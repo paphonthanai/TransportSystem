@@ -1,0 +1,106 @@
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth'
+import { auth } from '@/config/firebase'
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  const isAuthenticated = computed(() => !!user.value)
+
+  const userInitial = computed(() => {
+    if (!user.value) return ''
+    const name = user.value.displayName || user.value.email || 'U'
+    return name.charAt(0).toUpperCase()
+  })
+
+  const userName = computed(() => {
+    return user.value?.displayName || user.value?.email || 'User'
+  })
+
+  // Initialize auth state
+  onAuthStateChanged(auth, (currentUser) => {
+    user.value = currentUser
+  })
+
+  // Development mode mock authentication
+  const isDevelopment = import.meta.env.DEV
+  const demoCredentials: Record<string, { password: string; name: string; role: string }> = {
+    'admin@thanthara.co.th': { password: 'password123', name: 'Admin User', role: 'admin' },
+    'manager@thanthara.co.th': { password: 'password123', name: 'Manager User', role: 'manager' },
+    'dispatcher@thanthara.co.th': { password: 'password123', name: 'Dispatcher User', role: 'dispatcher' },
+  }
+
+  async function login(email: string, password: string) {
+    loading.value = true
+    error.value = null
+    try {
+      // Try Firebase first
+      if (!isDevelopment || (isDevelopment && !demoCredentials[email as keyof typeof demoCredentials])) {
+        await signInWithEmailAndPassword(auth, email, password)
+      } else {
+        // Development mode: use mock authentication
+        const credentials = demoCredentials[email as keyof typeof demoCredentials]
+        if (!credentials || credentials.password !== password) {
+          throw new Error('Invalid email or password')
+        }
+        
+        // Simulate async operation
+        await new Promise(resolve => setTimeout(resolve, 800))
+        
+        // Create mock user object
+        const mockUser = {
+          uid: 'mock-uid-' + Math.random(),
+          email: email,
+          displayName: credentials.name,
+          emailVerified: true,
+          isAnonymous: false,
+          metadata: {},
+          providerData: [],
+          phoneNumber: null,
+          photoURL: null,
+          tenantId: null,
+          getIdToken: async () => 'mock-token',
+          getIdTokenResult: async () => ({ token: 'mock-token', expirationTime: new Date().toISOString() }),
+          reload: async () => {},
+          toJSON: () => ({}),
+          delete: async () => {},
+          getDisplayName: () => credentials.name,
+          toFirebaseJSON: () => ({})
+        } as unknown as User
+        
+        user.value = mockUser
+      }
+    } catch (err: any) {
+      error.value = err.message
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function logout() {
+    loading.value = true
+    try {
+      await signOut(auth)
+    } catch (err: any) {
+      error.value = err.message
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return {
+    user,
+    loading,
+    error,
+    isAuthenticated,
+    userInitial,
+    userName,
+    login,
+    logout,
+  }
+})

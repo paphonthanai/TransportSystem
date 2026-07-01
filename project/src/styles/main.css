@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #2563eb;
+  --primary-soft: #eff6ff;
+  --surface: #fff;
+  --surface-2: #f8fafc;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e6e9f2;
+  --bg: #f4f6fb;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --primary: #2563eb;
+  --primary-soft: #1e3a8a;
+  --surface: #1f2937;
+  --surface-2: #111827;
+  --text: #f1f5f9;
+  --muted: #9ca3af;
+  --border: #374151;
+  --bg: #0b1220;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'IBM Plex Sans Thai', 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 135, 160, 0.35);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Material Symbols Icon */
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Animations */
+@keyframes tmsfade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tmsslide {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tmstoast {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-fade {
+  animation: tmsfade 0.2s ease both;
+}
+
+.animate-slide {
+  animation: tmsslide 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+.animate-toast {
+  animation: tmstoast 0.3s ease both;
+}
+
+/* Component Styles */
+@layer components {
+  .btn-primary {
+    @apply h-10 px-5 rounded-lg border-0 bg-primary text-white font-semibold text-sm flex items-center gap-2 cursor-pointer transition-all hover:opacity-90 shadow-md;
+  }
+
+  .btn-secondary {
+    @apply h-10 px-4 rounded-lg border border-border bg-surface text-text font-medium text-sm flex items-center gap-2 cursor-pointer hover:bg-surface-2;
+  }
+
+  .btn-icon {
+    @apply w-10 h-10 rounded-lg border border-border bg-surface-2 text-muted flex items-center justify-center cursor-pointer hover:bg-border;
+  }
+
+  .card {
+    @apply bg-surface border border-border rounded-xl shadow-default p-4;
+  }
+
+  .card-lg {
+    @apply bg-surface border border-border rounded-xl shadow-default p-5;
+  }
+
+  .badge {
+    @apply inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-success {
+    @apply badge bg-green-100 text-green-700;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-100 text-amber-700;
+  }
+
+  .badge-error {
+    @apply badge bg-red-100 text-red-700;
+  }
+
+  .input-field {
+    @apply h-10 px-3 border border-border rounded-lg bg-surface text-text text-sm font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary;
+  }
+
+  .table-header {
+    @apply bg-surface-2 text-muted text-left;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 border-b border-border;
+  }
+}
+
+/* Responsive utilities */
+@media (max-width: 768px) {
+  .sidebar {
+    @apply fixed left-0 top-0 z-40 h-full w-64 transform -translate-x-full transition-transform;
+  }
+
+  .sidebar.open {
+    @apply translate-x-0;
+  }
+}

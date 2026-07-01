@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=block">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:rgba(120,135,160,.35);border-radius:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  .msr{font-family:'Material Symbols Rounded';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24}
+  @keyframes tmsfade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes tmsslide{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+  @keyframes tmstoast{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  @keyframes tmsskel{0%{background-position:-200px 0}100%{background-position:calc(200px + 100%) 0}}
+  @keyframes tmsspin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+
+<div style="{{ rootStyle }}">
+
+  <!-- ===================== DESKTOP / ROLE != driver ===================== -->
+  <sc-if value="{{ notDriver }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;width:100%;height:100%;overflow:hidden">
+
+    <!-- SIDEBAR -->
+    <aside style="width:248px;flex:0 0 248px;height:100%;background:var(--sidebar,#fff);border-right:1px solid var(--border,#e6e9f2);display:flex;flex-direction:column;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:11px;padding:18px 20px 16px">
+        <div style="width:38px;height:38px;border-radius:10px;background:var(--primary,#2563EB);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(37,99,235,.35)">
+          <span class="msr" style="color:#fff;font-size:23px">local_shipping</span>
+        </div>
+        <div style="line-height:1.15">
+          <div style="font-weight:700;font-size:15.5px;color:var(--text,#0f172a)">THANTHARA</div>
+          <div style="font-size:11px;color:var(--muted,#64748b);letter-spacing:.3px">ระบบบริหารงานขนส่ง</div>
+        </div>
+      </div>
+
+      <nav style="flex:1;overflow-y:auto;padding:6px 12px 12px">
+        <sc-for list="{{ menu }}" as="m" hint-placeholder-count="9">
+          <button onClick="{{ m.go }}" style="{{ m.style }}">
+            <span class="msr" style="font-size:21px">{{ m.icon }}</span>
+            <span style="flex:1;text-align:left">{{ m.label }}</span>
+            <sc-if value="{{ m.badge }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:11px;font-weight:700;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--primary,#2563EB);color:#fff;display:flex;align-items:center;justify-content:center">{{ m.badge }}</span>
+            </sc-if>
+          </button>
+        </sc-for>
+      </nav>
+
+      <div style="padding:12px;border-top:1px solid var(--border,#e6e9f2)">
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;background:var(--surface2,#f8fafc)">
+          <div style="width:34px;height:34px;border-radius:9px;background:var(--primarySoft,#eff6ff);color:var(--primary,#2563EB);display:flex;align-items:center;justify-content:center;font-weight:700">{{ userInitial }}</div>
+          <div style="flex:1;line-height:1.2;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text,#0f172a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ userName }}</div>
+            <div style="font-size:11px;color:var(--muted,#64748b)">{{ roleLabel }}</div>
+          </div>
+          <span class="msr" style="font-size:19px;color:var(--muted,#64748b)">logout</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div style="flex:1;min-width:0;height:100%;display:flex;flex-direction:column;overflow:hidden;background:var(--bg,#f4f6fb)">
+      <!-- TOPBAR -->
+      <header style="flex:0 0 auto;height:64px;display:flex;align-items:center;gap:16px;padding:0 24px;background:var(--surface,#fff);border-bottom:1px solid var(--border,#e6e9f2)">
+        <div style="min-width:0">
+          <div style="font-size:18px;font-weight:700;color:var(--text,#0f172a);line-height:1.1">{{ screenTitle }}</div>
+          <div style="font-size:12px;color:var(--muted,#64748b)">{{ screenSub }}</div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="display:flex;align-items:center;gap:9px;height:40px;padding:0 13px;border-radius:10px;background:var(--surface2,#f8fafc);border:1px solid var(--border,#e6e9f2);width:240px;max-width:30vw">
+          <span class="msr" style="font-size:19px;color:var(--muted,#64748b)">search</span>
+          <input placeholder="ค้นหา..." style="border:0;outline:0;background:transparent;font-family:inherit;font-size:13.5px;color:var(--text,#0f172a);width:100%"/>
+        </div>
+        <select value="{{ role }}" onChange="{{ onRole }}" style="height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--surface2,#f8fafc);color:var(--text,#0f172a);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">
+          <sc-for list="{{ roles }}" as="r" hint-placeholder-count="5">
+            <option value="{{ r.id }}">{{ r.label }}</option>
+          </sc-for>
+        </select>
+        <button onClick="{{ toggleDark }}" title="สลับธีม" style="width:40px;height:40px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--surface2,#f8fafc);color:var(--text,#0f172a);display:flex;align-items:center;justify-content:center;cursor:pointer">
+          <span class="msr" style="font-size:20px">{{ darkIcon }}</span>
+        </button>
+        <button style="position:relative;width:40px;height:40px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--surface2,#f8fafc);color:var(--text,#0f172a);display:flex;align-items:center;justify-content:center;cursor:pointer">
+          <span class="msr" style="font-size:20px">notifications</span>
+          <span style="position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;background:#dc2626"></span>
+        </button>
+      </header>
+
+      <!-- SCROLL AREA -->
+      <main style="flex:1;overflow-y:auto;overflow-x:hidden;padding:24px">
+
+        <!-- ============== DASHBOARD ============== -->
+        <sc-if value="{{ isDash }}" hint-placeholder-val="{{ true }}">
+        <div style="opacity:1">
+          <!-- variant toggle -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+            <div style="font-size:13px;color:var(--muted,#64748b)">รูปแบบแดชบอร์ด</div>
+            <div style="display:flex;gap:4px;padding:4px;border-radius:10px;background:var(--surface2,#f8fafc);border:1px solid var(--border,#e6e9f2)">
+              <button onClick="{{ setVarA }}" style="{{ varAStyle }}">แบบที่ 1 · ภาพรวม</button>
+              <button onClick="{{ setVarB }}" style="{{ varBStyle }}">แบบที่ 2 · โฟกัสกราฟ</button>
+            </div>
+            <div style="flex:1"></div>
+            <div style="font-size:12.5px;color:var(--muted,#64748b);display:flex;align-items:center;gap:6px">
+              <span class="msr" style="font-size:17px">calendar_today</span> {{ today }}
+            </div>
+          </div>
+
+          <!-- KPI GRID -->
+          <div style="{{ kpiGridStyle }}">
+            <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="8">
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:16px 16px 15px;position:relative;overflow:hidden">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                  <div style="font-size:12.5px;color:var(--muted,#64748b);font-weight:500">{{ k.label }}</div>
+                  <div style="width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:{{ k.soft }};color:{{ k.color }}">
+                    <span class="msr" style="font-size:19px">{{ k.icon }}</span>
+                  </div>
+                </div>
+                <div style="font-size:25px;font-weight:700;color:var(--text,#0f172a);margin-top:8px;letter-spacing:-.5px">{{ k.value }}</div>
+                <div style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:12px;color:{{ k.deltaColor }}">
+                  <span class="msr" style="font-size:15px">{{ k.deltaIcon }}</span>{{ k.delta }}
+                  <span style="color:var(--muted,#64748b)">{{ k.deltaNote }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- VARIANT A -->
+          <sc-if value="{{ isVarA }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-top:18px">
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px">
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                  <div><div style="font-size:15px;font-weight:700;color:var(--text,#0f172a)">รายได้รายเดือน</div><div style="font-size:12px;color:var(--muted,#64748b)">ปีงบประมาณ 2569 · หน่วย: ล้านบาท</div></div>
+                  <div style="font-size:13px;font-weight:600;color:#16a34a;display:flex;align-items:center;gap:4px"><span class="msr" style="font-size:16px">trending_up</span> +18.4%</div>
+                </div>
+                <div style="display:flex;align-items:flex-end;gap:10px;height:190px;margin-top:18px;padding-top:8px">
+                  <sc-for list="{{ revenueBars }}" as="b" hint-placeholder-count="12">
+                    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;height:100%;justify-content:flex-end">
+                      <div style="width:100%;max-width:30px;height:{{ b.pct }}%;background:linear-gradient(180deg,var(--primary,#2563EB),#60a5fa);border-radius:6px 6px 3px 3px;transition:height .5s cubic-bezier(.2,.8,.2,1)" title="{{ b.v }} ลบ."></div>
+                      <div style="font-size:10.5px;color:var(--muted,#64748b)">{{ b.m }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px">
+                <div style="font-size:15px;font-weight:700;color:var(--text,#0f172a)">จำนวนเที่ยว</div>
+                <div style="font-size:12px;color:var(--muted,#64748b)">รายสัปดาห์ (เที่ยว/วัน)</div>
+                <div style="display:flex;align-items:flex-end;gap:8px;height:190px;margin-top:18px">
+                  <sc-for list="{{ tripBars }}" as="b" hint-placeholder-count="7">
+                    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;height:100%;justify-content:flex-end">
+                      <div style="width:100%;max-width:26px;height:{{ b.pct }}%;background:var(--primarySoft,#eff6ff);border:1.5px solid var(--primary,#2563EB);border-radius:6px 6px 3px 3px"></div>
+                      <div style="font-size:10.5px;color:var(--muted,#64748b)">{{ b.m }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px">
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div style="font-size:15px;font-weight:700;color:var(--text,#0f172a)">Top 10 ลูกค้า</div><span style="font-size:12px;color:var(--primary,#2563EB);cursor:pointer">ดูทั้งหมด</span></div>
+                <sc-for list="{{ topCustomers }}" as="c" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border,#e6e9f2)">
+                    <div style="width:26px;font-size:13px;font-weight:700;color:var(--muted,#64748b)">{{ c.rank }}</div>
+                    <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text,#0f172a)">{{ c.name }}</div><div style="height:5px;border-radius:3px;background:var(--surface2,#f1f5f9);margin-top:5px;overflow:hidden"><div style="height:100%;width:{{ c.pct }}%;background:var(--primary,#2563EB);border-radius:3px"></div></div></div>
+                    <div style="font-size:13px;font-weight:700;color:var(--text,#0f172a)">{{ c.amount }}</div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div style="font-size:15px;font-weight:700;color:var(--text,#0f172a)">Top 10 คนขับ</div><span style="font-size:12px;color:var(--primary,#2563EB);cursor:pointer">ดูทั้งหมด</span></div>
+                <sc-for list="{{ topDrivers }}" as="d" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border,#e6e9f2)">
+                    <div style="width:34px;height:34px;border-radius:50%;background:{{ d.av }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">{{ d.ini }}</div>
+                    <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text,#0f172a)">{{ d.name }}</div><div style="font-size:11.5px;color:var(--muted,#64748b)">{{ d.trips }} เที่ยว</div></div>
+                    <div style="font-size:13px;font-weight:700;color:#16a34a">{{ d.amount }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:18px;margin-top:18px">
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px;min-width:0">
+                <div style="font-size:15px;font-weight:700;color:var(--text,#0f172a);margin-bottom:10px">งานล่าสุด</div>
+                <div style="overflow-x:auto">
+                <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+                  <thead><tr style="color:var(--muted,#64748b);text-align:left">
+                    <th style="font-weight:500;padding:6px 8px">Booking</th><th style="font-weight:500;padding:6px 8px">ลูกค้า</th><th style="font-weight:500;padding:6px 8px">ปลายทาง</th><th style="font-weight:500;padding:6px 8px">สถานะ</th>
+                  </tr></thead>
+                  <tbody>
+                  <sc-for list="{{ recentJobs }}" as="j" hint-placeholder-count="6">
+                    <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                      <td style="padding:9px 8px;font-weight:600;color:var(--primary,#2563EB)">{{ j.id }}</td>
+                      <td style="padding:9px 8px;color:var(--text,#0f172a)">{{ j.customer }}</td>
+                      <td style="padding:9px 8px;color:var(--muted,#64748b)">{{ j.dest }}</td>
+                      <td style="padding:9px 8px"><span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;color:{{ j.c }};background:{{ j.b }}">{{ j.status }}</span></td>
+                    </tr>
+                  </sc-for>
+                  </tbody>
+                </table>
+                </div>
+              </div>
+
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;box-shadow:0 0 0 4px rgba(22,163,74,.16)"></span><div style="font-size:15px;font-weight:700;color:var(--text,#0f172a)">รถที่กำลังวิ่ง</div></div>
+                <sc-for list="{{ runningVehicles }}" as="v" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--border,#e6e9f2)">
+                    <div style="width:36px;height:36px;border-radius:9px;background:var(--primarySoft,#eff6ff);color:var(--primary,#2563EB);display:flex;align-items:center;justify-content:center"><span class="msr" style="font-size:19px">local_shipping</span></div>
+                    <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text,#0f172a)">{{ v.plate }} · {{ v.driver }}</div><div style="font-size:11.5px;color:var(--muted,#64748b)">{{ v.route }}</div></div>
+                    <div style="text-align:right"><div style="font-size:12px;font-weight:700;color:#16a34a">{{ v.progress }}%</div></div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          </sc-if>
+
+          <!-- VARIANT B -->
+          <sc-if value="{{ isVarB }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:18px;margin-top:18px;align-items:start">
+            <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:20px 22px">
+              <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:10px">
+                <div><div style="font-size:12.5px;color:var(--muted,#64748b)">รายได้รวมปีนี้</div><div style="font-size:30px;font-weight:700;color:var(--text,#0f172a);letter-spacing:-1px">฿ 28.6M</div><div style="font-size:12.5px;color:#16a34a;font-weight:600;display:flex;align-items:center;gap:4px"><span class="msr" style="font-size:16px">trending_up</span> +18.4% เทียบปีก่อน</div></div>
+                <div style="display:flex;gap:18px">
+                  <div><div style="font-size:11.5px;color:var(--muted,#64748b)">เที่ยวสะสม</div><div style="font-size:18px;font-weight:700;color:var(--text,#0f172a)">4,182</div></div>
+                  <div><div style="font-size:11.5px;color:var(--muted,#64748b)">กำไรเฉลี่ย/เที่ยว</div><div style="font-size:18px;font-weight:700;color:var(--text,#0f172a)">฿2,140</div></div>
+                </div>
+              </div>
+              <div style="position:relative;height:210px;margin-top:18px">
+                <svg viewBox="0 0 600 210" preserveAspectRatio="none" style="width:100%;height:100%">
+                  <defs><linearGradient id="tmsArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2563EB" stop-opacity="0.28"/><stop offset="1" stop-color="#2563EB" stop-opacity="0"/></linearGradient></defs>
+                  <path d="{{ areaFill }}" fill="url(#tmsArea)"></path>
+                  <path d="{{ areaLine }}" fill="none" stroke="#2563EB" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+                <div style="display:flex;justify-content:space-between;margin-top:6px">
+                  <sc-for list="{{ revenueBars }}" as="b" hint-placeholder-count="12"><div style="font-size:10px;color:var(--muted,#64748b)">{{ b.m }}</div></sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px">
+              <div style="font-size:15px;font-weight:700;color:var(--text,#0f172a);margin-bottom:8px">กิจกรรมล่าสุด</div>
+              <sc-for list="{{ activity }}" as="a" hint-placeholder-count="6">
+                <div style="display:flex;gap:12px;padding:9px 0">
+                  <div style="width:32px;height:32px;border-radius:8px;flex:0 0 32px;display:flex;align-items:center;justify-content:center;background:{{ a.soft }};color:{{ a.color }}"><span class="msr" style="font-size:18px">{{ a.icon }}</span></div>
+                  <div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--text,#0f172a)">{{ a.text }}</div><div style="font-size:11px;color:var(--muted,#64748b)">{{ a.time }}</div></div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr;gap:18px">
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px">
+                <div style="font-size:15px;font-weight:700;color:var(--text,#0f172a);margin-bottom:6px">Top 10 ลูกค้า</div>
+                <sc-for list="{{ topCustomers }}" as="c" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border,#e6e9f2)">
+                    <div style="width:24px;font-size:13px;font-weight:700;color:var(--muted,#64748b)">{{ c.rank }}</div>
+                    <div style="flex:1;font-size:13.5px;font-weight:600;color:var(--text,#0f172a)">{{ c.name }}</div>
+                    <div style="font-size:13px;font-weight:700;color:var(--text,#0f172a)">{{ c.amount }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px">
+                <div style="font-size:15px;font-weight:700;color:var(--text,#0f172a);margin-bottom:6px">Top 10 คนขับ</div>
+                <sc-for list="{{ topDrivers }}" as="d" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border,#e6e9f2)">
+                    <div style="width:30px;height:30px;border-radius:50%;background:{{ d.av }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">{{ d.ini }}</div>
+                    <div style="flex:1;font-size:13.5px;font-weight:600;color:var(--text,#0f172a)">{{ d.name }}</div>
+                    <div style="font-size:13px;font-weight:700;color:#16a34a">{{ d.amount }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          </sc-if>
+        </div>
+        </sc-if>
+
+        <!-- ============== BOOKING ============== -->
+        <sc-if value="{{ isBooking }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:9px;height:40px;padding:0 13px;border-radius:10px;background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);width:280px;max-width:60vw">
+              <span class="msr" style="font-size:19px;color:var(--muted,#64748b)">search</span>
+              <input value="{{ q }}" onInput="{{ onQ }}" placeholder="ค้นหาเลข Booking, ลูกค้า..." style="border:0;outline:0;background:transparent;font-family:inherit;font-size:13.5px;color:var(--text,#0f172a);width:100%"/>
+            </div>
+            <button style="height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--text,#0f172a);font-family:inherit;font-size:13px;font-weight:500;display:flex;align-items:center;gap:7px;cursor:pointer"><span class="msr" style="font-size:18px">filter_list</span> ตัวกรอง</button>
+            <div style="flex:1"></div>
+            <button onClick="{{ openDialog }}" style="height:40px;padding:0 18px;border-radius:10px;border:0;background:var(--primary,#2563EB);color:#fff;font-family:inherit;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.3)"><span class="msr" style="font-size:19px">add</span> สร้างงาน</button>
+          </div>
+
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:920px">
+              <thead><tr style="background:var(--surface2,#f8fafc);color:var(--muted,#64748b);text-align:left">
+                <th style="font-weight:600;padding:12px 14px">เลข Booking</th><th style="font-weight:600;padding:12px 14px">วันที่</th><th style="font-weight:600;padding:12px 14px">ลูกค้า</th><th style="font-weight:600;padding:12px 14px">สินค้า</th><th style="font-weight:600;padding:12px 14px">ต้นทาง</th><th style="font-weight:600;padding:12px 14px">ปลายทาง</th><th style="font-weight:600;padding:12px 14px;text-align:right">ราคา</th><th style="font-weight:600;padding:12px 14px">สถานะ</th><th style="font-weight:600;padding:12px 14px">Sh.No</th><th style="font-weight:600;padding:12px 14px">ผู้รับผิดชอบ</th><th style="font-weight:600;padding:12px 14px"></th>
+              </tr></thead>
+              <tbody>
+              <sc-for list="{{ bookingRows }}" as="b" hint-placeholder-count="8">
+                <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                  <td style="padding:12px 14px;font-weight:700;color:var(--primary,#2563EB)">{{ b.id }}</td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ b.date }}</td>
+                  <td style="padding:12px 14px;font-weight:600;color:var(--text,#0f172a)">{{ b.customer }}</td>
+                  <td style="padding:12px 14px;color:var(--text,#0f172a)">{{ b.goods }}</td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ b.origin }}</td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ b.dest }}</td>
+                  <td style="padding:12px 14px;text-align:right;font-weight:600;color:var(--text,#0f172a)">{{ b.price }}</td>
+                  <td style="padding:12px 14px"><span style="font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;color:{{ b.c }};background:{{ b.b }};white-space:nowrap">{{ b.status }}</span></td>
+                  <td style="padding:12px 14px"><sc-if value="{{ b.hasSh }}" hint-placeholder-val="{{ true }}"><span style="font-weight:600;color:var(--text,#0f172a)">{{ b.shipNo }}</span></sc-if><sc-if value="{{ b.noSh }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#d97706;background:rgba(217,119,6,.12);padding:3px 9px;border-radius:20px;white-space:nowrap">รอออกเลข</span></sc-if></td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ b.owner }}</td>
+                  <td style="padding:12px 14px;text-align:right"><button onClick="{{ b.edit }}" title="แก้ไข" style="height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--primary,#2563EB);font-family:inherit;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px;cursor:pointer"><span class="msr" style="font-size:16px">edit</span> แก้ไข</button></td>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border,#e6e9f2)">
+              <div style="font-size:12.5px;color:var(--muted,#64748b)">แสดง {{ bookingCount }} จาก {{ bookingTotal }} รายการ</div>
+              <div style="display:flex;gap:6px">
+                <button style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--muted,#64748b);cursor:pointer"><span class="msr" style="font-size:17px">chevron_left</span></button>
+                <button style="width:32px;height:32px;border-radius:8px;border:0;background:var(--primary,#2563EB);color:#fff;font-family:inherit;font-weight:600;cursor:pointer">1</button>
+                <button style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--text,#0f172a);font-family:inherit;cursor:pointer">2</button>
+                <button style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--text,#0f172a);cursor:pointer"><span class="msr" style="font-size:17px">chevron_right</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== DISPATCH ============== -->
+        <sc-if value="{{ isDispatch }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1;display:grid;grid-template-columns:1fr 1.05fr;gap:18px;align-items:start">
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="padding:15px 18px;border-bottom:1px solid var(--border,#e6e9f2);display:flex;align-items:center;justify-content:space-between"><div style="font-size:15px;font-weight:700;color:var(--text,#0f172a)">งานรอจัดรถ</div><span style="font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;color:#d97706;background:rgba(217,119,6,.14)">{{ waitingCount }} งาน</span></div>
+            <div style="padding:12px;max-height:560px;overflow-y:auto">
+              <sc-for list="{{ waitingBookings }}" as="b" hint-placeholder-count="5">
+                <button onClick="{{ b.pick }}" style="{{ b.style }}">
+                  <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-weight:700;color:var(--primary,#2563EB);font-size:13.5px">{{ b.id }}</div><div style="font-size:13px;font-weight:700;color:var(--text,#0f172a)">{{ b.price }}</div></div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text,#0f172a);margin-top:3px">{{ b.customer }} · {{ b.goods }}</div>
+                  <div style="font-size:12px;color:var(--muted,#64748b);margin-top:4px;display:flex;align-items:center;gap:5px"><span class="msr" style="font-size:15px">route</span>{{ b.origin }} → {{ b.dest }}</div>
+                  <sc-if value="{{ b.hasAssign }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;color:var(--primary,#2563EB);margin-top:6px;display:flex;align-items:center;gap:5px;background:var(--primarySoft,#eff6ff);padding:5px 8px;border-radius:7px"><span class="msr" style="font-size:15px">assignment_ind</span> ระบุจากงาน: {{ b.assignLabel }}</div></sc-if>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:18px">
+            <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="padding:13px 18px;border-bottom:1px solid var(--border,#e6e9f2);font-size:15px;font-weight:700;color:var(--text,#0f172a)">เลือกรถ</div>
+              <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:230px;overflow-y:auto">
+                <sc-for list="{{ vehiclePick }}" as="v" hint-placeholder-count="6">
+                  <button onClick="{{ v.pick }}" disabled="{{ v.disabled }}" style="{{ v.style }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-weight:700;font-size:13px;color:var(--text,#0f172a)">{{ v.plate }}</div><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:12px;color:{{ v.c }};background:{{ v.b }}">{{ v.status }}</span></div>
+                    <div style="font-size:11.5px;color:var(--muted,#64748b);margin-top:3px">{{ v.type }} · {{ v.cap }}</div>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+              <div style="padding:13px 18px;border-bottom:1px solid var(--border,#e6e9f2);font-size:15px;font-weight:700;color:var(--text,#0f172a)">เลือกคนขับ</div>
+              <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:230px;overflow-y:auto">
+                <sc-for list="{{ driverPick }}" as="d" hint-placeholder-count="6">
+                  <button onClick="{{ d.pick }}" disabled="{{ d.disabled }}" style="{{ d.style }}">
+                    <div style="display:flex;align-items:center;gap:9px"><div style="width:30px;height:30px;border-radius:50%;background:{{ d.av }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">{{ d.ini }}</div><div style="min-width:0"><div style="font-weight:600;font-size:12.5px;color:var(--text,#0f172a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.name }}</div><span style="font-size:10.5px;font-weight:600;color:{{ d.c }}">{{ d.status }}</span></div></div>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:16px 18px;display:flex;align-items:center;gap:14px">
+              <div style="flex:1;font-size:12.5px;color:var(--muted,#64748b)">{{ assignSummary }}</div>
+              <button onClick="{{ doAssign }}" disabled="{{ assignDisabled }}" style="{{ assignBtnStyle }}"><span class="msr" style="font-size:19px">bolt</span> Assign จัดรถ</button>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== JOBS (งานขนส่ง) ============== -->
+        <sc-if value="{{ isJobs }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1">
+          <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+            <sc-for list="{{ jobTabs }}" as="t" hint-placeholder-count="5"><button onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }} <span style="opacity:.7">{{ t.count }}</span></button></sc-for>
+          </div>
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:860px">
+              <thead><tr style="background:var(--surface2,#f8fafc);color:var(--muted,#64748b);text-align:left">
+                <th style="font-weight:600;padding:12px 14px">Booking</th><th style="font-weight:600;padding:12px 14px">ลูกค้า</th><th style="font-weight:600;padding:12px 14px">เส้นทาง</th><th style="font-weight:600;padding:12px 14px">คนขับ</th><th style="font-weight:600;padding:12px 14px">ทะเบียน</th><th style="font-weight:600;padding:12px 14px">สถานะ</th><th style="font-weight:600;padding:12px 14px"></th>
+              </tr></thead>
+              <tbody>
+              <sc-for list="{{ jobRows }}" as="j" hint-placeholder-count="8">
+                <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                  <td style="padding:12px 14px;font-weight:700;color:var(--primary,#2563EB)">{{ j.id }}</td>
+                  <td style="padding:12px 14px;font-weight:600;color:var(--text,#0f172a)">{{ j.customer }}</td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ j.origin }} → {{ j.dest }}</td>
+                  <td style="padding:12px 14px;color:var(--text,#0f172a)">{{ j.driver }}</td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ j.plate }}</td>
+                  <td style="padding:12px 14px"><span style="font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;color:{{ j.c }};background:{{ j.b }};white-space:nowrap">{{ j.status }}</span></td>
+                  <td style="padding:12px 14px;text-align:right"><span class="msr" style="font-size:19px;color:var(--muted,#64748b);cursor:pointer">more_horiz</span></td>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== WORKFLOW ============== -->
+        <sc-if value="{{ isWorkflow }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">
+            <sc-for list="{{ workflowStats }}" as="s" hint-placeholder-count="4">
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:14px 16px"><div style="font-size:12px;color:var(--muted,#64748b)">{{ s.label }}</div><div style="font-size:20px;font-weight:700;color:{{ s.color }};margin-top:4px">{{ s.value }}</div></div>
+            </sc-for>
+          </div>
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:820px">
+              <thead><tr style="background:var(--surface2,#f8fafc);color:var(--muted,#64748b);text-align:left"><th style="font-weight:600;padding:12px 14px">เลขงาน</th><th style="font-weight:600;padding:12px 14px">ลูกค้า</th><th style="font-weight:600;padding:12px 14px">ขั้นตอนปัจจุบัน</th><th style="font-weight:600;padding:12px 14px;width:210px">ความคืบหน้า</th><th style="font-weight:600;padding:12px 14px"></th></tr></thead>
+              <tbody>
+              <sc-for list="{{ workflowRows }}" as="w" hint-placeholder-count="6">
+                <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                  <td style="padding:12px 14px;font-weight:700;color:var(--primary,#2563EB)">{{ w.id }}</td>
+                  <td style="padding:12px 14px;font-weight:600;color:var(--text,#0f172a)">{{ w.customer }}</td>
+                  <td style="padding:12px 14px"><span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text,#0f172a)"><span class="msr" style="font-size:17px;color:var(--primary,#2563EB)">{{ w.icon }}</span>{{ w.stageLabel }}</span></td>
+                  <td style="padding:12px 14px"><div style="display:flex;align-items:center;gap:9px"><div style="flex:1;height:6px;border-radius:4px;background:var(--surface2,#f1f5f9);overflow:hidden"><div style="height:100%;width:{{ w.pct }}%;background:{{ w.barColor }};border-radius:4px"></div></div><span style="font-size:11.5px;font-weight:600;color:var(--muted,#64748b)">{{ w.step }}/12</span></div></td>
+                  <td style="padding:12px 14px;text-align:right"><button onClick="{{ w.open }}" style="height:32px;padding:0 13px;border-radius:8px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--primary,#2563EB);font-family:inherit;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px;cursor:pointer"><span class="msr" style="font-size:16px">account_tree</span> จัดการ</button></td>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== CUSTOMERS ============== -->
+        <sc-if value="{{ isCustomers }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:16px"><button style="height:40px;padding:0 16px;border-radius:10px;border:0;background:var(--primary,#2563EB);color:#fff;font-family:inherit;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.3)"><span class="msr" style="font-size:19px">person_add</span> เพิ่มลูกค้า</button></div>
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:760px">
+              <thead><tr style="background:var(--surface2,#f8fafc);color:var(--muted,#64748b);text-align:left"><th style="font-weight:600;padding:12px 14px">ลูกค้า</th><th style="font-weight:600;padding:12px 14px">ผู้ติดต่อ</th><th style="font-weight:600;padding:12px 14px">เบอร์</th><th style="font-weight:600;padding:12px 14px;text-align:right">งานสะสม</th><th style="font-weight:600;padding:12px 14px;text-align:right">ยอดรวม</th><th style="font-weight:600;padding:12px 14px">สถานะ</th></tr></thead>
+              <tbody>
+              <sc-for list="{{ customerRows }}" as="c" hint-placeholder-count="6">
+                <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                  <td style="padding:12px 14px"><div style="display:flex;align-items:center;gap:11px"><div style="width:34px;height:34px;border-radius:9px;background:{{ c.av }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">{{ c.ini }}</div><div style="font-weight:600;color:var(--text,#0f172a)">{{ c.name }}</div></div></td>
+                  <td style="padding:12px 14px;color:var(--text,#0f172a)">{{ c.contact }}</td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ c.phone }}</td>
+                  <td style="padding:12px 14px;text-align:right;color:var(--text,#0f172a)">{{ c.jobs }}</td>
+                  <td style="padding:12px 14px;text-align:right;font-weight:700;color:var(--text,#0f172a)">{{ c.total }}</td>
+                  <td style="padding:12px 14px"><span style="font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;color:#16a34a;background:rgba(22,163,74,.14)">ใช้งาน</span></td>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== DRIVERS LIST ============== -->
+        <sc-if value="{{ isDrivers }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1">
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:820px">
+              <thead><tr style="background:var(--surface2,#f8fafc);color:var(--muted,#64748b);text-align:left"><th style="font-weight:600;padding:12px 14px">คนขับ</th><th style="font-weight:600;padding:12px 14px">เบอร์</th><th style="font-weight:600;padding:12px 14px">รถประจำ</th><th style="font-weight:600;padding:12px 14px">สถานะ</th><th style="font-weight:600;padding:12px 14px">ค่าตอบแทน</th><th style="font-weight:600;padding:12px 14px"></th></tr></thead>
+              <tbody>
+              <sc-for list="{{ driverRows }}" as="d" hint-placeholder-count="6">
+                <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                  <td style="padding:12px 14px"><div style="display:flex;align-items:center;gap:11px"><div style="width:36px;height:36px;border-radius:50%;background:{{ d.av }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">{{ d.ini }}</div><div><div style="font-weight:600;color:var(--text,#0f172a)">{{ d.name }}</div><div style="font-size:11.5px;color:var(--muted,#64748b)">{{ d.code }}</div></div></div></td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ d.phone }}</td>
+                  <td style="padding:12px 14px;color:var(--text,#0f172a)">{{ d.vehicle }}</td>
+                  <td style="padding:12px 14px"><span style="font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;color:{{ d.c }};background:{{ d.b }}">{{ d.status }}</span></td>
+                  <td style="padding:12px 14px;color:var(--text,#0f172a)">{{ d.payType }}</td>
+                  <td style="padding:12px 14px;text-align:right"><button onClick="{{ d.detail }}" style="height:32px;padding:0 13px;border-radius:8px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--primary,#2563EB);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">ดูรายละเอียด</button></td>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== VEHICLES ============== -->
+        <sc-if value="{{ isVehicles }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1">
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px">
+              <thead><tr style="background:var(--surface2,#f8fafc);color:var(--muted,#64748b);text-align:left"><th style="font-weight:600;padding:12px 14px">ทะเบียน</th><th style="font-weight:600;padding:12px 14px">ประเภทรถ</th><th style="font-weight:600;padding:12px 14px">คนขับประจำ</th><th style="font-weight:600;padding:12px 14px">สถานะ</th><th style="font-weight:600;padding:12px 14px;text-align:right">น้ำหนักบรรทุก</th><th style="font-weight:600;padding:12px 14px">หมดอายุภาษี</th><th style="font-weight:600;padding:12px 14px">หมดอายุประกัน</th></tr></thead>
+              <tbody>
+              <sc-for list="{{ vehicleRows }}" as="v" hint-placeholder-count="6">
+                <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                  <td style="padding:12px 14px"><div style="display:flex;align-items:center;gap:10px"><div style="width:34px;height:34px;border-radius:9px;background:var(--primarySoft,#eff6ff);color:var(--primary,#2563EB);display:flex;align-items:center;justify-content:center"><span class="msr" style="font-size:19px">local_shipping</span></div><div style="font-weight:700;color:var(--text,#0f172a)">{{ v.plate }}</div></div></td>
+                  <td style="padding:12px 14px;color:var(--text,#0f172a)"><div>{{ v.type }}</div><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:12px;color:{{ v.vtypeC }};background:{{ v.vtypeB }}">รถ{{ v.vtype }}</span></td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ v.driver }}</td>
+                  <td style="padding:12px 14px"><span style="font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;color:{{ v.c }};background:{{ v.b }}">{{ v.status }}</span></td>
+                  <td style="padding:12px 14px;text-align:right;color:var(--text,#0f172a)">{{ v.cap }}</td>
+                  <td style="padding:12px 14px"><span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text,#0f172a)"><span style="width:8px;height:8px;border-radius:50%;background:{{ v.taxC }}"></span>{{ v.tax }}</span></td>
+                  <td style="padding:12px 14px"><span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text,#0f172a)"><span style="width:8px;height:8px;border-radius:50%;background:{{ v.insC }}"></span>{{ v.ins }}</span></td>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== DOCUMENTS ============== -->
+        <sc-if value="{{ isDocs }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px">
+            <sc-for list="{{ docCards }}" as="d" hint-placeholder-count="4">
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px">
+                <div style="width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:{{ d.soft }};color:{{ d.color }}"><span class="msr" style="font-size:23px">{{ d.icon }}</span></div>
+                <div style="font-size:24px;font-weight:700;color:var(--text,#0f172a);margin-top:12px">{{ d.count }}</div>
+                <div style="font-size:13px;color:var(--muted,#64748b)">{{ d.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:9px;height:40px;padding:0 13px;border-radius:10px;background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);width:260px;max-width:50vw"><span class="msr" style="font-size:19px;color:var(--muted,#64748b)">search</span><input placeholder="เลขงาน, ลูกค้า, วันที่..." style="border:0;outline:0;background:transparent;font-family:inherit;font-size:13.5px;color:var(--text,#0f172a);width:100%"/></div>
+            <button style="height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--text,#0f172a);font-family:inherit;font-size:13px;display:flex;align-items:center;gap:7px;cursor:pointer"><span class="msr" style="font-size:18px">calendar_month</span> ช่วงวันที่</button>
+          </div>
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:760px">
+              <thead><tr style="background:var(--surface2,#f8fafc);color:var(--muted,#64748b);text-align:left"><th style="font-weight:600;padding:12px 14px">เลขเอกสาร</th><th style="font-weight:600;padding:12px 14px">ประเภท</th><th style="font-weight:600;padding:12px 14px">เลขงาน</th><th style="font-weight:600;padding:12px 14px">ลูกค้า</th><th style="font-weight:600;padding:12px 14px">วันที่</th><th style="font-weight:600;padding:12px 14px"></th></tr></thead>
+              <tbody>
+              <sc-for list="{{ docRows }}" as="d" hint-placeholder-count="6">
+                <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                  <td style="padding:12px 14px;font-weight:600;color:var(--text,#0f172a)">{{ d.no }}</td>
+                  <td style="padding:12px 14px"><span style="font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;color:{{ d.color }};background:{{ d.soft }}">{{ d.type }}</span></td>
+                  <td style="padding:12px 14px;font-weight:600;color:var(--primary,#2563EB)">{{ d.job }}</td>
+                  <td style="padding:12px 14px;color:var(--text,#0f172a)">{{ d.customer }}</td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ d.date }}</td>
+                  <td style="padding:12px 14px;text-align:right"><button onClick="{{ d.open }}" style="height:32px;padding:0 13px;border-radius:8px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--text,#0f172a);font-family:inherit;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px;cursor:pointer"><span class="msr" style="font-size:17px">visibility</span> ดู / PDF</button></td>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== BILLING / ออกเอกสาร ============== -->
+        <sc-if value="{{ isBilling }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+            <div style="display:flex;gap:5px;padding:4px;border-radius:10px;background:var(--surface2,#f8fafc);border:1px solid var(--border,#e6e9f2)">
+              <sc-for list="{{ billingTabs }}" as="t" hint-placeholder-count="4"><button onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button></sc-for>
+            </div>
+            <div style="flex:1"></div>
+            <button onClick="{{ openNewBill }}" style="height:40px;padding:0 18px;border-radius:10px;border:0;background:var(--primary,#2563EB);color:#fff;font-family:inherit;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.3)"><span class="msr" style="font-size:19px">add</span> ออก{{ billingKindLabel }}</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px">
+            <sc-for list="{{ billingStats }}" as="s" hint-placeholder-count="4">
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:15px 17px">
+                <div style="font-size:12.5px;color:var(--muted,#64748b)">{{ s.label }}</div>
+                <div style="font-size:21px;font-weight:700;color:{{ s.color }};margin-top:5px">{{ s.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:840px">
+              <thead><tr style="background:var(--surface2,#f8fafc);color:var(--muted,#64748b);text-align:left"><th style="font-weight:600;padding:12px 14px">เลขที่เอกสาร</th><th style="font-weight:600;padding:12px 14px">ลูกค้า</th><th style="font-weight:600;padding:12px 14px">เลขงาน</th><th style="font-weight:600;padding:12px 14px">วันที่</th><th style="font-weight:600;padding:12px 14px">ครบกำหนด</th><th style="font-weight:600;padding:12px 14px;text-align:right">ยอดรวม</th><th style="font-weight:600;padding:12px 14px">สถานะ</th><th style="font-weight:600;padding:12px 14px"></th></tr></thead>
+              <tbody>
+              <sc-for list="{{ billingRows }}" as="r" hint-placeholder-count="6">
+                <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                  <td style="padding:12px 14px;font-weight:700;color:var(--primary,#2563EB)">{{ r.no }}</td>
+                  <td style="padding:12px 14px;font-weight:600;color:var(--text,#0f172a)">{{ r.customer }}</td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ r.job }}</td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ r.date }}</td>
+                  <td style="padding:12px 14px;color:var(--muted,#64748b)">{{ r.due }}</td>
+                  <td style="padding:12px 14px;text-align:right;font-weight:700;color:var(--text,#0f172a)">{{ r.total }}</td>
+                  <td style="padding:12px 14px"><span style="font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;color:{{ r.c }};background:{{ r.b }}">{{ r.status }}</span></td>
+                  <td style="padding:10px 14px;text-align:right;white-space:nowrap"><div style="display:inline-flex;gap:6px"><button onClick="{{ r.open }}" title="ดู/PDF" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--primary,#2563EB);display:flex;align-items:center;justify-content:center;cursor:pointer"><span class="msr" style="font-size:17px">visibility</span></button><button onClick="{{ r.edit }}" title="แก้ไข" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:#d97706;display:flex;align-items:center;justify-content:center;cursor:pointer"><span class="msr" style="font-size:17px">edit</span></button><button onClick="{{ r.del }}" title="ลบ" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:#dc2626;display:flex;align-items:center;justify-content:center;cursor:pointer"><span class="msr" style="font-size:17px">delete</span></button></div></td>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== DRIVER INCOME ============== -->
+        <sc-if value="{{ isIncome }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1">
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:16px 18px;margin-bottom:18px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span class="msr" style="font-size:20px;color:var(--primary,#2563EB)">functions</span><div style="font-size:14px;font-weight:700;color:var(--text,#0f172a)">สูตรคำนวณรายได้ตามประเภทรถ (กำหนดโดยผู้ดูแลระบบ)</div></div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+              <sc-for list="{{ incomeFormulas }}" as="f" hint-placeholder-count="4">
+                <div style="border:1px solid var(--border,#e6e9f2);border-radius:10px;padding:11px 13px;background:var(--surface2,#f8fafc)"><div style="font-size:12px;font-weight:700;color:{{ f.c }}">{{ f.name }}</div><div style="font-size:11px;color:var(--muted,#64748b);line-height:1.5;margin-top:3px">{{ f.formula }}</div></div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden">
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:880px">
+              <thead><tr style="background:var(--surface2,#f8fafc);color:var(--muted,#64748b);text-align:left"><th style="font-weight:600;padding:12px 14px">คนขับ</th><th style="font-weight:600;padding:12px 14px">ประเภทรถ</th><th style="font-weight:600;padding:12px 14px;text-align:right">จำนวนเที่ยว</th><th style="font-weight:600;padding:12px 14px;text-align:right">รายได้ตามสูตร</th><th style="font-weight:600;padding:12px 14px;text-align:right">โบนัส</th><th style="font-weight:600;padding:12px 14px;text-align:right">ค่าปรับ</th><th style="font-weight:600;padding:12px 14px;text-align:right">รายได้สุทธิ</th><th style="font-weight:600;padding:12px 14px">การจ่าย</th></tr></thead>
+              <tbody>
+              <sc-for list="{{ incomeRows }}" as="r" hint-placeholder-count="6">
+                <tr style="border-top:1px solid var(--border,#e6e9f2)">
+                  <td style="padding:12px 14px"><div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:50%;background:{{ r.av }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">{{ r.ini }}</div><div style="font-weight:600;color:var(--text,#0f172a)">{{ r.name }}</div></div></td>
+                  <td style="padding:12px 14px"><span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;color:{{ r.vtypeC }};background:{{ r.vtypeB }}">{{ r.vtype }}</span></td>
+                  <td style="padding:12px 14px;text-align:right;color:var(--text,#0f172a)">{{ r.trips }}</td>
+                  <td style="padding:12px 14px;text-align:right"><div style="color:var(--text,#0f172a)">{{ r.base }}</div><div style="font-size:10px;color:var(--muted,#94a3b8)">{{ r.formula }}</div></td>
+                  <td style="padding:12px 14px;text-align:right;color:#16a34a">+{{ r.bonus }}</td>
+                  <td style="padding:12px 14px;text-align:right;color:#dc2626">-{{ r.fine }}</td>
+                  <td style="padding:12px 14px;text-align:right;font-weight:700;color:var(--text,#0f172a)">{{ r.net }}</td>
+                  <td style="padding:12px 14px"><span style="font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;color:{{ r.payC }};background:{{ r.payB }}">{{ r.pay }}</span></td>
+                </tr>
+              </sc-for>
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== REPORTS ============== -->
+        <sc-if value="{{ isReports }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+            <div style="display:flex;gap:5px;padding:4px;border-radius:10px;background:var(--surface2,#f8fafc);border:1px solid var(--border,#e6e9f2)">
+              <sc-for list="{{ periods }}" as="p" hint-placeholder-count="4"><button onClick="{{ p.go }}" style="{{ p.style }}">{{ p.label }}</button></sc-for>
+            </div>
+            <div style="flex:1"></div>
+            <button onClick="{{ exportXls }}" style="height:40px;padding:0 15px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:#16a34a;font-family:inherit;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer"><span class="msr" style="font-size:18px">table_view</span> Excel</button>
+            <button onClick="{{ exportPdf }}" style="height:40px;padding:0 15px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:#dc2626;font-family:inherit;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer"><span class="msr" style="font-size:18px">picture_as_pdf</span> PDF</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:18px">
+            <sc-for list="{{ reportStats }}" as="s" hint-placeholder-count="6">
+              <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:16px 18px">
+                <div style="font-size:12.5px;color:var(--muted,#64748b)">{{ s.label }}</div>
+                <div style="font-size:23px;font-weight:700;color:var(--text,#0f172a);margin-top:6px">{{ s.value }}</div>
+                <div style="font-size:12px;color:{{ s.dc }};margin-top:2px">{{ s.delta }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:18px">
+            <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px">
+              <div style="font-size:15px;font-weight:700;color:var(--text,#0f172a);margin-bottom:6px">รายได้ตามช่วงเวลา</div>
+              <div style="display:flex;align-items:flex-end;gap:10px;height:200px;margin-top:14px">
+                <sc-for list="{{ revenueBars }}" as="b" hint-placeholder-count="12">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;height:100%;justify-content:flex-end"><div style="width:100%;max-width:28px;height:{{ b.pct }}%;background:linear-gradient(180deg,var(--primary,#2563EB),#60a5fa);border-radius:5px 5px 2px 2px"></div><div style="font-size:10px;color:var(--muted,#64748b)">{{ b.m }}</div></div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px">
+              <div style="font-size:15px;font-weight:700;color:var(--text,#0f172a);margin-bottom:10px">รถที่ใช้งานมากที่สุด</div>
+              <sc-for list="{{ topVehicles }}" as="v" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border,#e6e9f2)">
+                  <div style="width:28px;font-size:13px;font-weight:700;color:var(--muted,#64748b)">{{ v.rank }}</div>
+                  <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text,#0f172a)">{{ v.plate }}</div><div style="height:5px;border-radius:3px;background:var(--surface2,#f1f5f9);margin-top:5px;overflow:hidden"><div style="height:100%;width:{{ v.pct }}%;background:var(--primary,#2563EB);border-radius:3px"></div></div></div>
+                  <div style="font-size:13px;font-weight:700;color:var(--text,#0f172a)">{{ v.trips }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============== SETTINGS ============== -->
+        <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+        <div style="opacity:1;max-width:760px">
+          <sc-for list="{{ settingGroups }}" as="g" hint-placeholder-count="3">
+            <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;box-shadow:var(--shadow);padding:8px 20px;margin-bottom:16px">
+              <div style="font-size:14px;font-weight:700;color:var(--text,#0f172a);padding:14px 0 6px">{{ g.title }}</div>
+              <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-top:1px solid var(--border,#e6e9f2)">
+                  <div style="width:36px;height:36px;border-radius:9px;background:var(--surface2,#f8fafc);color:var(--primary,#2563EB);display:flex;align-items:center;justify-content:center"><span class="msr" style="font-size:19px">{{ it.icon }}</span></div>
+                  <div style="flex:1"><div style="font-size:13.5px;font-weight:600;color:var(--text,#0f172a)">{{ it.label }}</div><div style="font-size:12px;color:var(--muted,#64748b)">{{ it.sub }}</div></div>
+                  <div style="{{ it.toggleTrack }}"><div style="{{ it.toggleKnob }}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+        </sc-if>
+
+      </main>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===================== DRIVER MOBILE APP ===================== -->
+  <sc-if value="{{ isDriver }}" hint-placeholder-val="{{ false }}">
+  <div style="width:100%;height:100%;background:var(--bg,#0b1220);display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto">
+    <div style="width:390px;max-width:100%;background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:30px;box-shadow:0 24px 60px rgba(0,0,0,.28);overflow:hidden;display:flex;flex-direction:column;max-height:840px">
+      <!-- app header -->
+      <div style="background:var(--primary,#2563EB);padding:20px 20px 22px;color:#fff;position:relative">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:11px"><div style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:700">{{ userInitial }}</div><div><div style="font-size:14.5px;font-weight:700">{{ userName }}</div><div style="font-size:11.5px;opacity:.85">คนขับรถ</div></div></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <select value="{{ role }}" onChange="{{ onRole }}" style="height:32px;padding:0 8px;border-radius:8px;border:0;background:rgba(255,255,255,.18);color:#fff;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer">
+              <sc-for list="{{ roles }}" as="r" hint-placeholder-count="5"><option value="{{ r.id }}" style="color:#0f172a">{{ r.label }}</option></sc-for>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:16px;font-size:12px;opacity:.85">งานปัจจุบัน</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:2px"><div style="font-size:20px;font-weight:700">{{ dvJob.id }}</div><span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:rgba(255,255,255,.2)">{{ dvJob.statusLabel }}</span></div>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:18px 18px 8px;background:var(--bg,#f4f6fb)">
+        <!-- job card -->
+        <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:14px;padding:16px;box-shadow:var(--shadow)">
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted,#64748b)"><span class="msr" style="font-size:18px;color:var(--primary,#2563EB)">apartment</span> ลูกค้า</div>
+          <div style="font-size:16px;font-weight:700;color:var(--text,#0f172a);margin-top:2px">{{ dvJob.customer }}</div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted,#64748b);margin-top:12px"><span class="msr" style="font-size:18px;color:var(--primary,#2563EB)">inventory_2</span> สินค้า</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text,#0f172a);margin-top:2px">{{ dvJob.goods }}</div>
+          <div style="display:flex;gap:12px;margin-top:14px">
+            <div style="flex:1;background:var(--surface2,#f8fafc);border-radius:10px;padding:11px 12px"><div style="font-size:11px;color:var(--muted,#64748b);display:flex;align-items:center;gap:5px"><span class="msr" style="font-size:15px;color:#16a34a">trip_origin</span> จุดรับ</div><div style="font-size:13px;font-weight:600;color:var(--text,#0f172a);margin-top:3px">{{ dvJob.origin }}</div></div>
+            <div style="flex:1;background:var(--surface2,#f8fafc);border-radius:10px;padding:11px 12px"><div style="font-size:11px;color:var(--muted,#64748b);display:flex;align-items:center;gap:5px"><span class="msr" style="font-size:15px;color:#dc2626">place</span> จุดส่ง</div><div style="font-size:13px;font-weight:600;color:var(--text,#0f172a);margin-top:3px">{{ dvJob.dest }}</div></div>
+          </div>
+        </div>
+
+        <!-- timeline -->
+        <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:14px;padding:18px 18px 8px;box-shadow:var(--shadow);margin-top:14px">
+          <div style="font-size:14px;font-weight:700;color:var(--text,#0f172a);margin-bottom:6px">ขั้นตอนงาน</div>
+          <sc-for list="{{ driverSteps }}" as="s" hint-placeholder-count="6">
+            <div style="display:flex;gap:13px">
+              <div style="display:flex;flex-direction:column;align-items:center">
+                <div style="{{ s.dotStyle }}"><span class="msr" style="font-size:16px">{{ s.dotIcon }}</span></div>
+                <sc-if value="{{ s.line }}" hint-placeholder-val="{{ true }}"><div style="{{ s.lineStyle }}"></div></sc-if>
+              </div>
+              <div style="padding-bottom:14px;flex:1"><div style="font-size:13.5px;font-weight:600;color:{{ s.textColor }}">{{ s.label }}</div><div style="font-size:11.5px;color:var(--muted,#64748b)">{{ s.time }}</div></div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- photo proof at end -->
+        <sc-if value="{{ dvShowPhoto }}" hint-placeholder-val="{{ false }}">
+        <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:14px;padding:16px;box-shadow:var(--shadow);margin-top:14px">
+          <div style="font-size:14px;font-weight:700;color:var(--text,#0f172a);margin-bottom:10px">แนบรูปหลักฐานการส่ง</div>
+          <div onClick="{{ attachPhoto }}" style="border:2px dashed var(--border,#cbd5e1);border-radius:12px;padding:24px;text-align:center;cursor:pointer;background:repeating-linear-gradient(45deg,var(--surface2,#f8fafc),var(--surface2,#f8fafc) 10px,transparent 10px,transparent 20px)">
+            <span class="msr" style="font-size:32px;color:{{ dvPhotoColor }}">{{ dvPhotoIcon }}</span>
+            <div style="font-size:13px;color:{{ dvPhotoColor }};font-weight:600;margin-top:6px">{{ dvPhotoText }}</div>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+
+      <!-- action footer -->
+      <div style="padding:14px 18px 18px;background:var(--surface,#fff);border-top:1px solid var(--border,#e6e9f2)">
+        <button onClick="{{ dvAction }}" style="{{ dvBtnStyle }}"><span class="msr" style="font-size:21px">{{ dvBtnIcon }}</span> {{ dvBtnLabel }}</button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===================== CREATE BOOKING DIALOG ===================== -->
+  <sc-if value="{{ dialogOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeDialog }}" style="position:fixed;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(2px);z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;animation:tmsfade .2s ease both">
+    <div onClick="{{ stop }}" style="width:920px;max-width:100%;max-height:92vh;overflow-y:auto;background:var(--surface,#fff);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.35);animation:tmsslide .28s cubic-bezier(.2,.9,.3,1) both">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border,#e6e9f2);position:sticky;top:0;background:var(--surface,#fff);z-index:2">
+        <div style="display:flex;align-items:center;gap:12px"><div style="width:38px;height:38px;border-radius:10px;background:var(--primarySoft,#eff6ff);color:var(--primary,#2563EB);display:flex;align-items:center;justify-content:center"><span class="msr" style="font-size:21px">assignment</span></div><div><div style="font-size:17px;font-weight:700;color:var(--text,#0f172a)">{{ dialogTitle }}</div><div style="font-size:12.5px;color:var(--muted,#64748b)">เลขใบปฏิบัติงาน {{ form.docNo }} · ใบปล่อยรถ (รถภายใน)</div></div></div>
+        <button onClick="{{ closeDialog }}" style="width:36px;height:36px;border-radius:9px;border:1px solid var(--border,#e6e9f2);background:var(--surface2,#f8fafc);color:var(--text,#0f172a);display:flex;align-items:center;justify-content:center;cursor:pointer"><span class="msr" style="font-size:20px">close</span></button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 320px;gap:0">
+        <!-- LEFT: form -->
+        <div style="padding:20px 22px;border-right:1px solid var(--border,#e6e9f2)">
+          <!-- section: รถ/คนขับ -->
+          <div style="{{ secLabel }}">ข้อมูลรถและคนขับ</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:18px">
+            <div><label style="{{ lb }}">วันที่จัดส่ง</label><input type="date" value="{{ form.dateSend }}" onInput="{{ fh.dateSend }}" style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">เวลาจัดส่ง</label><input value="{{ form.timeSend }}" onInput="{{ fh.timeSend }}" placeholder="เช่น 08.00-16.00" style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">ทะเบียนรถ</label>
+              <select value="{{ form.plate }}" onChange="{{ fh.plate }}" style="{{ inputStyle }}"><option value="">เลือกรถ...</option><sc-for list="{{ plateOptions }}" as="p" hint-placeholder-count="6"><option value="{{ p.plate }}">{{ p.label }}</option></sc-for></select>
+            </div>
+            <div><label style="{{ lb }}">ประเภทรถ (ใช้คำนวณรายได้)</label><div style="{{ vtypeChip }}"><span class="msr" style="font-size:16px">directions_bus</span> {{ form.vtypeLabel }}</div></div>
+            <div style="grid-column:1 / -1"><label style="{{ lb }}">ชื่อคนขับ</label>
+              <select value="{{ form.driver }}" onChange="{{ fh.driver }}" style="{{ inputStyle }}"><option value="">เลือกคนขับ...</option><sc-for list="{{ driverOptions }}" as="d" hint-placeholder-count="6"><option value="{{ d }}">{{ d }}</option></sc-for></select>
+            </div>
+          </div>
+
+          <!-- section: ลูกค้า/งาน -->
+          <div style="{{ secLabel }}">ข้อมูลลูกค้าและงาน</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:18px">
+            <div style="grid-column:1 / -1"><label style="{{ lb }}">รหัสลูกค้า / ชื่อลูกค้า</label>
+              <select value="{{ form.customer }}" onChange="{{ fh.customer }}" style="{{ inputStyle }}"><option value="">เลือกลูกค้า...</option><sc-for list="{{ customerOptions }}" as="c" hint-placeholder-count="6"><option value="{{ c }}">{{ c }}</option></sc-for></select>
+            </div>
+            <div><label style="{{ lb }}">ใบสั่งงาน (PO)</label><input value="{{ form.po }}" onInput="{{ fh.po }}" placeholder="PO..." style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">เลขชิพเม้นท์ (Sh.No)</label><input value="{{ form.shipNo }}" onInput="{{ fh.shipNo }}" placeholder="ใช้วางบิล" style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">ต้นทาง</label><input value="{{ form.origin }}" onInput="{{ fh.origin }}" placeholder="ต้นทาง" style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">ปลายทาง</label><input value="{{ form.destination }}" onInput="{{ fh.destination }}" placeholder="ปลายทาง" style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">สถานที่ส่งสินค้า (หน้างาน)</label><input value="{{ form.site }}" onInput="{{ fh.site }}" placeholder="ชื่อหน้างาน" style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">อำเภอ/จังหวัดที่จัดส่ง</label><input value="{{ form.district }}" onInput="{{ fh.district }}" placeholder="อำเภอ/จังหวัด" style="{{ inputStyle }}"/></div>
+          </div>
+
+          <!-- section: สินค้า -->
+          <div style="{{ secLabel }}">สินค้า</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:18px">
+            <div><label style="{{ lb }}">ประเภทสินค้า</label>
+              <select value="{{ form.prodType }}" onChange="{{ fh.prodType }}" style="{{ inputStyle }}"><option value="ปูนถุง">ปูนถุง</option><option value="กระเบื้อง">กระเบื้อง</option></select>
+            </div>
+            <div><label style="{{ lb }}">ชื่อสินค้า (1–3 รายการ, ปลายทางเดียว)</label><input value="{{ form.goods }}" onInput="{{ fh.goods }}" placeholder="เช่น M402 + M300" style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">น้ำหนัก (ตัน)</label><input type="number" value="{{ form.weight }}" onInput="{{ fh.weight }}" placeholder="0" style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">จำนวน (ชิ้น/ถุง)</label><input type="number" value="{{ form.qty }}" onInput="{{ fh.qty }}" placeholder="0" style="{{ inputStyle }}"/></div>
+          </div>
+
+          <!-- section: คิดตาม -->
+          <div style="{{ secLabel }}">คิดค่าขนส่งตาม</div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+            <sc-for list="{{ calcByOptions }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.go }}" style="{{ o.style }}"><span class="msr" style="font-size:17px">{{ o.icon }}</span> {{ o.label }}</button></sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:6px">
+            <sc-if value="{{ showTon }}" hint-placeholder-val="{{ true }}"><div><label style="{{ lb }}">ตันละ (บาท)</label><input type="number" value="{{ form.ratePerTon }}" onInput="{{ fh.ratePerTon }}" placeholder="0" style="{{ inputStyle }}"/></div></sc-if>
+            <sc-if value="{{ showTrip }}" hint-placeholder-val="{{ false }}"><div><label style="{{ lb }}">เที่ยวละ (บาท)</label><input type="number" value="{{ form.ratePerTrip }}" onInput="{{ fh.ratePerTrip }}" placeholder="0" style="{{ inputStyle }}"/></div></sc-if>
+            <sc-if value="{{ showPiece }}" hint-placeholder-val="{{ false }}"><div><label style="{{ lb }}">ชิ้นละ (บาท)</label><input type="number" value="{{ form.ratePerPiece }}" onInput="{{ fh.ratePerPiece }}" placeholder="0" style="{{ inputStyle }}"/></div></sc-if>
+            <div><label style="{{ lb }}">ราคาค่าขนส่ง (เต็ม ยังไม่หักภาษี 1%)</label><input type="number" value="{{ form.price }}" onInput="{{ fh.price }}" placeholder="auto" style="{{ inputStyle }}"/></div>
+          </div>
+
+          <!-- section: น้ำมัน/เบี้ยเลี้ยง -->
+          <div style="{{ secLabel }};margin-top:14px">ค่าเชื้อเพลิง / เบี้ยเลี้ยง</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px">
+            <div><label style="{{ lb }}">จำนวนน้ำมัน (ลิตร)</label><input type="number" value="{{ form.fuelLiters }}" onInput="{{ fh.fuelLiters }}" placeholder="0" style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">ราคาน้ำมัน (ลิตรละ)</label><input type="number" value="{{ form.fuelPrice }}" onInput="{{ fh.fuelPrice }}" style="{{ inputStyle }}"/></div>
+            <div><label style="{{ lb }}">เบี้ยเลี้ยงคนขับ</label><input type="number" value="{{ form.perDiem }}" onInput="{{ fh.perDiem }}" placeholder="0" style="{{ inputStyle }}"/></div>
+            <div style="grid-column:1 / -1"><label style="{{ lb }}">เบิกเงินยืม</label><input type="number" value="{{ form.advance }}" onInput="{{ fh.advance }}" placeholder="0" style="{{ inputStyle }}"/></div>
+            <div style="grid-column:1 / -1"><label style="{{ lb }}">หมายเหตุ</label><textarea value="{{ form.note }}" onInput="{{ fh.note }}" placeholder="รายละเอียดเพิ่มเติม..." style="{{ inputStyle }};min-height:56px;resize:vertical"></textarea></div>
+          </div>
+        </div>
+
+        <!-- RIGHT: live calc -->
+        <div style="padding:20px 20px;background:var(--surface2,#f8fafc)">
+          <div style="{{ secLabel }}">สรุปการคำนวณ</div>
+          <div style="background:var(--surface,#fff);border:1px solid var(--border,#e6e9f2);border-radius:12px;padding:15px 16px">
+            <div style="font-size:11.5px;color:var(--muted,#64748b)">รายได้ค่าขนส่ง</div>
+            <div style="font-size:26px;font-weight:700;color:var(--text,#0f172a);letter-spacing:-.5px">{{ calc.income }}</div>
+            <div style="height:1px;background:var(--border,#e6e9f2);margin:12px 0"></div>
+            <sc-for list="{{ calc.rows }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px"><span style="color:var(--muted,#64748b)">{{ r.k }}</span><span style="font-weight:600;color:{{ r.c }}">{{ r.v }}</span></div>
+            </sc-for>
+          </div>
+          <div style="background:var(--primary,#2563EB);border-radius:12px;padding:14px 16px;margin-top:12px;color:#fff">
+            <div style="font-size:11.5px;opacity:.85">รายได้คนขับ ({{ form.vtypeLabel }} · {{ form.prodType }})</div>
+            <div style="font-size:22px;font-weight:700;margin-top:2px">{{ calc.driverPay }}</div>
+            <div style="font-size:10.5px;opacity:.8;margin-top:5px;line-height:1.5">{{ calc.formula }}</div>
+          </div>
+          <div style="background:var(--surface,#fff);border:1px dashed var(--border,#cbd5e1);border-radius:12px;padding:12px 16px;margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12.5px;color:var(--muted,#64748b)">เหลือให้คนขับ</span>
+            <span style="font-size:17px;font-weight:700;color:#16a34a">{{ calc.remain }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--border,#e6e9f2);position:sticky;bottom:0;background:var(--surface,#fff)">
+        <button onClick="{{ closeDialog }}" style="height:42px;padding:0 20px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--text,#0f172a);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer">ยกเลิก</button>
+        <button onClick="{{ saveBooking }}" style="height:42px;padding:0 22px;border-radius:10px;border:0;background:var(--primary,#2563EB);color:#fff;font-family:inherit;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.3)"><span class="msr" style="font-size:19px">save</span> {{ saveLabel }}</button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===================== DRIVER DETAIL DRAWER ===================== -->
+  <sc-if value="{{ driverDetail }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeDetail }}" style="position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:55;display:flex;justify-content:flex-end;animation:tmsfade .2s ease both">
+    <div onClick="{{ stop }}" style="width:420px;max-width:100%;height:100%;background:var(--surface,#fff);box-shadow:-12px 0 40px rgba(0,0,0,.2);overflow-y:auto;animation:tmsslide .3s cubic-bezier(.2,.9,.3,1) both">
+      <div style="padding:22px 22px;background:linear-gradient(135deg,var(--primary,#2563EB),#1d4ed8);color:#fff">
+        <div style="display:flex;justify-content:flex-end"><button onClick="{{ closeDetail }}" style="width:34px;height:34px;border-radius:9px;border:0;background:rgba(255,255,255,.2);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><span class="msr" style="font-size:19px">close</span></button></div>
+        <div style="display:flex;align-items:center;gap:14px;margin-top:4px"><div style="width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700">{{ dd.ini }}</div><div><div style="font-size:19px;font-weight:700">{{ dd.name }}</div><div style="font-size:12.5px;opacity:.85">{{ dd.code }} · {{ dd.phone }}</div></div></div>
+      </div>
+      <div style="padding:20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div style="background:var(--surface2,#f8fafc);border-radius:11px;padding:13px;text-align:center"><div style="font-size:21px;font-weight:700;color:var(--text,#0f172a)">{{ dd.trips }}</div><div style="font-size:11px;color:var(--muted,#64748b)">เที่ยวเดือนนี้</div></div>
+          <div style="background:var(--surface2,#f8fafc);border-radius:11px;padding:13px;text-align:center"><div style="font-size:21px;font-weight:700;color:#16a34a">{{ dd.income }}</div><div style="font-size:11px;color:var(--muted,#64748b)">รายได้เดือนนี้</div></div>
+          <div style="background:var(--surface2,#f8fafc);border-radius:11px;padding:13px;text-align:center"><div style="font-size:21px;font-weight:700;color:var(--text,#0f172a)">{{ dd.rating }}</div><div style="font-size:11px;color:var(--muted,#64748b)">คะแนน</div></div>
+        </div>
+        <div style="font-size:14px;font-weight:700;color:var(--text,#0f172a);margin:20px 0 4px">ประวัติการวิ่งงาน</div>
+        <sc-for list="{{ dd.history }}" as="h" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border,#e6e9f2)">
+            <div style="width:36px;height:36px;border-radius:9px;background:var(--primarySoft,#eff6ff);color:var(--primary,#2563EB);display:flex;align-items:center;justify-content:center"><span class="msr" style="font-size:18px">local_shipping</span></div>
+            <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text,#0f172a)">{{ h.route }}</div><div style="font-size:11.5px;color:var(--muted,#64748b)">{{ h.date }} · {{ h.id }}</div></div>
+            <div style="font-size:13px;font-weight:700;color:#16a34a">{{ h.amount }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===================== WORKFLOW DRAWER ===================== -->
+  <sc-if value="{{ workflowJob }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeWorkflow }}" style="position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:56;display:flex;justify-content:flex-end;animation:tmsfade .2s ease both">
+    <div onClick="{{ stop }}" style="width:440px;max-width:100%;height:100%;background:var(--surface,#fff);box-shadow:-12px 0 40px rgba(0,0,0,.2);overflow-y:auto;display:flex;flex-direction:column;animation:tmsslide .3s cubic-bezier(.2,.9,.3,1) both">
+      <div style="padding:20px 22px;background:linear-gradient(135deg,var(--primary,#2563EB),#1d4ed8);color:#fff">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:12px;opacity:.85">ผังขั้นตอนงาน</div><div style="font-size:19px;font-weight:700">{{ wf.id }}</div><div style="font-size:12.5px;opacity:.9;margin-top:2px">{{ wf.customer }} · {{ wf.price }}</div></div><button onClick="{{ closeWorkflow }}" style="width:34px;height:34px;border-radius:9px;border:0;background:rgba(255,255,255,.2);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><span class="msr" style="font-size:19px">close</span></button></div>
+      </div>
+      <div style="padding:18px 22px 8px;flex:1">
+        <sc-for list="{{ wf.steps }}" as="st" hint-placeholder-count="12">
+          <div style="display:flex;gap:13px">
+            <div style="display:flex;flex-direction:column;align-items:center">
+              <div style="{{ st.dotStyle }}"><span class="msr" style="font-size:16px">{{ st.dotIcon }}</span></div>
+              <sc-if value="{{ st.line }}" hint-placeholder-val="{{ true }}"><div style="{{ st.lineStyle }}"></div></sc-if>
+            </div>
+            <div style="padding-bottom:13px;flex:1"><div style="font-size:13.5px;font-weight:600;color:{{ st.textColor }}">{{ st.label }}</div><div style="font-size:11px;color:{{ st.subColor }}">{{ st.sub }}</div></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:14px 22px 20px;background:var(--surface,#fff);border-top:1px solid var(--border,#e6e9f2)">
+        <button onClick="{{ advanceStage }}" style="{{ wf.btnStyle }}"><span class="msr" style="font-size:20px">{{ wf.btnIcon }}</span> {{ wf.btnLabel }}</button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===================== BILL FORM (add/edit) ===================== -->
+  <sc-if value="{{ billFormOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeBillForm }}" style="position:fixed;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(2px);z-index:66;display:flex;align-items:center;justify-content:center;padding:24px;animation:tmsfade .2s ease both">
+    <div onClick="{{ stop }}" style="width:520px;max-width:100%;background:var(--surface,#fff);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.35);animation:tmsslide .28s cubic-bezier(.2,.9,.3,1) both">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border,#e6e9f2)">
+        <div style="font-size:16px;font-weight:700;color:var(--text,#0f172a)">{{ billFormTitle }}</div>
+        <button onClick="{{ closeBillForm }}" style="width:34px;height:34px;border-radius:9px;border:1px solid var(--border,#e6e9f2);background:var(--surface2,#f8fafc);color:var(--text,#0f172a);display:flex;align-items:center;justify-content:center;cursor:pointer"><span class="msr" style="font-size:19px">close</span></button>
+      </div>
+      <div style="padding:20px 22px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div style="grid-column:1 / -1"><label style="{{ lb }}">ลูกค้า</label>
+          <select value="{{ billForm.customer }}" onChange="{{ bfh.customer }}" style="{{ inputStyle }}"><option value="">เลือกลูกค้า...</option><sc-for list="{{ customerOptions }}" as="c" hint-placeholder-count="6"><option value="{{ c }}">{{ c }}</option></sc-for></select>
+        </div>
+        <div style="grid-column:1 / -1"><label style="{{ lb }}">อ้างอิงเลขงาน / Sh.No</label><input value="{{ billForm.job }}" onInput="{{ bfh.job }}" placeholder="BK-2569-...." style="{{ inputStyle }}"/></div>
+        <div style="grid-column:1 / -1"><label style="{{ lb }}">มูลค่า (ก่อน VAT, บาท)</label><input type="number" value="{{ billForm.amount }}" onInput="{{ bfh.amount }}" placeholder="0" style="{{ inputStyle }}"/></div>
+        <div><label style="{{ lb }}">วันที่</label><input value="{{ billForm.date }}" onInput="{{ bfh.date }}" placeholder="28 มิ.ย. 69" style="{{ inputStyle }}"/></div>
+        <div><label style="{{ lb }}">ครบกำหนด</label><input value="{{ billForm.due }}" onInput="{{ bfh.due }}" placeholder="12 ก.ค. 69" style="{{ inputStyle }}"/></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;padding:14px 22px;border-top:1px solid var(--border,#e6e9f2)">
+        <button onClick="{{ closeBillForm }}" style="height:40px;padding:0 18px;border-radius:10px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--text,#0f172a);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">ยกเลิก</button>
+        <button onClick="{{ saveBill }}" style="height:40px;padding:0 20px;border-radius:10px;border:0;background:var(--primary,#2563EB);color:#fff;font-family:inherit;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.3)"><span class="msr" style="font-size:18px">save</span> บันทึก</button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===================== DOCUMENT PREVIEW (ใบเสนอราคา/ใบแจ้งหนี้/ใบวางบิล/ใบเสร็จ) ===================== -->
+  <sc-if value="{{ docView }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeDoc }}" style="position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(2px);z-index:65;display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow-y:auto;animation:tmsfade .2s ease both">
+    <div onClick="{{ stop }}" style="width:780px;max-width:100%;animation:tmsslide .28s cubic-bezier(.2,.9,.3,1) both">
+      <!-- toolbar -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="color:#fff;font-size:15px;font-weight:700;flex:1">{{ dvDoc.kindLabel }} · {{ dvDoc.no }}</div>
+        <button onClick="{{ printDoc }}" style="height:38px;padding:0 15px;border-radius:9px;border:0;background:#fff;color:#0f172a;font-family:inherit;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer"><span class="msr" style="font-size:18px">download</span> ดาวน์โหลด PDF</button>
+        <button onClick="{{ closeDoc }}" style="width:38px;height:38px;border-radius:9px;border:0;background:rgba(255,255,255,.18);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer"><span class="msr" style="font-size:20px">close</span></button>
+      </div>
+      <!-- paper -->
+      <div style="background:#fff;border-radius:6px;box-shadow:0 24px 70px rgba(0,0,0,.4);padding:44px 46px;color:#1e293b;font-size:13px">
+        <!-- header -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;border-bottom:2px solid #2563EB;padding-bottom:20px">
+          <div style="display:flex;gap:13px">
+            <div style="width:46px;height:46px;border-radius:10px;background:#2563EB;display:flex;align-items:center;justify-content:center"><span class="msr" style="color:#fff;font-size:27px">local_shipping</span></div>
+            <div>
+              <div style="font-size:17px;font-weight:700;color:#0f172a">บริษัท ธันทรา ทรานสปอร์ต จำกัด</div>
+              <div style="font-size:11.5px;color:#64748b;line-height:1.6;margin-top:3px">88/9 ถ.พหลโยธิน ต.คลองหนึ่ง อ.คลองหลวง จ.ปทุมธานี 12120<br/>โทร. 02-555-8800 · เลขประจำตัวผู้เสียภาษี 0105561234567</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:22px;font-weight:700;color:#2563EB;letter-spacing:-.5px">{{ dvDoc.kindLabel }}</div>
+            <div style="font-size:11.5px;color:#64748b">{{ dvDoc.kindEn }}</div>
+          </div>
+        </div>
+        <!-- meta -->
+        <div style="display:flex;justify-content:space-between;gap:24px;margin-top:20px">
+          <div style="flex:1">
+            <div style="font-size:11px;color:#94a3b8;font-weight:600;letter-spacing:.3px">ลูกค้า / CUSTOMER</div>
+            <div style="font-size:14px;font-weight:700;color:#0f172a;margin-top:4px">{{ dvDoc.customer }}</div>
+            <div style="font-size:11.5px;color:#64748b;line-height:1.6;margin-top:2px">{{ dvDoc.customerAddr }}<br/>ผู้ติดต่อ: {{ dvDoc.contact }}</div>
+          </div>
+          <div style="width:230px;font-size:12px">
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">เลขที่</span><span style="font-weight:700;color:#0f172a">{{ dvDoc.no }}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">วันที่</span><span style="color:#0f172a">{{ dvDoc.date }}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">{{ dvDoc.dueLabel }}</span><span style="color:#0f172a">{{ dvDoc.due }}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#64748b">อ้างอิงงาน</span><span style="font-weight:600;color:#2563EB">{{ dvDoc.job }}</span></div>
+          </div>
+        </div>
+        <!-- items -->
+        <table style="width:100%;border-collapse:collapse;margin-top:20px;font-size:12.5px">
+          <thead><tr style="background:#f1f5fb;color:#475569">
+            <th style="text-align:left;font-weight:600;padding:10px 12px;border-radius:6px 0 0 6px">รายการ</th>
+            <th style="text-align:right;font-weight:600;padding:10px 12px">จำนวน</th>
+            <th style="text-align:right;font-weight:600;padding:10px 12px">หน่วยละ</th>
+            <th style="text-align:right;font-weight:600;padding:10px 12px;border-radius:0 6px 6px 0">จำนวนเงิน</th>
+          </tr></thead>
+          <tbody>
+          <sc-for list="{{ dvDoc.items }}" as="it" hint-placeholder-count="3">
+            <tr style="border-bottom:1px solid #f1f5f9">
+              <td style="padding:11px 12px;color:#0f172a">{{ it.desc }}</td>
+              <td style="padding:11px 12px;text-align:right;color:#475569">{{ it.qty }}</td>
+              <td style="padding:11px 12px;text-align:right;color:#475569">{{ it.unit }}</td>
+              <td style="padding:11px 12px;text-align:right;font-weight:600;color:#0f172a">{{ it.amount }}</td>
+            </tr>
+          </sc-for>
+          </tbody>
+        </table>
+        <!-- totals -->
+        <div style="display:flex;justify-content:space-between;gap:24px;margin-top:18px">
+          <div style="flex:1;align-self:flex-end">
+            <div style="font-size:11px;color:#94a3b8;font-weight:600">จำนวนเงินรวมทั้งสิ้น (ตัวอักษร)</div>
+            <div style="font-size:12.5px;font-weight:600;color:#0f172a;margin-top:3px;padding:9px 12px;background:#f8fafc;border-radius:8px;display:inline-block">{{ dvDoc.totalText }}</div>
+          </div>
+          <div style="width:260px;font-size:12.5px">
+            <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:#64748b">รวมเป็นเงิน</span><span style="color:#0f172a">{{ dvDoc.subtotal }}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e2e8f0"><span style="color:#64748b">ภาษีมูลค่าเพิ่ม 7%</span><span style="color:#0f172a">{{ dvDoc.vat }}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:11px 12px;margin-top:8px;background:#2563EB;border-radius:9px;color:#fff"><span style="font-weight:600">ยอดสุทธิ</span><span style="font-weight:700;font-size:15px">{{ dvDoc.total }}</span></div>
+          </div>
+        </div>
+        <!-- footer signatures -->
+        <div style="display:flex;gap:40px;margin-top:40px">
+          <div style="flex:1;text-align:center"><div style="border-top:1px dashed #cbd5e1;padding-top:8px;font-size:11.5px;color:#64748b">ผู้รับวางบิล / ลูกค้า</div></div>
+          <div style="flex:1;text-align:center"><div style="border-top:1px dashed #cbd5e1;padding-top:8px;font-size:11.5px;color:#64748b">ผู้มีอำนาจลงนาม</div></div>
+        </div>
+        <div style="margin-top:22px;font-size:10.5px;color:#94a3b8;text-align:center;border-top:1px solid #f1f5f9;padding-top:12px">{{ dvDoc.note }}</div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===================== TOAST ===================== -->
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:11px;padding:13px 20px 13px 16px;border-radius:12px;background:var(--text,#0f172a);color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.32);animation:tmstoast .3s cubic-bezier(.2,.9,.3,1) both">
+    <span class="msr" style="font-size:21px;color:{{ toastColor }}">{{ toastIcon }}</span>
+    <span style="font-size:13.5px;font-weight:500">{{ toast }}</span>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = {
+    role: 'admin', screen: 'dashboard', dark: false, variant: 'a',
+    dialogOpen: false, q: '', jobTab: 'all', incomeMethod: 'trip', period: 'month',
+    driverStep: 0, dvPhoto: false, driverDetail: null, toast: null,
+    billTab: 'quote', docView: null,
+    selBooking: null, selVehicle: null, selDriver: null,
+    form: { docNo:'', dateSend:'', plate:'', driver:'', customer:'', po:'', shipNo:'', origin:'', destination:'', site:'', district:'', prodType:'ปูนถุง', goods:'', weight:'', qty:'', calcBy:'trip', ratePerTon:'', ratePerTrip:'', ratePerPiece:'', price:'', fuelLiters:'', fuelPrice:'37.67', perDiem:'', timeSend:'', advance:'', note:'' },
+    editingBooking: null,
+    billFormOpen: false, editingBill: null,
+    workflowJob: null,
+    billForm: { customer:'', job:'', amount:'', date:'', due:'' },
+    billDocs: [
+      { key:1, kind:'quote', bookingId:'BK-2569-0142', no:'QT-69-0501', customer:'บจก. ศรีไทยคอนกรีต', job:'BK-2569-0142', amount:18500, date:'28 มิ.ย. 69', due:'12 ก.ค. 69', status:'เสนอแล้ว' },
+      { key:2, kind:'invoice', bookingId:'BK-2569-0140', no:'IV-69-0498', customer:'บมจ. พฤกษา', job:'BK-2569-0140', amount:24000, date:'27 มิ.ย. 69', due:'11 ก.ค. 69', status:'รอชำระ' },
+      { key:3, kind:'bill', bookingId:'BK-2569-0139', no:'BN-69-0495', customer:'บจก. แลนด์ดีเวลลอป', job:'BK-2569-0139', amount:15600, date:'27 มิ.ย. 69', due:'26 ก.ค. 69', status:'วางบิลแล้ว' },
+      { key:4, kind:'receipt', bookingId:'BK-2569-0137', no:'RC-69-0490', customer:'หจก. ทวีทรัพย์', job:'BK-2569-0137', amount:9200, date:'26 มิ.ย. 69', due:'26 มิ.ย. 69', status:'ชำระแล้ว' }
+    ],
+    bookings: [
+      { id:'BK-2569-0142', date:'28 มิ.ย. 69', customer:'บจก. ศรีไทยคอนกรีต', goods:'หิน 3/4', origin:'โรงโม่ สระบุรี', dest:'ไซต์ลาดกระบัง', price:'฿18,500', status:'รอจัดรถ', owner:'สมหญิง' },
+      { id:'BK-2569-0141', date:'28 มิ.ย. 69', customer:'หจก. รุ่งเรืองวัสดุ', goods:'ทรายหยาบ', origin:'บ่อทราย อยุธยา', dest:'บางนา กม.18', price:'฿12,800', status:'รอจัดรถ', owner:'สมหญิง' },
+      { id:'BK-2569-0140', date:'27 มิ.ย. 69', customer:'บมจ. พฤกษา', goods:'ปูนผง', origin:'ปูนซีเมนต์ สระบุรี', dest:'รังสิต คลอง 7', price:'฿24,000', status:'กำลังดำเนินการ', owner:'ธนกร' },
+      { id:'BK-2569-0139', date:'27 มิ.ย. 69', customer:'บจก. แลนด์ดีเวลลอป', goods:'หินคลุก', origin:'โรงโม่ ราชบุรี', dest:'นครปฐม', price:'฿15,600', status:'กำลังขนส่ง', owner:'ธนกร' },
+      { id:'BK-2569-0138', date:'26 มิ.ย. 69', customer:'บจก. ศรีไทยคอนกรีต', goods:'เหล็กเส้น', origin:'โกดัง บางพลี', dest:'ไซต์พระราม 9', price:'฿32,400', status:'กำลังขนส่ง', owner:'อนุชา' },
+      { id:'BK-2569-0137', date:'26 มิ.ย. 69', customer:'หจก. ทวีทรัพย์', goods:'อิฐมอญ', origin:'โรงอิฐ อ่างทอง', dest:'มีนบุรี', price:'฿9,200', status:'ส่งสำเร็จ', owner:'สมหญิง' },
+      { id:'BK-2569-0136', date:'25 มิ.ย. 69', customer:'บมจ. พฤกษา', goods:'ทรายถม', origin:'บ่อทราย อยุธยา', dest:'รังสิต คลอง 3', price:'฿11,000', status:'ส่งสำเร็จ', owner:'ธนกร' },
+      { id:'BK-2569-0135', date:'25 มิ.ย. 69', customer:'บจก. เมกาโฮม', goods:'ปูนสำเร็จ', origin:'รง.ปูน สระบุรี', dest:'บางใหญ่', price:'฿20,500', status:'รอวางบิล', owner:'อนุชา' }
+    ],
+    vehicles: [
+      { plate:'70-8821 สระบุรี', type:'ดัมพ์ 10 ล้อ', vtype:'บริษัท', driver:'สมชาย ทองดี', status:'ว่าง', cap:'18 ตัน', tax:'15 ส.ค. 69', taxL:'g', ins:'30 ก.ย. 69', insL:'g' },
+      { plate:'82-4417 กรุงเทพ', type:'พ่วง 18 ล้อ', vtype:'ร่วม', driver:'ประเสริฐ มั่นคง', status:'กำลังใช้งาน', cap:'32 ตัน', tax:'02 ก.ค. 69', taxL:'y', ins:'18 ส.ค. 69', insL:'g' },
+      { plate:'71-3390 ราชบุรี', type:'ดัมพ์ 6 ล้อ', vtype:'หุ้นส่วน', driver:'วิรัตน์ ใจกล้า', status:'กำลังใช้งาน', cap:'8 ตัน', tax:'20 มิ.ย. 69', taxL:'r', ins:'12 ต.ค. 69', insL:'g' },
+      { plate:'83-1102 กรุงเทพ', type:'พ่วง 22 ล้อ', vtype:'ร่วม', driver:'อภิชาติ แสนดี', status:'ซ่อม', cap:'40 ตัน', tax:'28 พ.ย. 69', taxL:'g', ins:'05 ก.ค. 69', insL:'y' },
+      { plate:'70-9954 สระบุรี', type:'ดัมพ์ 10 ล้อ', vtype:'บริษัท', driver:'ยังไม่กำหนด', status:'ว่าง', cap:'18 ตัน', tax:'14 ม.ค. 70', taxL:'g', ins:'22 ก.พ. 70', insL:'g' },
+      { plate:'72-6628 อยุธยา', type:'ดัมพ์ 6 ล้อ', vtype:'หุ้นส่วน', driver:'สมหมาย เพียรงาน', status:'กำลังใช้งาน', cap:'8 ตัน', tax:'19 มิ.ย. 69', taxL:'r', ins:'08 ก.ค. 69', insL:'y' }
+    ],
+    drivers: [
+      { name:'สมชาย ทองดี', code:'DRV-001', phone:'081-234-5678', vehicle:'70-8821', status:'ว่าง', payType:'ค่าเที่ยว', trips:42, income:'฿38,400', rating:'4.9' },
+      { name:'ประเสริฐ มั่นคง', code:'DRV-002', phone:'089-555-1212', vehicle:'82-4417', status:'กำลังวิ่ง', payType:'เปอร์เซ็นต์', trips:38, income:'฿52,800', rating:'4.8' },
+      { name:'วิรัตน์ ใจกล้า', code:'DRV-003', phone:'086-777-9090', vehicle:'71-3390', status:'กำลังวิ่ง', payType:'ระยะทาง', trips:51, income:'฿44,100', rating:'4.7' },
+      { name:'อภิชาติ แสนดี', code:'DRV-004', phone:'082-101-2020', vehicle:'83-1102', status:'ลางาน', payType:'ค่าเที่ยว', trips:29, income:'฿26,600', rating:'4.6' },
+      { name:'สมหมาย เพียรงาน', code:'DRV-005', phone:'087-345-6767', vehicle:'72-6628', status:'กำลังวิ่ง', payType:'ค่าเที่ยว', trips:47, income:'฿41,200', rating:'4.9' },
+      { name:'ธีรพงษ์ ขยันยิ่ง', code:'DRV-006', phone:'090-888-3434', vehicle:'70-9954', status:'ว่าง', payType:'เปอร์เซ็นต์', trips:33, income:'฿39,900', rating:'4.5' }
+    ],
+    customers: [
+      { name:'บจก. ศรีไทยคอนกรีต', contact:'คุณวิชัย', phone:'02-555-0100', jobs:84, total:'฿1.42M' },
+      { name:'บมจ. พฤกษา', contact:'คุณนภา', phone:'02-555-0200', jobs:67, total:'฿1.18M' },
+      { name:'หจก. รุ่งเรืองวัสดุ', contact:'คุณสมพร', phone:'035-221-330', jobs:52, total:'฿890K' },
+      { name:'บจก. แลนด์ดีเวลลอป', contact:'คุณกานต์', phone:'02-555-0400', jobs:48, total:'฿760K' },
+      { name:'บจก. เมกาโฮม', contact:'คุณปิติ', phone:'02-555-0500', jobs:39, total:'฿620K' },
+      { name:'หจก. ทวีทรัพย์', contact:'คุณมานะ', phone:'035-441-220', jobs:31, total:'฿498K' }
+    ]
+  };
+
+  AV = ['#2563EB','#7c3aed','#0891b2','#16a34a','#d97706','#db2777'];
+  avc(i){ return this.AV[i % this.AV.length]; }
+  ini(name){ const p = name.replace(/^(บจก\.|บมจ\.|หจก\.)\s*/,'').trim(); return p.charAt(0); }
+
+  BILLKINDS = { quote:'ใบเสนอราคา', invoice:'ใบแจ้งหนี้', bill:'ใบวางบิล', receipt:'ใบเสร็จรับเงิน/ใบกำกับภาษี' };
+
+  STAGES = [
+    { label:'ลูกค้าขอราคา', icon:'contact_phone' },
+    { label:'ออกใบเสนอราคา', icon:'request_quote', doc:'quote', route:'billing', tab:'quote' },
+    { label:'ลูกค้าอนุมัติ / PO', icon:'verified', route:'booking', act:'edit' },
+    { label:'สร้างใบงาน (Job)', icon:'assignment', route:'booking', act:'edit' },
+    { label:'มอบหมายรถ / คนขับ', icon:'local_shipping', route:'dispatch' },
+    { label:'ขนส่งสินค้า', icon:'navigation', route:'jobs' },
+    { label:'แนบ POD / เอกสารขนส่ง', icon:'photo_camera', route:'driver' },
+    { label:'ออกใบแจ้งหนี้', icon:'receipt_long', doc:'invoice', route:'billing', tab:'invoice' },
+    { label:'วางบิล', icon:'account_balance', doc:'bill', route:'billing', tab:'bill' },
+    { label:'รับชำระเงิน', icon:'payments', route:'billing', tab:'invoice' },
+    { label:'ออกใบเสร็จ', icon:'paid', doc:'receipt', route:'billing', tab:'receipt' },
+    { label:'ปิดงาน', icon:'task_alt' }
+  ];
+  stageStatus(i){ return i<=3?'รอจัดรถ':i===4?'กำลังดำเนินการ':i<=6?'กำลังขนส่ง':i<=8?'รอวางบิล':i<11?'รอวางบิล':'ส่งสำเร็จ'; }
+  defStage(st){ return ({ 'รอจัดรถ':3, 'กำลังดำเนินการ':4, 'กำลังขนส่ง':5, 'ส่งสำเร็จ':6, 'รอวางบิล':8 })[st] ?? 3; }
+  stageOf(b){ return b.stage ?? this.defStage(b.status); }
+  openWorkflow(id){ return ()=> this.setState({ workflowJob:id }); }
+  closeWorkflow = ()=> this.setState({ workflowJob:null });
+  advanceStage = ()=>{
+    const id = this.state.workflowJob; if(!id) return;
+    const b = this.state.bookings.find(x=>x.id===id); if(!b) return;
+    const cur = this.stageOf(b); if(cur>=this.STAGES.length-1){ this.toast('งานนี้ปิดแล้ว'); return; }
+    const next = cur+1; const st = this.STAGES[next];
+    this.setState(s=>{
+      let billDocs = s.billDocs;
+      if(st.doc && !billDocs.some(d=>d.bookingId===id && d.kind===st.doc)){
+        const seq = 502 + billDocs.length;
+        const smap = { quote:'เสนอแล้ว', invoice:'รอชำระ', bill:'วางบิลแล้ว', receipt:'ชำระแล้ว' };
+        const nd = { key:Date.now(), bookingId:id, kind:st.doc, no:this.BILLPREFIX[st.doc]+'-69-0'+seq, customer:b.customer, job:b.shipNo||b.id, amount:b.priceN||Number(String(b.price).replace(/[^0-9]/g,''))||0, date:b.date, due:b.date, status:smap[st.doc] };
+        billDocs = [nd, ...billDocs];
+      }
+      const patch = { bookings: s.bookings.map(x=> x.id===id ? { ...x, stage:next, status:this.stageStatus(next) } : x), billDocs };
+      // navigate to the page for this step so user can fill data
+      if(st.route){
+        patch.workflowJob = null;
+        patch.screen = st.route;
+        if(st.tab) patch.billTab = st.tab;
+        if(st.route==='dispatch'){ patch.selBooking = id; const veh=s.vehicles.find(v=>v.plate===b.plate); const drv=s.drivers.find(d=>d.name===b.driver); patch.selVehicle=veh?veh.plate:null; patch.selDriver=drv?drv.code:null; }
+        if(st.act==='edit'){ patch.dialogOpen=true; patch.editingBooking=id; patch.workflowJob=null; }
+      }
+      return patch;
+    });
+    if(st.act==='edit'){ const veh = this.state.vehicles.find(v=>v.plate===b.plate); this.setState({ form:{ ...this.emptyForm(), docNo:b.docNo||('67-'+(17058+this.state.bookings.length)), customer:b.customer||'', plate:b.plate||'', vtypeLabel:veh?veh.vtype:'—', driver:b.driver||'', po:b.po||'', shipNo:b.shipNo||'', origin:b.origin||'', destination:b.dest||'', prodType:b.prodType||'ปูนถุง', goods:b.goods||'', calcBy:'trip', price:b.priceN?String(b.priceN):'', note:b.note||'' } }); }
+    this.toast(st.doc ? ('ออก'+this.BILLKINDS[st.doc]+'แล้ว · ไปหน้ากรอกข้อมูล') : (st.route ? ('ไปยัง: '+st.label) : ('อัปเดตสถานะ: '+st.label)));
+  };
+  BILLEN = { quote:'QUOTATION', invoice:'INVOICE', bill:'BILLING NOTE', receipt:'RECEIPT / TAX INVOICE' };
+  BILLPREFIX = { quote:'QT', invoice:'IV', bill:'BN', receipt:'RC' };
+  baht(n){ return '฿'+Number(Math.round(n)).toLocaleString(); }
+  bahtText(n){
+    const num=['ศูนย์','หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
+    const pos=['','สิบ','ร้อย','พัน','หมื่น','แสน','ล้าน'];
+    n=Math.round(n); if(n===0) return 'ศูนย์บาทถ้วน';
+    const conv=(s)=>{ let r=''; const L=s.length; for(let i=0;i<L;i++){ const d=+s[i]; const p=L-1-i; if(d===0) continue; if(p===1&&d===1) r+='สิบ'; else if(p===1&&d===2) r+='ยี่สิบ'; else if(p===0&&d===1&&L>1) r+='เอ็ด'; else r+=num[d]+pos[p]; } return r; };
+    let baht=Math.floor(n); let s='';
+    if(baht>=1000000){ s+=conv(String(Math.floor(baht/1000000)))+'ล้าน'; baht=baht%1000000; if(baht>0&&baht<100000) s+=''; }
+    s+=conv(String(baht));
+    return s+'บาทถ้วน';
+  }
+  buildDoc(kindKey, customer, job, amount, seq){
+    const cust = this.state.customers.find(c=>c.name===customer) || { contact:'-' };
+    const addr = { 'บจก. ศรีไทยคอนกรีต':'120 หมู่ 4 ต.หนองปลาไหล อ.เมือง จ.สระบุรี 18000', 'บมจ. พฤกษา':'979 อาคารเอสเอ็ม ถ.พหลโยธิน เขตจตุจักร กทม. 10900' }[customer] || 'กรุงเทพมหานคร 10000';
+    const trips = Math.max(1, Math.round(amount/2400));
+    const items = [
+      { desc:'ค่าขนส่งวัสดุก่อสร้าง '+job, qtyN:trips, unitN: Math.round(amount/trips) },
+      { desc:'ค่าน้ำมันเชื้อเพลิงส่วนเพิ่ม', qtyN:1, unitN: Math.round(amount*0.06) }
+    ];
+    const subtotal = items.reduce((a,it)=>a+it.qtyN*it.unitN,0);
+    const vat = subtotal*0.07; const total = subtotal+vat;
+    const dueK = kindKey==='quote' ? 'ยืนราคาถึง' : 'ครบกำหนด';
+    return {
+      kind:kindKey, kindLabel:this.BILLKINDS[kindKey], kindEn:this.BILLEN[kindKey],
+      no: this.BILLPREFIX[kindKey]+'-69-0'+(500+seq), date:'28 มิ.ย. 2569', due:'12 ก.ค. 2569', dueLabel:dueK,
+      customer, customerAddr:addr, contact:cust.contact, job,
+      items: items.map(it=>({ desc:it.desc, qty:it.qtyN+' เที่ยว', unit:this.baht(it.unitN), amount:this.baht(it.qtyN*it.unitN) })),
+      subtotal:this.baht(subtotal), vat:this.baht(vat), total:this.baht(total), totalText:this.bahtText(total),
+      note: kindKey==='quote' ? 'ราคานี้ยังไม่รวมค่าทางด่วน · ยืนราคา 15 วัน · ขอบคุณที่ใช้บริการ' : 'กรุณาชำระเงินภายในกำหนด · โอนเข้าบัญชี ธ.กสิกรไทย เลขที่ 123-4-56789-0 บจก. ธันทรา ทรานสปอร์ต'
+    };
+  }
+
+  ROLES = [
+    { id:'admin', label:'Admin', name:'ก้องเกียรติ (แอดมิน)' },
+    { id:'staff', label:'พนักงานรับงาน', name:'สมหญิง รับงาน' },
+    { id:'dispatch', label:'Dispatcher', name:'ธนกร จัดรถ' },
+    { id:'driver', label:'คนขับรถ', name:'สมชาย ทองดี' },
+    { id:'exec', label:'ผู้บริหาร', name:'ดร.ประยุทธ (ผู้บริหาร)' }
+  ];
+
+  MENU = [
+    { id:'dashboard', label:'Dashboard', icon:'space_dashboard', roles:['admin','staff','dispatch','exec'] },
+    { id:'booking', label:'Booking', icon:'note_add', roles:['admin','staff','dispatch'], badge:'8' },
+    { id:'dispatch', label:'Dispatch', icon:'alt_route', roles:['admin','dispatch'] },
+    { id:'jobs', label:'งานขนส่ง', icon:'local_shipping', roles:['admin','staff','dispatch','exec'] },
+    { id:'workflow', label:'ผังขั้นตอนงาน', icon:'account_tree', roles:['admin','staff','dispatch'] },
+    { id:'customers', label:'ลูกค้า', icon:'groups', roles:['admin','staff'] },
+    { id:'drivers', label:'คนขับ', icon:'badge', roles:['admin','dispatch'] },
+    { id:'vehicles', label:'รถขนส่ง', icon:'directions_bus', roles:['admin','dispatch'] },
+    { id:'docs', label:'เอกสาร', icon:'description', roles:['admin','staff'] },
+    { id:'billing', label:'ออกเอกสาร/วางบิล', icon:'request_quote', roles:['admin','staff'] },
+    { id:'income', label:'รายได้คนขับ', icon:'payments', roles:['admin','exec'] },
+    { id:'reports', label:'รายงาน', icon:'monitoring', roles:['admin','exec'] },
+    { id:'settings', label:'ตั้งค่าระบบ', icon:'settings', roles:['admin'] }
+  ];
+
+  TITLES = { dashboard:['Dashboard','ภาพรวมการดำเนินงานวันนี้'], booking:['Booking','รายการจองงานขนส่ง'], dispatch:['Dispatch','จัดรถและคนขับ'], jobs:['งานขนส่ง','ติดตามสถานะงานทั้งหมด'], workflow:['ผังขั้นตอนงาน','ติดตามงานตามขั้นตอน (Quote → ปิดงาน)'], customers:['ลูกค้า','ฐานข้อมูลลูกค้า'], drivers:['คนขับ','ข้อมูลพนักงานขับรถ'], vehicles:['รถขนส่ง','ทะเบียนและสถานะรถ'], docs:['เอกสาร','ใบงาน ใบส่งของ ใบวางบิล'], billing:['ออกเอกสาร / วางบิล','ใบเสนอราคา ใบแจ้งหนี้ ใบวางบิล'], income:['รายได้คนขับ','คำนวณค่าตอบแทน'], reports:['รายงาน','สรุปผลการดำเนินงาน'], settings:['ตั้งค่าระบบ','การกำหนดค่าระบบ'] };
+
+  meta(s){
+    const m = {
+      'รอจัดรถ':['#d97706','rgba(217,119,6,.14)'], 'กำลังดำเนินการ':['#2563EB','rgba(37,99,235,.14)'],
+      'กำลังขนส่ง':['#0891b2','rgba(8,145,178,.14)'], 'ส่งสำเร็จ':['#16a34a','rgba(22,163,74,.14)'],
+      'รอวางบิล':['#7c3aed','rgba(124,58,237,.14)'],
+      'ว่าง':['#16a34a','rgba(22,163,74,.14)'], 'กำลังใช้งาน':['#2563EB','rgba(37,99,235,.14)'], 'ซ่อม':['#dc2626','rgba(220,38,38,.14)'],
+      'กำลังวิ่ง':['#2563EB','rgba(37,99,235,.14)'], 'ลางาน':['#64748b','rgba(100,116,139,.16)']
+    };
+    return m[s] || ['#64748b','rgba(100,116,139,.14)'];
+  }
+  expColor(l){ return l==='g'?'#16a34a':l==='y'?'#eab308':'#dc2626'; }
+
+  toast(msg){ this.setState({ toast: msg }); clearTimeout(this._t); this._t = setTimeout(()=>this.setState({toast:null}), 2600); }
+  go(s){ return ()=>this.setState({ screen:s, q:'' }); }
+  onRole = (e)=>{ const r = e.target.value; const allowed = this.MENU.filter(m=>m.roles.includes(r)); let sc = r==='driver' ? 'driverapp' : (allowed[0]?allowed[0].id:'dashboard'); this.setState({ role:r, screen:sc }); };
+  toggleDark = ()=> this.setState(s=>({ dark:!s.dark }));
+  emptyForm(){ return { docNo:'', dateSend:'', plate:'', driver:'', vtypeLabel:'—', customer:'', po:'', shipNo:'', origin:'', destination:'', site:'', district:'', prodType:'ปูนถุง', goods:'', weight:'', qty:'', calcBy:'trip', ratePerTon:'', ratePerTrip:'', ratePerPiece:'', price:'', fuelLiters:'', fuelPrice:'37.67', perDiem:'', timeSend:'', advance:'', note:'' }; }
+  openDialog = ()=>{
+    const seq = 17058 + this.state.bookings.length;
+    this.setState({ dialogOpen:true, editingBooking:null, form:{ ...this.emptyForm(), docNo:'67-'+seq } });
+  };
+  closeDialog = ()=> this.setState({ dialogOpen:false, editingBooking:null });
+  stop = (e)=> e.stopPropagation();
+  onQ = (e)=> this.setState({ q:e.target.value });
+  setCalcBy(m){ return ()=> this.setForm('calcBy', m); }
+
+  // live calculation shared by dialog + income
+  calcJob(f){
+    const num = (x)=> Number(x)||0;
+    const weight = num(f.weight), qty = num(f.qty);
+    let income = num(f.price);
+    if(!income){
+      if(f.calcBy==='weight') income = weight * num(f.ratePerTon);
+      else if(f.calcBy==='piece') income = qty * num(f.ratePerPiece);
+      else income = num(f.ratePerTrip);
+    }
+    const tax = income * 0.01;
+    const fuel = num(f.fuelLiters) * num(f.fuelPrice);
+    const perDiem = num(f.perDiem);
+    const vtype = f.vtypeLabel || '—';
+    let driverPay = 0, formula = '';
+    if(f.prodType === 'กระเบื้อง'){
+      driverPay = (income - tax) * 0.62;
+      formula = 'กระเบื้อง: (รายได้ − ภาษี1%) × 62% (ค่าน้ำมันเหมา)';
+    } else if(vtype === 'บริษัท'){
+      driverPay = income - tax - perDiem - fuel;
+      formula = 'รถบริษัท: รายได้ − ภาษี1% − ค่าแรง(เบี้ยเลี้ยง) − ค่าน้ำมัน';
+    } else if(vtype === 'ร่วม'){
+      driverPay = (income - tax) * 0.10;
+      formula = 'รถร่วม: (รายได้ − ภาษี1%) × 10%';
+    } else if(vtype === 'หุ้นส่วน'){
+      driverPay = (income - tax) * 0.08;
+      formula = 'รถหุ้นส่วน: (รายได้ − ภาษี1%) × 8%';
+    } else {
+      driverPay = perDiem;
+      formula = 'เลือกทะเบียนรถเพื่อคำนวณตามประเภทรถ';
+    }
+    const remain = perDiem - num(f.advance);
+    return { income, tax, fuel, perDiem, driverPay, remain, vtype };
+  }
+
+  saveBooking = ()=>{
+    const f = this.state.form;
+    const c = this.calcJob(f);
+    const nb = {
+      id: this.state.editingBooking || ('BK-2569-0'+(143+this.state.bookings.length)),
+      docNo: f.docNo, date: f.dateSend ? this.fmtDate(f.dateSend) : '28 มิ.ย. 69',
+      customer: f.customer||'ลูกค้าใหม่', goods: f.goods||f.prodType||'-',
+      origin: f.origin||'-', dest: f.destination||f.site||'-',
+      price: '฿'+Math.round(c.income).toLocaleString(),
+      priceN: Math.round(c.income), plate: f.plate, driver: f.driver, prodType: f.prodType,
+      shipNo: f.shipNo, po: f.po, timeSend: f.timeSend, perDiem: c.perDiem, fuel: c.fuel,
+      status:'รอจัดรถ', owner:'สมหญิง', stage: (f.plate||f.driver) ? 4 : 3
+    };
+    if(this.state.editingBooking){
+      this.setState(s=>({
+        bookings: s.bookings.map(b=> b.id===s.editingBooking ? { ...b, ...nb, stage:b.stage } : b),
+        billDocs: s.billDocs.map(d=> d.bookingId===s.editingBooking ? { ...d, customer:nb.customer, amount:nb.priceN, job:nb.shipNo||nb.id } : d),
+        dialogOpen:false, editingBooking:null
+      }));
+      this.toast('บันทึกการแก้ไข · อัปเดตเอกสารที่ผูกไว้แล้ว');
+    } else {
+      const seq = 502 + this.state.billDocs.length;
+      const quote = { key:Date.now(), bookingId:nb.id, kind:'quote', no:'QT-69-0'+seq, customer:nb.customer, job:nb.shipNo||nb.id, amount:nb.priceN, date:nb.date, due:nb.date, status:'เสนอแล้ว' };
+      this.setState(s=>({ bookings:[nb, ...s.bookings], billDocs:[quote, ...s.billDocs], dialogOpen:false, form:this.emptyForm() }));
+      this.toast('สร้างใบงานสำเร็จ · ออกใบเสนอราคาแล้ว (เริ่มขั้นตอนงาน)');
+    }
+  };
+  fmtDate(iso){ try{ const d=new Date(iso); return d.getDate()+' '+['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][d.getMonth()]+' '+String(d.getFullYear()+543).slice(-2); }catch(e){ return iso; } }
+
+  editBooking(b){ return ()=>{
+    const veh = this.state.vehicles.find(v=>v.plate===b.plate);
+    this.setState({ dialogOpen:true, editingBooking:b.id, form:{
+      ...this.emptyForm(),
+      docNo: b.docNo || ('67-'+(17058+this.state.bookings.length)),
+      customer: b.customer||'', plate: b.plate||'', vtypeLabel: veh?veh.vtype:'—', driver: b.driver||'',
+      po: b.po||'', shipNo: b.shipNo||'', origin: b.origin||'', destination: b.dest||'', site: b.site||'',
+      prodType: b.prodType||'ปูนถุง', goods: b.goods||'', timeSend: b.timeSend||'',
+      calcBy:'trip', ratePerTrip: b.priceN?String(b.priceN):'', price: b.priceN?String(b.priceN):String(Number(String(b.price).replace(/[^0-9]/g,''))||''),
+      perDiem: b.perDiem?String(b.perDiem):'', note: b.note||''
+    } });
+  }; }
+
+  setForm(k,v){
+    this.setState(s=>{
+      const form = { ...s.form, [k]:v };
+      if(k==='plate'){ const veh = s.vehicles.find(x=>x.plate===v); form.vtypeLabel = veh ? veh.vtype : '—'; if(veh && veh.driver && veh.driver!=='ยังไม่กำหนด') form.driver = veh.driver; }
+      return { form };
+    });
+  }
+
+  // billing CRUD
+  openNewBill = ()=>{ const kind=this.state.billTab; this.setState({ billFormOpen:true, editingBill:null, billForm:{ customer:'', job:'', amount:'', date:'', due:'' } }); };
+  editBill(b){ return ()=> this.setState({ billFormOpen:true, editingBill:b.key, billForm:{ customer:b.customer, job:b.job, amount:String(b.amount), date:b.date, due:b.due } }); }
+  deleteBill(key){ return ()=>{ this.setState(s=>({ billDocs: s.billDocs.filter(x=>x.key!==key) })); this.toast('ลบเอกสารแล้ว'); }; }
+  closeBillForm = ()=> this.setState({ billFormOpen:false, editingBill:null });
+  setBillForm(k,v){ this.setState(s=>({ billForm:{ ...s.billForm, [k]:v } })); }
+  saveBill = ()=>{
+    const bf = this.state.billForm; const kind = this.state.billTab;
+    const statusMap = { quote:'เสนอแล้ว', invoice:'รอชำระ', bill:'วางบิลแล้ว', receipt:'ชำระแล้ว' };
+    if(this.state.editingBill){
+      this.setState(s=>({ billDocs: s.billDocs.map(x=> x.key===s.editingBill ? { ...x, customer:bf.customer||x.customer, job:bf.job, amount:Number(bf.amount)||0, date:bf.date||x.date, due:bf.due||x.due } : x), billFormOpen:false, editingBill:null }));
+      this.toast('บันทึกการแก้ไขเอกสารแล้ว');
+    } else {
+      const seq = 502 + this.state.billDocs.length;
+      const nb = { key:Date.now(), kind, no:this.BILLPREFIX[kind]+'-69-0'+seq, customer:bf.customer||'ลูกค้าใหม่', job:bf.job||'-', amount:Number(bf.amount)||0, date:bf.date||'28 มิ.ย. 69', due:bf.due||'12 ก.ค. 69', status:statusMap[kind] };
+      this.setState(s=>({ billDocs:[nb, ...s.billDocs], billFormOpen:false }));
+      this.toast('สร้าง'+this.BILLKINDS[kind]+'สำเร็จ');
+    }
+  };
+
+  // dispatch
+  pickBooking(id){ return ()=>{
+    const b = this.state.bookings.find(x=>x.id===id) || {};
+    const veh = b.plate ? this.state.vehicles.find(v=>v.plate===b.plate) : null;
+    const drv = b.driver ? this.state.drivers.find(d=>d.name===b.driver) : null;
+    this.setState({ selBooking:id, selVehicle: veh?veh.plate:null, selDriver: drv?drv.code:null });
+  }; }
+  pickVehicle(p){ return ()=> this.setState({ selVehicle:p }); }
+  pickDriver(c){ return ()=> this.setState({ selDriver:c }); }
+  doAssign = ()=>{
+    const { selBooking, selVehicle, selDriver } = this.state;
+    if(!selBooking || !selVehicle || !selDriver) return;
+    this.setState(s=>({
+      bookings: s.bookings.map(b=> b.id===selBooking ? { ...b, status:'กำลังดำเนินการ' } : b),
+      vehicles: s.vehicles.map(v=> v.plate===selVehicle ? { ...v, status:'กำลังใช้งาน' } : v),
+      drivers: s.drivers.map(d=> d.code===selDriver ? { ...d, status:'กำลังวิ่ง' } : d),
+      selBooking:null, selVehicle:null, selDriver:null
+    }));
+    this.toast('จัดรถสำเร็จ · สถานะ "กำลังดำเนินการ"');
+  };
+
+  // driver app
+  DSTEPS = [['รับงาน','assignment_turned_in'],['รับน้ำมัน','local_gas_station'],['กำลังเดินทาง','navigation'],['ถึงปลายทาง','where_to_vote'],['ส่งสินค้า','inventory'],['แนบรูปหลักฐาน','photo_camera']];
+  dvAction = ()=>{
+    const st = this.state.driverStep;
+    if(st < 4){ this.setState({ driverStep: st+1 }); return; }
+    if(st === 4){ this.setState({ driverStep:5 }); return; }
+    if(st === 5){
+      if(!this.state.dvPhoto){ this.setState({ dvPhoto:true }); this.toast('แนบรูปหลักฐานแล้ว'); return; }
+      this.setState({ driverStep:6 });
+      this.toast('อนุมัติงาน · สถานะ "ส่งสำเร็จ"');
+    }
+  };
+  attachPhoto = ()=>{ if(!this.state.dvPhoto){ this.setState({ dvPhoto:true }); this.toast('แนบรูปหลักฐานแล้ว'); } };
+
+  openDetail(d){ return ()=> this.setState({ driverDetail:d }); }
+  closeDetail = ()=> this.setState({ driverDetail:null });
+
+  setVariant(v){ return ()=> this.setState({ variant:v }); }
+  setMethod(m){ return ()=> this.setState({ incomeMethod:m }); }
+  setPeriod(p){ return ()=> this.setState({ period:p }); }
+  setJobTab(t){ return ()=> this.setState({ jobTab:t }); }
+  downloadPdf = ()=> this.toast('กำลังดาวน์โหลด PDF...');
+  exportXls = ()=> this.toast('กำลังส่งออก Excel...');
+  exportPdf = ()=> this.toast('กำลังส่งออก PDF...');
+  setBillTab(t){ return ()=> this.setState({ billTab:t }); }
+  openDoc(doc){ return ()=> this.setState({ docView:doc }); }
+  closeDoc = ()=> this.setState({ docView:null });
+  openNewDoc = ()=> this.toast('สร้าง'+(this.BILLKINDS[this.state.billTab]||'เอกสาร')+'ใหม่');
+  printDoc = ()=> this.toast('กำลังสร้างไฟล์ PDF...');
+
+  navBtn(active){ return active
+    ? 'width:100%;display:flex;align-items:center;gap:12px;padding:10px 13px;border:0;border-radius:10px;background:var(--primary,#2563EB);color:#fff;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:3px;box-shadow:0 4px 12px rgba(37,99,235,.3)'
+    : 'width:100%;display:flex;align-items:center;gap:12px;padding:10px 13px;border:0;border-radius:10px;background:transparent;color:var(--muted,#64748b);font-family:inherit;font-size:13.5px;font-weight:500;cursor:pointer;margin-bottom:3px'; }
+  segBtn(active){ return 'height:30px;padding:0 13px;border-radius:7px;border:0;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;'+(active?'background:var(--primary,#2563EB);color:#fff':'background:transparent;color:var(--muted,#64748b)'); }
+  tabBtn(active){ return 'height:36px;padding:0 16px;border-radius:9px;border:1px solid var(--border,#e6e9f2);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;'+(active?'background:var(--primary,#2563EB);color:#fff;border-color:var(--primary,#2563EB)':'background:var(--surface,#fff);color:var(--muted,#64748b)'); }
+
+  renderVals(){
+    const s = this.state;
+    const light = {'--bg':'#f1f5fb','--surface':'#ffffff','--surface2':'#f6f8fc','--border':'#e6e9f2','--text':'#0f172a','--muted':'#64748b','--primary':'#2563EB','--primarySoft':'#eff6ff','--sidebar':'#ffffff','--shadow':'0 1px 3px rgba(15,23,42,.07)'};
+    const dark = {'--bg':'#0b1220','--surface':'#131c2e','--surface2':'#1a2536','--border':'#26334a','--text':'#e8edf7','--muted':'#93a1b8','--primary':'#3b82f6','--primarySoft':'#16243f','--sidebar':'#0f1828','--shadow':'0 1px 3px rgba(0,0,0,.4)'};
+    const vars = s.dark ? dark : light;
+    const rootStyle = { ...vars, display:'flex', width:'100%', height:'100vh', fontFamily:"'IBM Plex Sans Thai','IBM Plex Sans',sans-serif", background:'var(--bg)', color:'var(--text)', overflow:'hidden' };
+
+    const roleObj = this.ROLES.find(r=>r.id===s.role) || this.ROLES[0];
+    const isDriver = s.role === 'driver';
+    const menu = this.MENU.filter(m=>m.roles.includes(s.role)).map(m=>({
+      label:m.label, icon:m.icon, badge: m.badge, go:this.go(m.id), style:this.navBtn(s.screen===m.id)
+    }));
+
+    // kpis
+    const kpiDefs = [
+      ['งานใหม่วันนี้','24','add_task','#2563EB','rgba(37,99,235,.12)','arrow_upward','+12%','#16a34a','vs เมื่อวาน'],
+      ['รอจัดรถ','8','pending_actions','#d97706','rgba(217,119,6,.12)','arrow_upward','+3','#d97706','รายการ'],
+      ['กำลังขนส่ง','15','local_shipping','#0891b2','rgba(8,145,178,.12)','remove','คงที่','#64748b',''],
+      ['ส่งสำเร็จ','132','task_alt','#16a34a','rgba(22,163,74,.12)','arrow_upward','+8%','#16a34a','เดือนนี้'],
+      ['รถว่าง','6','directions_bus','#2563EB','rgba(37,99,235,.12)','remove','/ 24 คัน','#64748b',''],
+      ['คนขับว่าง','9','badge','#7c3aed','rgba(124,58,237,.12)','remove','/ 31 คน','#64748b',''],
+      ['รายได้วันนี้','฿248K','payments','#16a34a','rgba(22,163,74,.12)','arrow_upward','+18%','#16a34a','vs เมื่อวาน'],
+      ['งานรอวางบิล','11','receipt_long','#7c3aed','rgba(124,58,237,.12)','arrow_downward','-2','#16a34a','รายการ']
+    ];
+    const kpis = kpiDefs.map(k=>({ label:k[0], value:k[1], icon:k[2], color:k[3], soft:k[4], deltaIcon:k[5], delta:k[6], deltaColor:k[7], deltaNote:k[8] }));
+
+    // charts
+    const revData = [['ก.ค.',1.9],['ส.ค.',2.1],['ก.ย.',1.8],['ต.ค.',2.4],['พ.ย.',2.6],['ธ.ค.',3.1],['ม.ค.',2.8],['ก.พ.',2.5],['มี.ค.',3.0],['เม.ย.',2.7],['พ.ค.',3.3],['มิ.ย.',3.5]];
+    const rmax = Math.max(...revData.map(d=>d[1]));
+    const revenueBars = revData.map(d=>({ m:d[0], v:d[1], pct: Math.round(d[1]/rmax*92)+6 }));
+    const tripData = [['จ.',58],['อ.',64],['พ.',49],['พฤ.',72],['ศ.',81],['ส.',67],['อา.',38]];
+    const tmax = Math.max(...tripData.map(d=>d[1]));
+    const tripBars = tripData.map(d=>({ m:d[0], pct: Math.round(d[1]/tmax*92)+6 }));
+
+    // area path for variant B
+    const W=600, H=190;
+    const pts = revData.map((d,i)=>[ Math.round(i/(revData.length-1)*W), Math.round(H - (d[1]/rmax)*(H-20) - 8) ]);
+    const line = pts.map((p,i)=> (i===0?'M':'L')+p[0]+' '+p[1]).join(' ');
+    const areaLine = line;
+    const areaFill = line + ` L ${W} ${H} L 0 ${H} Z`;
+
+    const topCustomers = s.customers.map((c,i)=>({ rank:i+1, name:c.name, amount:c.total, pct: Math.round(100 - i*13), ini:this.ini(c.name), av:this.avc(i) }));
+    const topDrivers = [...s.drivers].sort((a,b)=>b.trips-a.trips).map((d,i)=>({ name:d.name, trips:d.trips, amount:d.income, ini:this.ini(d.name), av:this.avc(i) }));
+
+    const recentJobs = s.bookings.slice(0,6).map(b=>{ const m=this.meta(b.status); return { id:b.id, customer:b.customer, dest:b.dest, status:b.status, c:m[0], b:m[1] }; });
+    const runningVehicles = [
+      { plate:'82-4417', driver:'ประเสริฐ', route:'สระบุรี → รังสิต', progress:72 },
+      { plate:'71-3390', driver:'วิรัตน์', route:'ราชบุรี → นครปฐม', progress:45 },
+      { plate:'72-6628', driver:'สมหมาย', route:'อยุธยา → มีนบุรี', progress:88 },
+      { plate:'83-1102', driver:'อภิชาติ', route:'บางพลี → พระราม 9', progress:30 },
+      { plate:'70-8821', driver:'สมชาย', route:'สระบุรี → ลาดกระบัง', progress:15 }
+    ];
+    const activity = [
+      ['check_circle','#16a34a','rgba(22,163,74,.12)','BK-0137 ส่งสำเร็จโดย สมหมาย','5 นาทีที่แล้ว'],
+      ['local_shipping','#2563EB','rgba(37,99,235,.12)','BK-0139 เริ่มขนส่ง','22 นาทีที่แล้ว'],
+      ['note_add','#7c3aed','rgba(124,58,237,.12)','สมหญิง สร้างงาน BK-0142','40 นาทีที่แล้ว'],
+      ['alt_route','#0891b2','rgba(8,145,178,.12)','ธนกร จัดรถ BK-0140','1 ชม.ที่แล้ว'],
+      ['receipt_long','#d97706','rgba(217,119,6,.12)','ออกใบวางบิล INV-0512','2 ชม.ที่แล้ว'],
+      ['build','#dc2626','rgba(220,38,38,.12)','รถ 83-1102 แจ้งซ่อม','3 ชม.ที่แล้ว']
+    ].map(a=>({ icon:a[0], color:a[1], soft:a[2], text:a[3], time:a[4] }));
+
+    // booking rows (filtered)
+    const q = s.q.trim().toLowerCase();
+    const filtered = s.bookings.filter(b=> !q || (b.id+b.customer+b.goods+b.dest+b.origin).toLowerCase().includes(q));
+    const bookingRows = filtered.map(b=>{ const m=this.meta(b.status); const sh=b.shipNo&&String(b.shipNo).trim(); return { ...b, c:m[0], b:m[1], shipNo: sh||'', hasSh: !!sh, noSh: !sh, edit:this.editBooking(b) }; });
+
+    // dispatch
+    const waiting = s.bookings.filter(b=>b.status==='รอจัดรถ');
+    const waitingBookings = waiting.map(b=>{ const hasAssign = !!(b.plate || b.driver); const assignLabel = [b.plate&&b.plate.split(' ')[0], b.driver].filter(Boolean).join(' · '); return { ...b, hasAssign, assignLabel, pick:this.pickBooking(b.id), style:'width:100%;text-align:left;border:1.5px solid '+(s.selBooking===b.id?'var(--primary,#2563EB)':'var(--border,#e6e9f2)')+';background:'+(s.selBooking===b.id?'var(--primarySoft,#eff6ff)':'var(--surface,#fff)')+';border-radius:11px;padding:13px;margin-bottom:9px;cursor:pointer;font-family:inherit' }; });
+    const vehiclePick = s.vehicles.map(v=>{ const m=this.meta(v.status); const ok=v.status==='ว่าง'; return { plate:v.plate, type:v.type, cap:v.cap, status:v.status, c:m[0], b:m[1], disabled:!ok, pick:this.pickVehicle(v.plate), style:'text-align:left;border:1.5px solid '+(s.selVehicle===v.plate?'var(--primary,#2563EB)':'var(--border,#e6e9f2)')+';background:'+(s.selVehicle===v.plate?'var(--primarySoft,#eff6ff)':'var(--surface,#fff)')+';border-radius:10px;padding:11px;cursor:'+(ok?'pointer':'not-allowed')+';opacity:'+(ok?'1':'.5')+';font-family:inherit' }; });
+    const driverPick = s.drivers.map(d=>{ const m=this.meta(d.status); const ok=d.status==='ว่าง'; return { name:d.name, ini:this.ini(d.name), av:this.avc(s.drivers.indexOf(d)), status:d.status, c:m[0], disabled:!ok, pick:this.pickDriver(d.code), style:'text-align:left;border:1.5px solid '+(s.selDriver===d.code?'var(--primary,#2563EB)':'var(--border,#e6e9f2)')+';background:'+(s.selDriver===d.code?'var(--primarySoft,#eff6ff)':'var(--surface,#fff)')+';border-radius:10px;padding:10px;cursor:'+(ok?'pointer':'not-allowed')+';opacity:'+(ok?'1':'.5')+';font-family:inherit' }; });
+    const canAssign = s.selBooking && s.selVehicle && s.selDriver;
+    const assignSummary = canAssign ? ('พร้อมจัด: '+s.selBooking+' · '+s.selVehicle) : 'เลือกงาน รถ และคนขับ เพื่อจัดรถ';
+    const assignBtnStyle = 'height:44px;padding:0 22px;border-radius:11px;border:0;font-family:inherit;font-size:14px;font-weight:700;display:flex;align-items:center;gap:7px;cursor:'+(canAssign?'pointer':'not-allowed')+';background:'+(canAssign?'var(--primary,#2563EB)':'var(--border,#cbd5e1)')+';color:#fff;'+(canAssign?'box-shadow:0 4px 14px rgba(37,99,235,.35)':'');
+
+    // jobs
+    const jobAll = s.bookings;
+    const jobTabsDef = [['all','ทั้งหมด',jobAll.length],['active','กำลังดำเนินการ',jobAll.filter(b=>b.status==='กำลังดำเนินการ').length],['shipping','กำลังขนส่ง',jobAll.filter(b=>b.status==='กำลังขนส่ง').length],['done','ส่งสำเร็จ',jobAll.filter(b=>b.status==='ส่งสำเร็จ').length],['bill','รอวางบิล',jobAll.filter(b=>b.status==='รอวางบิล').length]];
+    const jobTabs = jobTabsDef.map(t=>({ label:t[1], count:t[2], go:this.setJobTab(t[0]), style:this.tabBtn(s.jobTab===t[0]) }));
+    const tabMap = { active:'กำลังดำเนินการ', shipping:'กำลังขนส่ง', done:'ส่งสำเร็จ', bill:'รอวางบิล' };
+    const jobFiltered = s.jobTab==='all' ? jobAll : jobAll.filter(b=>b.status===tabMap[s.jobTab]);
+    const driverByPlate = {}; s.vehicles.forEach(v=>{ driverByPlate[v.plate]=v.driver; });
+    const jobRows = jobFiltered.map((b,i)=>{ const m=this.meta(b.status); const v=s.vehicles[i % s.vehicles.length]; return { id:b.id, customer:b.customer, origin:b.origin, dest:b.dest, driver:v.driver, plate:v.plate.split(' ')[0], status:b.status, c:m[0], b:m[1] }; });
+
+    // workflow
+    const NSTAGE = this.STAGES.length;
+    const workflowSource = s.bookings;
+    const workflowRows = workflowSource.map(b=>{ const stg = this.stageOf(b); const cur = this.STAGES[stg]; const pct = Math.round((stg+1)/NSTAGE*100); const done = stg>=NSTAGE-1; return { id:b.id, customer:b.customer, icon:cur.icon, stageLabel:cur.label, step:stg+1, pct, barColor: done?'#16a34a':'var(--primary,#2563EB)', open:this.openWorkflow(b.id) }; });
+    const wfCounts = { early:0, ship:0, bill:0, done:0 };
+    workflowSource.forEach(b=>{ const stg=this.stageOf(b); if(stg>=NSTAGE-1) wfCounts.done++; else if(stg>=7) wfCounts.bill++; else if(stg>=4) wfCounts.ship++; else wfCounts.early++; });
+    const workflowStats = [
+      { label:'อยู่ระหว่างเสนอราคา/เปิดงาน', value:wfCounts.early+' งาน', color:'#0891b2' },
+      { label:'กำลังขนส่ง', value:wfCounts.ship+' งาน', color:'var(--primary,#2563EB)' },
+      { label:'รอวางบิล/รับเงิน', value:wfCounts.bill+' งาน', color:'#d97706' },
+      { label:'ปิดงานแล้ว', value:wfCounts.done+' งาน', color:'#16a34a' }
+    ];
+    let wf = { steps:[] };
+    if(s.workflowJob){
+      const b = s.bookings.find(x=>x.id===s.workflowJob) || {};
+      const stg = this.stageOf(b);
+      const done = stg>=NSTAGE-1;
+      wf = {
+        id:b.id, customer:b.customer, price:b.price,
+        steps: this.STAGES.map((st,i)=>{
+          const isDone = i<stg, isCur = i===stg;
+          const clr = isDone?'#16a34a':isCur?'var(--primary,#2563EB)':'var(--border,#cbd5e1)';
+          return { label:st.label, dotIcon: isDone?'check':st.icon, dotStyle:'width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;background:'+clr+(isCur?';box-shadow:0 0 0 4px rgba(37,99,235,.2)':''), line:i<NSTAGE-1, lineStyle:'width:2px;flex:1;min-height:16px;background:'+(isDone?'#16a34a':'var(--border,#e6e9f2)'), textColor:(isDone||isCur)?'var(--text,#0f172a)':'var(--muted,#94a3b8)', subColor:isCur?'var(--primary,#2563EB)':'var(--muted,#94a3b8)', sub: isDone?'เสร็จแล้ว':isCur?(st.doc?'พร้อมออกเอกสาร':'ขั้นตอนปัจจุบัน'):'รอดำเนินการ' };
+        }),
+        btnLabel: done?'งานปิดแล้ว':(this.STAGES[Math.min(stg+1,NSTAGE-1)].route?('ดำเนินการ & ไปกรอก: '+this.STAGES[Math.min(stg+1,NSTAGE-1)].label):('ดำเนินการ: '+this.STAGES[Math.min(stg+1,NSTAGE-1)].label)),
+        btnIcon: done?'task_alt':(this.STAGES[Math.min(stg+1,NSTAGE-1)].route?'open_in_new':'arrow_forward'),
+        btnStyle:'width:100%;height:48px;border-radius:12px;border:0;font-family:inherit;font-size:14.5px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;cursor:'+(done?'default':'pointer')+';color:#fff;background:'+(done?'#16a34a':'var(--primary,#2563EB)')+';box-shadow:0 6px 16px rgba(37,99,235,.3)'
+      };
+    }
+
+    // customers
+    const customerRows = s.customers.map((c,i)=>({ ...c, ini:this.ini(c.name), av:this.avc(i) }));
+
+    // drivers
+    const driverRows = s.drivers.map((d,i)=>{ const m=this.meta(d.status); return { ...d, ini:this.ini(d.name), av:this.avc(i), c:m[0], b:m[1], detail:this.openDetail({ ...d, av:this.avc(i), ini:this.ini(d.name) }) }; });
+
+    // vehicles
+    const vehicleRows = s.vehicles.map(v=>{ const m=this.meta(v.status); const vm={ 'บริษัท':['#2563EB','rgba(37,99,235,.12)'], 'ร่วม':['#0891b2','rgba(8,145,178,.12)'], 'หุ้นส่วน':['#7c3aed','rgba(124,58,237,.12)'] }[v.vtype]||['#64748b','rgba(100,116,139,.12)']; return { ...v, c:m[0], b:m[1], taxC:this.expColor(v.taxL), insC:this.expColor(v.insL), vtypeC:vm[0], vtypeB:vm[1] }; });
+
+    // docs
+    const docCards = [
+      { label:'ใบงาน', count:'248', icon:'assignment', color:'#2563EB', soft:'rgba(37,99,235,.12)' },
+      { label:'ใบส่งของ', count:'192', icon:'local_shipping', color:'#0891b2', soft:'rgba(8,145,178,.12)' },
+      { label:'ใบวางบิล', count:'86', icon:'receipt_long', color:'#7c3aed', soft:'rgba(124,58,237,.12)' },
+      { label:'ใบเสร็จ', count:'74', icon:'paid', color:'#16a34a', soft:'rgba(22,163,74,.12)' }
+    ];
+    const docTypes = [['ใบงาน','#2563EB','rgba(37,99,235,.12)'],['ใบส่งของ','#0891b2','rgba(8,145,178,.12)'],['ใบวางบิล','#7c3aed','rgba(124,58,237,.12)'],['ใบเสร็จ','#16a34a','rgba(22,163,74,.12)']];
+    const docKindMap = ['bill','bill','bill','receipt'];
+    const docRows = s.bookings.slice(0,6).map((b,i)=>{ const t=docTypes[i%4]; const price=Number(String(b.price).replace(/[^0-9]/g,''))||12000; return { no:'DOC-69-0'+(520-i), type:t[0], color:t[1], soft:t[2], job:b.id, customer:b.customer, date:b.date, open:this.openDoc(this.buildDoc(docKindMap[i%4], b.customer, b.id, price, 20-i)) }; });
+
+    // billing
+    const billTabDefs = [['quote','ใบเสนอราคา'],['invoice','ใบแจ้งหนี้'],['bill','ใบวางบิล'],['receipt','ใบเสร็จ']];
+    const billingTabs = billTabDefs.map(t=>({ label:t[1], go:this.setBillTab(t[0]), style:this.segBtn(s.billTab===t[0]) }));
+    const billingKindLabel = this.BILLKINDS[s.billTab];
+    const billStatusMap = { quote:['เสนอแล้ว','#0891b2','rgba(8,145,178,.14)'], invoice:['รอชำระ','#d97706','rgba(217,119,6,.14)'], bill:['วางบิลแล้ว','#7c3aed','rgba(124,58,237,.14)'], receipt:['ชำระแล้ว','#16a34a','rgba(22,163,74,.14)'] };
+    const bst = billStatusMap[s.billTab];
+    const billFiltered = s.billDocs.filter(b=>b.kind===s.billTab);
+    const billStatusColor = { 'เสนอแล้ว':['#0891b2','rgba(8,145,178,.14)'], 'รอชำระ':['#d97706','rgba(217,119,6,.14)'], 'วางบิลแล้ว':['#7c3aed','rgba(124,58,237,.14)'], 'ชำระแล้ว':['#16a34a','rgba(22,163,74,.14)'] };
+    const billingRows = billFiltered.map((b)=>{ const total=Math.round(b.amount*1.07); const sc=billStatusColor[b.status]||['#64748b','rgba(100,116,139,.14)']; const doc=this.buildDoc(b.kind, b.customer, b.job, b.amount, 30); doc.no=b.no; doc.date=b.date; doc.due=b.due; return { key:b.key, no:b.no, customer:b.customer, job:b.job, date:b.date, due:b.due, total:this.baht(total), status:b.status, c:sc[0], b:sc[1], open:this.openDoc(doc), edit:this.editBill(b), del:this.deleteBill(b.key) }; });
+    const billSum = billFiltered.reduce((a,b)=>a+b.amount,0);
+    const billingStats = [
+      { label:'จำนวนเอกสาร', value:billFiltered.length+' ฉบับ', color:'var(--text,#0f172a)' },
+      { label:'มูลค่ารวม (ก่อน VAT)', value:this.baht(billSum), color:'var(--text,#0f172a)' },
+      { label:'VAT 7%', value:this.baht(billSum*0.07), color:'var(--text,#0f172a)' },
+      { label:'ยอดสุทธิ', value:this.baht(billSum*1.07), color:'#16a34a' }
+    ];
+    const dvDoc = s.docView || { items:[] };
+
+    // income
+    const methodDefs = [['trip','ค่าเที่ยว'],['percent','เปอร์เซ็นต์'],['distance','ระยะทาง']];
+    const incomeMethods = methodDefs.map(m=>({ label:m[1], go:this.setMethod(m[0]), style:this.segBtn(s.incomeMethod===m[0]) }));
+    const baseLabel = s.incomeMethod==='trip'?'ค่าเที่ยว':s.incomeMethod==='percent'?'ส่วนแบ่ง %':'ค่าระยะทาง';
+    const incomeFormulas = [
+      { name:'รถบริษัท', c:'#2563EB', formula:'รายได้ − ภาษี1% − ค่าแรง − ค่าน้ำมัน' },
+      { name:'รถร่วม', c:'#0891b2', formula:'(รายได้ − ภาษี1%) × 10%' },
+      { name:'รถหุ้นส่วน', c:'#7c3aed', formula:'(รายได้ − ภาษี1%) × 8%' },
+      { name:'สินค้ากระเบื้อง', c:'#d97706', formula:'(รายได้ค่าเที่ยว − ภาษี1%) × 62% (น้ำมันเหมา)' }
+    ];
+    const incomeRows = s.drivers.map((d,i)=>{
+      const trips=d.trips;
+      const veh = s.vehicles.find(v=>v.plate.split(' ')[0]===d.vehicle) || {};
+      const vtype = veh.vtype || 'บริษัท';
+      const gross = trips*850; const tax = gross*0.01; const fuel = trips*640; const wage = trips*250;
+      let base, note;
+      if(vtype==='ร่วม'){ base=(gross-tax)*0.10; note='(รายได้−ภาษี1%)×10%'; }
+      else if(vtype==='หุ้นส่วน'){ base=(gross-tax)*0.08; note='(รายได้−ภาษี1%)×8%'; }
+      else { base=gross-tax-wage-fuel; note='รายได้−ภาษี1%−ค่าแรง−ค่าน้ำมัน'; }
+      base=Math.round(base);
+      const bonus=Math.round(trips*30), fine=(i%3===0?500:0);
+      const net=base+bonus-fine;
+      const payDone=i%2===0; const pm=payDone?['#16a34a','rgba(22,163,74,.14)']:['#d97706','rgba(217,119,6,.14)'];
+      const vm = { 'บริษัท':['#2563EB','rgba(37,99,235,.12)'], 'ร่วม':['#0891b2','rgba(8,145,178,.12)'], 'หุ้นส่วน':['#7c3aed','rgba(124,58,237,.12)'] }[vtype];
+      return { name:d.name, ini:this.ini(d.name), av:this.avc(i), trips, vtype, vtypeC:vm[0], vtypeB:vm[1], base:'฿'+base.toLocaleString(), bonus:'฿'+bonus.toLocaleString(), fine:'฿'+fine.toLocaleString(), net:'฿'+net.toLocaleString(), formula:note, pay:payDone?'จ่ายแล้ว':'รอจ่าย', payC:pm[0], payB:pm[1] };
+    });
+
+    // reports
+    const periodDefs = [['today','วันนี้'],['week','สัปดาห์'],['month','เดือน'],['year','ปี']];
+    const periods = periodDefs.map(p=>({ label:p[1], go:this.setPeriod(p[0]), style:this.segBtn(s.period===p[0]) }));
+    const reportStats = [
+      ['รายได้รวม','฿3.52M','+18.4% MoM','#16a34a'],
+      ['จำนวนเที่ยว','1,284','+6.2%','#16a34a'],
+      ['รายได้คนขับ','฿842K','+11%','#16a34a'],
+      ['กำไรต่อเที่ยว','฿2,140','+4.1%','#16a34a'],
+      ['ลูกค้าใหม่','12','+3 ราย','#16a34a'],
+      ['อัตราส่งตรงเวลา','96.8%','-0.4%','#dc2626']
+    ].map(x=>({ label:x[0], value:x[1], delta:x[2], dc:x[3] }));
+    const topVehicles = [['82-4417 กรุงเทพ',312,100],['71-3390 ราชบุรี',287,92],['72-6628 อยุธยา',264,85],['70-8821 สระบุรี',231,74],['83-1102 กรุงเทพ',198,63]].map((v,i)=>({ rank:i+1, plate:v[0], trips:v[1], pct:v[2] }));
+
+    // settings
+    const tgl = (on)=>({ track:'width:42px;height:24px;border-radius:14px;background:'+(on?'var(--primary,#2563EB)':'var(--border,#cbd5e1)')+';position:relative;transition:.2s;flex:0 0 42px', knob:'position:absolute;top:3px;left:'+(on?'21px':'3px')+';width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.3)' });
+    const sg = [
+      { title:'ทั่วไป', items:[ ['dark_mode','โหมดมืด','สลับธีมสว่าง/มืด', s.dark], ['notifications','การแจ้งเตือน','แจ้งเตือนงานใหม่และสถานะ', true], ['language','ภาษาไทย','ภาษาของระบบ', true] ] },
+      { title:'การคำนวณรายได้', items:[ ['payments','คิดตามค่าเที่ยว','สูตรเริ่มต้น', s.incomeMethod==='trip'], ['percent','คิดตามเปอร์เซ็นต์','ส่วนแบ่งจากค่างาน', s.incomeMethod==='percent'], ['route','คิดตามระยะทาง','บาท/กม.', s.incomeMethod==='distance'] ] },
+      { title:'สิทธิ์และความปลอดภัย', items:[ ['admin_panel_settings','สิทธิ์ตามบทบาท','จำกัดเมนูตามผู้ใช้', true], ['lock','ยืนยันตัวตน 2 ชั้น','OTP เมื่อเข้าสู่ระบบ', false] ] }
+    ];
+    const settingGroups = sg.map(g=>({ title:g.title, items: g.items.map(it=>{ const t=tgl(it[3]); return { icon:it[0], label:it[1], sub:it[2], toggleTrack:t.track, toggleKnob:t.knob }; }) }));
+
+    // driver app
+    const dvJobBase = s.bookings.find(b=>b.status==='กำลังดำเนินการ') || s.bookings[2];
+    const dvDone = s.driverStep>=6;
+    const dvJob = { id:'BK-2569-0140', customer:'บมจ. พฤกษา', goods:'ปูนผง 24 ตัน', origin:'ปูนซีเมนต์ สระบุรี', dest:'รังสิต คลอง 7', statusLabel: dvDone?'ส่งสำเร็จ':'กำลังดำเนินการ' };
+    const stepTimes = ['08:10 น.','08:35 น.','09:05 น.','11:20 น.','11:45 น.','—'];
+    const driverSteps = this.DSTEPS.map((st,i)=>{
+      const done = i < s.driverStep; const cur = i === s.driverStep;
+      const color = done ? '#16a34a' : cur ? '#2563EB' : 'var(--border,#cbd5e1)';
+      const dotStyle = 'width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;background:'+(done?'#16a34a':cur?'var(--primary,#2563EB)':'var(--border,#cbd5e1)')+(cur?';box-shadow:0 0 0 4px rgba(37,99,235,.2)':'');
+      return { label:st[0], dotIcon: done?'check':st[1], dotStyle, line: i<this.DSTEPS.length-1, lineStyle:'width:2px;flex:1;min-height:20px;background:'+(done?'#16a34a':'var(--border,#e6e9f2)'), textColor: (done||cur)?'var(--text,#0f172a)':'var(--muted,#94a3b8)', time: done?stepTimes[i]:cur?'กำลังทำ':'รอดำเนินการ' };
+    });
+    const dvShowPhoto = s.driverStep===5;
+    const dvPhotoColor = s.dvPhoto ? '#16a34a' : 'var(--muted,#64748b)';
+    const dvPhotoIcon = s.dvPhoto ? 'check_circle' : 'add_a_photo';
+    const dvPhotoText = s.dvPhoto ? 'แนบรูปแล้ว (1 รูป)' : 'แตะเพื่อถ่ายรูป / แนบไฟล์';
+    let dvBtnLabel, dvBtnIcon;
+    if(s.driverStep<4){ dvBtnLabel='ดำเนินการขั้นต่อไป'; dvBtnIcon='arrow_forward'; }
+    else if(s.driverStep===4){ dvBtnLabel='ไปขั้นตอนแนบรูป'; dvBtnIcon='arrow_forward'; }
+    else if(s.driverStep===5){ dvBtnLabel= s.dvPhoto ? 'อนุมัติ (Approve)' : 'แนบรูปก่อนอนุมัติ'; dvBtnIcon= s.dvPhoto?'check_circle':'photo_camera'; }
+    else { dvBtnLabel='งานเสร็จสมบูรณ์'; dvBtnIcon='verified'; }
+    const dvBtnStyle = 'width:100%;height:50px;border-radius:13px;border:0;font-family:inherit;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;cursor:'+(dvDone?'default':'pointer')+';color:#fff;background:'+(dvDone?'#16a34a':'var(--primary,#2563EB)')+';box-shadow:0 6px 16px rgba(37,99,235,.32)';
+
+    // form handlers
+    const fields = ['docNo','dateSend','plate','driver','customer','po','shipNo','origin','destination','site','district','prodType','goods','weight','qty','ratePerTon','ratePerTrip','ratePerPiece','price','fuelLiters','fuelPrice','perDiem','timeSend','advance','note'];
+    const fh = {}; fields.forEach(k=> fh[k] = (e)=> this.setForm(k, e.target.value));
+    const inputStyle = 'width:100%;height:40px;padding:0 12px;border-radius:9px;border:1px solid var(--border,#e6e9f2);background:var(--surface,#fff);color:var(--text,#0f172a);font-family:inherit;font-size:13px;outline:none';
+    const customerOptions = s.customers.map(c=>c.name);
+    const lb = 'font-size:12px;font-weight:600;color:var(--text,#0f172a);display:block;margin-bottom:5px';
+    const secLabel = 'font-size:12px;font-weight:700;color:var(--primary,#2563EB);letter-spacing:.3px;margin-bottom:10px;display:flex;align-items:center;gap:6px';
+    const plateOptions = s.vehicles.map(v=>({ plate:v.plate, label:v.plate+' ('+v.vtype+')' }));
+    const driverOptions = s.drivers.map(d=>d.name);
+    const vtypeChip = 'height:40px;display:flex;align-items:center;gap:7px;padding:0 12px;border-radius:9px;background:var(--primarySoft,#eff6ff);color:var(--primary,#2563EB);font-size:13px;font-weight:700';
+    const calcByDefs = [['weight','คิดตามน้ำหนัก','scale'],['trip','ต่อเที่ยว','sync_alt'],['piece','จำนวนชิ้น','inventory_2']];
+    const calcByOptions = calcByDefs.map(o=>({ label:o[1], icon:o[2], go:this.setCalcBy(o[0]), style:'height:36px;padding:0 14px;border-radius:9px;border:1.5px solid '+(s.form.calcBy===o[0]?'var(--primary,#2563EB)':'var(--border,#e6e9f2)')+';background:'+(s.form.calcBy===o[0]?'var(--primarySoft,#eff6ff)':'var(--surface,#fff)')+';color:'+(s.form.calcBy===o[0]?'var(--primary,#2563EB)':'var(--muted,#64748b)')+';font-family:inherit;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer' }));
+    const _cf = this.calcJob(s.form);
+    const calc = {
+      income: this.baht(_cf.income), driverPay: this.baht(_cf.driverPay), remain: this.baht(_cf.remain), formula:_cf.formula,
+      rows: [
+        { k:'ภาษี 1%', v:'−'+this.baht(_cf.tax), c:'#dc2626' },
+        { k:'ค่าน้ำมัน ('+(Number(s.form.fuelLiters)||0)+' ล.)', v:'−'+this.baht(_cf.fuel), c:'#dc2626' },
+        { k:'เบี้ยเลี้ยงคนขับ', v:this.baht(_cf.perDiem), c:'var(--text,#0f172a)' },
+        { k:'เบิกเงินยืม', v:'−'+this.baht(Number(s.form.advance)||0), c:'#dc2626' }
+      ]
+    };
+    const dialogTitle = s.editingBooking ? 'แก้ไขใบปฏิบัติงาน' : 'เพิ่มใบปล่อยรถ (สร้างงาน)';
+    const saveLabel = s.editingBooking ? 'บันทึกการแก้ไข' : 'บันทึกงาน';
+    // bill form
+    const billFormFields = ['customer','job','amount','date','due'];
+    const bfh = {}; billFormFields.forEach(k=> bfh[k] = (e)=> this.setBillForm(k, e.target.value));
+
+    const dd = s.driverDetail ? {
+      ...s.driverDetail,
+      history: [
+        { route:'สระบุรี → ลาดกระบัง', date:'27 มิ.ย.', id:'BK-0140', amount:'฿2,400' },
+        { route:'อยุธยา → บางนา', date:'26 มิ.ย.', id:'BK-0132', amount:'฿1,850' },
+        { route:'ราชบุรี → นครปฐม', date:'25 มิ.ย.', id:'BK-0128', amount:'฿2,100' },
+        { route:'สระบุรี → รังสิต', date:'24 มิ.ย.', id:'BK-0119', amount:'฿2,650' },
+        { route:'อ่างทอง → มีนบุรี', date:'23 มิ.ย.', id:'BK-0111', amount:'฿1,600' }
+      ]
+    } : {};
+
+    const tt = s.toast||'';
+    const toastIsErr = /ก่อน|ไม่/.test(tt);
+    const today = new Date(2026,5,28).toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long'});
+
+    const [st0,st1] = this.TITLES[s.screen] || ['',''];
+
+    return {
+      rootStyle, role:s.role, roles:this.ROLES, onRole:this.onRole,
+      notDriver: !isDriver, isDriver,
+      menu, userName:roleObj.name, roleLabel:roleObj.label, userInitial:roleObj.name.charAt(0),
+      screenTitle:st0, screenSub:st1,
+      toggleDark:this.toggleDark, darkIcon: s.dark?'light_mode':'dark_mode',
+      today,
+      isDash:s.screen==='dashboard', isBooking:s.screen==='booking', isDispatch:s.screen==='dispatch', isJobs:s.screen==='jobs', isWorkflow:s.screen==='workflow', isCustomers:s.screen==='customers', isDrivers:s.screen==='drivers', isVehicles:s.screen==='vehicles', isDocs:s.screen==='docs', isIncome:s.screen==='income', isReports:s.screen==='reports', isSettings:s.screen==='settings',
+      // dashboard
+      isVarA:s.variant==='a', isVarB:s.variant==='b', setVarA:this.setVariant('a'), setVarB:this.setVariant('b'),
+      varAStyle:this.segBtn(s.variant==='a'), varBStyle:this.segBtn(s.variant==='b'),
+      kpiGridStyle:'display:grid;grid-template-columns:repeat(4,1fr);gap:16px',
+      kpis, revenueBars, tripBars, areaFill, areaLine, topCustomers, topDrivers, recentJobs, runningVehicles, activity,
+      // booking
+      openDialog:this.openDialog, q:s.q, onQ:this.onQ, bookingRows, bookingCount:bookingRows.length, bookingTotal:s.bookings.length,
+      // dispatch
+      waitingBookings, waitingCount:waiting.length, vehiclePick, driverPick, assignSummary, assignBtnStyle, assignDisabled:!canAssign, doAssign:this.doAssign,
+      // jobs
+      jobTabs, jobRows,
+      // workflow
+      workflowRows, workflowStats, workflowJob:s.workflowJob, wf, closeWorkflow:this.closeWorkflow, advanceStage:this.advanceStage,
+      // customers/drivers/vehicles
+      customerRows, driverRows, vehicleRows,
+      // docs
+      docCards, docRows, downloadPdf:this.downloadPdf,
+      // billing
+      isBilling:s.screen==='billing', billingTabs, billingKindLabel, billingStats, billingRows,
+      openNewBill:this.openNewBill, docView:s.docView, closeDoc:this.closeDoc, dvDoc, printDoc:this.printDoc,
+      billFormOpen:s.billFormOpen, billForm:s.billForm, bfh, closeBillForm:this.closeBillForm, saveBill:this.saveBill, billFormTitle:(s.editingBill?'แก้ไข':'สร้าง')+billingKindLabel,
+      // income
+      incomeMethods, baseLabel, incomeRows, incomeFormulas,
+      // reports
+      periods, reportStats, topVehicles, exportXls:this.exportXls, exportPdf:this.exportPdf,
+      // settings
+      settingGroups,
+      // dialog
+      dialogOpen:s.dialogOpen, closeDialog:this.closeDialog, stop:this.stop, form:s.form, fh, inputStyle, customerOptions, saveBooking:this.saveBooking,
+      lb, secLabel, plateOptions, driverOptions, vtypeChip, calcByOptions, calc, dialogTitle, saveLabel,
+      showTon:s.form.calcBy==='weight', showTrip:s.form.calcBy==='trip', showPiece:s.form.calcBy==='piece',
+      // driver app
+      dvJob, driverSteps, dvShowPhoto, dvPhotoColor, dvPhotoIcon, dvPhotoText, attachPhoto:this.attachPhoto, dvAction:this.dvAction, dvBtnLabel, dvBtnIcon, dvBtnStyle,
+      // driver detail
+      driverDetail:s.driverDetail, closeDetail:this.closeDetail, dd,
+      // toast
+      toast:s.toast, toastIcon: toastIsErr?'error':'check_circle', toastColor: toastIsErr?'#f87171':'#4ade80'
+    };
+  }
+}
+</script>
+</body>
+</html>
