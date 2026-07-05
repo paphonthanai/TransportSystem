@@ -7,6 +7,7 @@ export type MenuItem = {
   label: string
   route?: string
   badge?: number
+  children?: MenuItem[]
 }
 
 export const useAppStore = defineStore('app', () => {
@@ -16,19 +17,39 @@ export const useAppStore = defineStore('app', () => {
   const sidebarOpen = ref(window.innerWidth > 768)
 
   const menu = computed<MenuItem[]>(() => [
-    { id: '1', icon: 'dashboard', label: 'Dashboard', route: '/dashboard' },
-    { id: '2', icon: 'assignment', label: 'สร้างงาน', route: '/booking' },
-    { id: '3', icon: 'local_shipping', label: 'จัดรถ', route: '/dispatch' },
-    { id: '4', icon: 'tour', label: 'งานขนส่ง', route: '/jobs' },
-    { id: '5', icon: 'account_tree', label: 'ผังการไหลงาน', route: '/workflow' },
-    { id: '6', icon: 'apartment', label: 'ลูกค้า', route: '/customers' },
-    { id: '7', icon: 'person', label: 'คนขับ', route: '/drivers' },
-    { id: '8', icon: 'directions_bus', label: 'รถ', route: '/vehicles' },
-    { id: '9', icon: 'article', label: 'เอกสาร', route: '/documents' },
-    { id: '10', icon: 'receipt', label: 'บิล/ใบเสร็จ', route: '/billing' },
-    { id: '11', icon: 'trending_up', label: 'รายได้คนขับ', route: '/income' },
-    { id: '12', icon: 'bar_chart', label: 'รายงาน', route: '/reports' },
-    { id: '13', icon: 'settings', label: 'ตั้งค่า', route: '/settings' },
+    { id: '1', icon: 'dashboard', label: 'Dashboard', route: '/' },
+    { id: '2', icon: 'sell', label: 'เอกสารขาย', route: '/documents' },
+    {
+      id: '3',
+      icon: 'tour',
+      label: 'ตารางขนส่ง',
+      children: [
+        { id: '3-1', icon: 'assignment', label: 'ตารางจองงาน', route: '/booking' },
+        { id: '3-2', icon: 'search', label: 'ค้นหางาน', route: '/job-search' },
+        { id: '3-3', icon: 'pending_actions', label: 'สถานะงาน', route: '/job-status' },
+      ],
+    },
+    { id: '4', icon: 'local_shipping', label: 'จัดรถ', route: '/dispatch' },
+    { id: '5', icon: 'list_alt', label: 'งานขนส่ง', route: '/jobs' },
+    { id: '6', icon: 'account_tree', label: 'ผังการไหลงาน', route: '/workflow' },
+    { id: '7', icon: 'account_balance', label: 'บัญชี', route: '/accounting' },
+    { id: '8', icon: 'receipt', label: 'บิล/ใบเสร็จ', route: '/billing' },
+    { id: '9', icon: 'trending_up', label: 'รายได้คนขับ', route: '/income' },
+    { id: '10', icon: 'payments', label: 'เงินเดือน', route: '/payroll' },
+    { id: '11', icon: 'bar_chart', label: 'รายงาน', route: '/reports' },
+    {
+      id: '12',
+      icon: 'settings',
+      label: 'ตั้งค่า',
+      children: [
+        { id: '12-1', icon: 'badge', label: 'เสมียน (พนักงานออฟฟิศ)', route: '/staff' },
+        { id: '12-2', icon: 'person', label: 'พนักงานขับรถ', route: '/drivers' },
+        { id: '12-3', icon: 'directions_bus', label: 'รถ (รถร่วม/รถบรรทุก)', route: '/vehicles' },
+        { id: '12-4', icon: 'apartment', label: 'ลูกค้า/คู่ค้า', route: '/customers' },
+        { id: '12-5', icon: 'storefront', label: 'ผู้จำหน่าย', route: '/vendors' },
+        { id: '12-6', icon: 'tune', label: 'ตั้งค่าทั่วไป', route: '/settings' },
+      ],
+    },
   ])
 
   const roles = computed(() => [

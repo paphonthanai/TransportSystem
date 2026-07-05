@@ -1,16 +1,26 @@
+export type BookingCategory = 'ceramics' | 'cements'
+
+export type BookingJobType = 'ลงมือ' | 'พาเลทโรงงาน' | 'พาเลทฟรี'
+
 export interface Booking {
   id: string
-  date: string
+  category: BookingCategory
+  docNo: string
   customer: string
-  goods: string
-  origin: string
-  destination: string
-  price: number
-  status: 'draft' | 'pending' | 'assigned' | 'in-transit' | 'completed' | 'cancelled'
-  shipNo?: string
-  owner?: string
+  siteName: string
+  district: string
+  cementTypes?: string[]
+  jobType?: BookingJobType
+  allowance: number
+  tripFee: number
+  fuelLiters: number
+  fuelRate: number
+  siteContactName?: string
+  sitePhone?: string
+  siteCoords?: string
+  plate?: string
+  status: 'รอจัดรถ' | 'ส่งงานแล้ว'
   createdAt: Date
-  updatedAt: Date
 }
 
 export interface Job {

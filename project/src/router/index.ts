@@ -25,6 +25,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/BookingView.vue'),
       },
       {
+        path: 'job-search',
+        name: 'JobSearch',
+        component: () => import('@/views/JobSearchView.vue'),
+      },
+      {
+        path: 'job-status',
+        name: 'JobStatus',
+        component: () => import('@/views/JobStatusView.vue'),
+      },
+      {
         path: 'dispatch',
         name: 'Dispatch',
         component: () => import('@/views/DispatchView.vue'),
@@ -70,9 +80,29 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/IncomeView.vue'),
       },
       {
+        path: 'payroll',
+        name: 'Payroll',
+        component: () => import('@/views/PayrollView.vue'),
+      },
+      {
+        path: 'accounting',
+        name: 'Accounting',
+        component: () => import('@/views/AccountingView.vue'),
+      },
+      {
         path: 'reports',
         name: 'Reports',
         component: () => import('@/views/ReportsView.vue'),
+      },
+      {
+        path: 'staff',
+        name: 'Staff',
+        component: () => import('@/views/StaffView.vue'),
+      },
+      {
+        path: 'vendors',
+        name: 'Vendors',
+        component: () => import('@/views/VendorsView.vue'),
       },
       {
         path: 'settings',

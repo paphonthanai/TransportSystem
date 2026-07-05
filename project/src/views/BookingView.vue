@@ -15,7 +15,7 @@
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="ค้นหาเลข Booking, ลูกค้า..."
+          placeholder="ค้นหาเลขที่เอกสาร, ชื่อหน้างาน..."
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
@@ -25,68 +25,61 @@
       </button>
     </div>
 
-    <!-- Bookings Table -->
+    <!-- Bookings Table (งานที่ได้รับมาในวันนั้น ยังไม่ได้จัด) -->
     <div class="card-lg overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เลข Booking</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">สินค้า</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">ต้นทาง</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">ปลายทาง</th>
-              <th class="text-right px-4 py-3 font-semibold text-muted">ราคา</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">ชื่อหน้างาน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เขตอำเภอ</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">ชื่อชนิดสินค้า</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เบอร์โทรหน้างาน</th>
+              <th class="text-right px-4 py-3 font-semibold text-muted">จำนวนน้ำมัน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">ประเภทงาน</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">สถานะ</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">Sh.No</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">ผู้รับผิดชอบ</th>
-              <th class="text-right px-4 py-3 font-semibold text-muted">การดำเนิน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">ทะเบียนรถ / ส่งงาน</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(booking, index) in bookings" :key="index" class="border-b border-border hover:bg-surface-2 transition-colors">
-              <td class="px-4 py-3 font-bold text-primary">{{ booking.id }}</td>
-              <td class="px-4 py-3 text-muted">{{ booking.date }}</td>
-              <td class="px-4 py-3 font-semibold text-text">{{ booking.customer }}</td>
-              <td class="px-4 py-3 text-text">{{ booking.goods }}</td>
-              <td class="px-4 py-3 text-muted">{{ booking.origin }}</td>
-              <td class="px-4 py-3 text-muted">{{ booking.dest }}</td>
-              <td class="px-4 py-3 text-right font-semibold text-text">{{ booking.price }}</td>
+            <tr v-for="booking in filteredBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+              <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
+              <td class="px-4 py-3 font-semibold text-text">{{ booking.siteName }}</td>
+              <td class="px-4 py-3 text-muted">{{ booking.district }}</td>
+              <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
+              <td class="px-4 py-3 text-muted">{{ booking.sitePhone || '-' }}</td>
+              <td class="px-4 py-3 text-right text-text">{{ booking.fuelLiters || 0 }} ล.</td>
+              <td class="px-4 py-3 text-text">{{ booking.jobType || '-' }}</td>
               <td class="px-4 py-3">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', getStatusClass(booking.status)]">
                   {{ booking.status }}
                 </span>
               </td>
               <td class="px-4 py-3">
-                <span v-if="booking.shipNo" class="font-semibold text-text">{{ booking.shipNo }}</span>
-                <span v-else class="text-xs text-amber-700 bg-amber-100 px-2 py-1 rounded-full">รอออกเลข</span>
+                <div class="flex items-center gap-2">
+                  <input
+                    v-model="booking.plate"
+                    :disabled="booking.status === 'ส่งงานแล้ว'"
+                    placeholder="ทะเบียนรถ"
+                    class="input-field w-32 disabled:opacity-60"
+                  />
+                  <button
+                    @click="sendToDriver(booking)"
+                    :disabled="!booking.plate || booking.status === 'ส่งงานแล้ว'"
+                    class="btn-sm text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <span class="material-symbols-rounded text-base">send</span>
+                    ส่งงาน
+                  </button>
+                </div>
               </td>
-              <td class="px-4 py-3 text-muted">{{ booking.owner }}</td>
-              <td class="px-4 py-3 text-right">
-                <button class="btn-sm px-3 text-primary">
-                  <span class="material-symbols-rounded text-base">edit</span>
-                  แก้ไข
-                </button>
-              </td>
+            </tr>
+            <tr v-if="filteredBookings.length === 0">
+              <td colspan="9" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
-      </div>
-
-      <!-- Pagination -->
-      <div class="flex items-center justify-between px-4 py-3 border-t border-border">
-        <div class="text-xs text-muted">แสดง {{ bookings.length }} จาก 156 รายการ</div>
-        <div class="flex gap-2">
-          <button class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2">
-            <span class="material-symbols-rounded text-base">chevron_left</span>
-          </button>
-          <button class="w-8 h-8 rounded-lg border-0 bg-primary text-white font-semibold">1</button>
-          <button class="w-8 h-8 rounded-lg border border-border bg-surface text-text font-semibold hover:bg-surface-2">2</button>
-          <button class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2">
-            <span class="material-symbols-rounded text-base">chevron_right</span>
-          </button>
-        </div>
       </div>
     </div>
 
@@ -101,8 +94,8 @@
                 <span class="material-symbols-rounded">assignment</span>
               </div>
               <div>
-                <div class="font-bold text-text">{{ dialogTitle }}</div>
-                <div class="text-xs text-muted">เลขใบปฏิบัติงาน {{ formData.docNo }} · ใบปล่อยรถ</div>
+                <div class="font-bold text-text">สร้างงานขนส่งใหม่</div>
+                <div class="text-xs text-muted">เลขที่เอกสาร {{ formData.docNo }}</div>
               </div>
             </div>
             <button @click="closeDialog" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
@@ -110,186 +103,161 @@
             </button>
           </div>
 
-          <!-- Dialog Content -->
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-0">
-            <!-- Form Area -->
-            <div class="lg:col-span-2 px-6 py-6 space-y-6 border-r border-border">
-              <!-- Vehicle & Driver Section -->
-              <div>
-                <h3 class="font-semibold text-text mb-3">ข้อมูลรถและคนขับ</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">วันที่จัดส่ง</label>
-                    <input v-model="formData.dateSend" type="date" class="input-field w-full" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">เวลาจัดส่ง</label>
-                    <input v-model="formData.timeSend" placeholder="เช่น 08.00-16.00" class="input-field w-full" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ทะเบียนรถ</label>
-                    <select v-model="formData.plate" class="input-field w-full">
-                      <option value="">เลือกรถ...</option>
-                      <option>กก 1234</option>
-                      <option>กก 5678</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ประเภทรถ</label>
-                    <div class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface-2 text-sm text-muted">
-                      <span class="material-symbols-rounded">directions_bus</span>
-                      {{ formData.vtypeLabel }}
-                    </div>
-                  </div>
-                  <div class="md:col-span-2">
-                    <label class="block text-xs font-semibold text-muted mb-1">ชื่อคนขับ</label>
-                    <select v-model="formData.driver" class="input-field w-full">
-                      <option value="">เลือกคนขับ...</option>
-                      <option>สมชาย ใจกล้า</option>
-                      <option>วิชัย เสียงแจ่ม</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
+          <!-- Category Selector -->
+          <div class="px-6 pt-6">
+            <h3 class="font-semibold text-text mb-3">ประเภทการจองงาน</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <button
+                v-for="option in categoryOptions"
+                :key="option.id"
+                @click="setCategory(option.id)"
+                :class="[
+                  'text-left rounded-2xl border p-4 transition',
+                  formData.category === option.id ? 'border-primary bg-primary-soft' : 'border-border bg-surface hover:border-primary',
+                ]"
+              >
+                <div class="font-bold text-text">{{ option.label }}</div>
+                <div class="text-xs text-muted mt-1">{{ option.subtitle }}</div>
+              </button>
+            </div>
+          </div>
 
-              <!-- Customer & Job Section -->
+          <!-- Dialog Content -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-0 mt-6">
+            <!-- Form Area -->
+            <div class="lg:col-span-2 px-6 pb-6 space-y-6 border-r border-border">
+              <!-- Job Info Section -->
               <div>
-                <h3 class="font-semibold text-text mb-3">ข้อมูลลูกค้าและงาน</h3>
+                <h3 class="font-semibold text-text mb-3">ข้อมูลงาน</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div class="md:col-span-2">
-                    <label class="block text-xs font-semibold text-muted mb-1">รหัสลูกค้า / ชื่อลูกค้า</label>
-                    <select v-model="formData.customer" class="input-field w-full">
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">เลขที่เอกสาร</label>
+                    <input v-model="formData.docNo" class="input-field w-full" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">ชื่อลูกค้า</label>
+                    <select v-if="formData.category === 'ceramics'" v-model="formData.customer" class="input-field w-full">
                       <option value="">เลือกลูกค้า...</option>
                       <option>บริษัท ABC จำกัด</option>
                       <option>บริษัท XYZ จำกัด</option>
                     </select>
+                    <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-medium">
+                      {{ fixedCementsCustomer }}
+                    </div>
                   </div>
                   <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ใบสั่งงาน (PO)</label>
-                    <input v-model="formData.po" placeholder="PO..." class="input-field w-full" />
+                    <label class="block text-xs font-semibold text-muted mb-1">สถานที่ส่งสินค้า (ชื่อหน้างาน)</label>
+                    <input v-model="formData.siteName" placeholder="ชื่อหน้างาน" class="input-field w-full" />
                   </div>
                   <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">เลขชิพเม้นท์</label>
-                    <input v-model="formData.shipNo" placeholder="Sh.No" class="input-field w-full" />
+                    <label class="block text-xs font-semibold text-muted mb-1">อำเภอ</label>
+                    <input v-model="formData.district" placeholder="อำเภอ" class="input-field w-full" />
                   </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ต้นทาง</label>
-                    <input v-model="formData.origin" placeholder="ต้นทาง" class="input-field w-full" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ปลายทาง</label>
-                    <input v-model="formData.destination" placeholder="ปลายทาง" class="input-field w-full" />
-                  </div>
+
+                  <template v-if="formData.category === 'ceramics'">
+                    <div class="md:col-span-2">
+                      <label class="block text-xs font-semibold text-muted mb-1">ชนิดปูน (1-3 ชนิดต่อเที่ยว)</label>
+                      <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <input v-model="formData.cementTypes[0]" placeholder="ชนิดปูน #1" class="input-field w-full" />
+                        <input v-model="formData.cementTypes[1]" placeholder="ชนิดปูน #2 (ถ้ามี)" class="input-field w-full" />
+                        <input v-model="formData.cementTypes[2]" placeholder="ชนิดปูน #3 (ถ้ามี)" class="input-field w-full" />
+                      </div>
+                    </div>
+                    <div class="md:col-span-2">
+                      <label class="block text-xs font-semibold text-muted mb-1">ประเภทงาน</label>
+                      <div class="flex gap-2 flex-wrap">
+                        <button
+                          v-for="jt in jobTypeOptions"
+                          :key="jt"
+                          @click="formData.jobType = jt"
+                          :class="[
+                            'px-3 py-2 text-sm font-medium rounded-lg transition-all',
+                            formData.jobType === jt ? 'bg-primary text-white' : 'bg-surface-2 text-text border border-border hover:bg-border',
+                          ]"
+                        >
+                          {{ jt }}
+                        </button>
+                      </div>
+                    </div>
+                  </template>
                 </div>
               </div>
 
-              <!-- Goods Section -->
+              <!-- Trip / Fuel / Allowance Section -->
               <div>
-                <h3 class="font-semibold text-text mb-3">สินค้า</h3>
+                <h3 class="font-semibold text-text mb-3">ค่าเที่ยว / น้ำมัน / เบี้ยเลี้ยง</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ประเภทสินค้า</label>
-                    <select v-model="formData.prodType" class="input-field w-full">
-                      <option>ปูนถุง</option>
-                      <option>กระเบื้อง</option>
-                    </select>
+                    <label class="block text-xs font-semibold text-muted mb-1">ค่าเที่ยว (บาท)</label>
+                    <input v-model.number="formData.tripFee" type="number" placeholder="0" class="input-field w-full" />
                   </div>
                   <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ชื่อสินค้า</label>
-                    <input v-model="formData.goods" placeholder="เช่น M402 + M300" class="input-field w-full" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">น้ำหนัก (ตัน)</label>
-                    <input v-model.number="formData.weight" type="number" placeholder="0" class="input-field w-full" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">จำนวน (ชิ้น/ถุง)</label>
-                    <input v-model.number="formData.qty" type="number" placeholder="0" class="input-field w-full" />
-                  </div>
-                </div>
-              </div>
-
-              <!-- Pricing Section -->
-              <div>
-                <h3 class="font-semibold text-text mb-3">คิดค่าขนส่งตาม</h3>
-                <div class="flex gap-2 mb-4 flex-wrap">
-                  <button
-                    v-for="option in calcByOptions"
-                    :key="option.id"
-                    @click="formData.calcBy = option.id"
-                    :class="[
-                      'px-3 py-2 text-sm font-medium rounded-lg flex items-center gap-1.5 transition-all',
-                      formData.calcBy === option.id
-                        ? 'bg-primary text-white'
-                        : 'bg-surface-2 text-text border border-border hover:bg-border',
-                    ]"
-                  >
-                    <span class="material-symbols-rounded text-base">{{ option.icon }}</span>
-                    {{ option.label }}
-                  </button>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div v-if="showTonRate">
-                    <label class="block text-xs font-semibold text-muted mb-1">ตันละ (บาท)</label>
-                    <input v-model.number="formData.ratePerTon" type="number" placeholder="0" class="input-field w-full" />
-                  </div>
-                  <div v-if="showTripRate">
-                    <label class="block text-xs font-semibold text-muted mb-1">เที่ยวละ (บาท)</label>
-                    <input v-model.number="formData.ratePerTrip" type="number" placeholder="0" class="input-field w-full" />
-                  </div>
-                  <div v-if="showPieceRate">
-                    <label class="block text-xs font-semibold text-muted mb-1">ชิ้นละ (บาท)</label>
-                    <input v-model.number="formData.ratePerPiece" type="number" placeholder="0" class="input-field w-full" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ราคาค่าขนส่ง (เต็ม)</label>
-                    <input v-model.number="formData.price" type="number" placeholder="auto" class="input-field w-full" />
-                  </div>
-                </div>
-              </div>
-
-              <!-- Fuel & Allowance Section -->
-              <div>
-                <h3 class="font-semibold text-text mb-3">ค่าเชื้อเพลิง / เบี้ยเลี้ยง</h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">จำนวนน้ำมัน (ลิตร)</label>
+                    <label class="block text-xs font-semibold text-muted mb-1">น้ำมัน (ลิตร)</label>
                     <input v-model.number="formData.fuelLiters" type="number" placeholder="0" class="input-field w-full" />
                   </div>
                   <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ราคาน้ำมัน (ลิตรละ)</label>
-                    <input v-model.number="formData.fuelPrice" type="number" class="input-field w-full" />
+                    <label class="block text-xs font-semibold text-muted mb-1">เรทน้ำมัน (บาท/ลิตร วันนั้น)</label>
+                    <input v-model.number="formData.fuelRate" type="number" placeholder="0" class="input-field w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-semibold text-muted mb-1">เบี้ยเลี้ยงคนขับ</label>
-                    <input v-model.number="formData.perDiem" type="number" placeholder="0" class="input-field w-full" />
+                    <input
+                      v-if="formData.category === 'ceramics'"
+                      v-model.number="formData.allowance"
+                      type="number"
+                      placeholder="0"
+                      class="input-field w-full"
+                    />
+                    <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-semibold">
+                      {{ formatBaht(calculatedCementsAllowance) }} (คำนวณอัตโนมัติ)
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Site Contact Section (optional, can be filled later on dispatch) -->
+              <div>
+                <h3 class="font-semibold text-text mb-3">
+                  ข้อมูลหน้างาน
+                  <span class="text-xs font-normal text-muted">(ไม่บังคับ - ใส่ทีหลังตอนกดส่งงานได้)</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้ติดต่อหน้างาน</label>
+                    <input v-model="formData.siteContactName" placeholder="ชื่อผู้ติดต่อ" class="input-field w-full" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทรหน้างาน</label>
+                    <input v-model="formData.sitePhone" placeholder="เบอร์โทร" class="input-field w-full" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">พิกัดหน้างาน</label>
+                    <input v-model="formData.siteCoords" placeholder="โลเคชั่นหน้างาน" class="input-field w-full" />
                   </div>
                 </div>
               </div>
             </div>
 
             <!-- Calculation Summary -->
-            <div class="px-6 py-6 bg-surface-2">
+            <div class="px-6 pb-6 bg-surface-2">
               <h3 class="font-semibold text-text mb-4">สรุปการคำนวณ</h3>
               <div class="space-y-3">
                 <div class="bg-surface border border-border rounded-lg p-3">
-                  <div class="text-xs text-muted mb-1">รายได้ค่าขนส่ง</div>
-                  <div class="text-2xl font-bold text-text">{{ calculatedIncome }}</div>
+                  <div class="text-xs text-muted mb-1">ค่าเที่ยว</div>
+                  <div class="text-2xl font-bold text-text">{{ formatBaht(formData.tripFee) }}</div>
                   <div class="mt-2 pt-2 border-t border-border space-y-1 text-xs">
                     <div class="flex justify-between">
-                      <span class="text-muted">ค่าขนส่ง</span>
-                      <span class="font-semibold text-text">{{ formData.price || 0 }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                      <span class="text-muted">ค่าน้ำมัน</span>
-                      <span class="font-semibold text-green-600">{{ calculatedFuel }}</span>
+                      <span class="text-muted">ค่าน้ำมัน ({{ formData.fuelLiters || 0 }} ล. x {{ formData.fuelRate || 0 }})</span>
+                      <span class="font-semibold text-green-600">{{ formatBaht(calculatedFuelCost) }}</span>
                     </div>
                   </div>
                 </div>
                 <div class="bg-primary text-white rounded-lg p-3">
-                  <div class="text-xs opacity-90 mb-1">รายได้คนขับ</div>
-                  <div class="text-2xl font-bold">{{ calculatedDriverPay }}</div>
-                  <div class="text-xs opacity-80 mt-1">ตามสูตร: Base × 1.0</div>
+                  <div class="text-xs opacity-90 mb-1">เบี้ยเลี้ยงคนขับ</div>
+                  <div class="text-2xl font-bold">{{ formatBaht(displayedAllowance) }}</div>
+                  <div class="text-xs opacity-80 mt-1">
+                    {{ formData.category === 'ceramics' ? 'กรอกเอง' : 'สูตร: ((ค่าเที่ยว - 1%) x 62%) - ค่าน้ำมัน' }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -298,9 +266,9 @@
           <!-- Dialog Footer -->
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border bg-surface sticky bottom-0">
             <button @click="closeDialog" class="btn-secondary">ยกเลิก</button>
-            <button @click="saveBooking" class="btn-primary">
+            <button @click="saveBooking" :disabled="!canSave" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
               <span class="material-symbols-rounded">save</span>
-              {{ saveLabel }}
+              บันทึก
             </button>
           </div>
         </div>
@@ -311,101 +279,142 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import type { Booking, BookingCategory, BookingJobType } from '@/types'
 
 const showDialog = ref(false)
 const searchQuery = ref('')
-const dialogTitle = ref('สร้างงานขนส่งใหม่')
-const saveLabel = ref('บันทึก')
 
-const bookings = ref([
+const fixedCementsCustomer = 'บจก. ศรีไทยคอนกรีต'
+
+const categoryOptions: { id: BookingCategory; label: string; subtitle: string }[] = [
+  { id: 'ceramics', label: 'Fleet Ceramics', subtitle: 'หลายลูกค้า · ระบุชนิดปูนและประเภทงาน · เบี้ยเลี้ยงกรอกเอง' },
+  { id: 'cements', label: 'Fleet Cements', subtitle: `ลูกค้าประจำ (${fixedCementsCustomer}) · เบี้ยเลี้ยงคำนวณอัตโนมัติ` },
+]
+
+const jobTypeOptions: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
+
+const bookings = ref<Booking[]>([
   {
-    id: 'BK-2569-0001',
-    date: '28 มิ.ย. 69',
+    id: 'b1',
+    category: 'ceramics',
+    docNo: 'CR2569-0001',
     customer: 'บริษัท ABC จำกัด',
-    goods: 'ปูนถุง M402',
-    origin: 'นครสวรรค์',
-    dest: 'กรุงเทพฯ',
-    price: '฿4,500',
-    status: 'สำเร็จ',
-    shipNo: 'SH-2569-001',
-    owner: 'สมชาย ใจกล้า',
+    siteName: 'ไซต์งาน นครสวรรค์',
+    district: 'เมืองนครสวรรค์',
+    cementTypes: ['ปูนซีเมนต์ M402'],
+    jobType: 'ลงมือ',
+    allowance: 350,
+    tripFee: 4500,
+    fuelLiters: 40,
+    fuelRate: 32,
+    siteContactName: 'คุณสมชาย',
+    sitePhone: '081-234-5678',
+    siteCoords: '',
+    plate: '',
+    status: 'รอจัดรถ',
+    createdAt: new Date(),
   },
   {
-    id: 'BK-2569-0002',
-    date: '28 มิ.ย. 69',
-    customer: 'บริษัท XYZ จำกัด',
-    goods: 'กระเบื้องดำ',
-    origin: 'ชลบุรี',
-    dest: 'นนทบุรี',
-    price: '฿3,800',
-    status: 'รถกำลังวิ่ง',
-    shipNo: null,
-    owner: 'วิชัย เสียงแจ่ม',
+    id: 'b2',
+    category: 'cements',
+    docNo: 'CM2569-0002',
+    customer: fixedCementsCustomer,
+    siteName: 'ไซต์งาน ชลบุรี',
+    district: 'ศรีราชา',
+    allowance: 0,
+    tripFee: 3800,
+    fuelLiters: 35,
+    fuelRate: 32,
+    siteContactName: '',
+    sitePhone: '',
+    siteCoords: '',
+    plate: '',
+    status: 'รอจัดรถ',
+    createdAt: new Date(),
   },
 ])
 
-const formData = ref({
-  docNo: '2569-0003',
-  dateSend: '',
-  timeSend: '',
-  plate: '',
-  vtypeLabel: 'รถ 6 ล้อ',
-  driver: '',
-  customer: '',
-  po: '',
-  shipNo: '',
-  origin: '',
-  destination: '',
-  prodType: 'ปูนถุง',
-  goods: '',
-  weight: 0,
-  qty: 0,
-  calcBy: 'ton',
-  ratePerTon: 0,
-  ratePerTrip: 0,
-  ratePerPiece: 0,
-  price: 0,
+const defaultFormData = (category: BookingCategory = 'ceramics') => ({
+  docNo: nextDocNo(category),
+  category,
+  customer: category === 'cements' ? fixedCementsCustomer : '',
+  siteName: '',
+  district: '',
+  cementTypes: ['', '', ''] as string[],
+  jobType: undefined as BookingJobType | undefined,
+  allowance: 0,
+  tripFee: 0,
   fuelLiters: 0,
-  fuelPrice: 0,
-  perDiem: 0,
+  fuelRate: 0,
+  siteContactName: '',
+  sitePhone: '',
+  siteCoords: '',
 })
 
-const calcByOptions = [
-  { id: 'ton', label: 'ตันละ', icon: 'scale' },
-  { id: 'trip', label: 'เที่ยวละ', icon: 'route' },
-  { id: 'piece', label: 'ชิ้นละ', icon: 'inventory_2' },
-]
+const formData = ref(defaultFormData())
 
-const showTonRate = computed(() => formData.value.calcBy === 'ton')
-const showTripRate = computed(() => formData.value.calcBy === 'trip')
-const showPieceRate = computed(() => formData.value.calcBy === 'piece')
+function nextDocNo(category: BookingCategory) {
+  const prefix = category === 'ceramics' ? 'CR' : 'CM'
+  const maxSeq = bookings.value
+    .filter((b) => b.category === category)
+    .reduce((max, b) => {
+      const seq = Number(b.docNo.replace(prefix, '').replace('2569-', ''))
+      return Number.isFinite(seq) && seq > max ? seq : max
+    }, 0)
+  return `${prefix}2569-${String(maxSeq + 1).padStart(4, '0')}`
+}
 
-const calculatedIncome = computed(() => {
-  return formData.value.price || 0
+const setCategory = (category: BookingCategory) => {
+  formData.value.category = category
+  formData.value.docNo = nextDocNo(category)
+  formData.value.customer = category === 'cements' ? fixedCementsCustomer : ''
+}
+
+const calculatedFuelCost = computed(() => (formData.value.fuelLiters || 0) * (formData.value.fuelRate || 0))
+
+const calculatedCementsAllowance = computed(() => {
+  const tripFee = formData.value.tripFee || 0
+  return Math.round(tripFee * 0.99 * 0.62 - calculatedFuelCost.value)
 })
 
-const calculatedFuel = computed(() => {
-  return (formData.value.fuelLiters || 0) * (formData.value.fuelPrice || 0)
+const displayedAllowance = computed(() =>
+  formData.value.category === 'ceramics' ? formData.value.allowance || 0 : calculatedCementsAllowance.value
+)
+
+const canSave = computed(() => {
+  const f = formData.value
+  const baseValid = !!f.docNo && !!f.siteName && !!f.district && !!f.tripFee
+  const customerValid = f.category === 'cements' || !!f.customer
+  return baseValid && customerValid
 })
 
-const calculatedDriverPay = computed(() => {
-  const base = calculatedIncome.value + calculatedFuel.value + (formData.value.perDiem || 0)
-  return Math.round(base * 1.0)
-})
+const productLabel = (booking: Booking) => {
+  if (booking.category === 'cements') return 'ปูน (Fleet Cements)'
+  const types = (booking.cementTypes || []).filter(Boolean)
+  return types.length ? types.join(', ') : '-'
+}
 
 const getStatusClass = (status: string) => {
   const classes: Record<string, string> = {
-    'สำเร็จ': 'bg-green-100 text-green-700',
-    'รถกำลังวิ่ง': 'bg-blue-100 text-blue-700',
     'รอจัดรถ': 'bg-amber-100 text-amber-700',
+    'ส่งงานแล้ว': 'bg-blue-100 text-blue-700',
   }
   return classes[status] || 'bg-gray-100 text-gray-700'
 }
 
+const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+
+const filteredBookings = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return bookings.value
+  return bookings.value.filter(
+    (b) => b.docNo.toLowerCase().includes(q) || b.siteName.toLowerCase().includes(q)
+  )
+})
+
 const openDialog = () => {
+  formData.value = defaultFormData()
   showDialog.value = true
-  dialogTitle.value = 'สร้างงานขนส่งใหม่'
-  saveLabel.value = 'บันทึก'
 }
 
 const closeDialog = () => {
@@ -413,8 +422,35 @@ const closeDialog = () => {
 }
 
 const saveBooking = () => {
-  // Save logic here
+  if (!canSave.value) return
+  const f = formData.value
+  bookings.value.unshift({
+    id: `b${bookings.value.length + 1}`,
+    category: f.category,
+    docNo: f.docNo,
+    customer: f.customer,
+    siteName: f.siteName,
+    district: f.district,
+    cementTypes: f.category === 'ceramics' ? f.cementTypes.filter(Boolean) : undefined,
+    jobType: f.category === 'ceramics' ? f.jobType : undefined,
+    allowance: displayedAllowance.value,
+    tripFee: f.tripFee,
+    fuelLiters: f.fuelLiters,
+    fuelRate: f.fuelRate,
+    siteContactName: f.siteContactName || undefined,
+    sitePhone: f.sitePhone || undefined,
+    siteCoords: f.siteCoords || undefined,
+    plate: '',
+    status: 'รอจัดรถ',
+    createdAt: new Date(),
+  })
   closeDialog()
+}
+
+const sendToDriver = (booking: Booking) => {
+  if (!booking.plate) return
+  booking.status = 'ส่งงานแล้ว'
+  alert(`ส่งงาน ${booking.docNo} ให้ทะเบียนรถ ${booking.plate} เรียบร้อย — งานจะไปแสดงในหน้าสถานะงาน`)
 }
 </script>
 

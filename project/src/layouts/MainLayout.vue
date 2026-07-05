@@ -20,27 +20,55 @@
 
       <!-- Menu -->
       <nav class="flex-1 overflow-y-auto py-2 px-3">
-        <button
-          v-for="item in appStore.menu"
-          :key="item.id"
-          :to="item.route"
-          @click="navigateTo(item.route)"
-          class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-surface-2 hover:text-text transition-all mb-1"
-          :class="[
-            currentRoute.path === item.route
-              ? 'bg-primary-soft text-primary font-semibold'
-              : '',
-          ]"
-        >
-          <span class="material-symbols-rounded text-lg">{{ item.icon }}</span>
-          <span class="flex-1 text-left">{{ item.label }}</span>
-          <span
-            v-if="item.badge"
-            class="text-xs font-bold min-w-fit px-1.5 h-5 rounded-full bg-primary text-white flex items-center justify-center"
+        <template v-for="item in appStore.menu" :key="item.id">
+          <!-- Group with children -->
+          <div v-if="item.children" class="mb-1">
+            <button
+              @click="toggleGroup(item.id)"
+              class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-surface-2 hover:text-text transition-all"
+              :class="[groupHasActiveChild(item) ? 'text-primary font-semibold' : '']"
+            >
+              <span class="material-symbols-rounded text-lg">{{ item.icon }}</span>
+              <span class="flex-1 text-left">{{ item.label }}</span>
+              <span class="material-symbols-rounded text-base transition-transform" :class="[isGroupOpen(item.id) ? 'rotate-180' : '']">
+                expand_more
+              </span>
+            </button>
+            <div v-if="isGroupOpen(item.id)" class="mt-1 ml-4 pl-3 border-l border-border space-y-1">
+              <button
+                v-for="child in item.children"
+                :key="child.id"
+                @click="navigateTo(child.route)"
+                class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-surface-2 hover:text-text transition-all"
+                :class="[currentRoute.path === child.route ? 'bg-primary-soft text-primary font-semibold' : '']"
+              >
+                <span class="material-symbols-rounded text-base">{{ child.icon }}</span>
+                <span class="flex-1 text-left">{{ child.label }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Single item -->
+          <button
+            v-else
+            @click="navigateTo(item.route)"
+            class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-surface-2 hover:text-text transition-all mb-1"
+            :class="[
+              currentRoute.path === item.route
+                ? 'bg-primary-soft text-primary font-semibold'
+                : '',
+            ]"
           >
-            {{ item.badge }}
-          </span>
-        </button>
+            <span class="material-symbols-rounded text-lg">{{ item.icon }}</span>
+            <span class="flex-1 text-left">{{ item.label }}</span>
+            <span
+              v-if="item.badge"
+              class="text-xs font-bold min-w-fit px-1.5 h-5 rounded-full bg-primary text-white flex items-center justify-center"
+            >
+              {{ item.badge }}
+            </span>
+          </button>
+        </template>
       </nav>
 
       <!-- User Profile -->
@@ -141,6 +169,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import type { MenuItem } from '@/stores/app'
 
 const router = useRouter()
 const currentRoute = useRoute()
@@ -149,6 +178,25 @@ const authStore = useAuthStore()
 const isSmallScreen = ref(false)
 
 const sidebarOpen = computed(() => appStore.sidebarOpen)
+
+const openGroups = ref(new Set<string>())
+
+const groupHasActiveChild = (item: MenuItem) => {
+  return !!item.children?.some((child) => child.route === currentRoute.path)
+}
+
+const isGroupOpen = (id: string) => {
+  const group = appStore.menu.find((item) => item.id === id)
+  return openGroups.value.has(id) || (group ? groupHasActiveChild(group) : false)
+}
+
+const toggleGroup = (id: string) => {
+  if (openGroups.value.has(id)) {
+    openGroups.value.delete(id)
+  } else {
+    openGroups.value.add(id)
+  }
+}
 
 onMounted(() => {
   const handleResize = () => {
@@ -167,17 +215,23 @@ onMounted(() => {
 const getScreenTitle = () => {
   const routes: Record<string, string> = {
     '/': 'Dashboard',
-    '/booking': 'สร้างงานขนส่ง',
+    '/booking': 'ตารางจองงาน',
+    '/job-search': 'ค้นหางาน',
+    '/job-status': 'สถานะงาน',
     '/dispatch': 'จัดส่วนรถ',
     '/jobs': 'งานขนส่ง',
     '/workflow': 'ผังการไหลงาน',
-    '/customers': 'ลูกค้า',
-    '/drivers': 'คนขับ',
+    '/accounting': 'บัญชี',
+    '/customers': 'ลูกค้า/คู่ค้า',
+    '/drivers': 'พนักงานขับรถ',
     '/vehicles': 'รถ',
-    '/documents': 'เอกสาร',
+    '/documents': 'เอกสารขาย',
     '/billing': 'บิล/ใบเสร็จ',
     '/income': 'รายได้คนขับ',
+    '/payroll': 'เงินเดือน',
     '/reports': 'รายงาน',
+    '/staff': 'เสมียน (พนักงานออฟฟิศ)',
+    '/vendors': 'ผู้จำหน่าย',
     '/settings': 'ตั้งค่า',
   }
   return routes[currentRoute.path] || 'Dashboard'
