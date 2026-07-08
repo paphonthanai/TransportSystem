@@ -1,6 +1,41 @@
-export type BookingCategory = 'ceramics' | 'cements'
+export type BookingCategory = 'cements' | 'ceramics'
 
 export type BookingJobType = 'ลงมือ' | 'พาเลทโรงงาน' | 'พาเลทฟรี'
+
+/**
+ * สถานะวงจรชีวิตของงาน (job lifecycle) แยกจากสถานะการเงิน (BillingStatus) โดยเจตนา
+ * ตามหลักที่ว่า "ส่งของเสร็จ = งานจบ" ไม่เท่ากับ "วางบิล = แปลงงานเป็นเงิน"
+ * WAITING_DISPATCH: ลงงานแล้ว รอจัดคนขับ/รถ/น้ำมัน (ราคาแก้ไขได้อิสระ)
+ * DISPATCHED: จัดคนขับ+รถ+น้ำมันแล้ว (ราคาถูกล็อก แก้ได้เฉพาะ admin)
+ * IN_TRANSIT: คนขับกดเริ่มขนส่งแล้ว กำลังวิ่งงาน
+ * DELIVERED: ส่งของสำเร็จแล้ว (มี POD หรือจบงานผ่านออฟฟิศ)
+ */
+export type BookingStatus = 'WAITING_DISPATCH' | 'DISPATCHED' | 'IN_TRANSIT' | 'DELIVERED'
+
+/**
+ * สถานะฝั่งการเงิน มีความหมายเมื่องานเป็น DELIVERED แล้วเท่านั้น
+ * UNBILLED: ยังไม่ถูกจัดเข้ารอบบิล
+ * IN_BATCH: อยู่ในรอบบิล รอตรวจสอบ/ออกใบแจ้งหนี้
+ * HOLD: ตรวจสอบแล้วไม่ผ่าน (POD ไม่ครบ/ราคาไม่ตรง) พักไว้ก่อน
+ * INVOICED: ออกใบแจ้งหนี้แล้ว
+ * PAID: ลูกค้าชำระแล้ว ปิดรอบ
+ */
+export type BillingStatus = 'UNBILLED' | 'IN_BATCH' | 'HOLD' | 'INVOICED' | 'PAID'
+
+export interface DebtAdjustment {
+  id: string
+  label: string
+  /** จำนวนเงิน: บวก = เพิ่มหนี้ (หักจากเบี้ยเลี้ยง), ลบ = ลดหนี้ (เพิ่มให้เบี้ยเลี้ยง) */
+  amount: number
+  note?: string
+}
+
+export interface ExtraCharge {
+  id: string
+  /** เช่น ค่ารอรถ, ค่าเพิ่มระยะ, ค่าเปลี่ยนเส้นทาง */
+  label: string
+  amount: number
+}
 
 export interface Booking {
   id: string
@@ -9,18 +44,82 @@ export interface Booking {
   customer: string
   siteName: string
   district: string
+  /** เฉพาะ Fleet Cements: รหัสปูน 1-3 ชนิดต่อเที่ยว */
   cementTypes?: string[]
+  /** เฉพาะ Fleet Cements: ประเภทงาน 3 แบบ */
   jobType?: BookingJobType
   allowance: number
+  /** ค่าเที่ยวที่ใช้คำนวณจริง (ต้นทุน/เบี้ยเลี้ยง) */
   tripFee: number
+  /** ราคาที่ตกลงกับลูกค้าไว้ ใช้เทียบตอนตรวจสอบก่อนวางบิล แก้ไขได้อิสระตอน WAITING_DISPATCH เท่านั้น (หลังจากนั้นแก้ได้เฉพาะ admin) */
+  agreedPrice: number
   fuelLiters: number
   fuelRate: number
   siteContactName?: string
   sitePhone?: string
   siteCoords?: string
   plate?: string
-  status: 'รอจัดรถ' | 'ส่งงานแล้ว'
+  driverName?: string
+  status: BookingStatus
+  debtAdjustments?: DebtAdjustment[]
+  /** เบี้ยเลี้ยงหลังกระทบยอดเพิ่ม/ลดหนี้ ตอนกดจบงาน */
+  finalAllowance?: number
+  /** รูปหลักฐานการส่งมอบสินค้า (Proof of Delivery) ที่คนขับแนบตอนกดจบงานจาก Driver App */
+  podImage?: string
+  /** สถานะการเงิน มีผลเมื่อ status เป็น DELIVERED เท่านั้น */
+  billingStatus?: BillingStatus
+  /** ค่าใช้จ่ายเพิ่มเติมที่เรียกเก็บลูกค้า เพิ่มได้ตอนตรวจสอบรอบบิล */
+  extraCharges?: ExtraCharge[]
+  /** รอบบิลที่งานนี้ถูกจัดเข้าไป (ถ้ามี) */
+  batchId?: string
   createdAt: Date
+  dispatchedAt?: Date
+  transitStartedAt?: Date
+  completedAt?: Date
+  billedAt?: Date
+}
+
+export type WHTPayeeType = 'driver' | 'vendor_fleet' | 'vendor' | 'other'
+
+/** หนังสือรับรองการหักภาษี ณ ที่จ่าย (ภ.ง.ด.3/53) ออกเมื่อบริษัทจ่ายเงินให้คนขับ/รถร่วม/ผู้จำหน่าย */
+export interface WHTCertificate {
+  id: string
+  number: string
+  payeeType: WHTPayeeType
+  payeeName: string
+  payeeAddress: string
+  /** เลขประจำตัวผู้เสียภาษี หรือเลขบัตรประชาชน */
+  payeeTaxId: string
+  payDate: Date
+  /** ประเภทเงินได้ที่จ่าย เช่น ค่าขนส่ง, ค่าเช่ารถ */
+  incomeType: string
+  /** จำนวนเงินที่จ่ายเต็ม (ก่อนหักภาษี) */
+  grossAmount: number
+  /** อัตราภาษีหัก ณ ที่จ่าย (%) */
+  whtRate: number
+  note?: string
+  createdAt: Date
+}
+
+export interface LogEntry {
+  id: string
+  timestamp: Date
+  /** ชื่อผู้ทำรายการ (จากบัญชีที่ล็อกอินอยู่) */
+  actor: string
+  /** คำอธิบายรายการที่ทำ */
+  action: string
+}
+
+export interface BillingBatch {
+  id: string
+  label: string
+  /** ถ้าระบุ = รอบบิลเฉพาะลูกค้ารายนี้ ถ้าไม่ระบุ = รวมทุกลูกค้าในช่วงวันที่ */
+  customer?: string
+  dateFrom: Date
+  dateTo: Date
+  bookingIds: string[]
+  createdAt: Date
+  status: 'draft' | 'invoiced' | 'paid'
 }
 
 export interface Job {
@@ -46,6 +145,26 @@ export interface Customer {
   status: 'active' | 'inactive'
 }
 
+export interface Vendor {
+  id: string
+  name: string
+  phone: string
+  contact?: string
+  address?: string
+  category: string
+  status: 'active' | 'inactive'
+}
+
+export interface StaffMember {
+  id: string
+  name: string
+  phone: string
+  position: string
+  idCard?: string
+  lineId?: string
+  status: 'active' | 'inactive'
+}
+
 export interface Driver {
   id: string
   name: string
@@ -56,33 +175,39 @@ export interface Driver {
   totalTrips: number
   monthlyIncome: number
   rating: number
+  /** ข้อมูลตั้งค่าคนขับ ตามเอกสารความต้องการ */
+  idCard?: string
+  address?: string
+  lineId?: string
+  bankAccount?: string
 }
+
+export type VehicleType = 'รถบริษัท' | 'รถร่วม' | 'รถหุ้นส่วน'
 
 export interface Vehicle {
   id: string
+  /** ทะเบียนรถ */
   plate: string
-  type: string
-  capacity: number
-  driver?: string
-  status: 'available' | 'in-use' | 'maintenance' | 'inactive'
-  taxExpiry?: Date
-  insuranceExpiry?: Date
-}
-
-export interface Workflow {
-  id: string
-  jobId: string
-  stages: WorkflowStage[]
-  currentStage: number
-}
-
-export interface WorkflowStage {
-  id: string
-  name: string
-  description?: string
-  status: 'pending' | 'in-progress' | 'completed' | 'failed'
-  timestamp?: Date
-  notes?: string
+  /** ทะเบียนจังหวัด */
+  plateProvince: string
+  /** เบอร์รถ */
+  vehicleNo: string
+  /** ทะเบียนหาง */
+  trailerPlate?: string
+  /** ยี่ห้อ */
+  brand: string
+  /** ลักษณะรถ */
+  bodyType: string
+  /** เลขตัวถัง */
+  chassisNo: string
+  /** เลขเครื่อง */
+  engineNo: string
+  /** หน่วยงาน (ประเภทรถ) */
+  department: VehicleType
+  /** เลขไมล์ */
+  mileage: number
+  repairStatus?: string
+  repairDays?: number
 }
 
 export interface Document {

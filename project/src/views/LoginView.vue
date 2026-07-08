@@ -73,6 +73,10 @@
               <span>Manager:</span>
               <span class="font-mono">manager@thanthara.co.th / password123</span>
             </div>
+            <div class="flex justify-between text-muted">
+              <span>Driver:</span>
+              <span class="font-mono">driver@thanthara.co.th / password123</span>
+            </div>
           </div>
         </div>
       </div>
@@ -104,7 +108,7 @@ const handleLogin = async () => {
   error.value = ''
   try {
     await authStore.login(email.value, password.value)
-    const redirect = (route.query.redirect as string) || '/'
+    const redirect = (route.query.redirect as string) || (authStore.role === 'driver' ? '/driver-app' : '/')
     router.push(redirect)
   } catch (err: any) {
     error.value = err.message || 'เข้าสู่ระบบไม่สำเร็จ'

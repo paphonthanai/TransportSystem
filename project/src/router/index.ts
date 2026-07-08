@@ -20,49 +20,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/DashboardView.vue'),
       },
       {
-        path: 'booking',
+        path: 'booking/:fleet',
         name: 'Booking',
         component: () => import('@/views/BookingView.vue'),
+        props: true,
       },
       {
-        path: 'job-search',
-        name: 'JobSearch',
-        component: () => import('@/views/JobSearchView.vue'),
-      },
-      {
-        path: 'job-status',
+        path: 'job-status/:fleet',
         name: 'JobStatus',
         component: () => import('@/views/JobStatusView.vue'),
-      },
-      {
-        path: 'dispatch',
-        name: 'Dispatch',
-        component: () => import('@/views/DispatchView.vue'),
-      },
-      {
-        path: 'jobs',
-        name: 'Jobs',
-        component: () => import('@/views/JobsView.vue'),
-      },
-      {
-        path: 'workflow',
-        name: 'Workflow',
-        component: () => import('@/views/WorkflowView.vue'),
-      },
-      {
-        path: 'customers',
-        name: 'Customers',
-        component: () => import('@/views/CustomersView.vue'),
-      },
-      {
-        path: 'drivers',
-        name: 'Drivers',
-        component: () => import('@/views/DriversView.vue'),
-      },
-      {
-        path: 'vehicles',
-        name: 'Vehicles',
-        component: () => import('@/views/VehiclesView.vue'),
+        props: true,
       },
       {
         path: 'documents',
@@ -75,39 +42,60 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/BillingView.vue'),
       },
       {
-        path: 'income',
-        name: 'Income',
-        component: () => import('@/views/IncomeView.vue'),
+        path: 'documents/:docId',
+        name: 'InvoiceDocument',
+        component: () => import('@/views/InvoiceDocumentView.vue'),
+        props: true,
       },
       {
-        path: 'payroll',
-        name: 'Payroll',
+        path: 'wht-certificates',
+        name: 'WHTCertificates',
+        component: () => import('@/views/WHTCertificateView.vue'),
+      },
+      {
+        path: 'payroll/staff',
+        name: 'PayrollStaff',
         component: () => import('@/views/PayrollView.vue'),
       },
       {
-        path: 'accounting',
-        name: 'Accounting',
-        component: () => import('@/views/AccountingView.vue'),
+        path: 'payroll/drivers',
+        name: 'PayrollDrivers',
+        component: () => import('@/views/IncomeView.vue'),
       },
       {
-        path: 'reports',
-        name: 'Reports',
-        component: () => import('@/views/ReportsView.vue'),
+        path: 'payroll/vendor-fleet',
+        name: 'PayrollVendorFleet',
+        component: () => import('@/views/PayrollVendorFleetView.vue'),
       },
       {
-        path: 'staff',
-        name: 'Staff',
+        path: 'settings/vehicles',
+        name: 'SettingsVehicles',
+        component: () => import('@/views/VehiclesView.vue'),
+      },
+      {
+        path: 'settings/staff',
+        name: 'SettingsStaff',
         component: () => import('@/views/StaffView.vue'),
       },
       {
-        path: 'vendors',
-        name: 'Vendors',
+        path: 'settings/drivers',
+        name: 'SettingsDrivers',
+        component: () => import('@/views/DriversView.vue'),
+      },
+      {
+        path: 'settings/customers',
+        name: 'SettingsCustomers',
+        component: () => import('@/views/CustomersView.vue'),
+      },
+      {
+        path: 'settings/vendors',
+        name: 'SettingsVendors',
         component: () => import('@/views/VendorsView.vue'),
       },
       {
-        path: 'settings',
-        name: 'Settings',
-        component: () => import('@/views/SettingsView.vue'),
+        path: 'settings/logs',
+        name: 'SettingsLogs',
+        component: () => import('@/views/LogView.vue'),
       },
     ],
   },
@@ -134,7 +122,10 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'Login', query: { redirect: to.fullPath } })
   } else if (to.name === 'Login' && authStore.isAuthenticated) {
-    next({ name: 'DashboardHome' })
+    next(authStore.role === 'driver' ? { name: 'DriverApp' } : { name: 'DashboardHome' })
+  } else if (authStore.isAuthenticated && authStore.role === 'driver' && to.name !== 'DriverApp') {
+    // แยกมุมมองคนขับออกจากส่วนแอดมิน: คนขับเข้าได้เฉพาะหน้า Driver App
+    next({ name: 'DriverApp' })
   } else {
     next()
   }

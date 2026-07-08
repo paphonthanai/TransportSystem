@@ -25,12 +25,15 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = currentUser
   })
 
+  const role = ref<string | null>(null)
+
   // Development mode mock authentication
   const isDevelopment = import.meta.env.DEV
   const demoCredentials: Record<string, { password: string; name: string; role: string }> = {
     'admin@thanthara.co.th': { password: 'password123', name: 'Admin User', role: 'admin' },
     'manager@thanthara.co.th': { password: 'password123', name: 'Manager User', role: 'manager' },
     'dispatcher@thanthara.co.th': { password: 'password123', name: 'Dispatcher User', role: 'dispatcher' },
+    'driver@thanthara.co.th': { password: 'password123', name: 'สมชาย ทองดี', role: 'driver' },
   }
 
   async function login(email: string, password: string) {
@@ -72,6 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
         } as unknown as User
         
         user.value = mockUser
+        role.value = credentials.role
       }
     } catch (err: any) {
       error.value = err.message
@@ -89,6 +93,8 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = err.message
       throw err
     } finally {
+      user.value = null
+      role.value = null
       loading.value = false
     }
   }
@@ -97,6 +103,7 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     loading,
     error,
+    role,
     isAuthenticated,
     userInitial,
     userName,
