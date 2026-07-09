@@ -84,8 +84,20 @@
                 นำทาง
               </a>
             </div>
+            <div v-if="job.status === 'PENDING_ACCEPT'" class="space-y-1.5">
+              <div class="text-[11px] text-center text-muted">
+                กรุณาตอบรับภายใน {{ formatCountdown(remainingAcceptSeconds(job)) }} มิฉะนั้นงานจะถูกจัดให้คนขับคนอื่นอัตโนมัติ
+              </div>
+              <button
+                @click="bookingStore.acceptDispatch(job.id)"
+                class="w-full h-9 rounded-lg bg-amber-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+              >
+                <span class="material-symbols-rounded text-base">how_to_reg</span>
+                ตอบรับงาน
+              </button>
+            </div>
             <button
-              v-if="job.status === 'DISPATCHED'"
+              v-else-if="job.status === 'DISPATCHED'"
               @click="bookingStore.startTransit(job.id)"
               class="w-full h-9 rounded-lg bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
             >
@@ -166,7 +178,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
@@ -192,9 +204,29 @@ const logout = async () => {
 
 const activeJobs = computed(() =>
   bookingStore.bookings.filter(
-    (b) => b.driverName === selectedDriver.value && (b.status === 'DISPATCHED' || b.status === 'IN_TRANSIT')
+    (b) =>
+      b.driverName === selectedDriver.value &&
+      (b.status === 'PENDING_ACCEPT' || b.status === 'DISPATCHED' || b.status === 'IN_TRANSIT')
   )
 )
+
+// นาฬิกาสำหรับนับถอยหลังเวลาที่เหลือให้ตอบรับงาน
+const now = ref(Date.now())
+let clockTimer: number
+onMounted(() => {
+  clockTimer = window.setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
+})
+onUnmounted(() => clearInterval(clockTimer))
+
+const ACCEPT_TIMEOUT_MS = 15 * 60 * 1000
+const remainingAcceptSeconds = (job: Booking) => {
+  if (!job.dispatchedAt) return 0
+  const deadline = new Date(job.dispatchedAt).getTime() + ACCEPT_TIMEOUT_MS
+  return Math.max(0, Math.floor((deadline - now.value) / 1000))
+}
+const formatCountdown = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
 
 const recentJobs = computed(() =>
   bookingStore.bookings

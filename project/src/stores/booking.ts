@@ -26,6 +26,9 @@ export interface SalesDocument {
 
 const fixedCeramicsCustomer = 'บจก. ศรีไทยคอนกรีต'
 
+/** ระยะเวลาที่ให้คนขับตอบรับงานหลังถูกจัดรถ ก่อนยกเลิกและกลับไปรอจัดคนขับใหม่อัตโนมัติ */
+const ACCEPT_TIMEOUT_MS = 15 * 60 * 1000
+
 /**
  * ไม่มี backend จริง จึงใช้ localStorage เป็นตัวกลางเก็บข้อมูล
  * เพื่อให้หน้า Admin (สั่งงาน/จบงาน/วางบิล) กับหน้า Driver App ที่เปิดคนละแท็บ
@@ -302,6 +305,7 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`แก้ไขราคา ${booking.docNo}: ค่าเที่ยว ${booking.tripFee} บาท, ราคาที่ตกลง ${booking.agreedPrice} บาท`)
   }
 
+  /** จ่ายงานให้คนขับ: WAITING_DISPATCH -> PENDING_ACCEPT (รอคนขับตอบรับใน Driver App ภายใน 15 นาที) */
   function dispatchBooking(
     id: string,
     plate: string,
@@ -314,10 +318,35 @@ export const useBookingStore = defineStore('booking', () => {
     if (extra?.siteContactName) booking.siteContactName = extra.siteContactName
     if (extra?.sitePhone) booking.sitePhone = extra.sitePhone
     if (extra?.siteCoords) booking.siteCoords = extra.siteCoords
-    booking.status = 'DISPATCHED'
+    booking.status = 'PENDING_ACCEPT'
     booking.dispatchedAt = new Date()
-    addLog(`จัดรถ ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''}`)
+    addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''} (รอคนขับตอบรับ)`)
   }
+
+  /** คนขับกดตอบรับงานใน Driver App: PENDING_ACCEPT -> DISPATCHED */
+  function acceptDispatch(id: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking || booking.status !== 'PENDING_ACCEPT') return
+    booking.status = 'DISPATCHED'
+    addLog(`คนขับตอบรับงาน ${booking.docNo}`)
+  }
+
+  /** ตรวจงานที่รอคนขับตอบรับเกิน 15 นาที ยกเลิกการจ่ายงานและกลับไปรอจัดคนขับใหม่อัตโนมัติ */
+  function checkExpiredDispatches() {
+    const now = Date.now()
+    bookings.value.forEach((booking) => {
+      if (booking.status !== 'PENDING_ACCEPT' || !booking.dispatchedAt) return
+      if (now - new Date(booking.dispatchedAt).getTime() < ACCEPT_TIMEOUT_MS) return
+      booking.status = 'WAITING_DISPATCH'
+      booking.plate = ''
+      booking.driverName = undefined
+      booking.dispatchedAt = undefined
+      addLog(`ยกเลิกการจ่ายงาน ${booking.docNo} (คนขับไม่ตอบรับภายใน 15 นาที) รอจัดคนขับใหม่`)
+    })
+  }
+
+  checkExpiredDispatches()
+  setInterval(checkExpiredDispatches, 30_000)
 
   /** คนขับกดเริ่มขนส่ง: DISPATCHED -> IN_TRANSIT */
   function startTransit(id: string) {
@@ -381,6 +410,34 @@ export const useBookingStore = defineStore('booking', () => {
 
   const bookingsInBatch = (batchId: string) => computed(() => bookings.value.filter((b) => b.batchId === batchId))
 
+  /** แก้ไขชื่อ/ลูกค้า/ช่วงวันที่ของรอบบิล (ไม่กระทบรายการงานที่มีอยู่ในรอบบิลแล้ว) */
+  function updateBatch(batchId: string, data: { label?: string; customer?: string; dateFrom?: Date; dateTo?: Date }) {
+    const batch = batches.value.find((b) => b.id === batchId)
+    if (!batch) return
+    if (data.label !== undefined) batch.label = data.label
+    if (data.customer !== undefined) batch.customer = data.customer || undefined
+    if (data.dateFrom !== undefined) batch.dateFrom = data.dateFrom
+    if (data.dateTo !== undefined) batch.dateTo = data.dateTo
+    addLog(`แก้ไขรอบบิล "${batch.label}"`)
+  }
+
+  /** ลบรอบบิล ได้เฉพาะรอบที่ยังไม่มีการออกใบแจ้งหนี้ (ปลดงานทั้งหมดกลับไปเป็นยังไม่วางบิล) */
+  function deleteBatch(batchId: string) {
+    const batch = batches.value.find((b) => b.id === batchId)
+    if (!batch) return false
+    const hasInvoice = documents.value.some((d) => d.batchId === batchId)
+    if (hasInvoice) return false
+    bookings.value.forEach((b) => {
+      if (b.batchId === batchId) {
+        b.billingStatus = 'UNBILLED'
+        b.batchId = undefined
+      }
+    })
+    batches.value = batches.value.filter((b) => b.id !== batchId)
+    addLog(`ลบรอบบิล "${batch.label}"`)
+    return true
+  }
+
   /** พัก/ปลดพักงานในรอบบิล ตอนตรวจสอบก่อนออกใบแจ้งหนี้ */
   function setBookingHold(bookingId: string, hold: boolean) {
     const booking = bookings.value.find((b) => b.id === bookingId)
@@ -403,14 +460,17 @@ export const useBookingStore = defineStore('booking', () => {
     booking.extraCharges = booking.extraCharges.filter((c) => c.id !== chargeId)
   }
 
-  /** ออกใบแจ้งหนี้จากงานที่ผ่านการตรวจสอบ (IN_BATCH ไม่ติด HOLD) ในรอบบิลนี้ */
+  /** ออกใบแจ้งหนี้จากงานที่ผู้ใช้เลือก (ติ๊กถูก) ในรอบบิลนี้ ต้องผ่านการตรวจสอบแล้ว (IN_BATCH ไม่ติด HOLD) */
   function issueInvoiceFromBatch(
     batchId: string,
+    bookingIds: string[],
     options?: { customer?: string; creditDays?: number; reference?: string }
   ) {
     const batch = batches.value.find((b) => b.id === batchId)
     if (!batch) return null
-    const readyBookings = bookings.value.filter((b) => b.batchId === batchId && b.billingStatus === 'IN_BATCH')
+    const readyBookings = bookings.value.filter(
+      (b) => bookingIds.includes(b.id) && b.batchId === batchId && b.billingStatus === 'IN_BATCH'
+    )
     if (readyBookings.length === 0) return null
     const customer = options?.customer || batch.customer || readyBookings[0].customer
     const amount = readyBookings.reduce((sum, b) => {
@@ -487,11 +547,14 @@ export const useBookingStore = defineStore('booking', () => {
     addBooking,
     updateBookingPrice,
     dispatchBooking,
+    acceptDispatch,
     startTransit,
     completeJob,
     completeJobByDriver,
     createBillingBatch,
     bookingsInBatch,
+    updateBatch,
+    deleteBatch,
     setBookingHold,
     addExtraCharge,
     removeExtraCharge,

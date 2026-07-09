@@ -2,6 +2,7 @@ import type { BookingStatus, BillingStatus } from '@/types'
 
 export const bookingStatusLabel: Record<BookingStatus, string> = {
   WAITING_DISPATCH: 'รอจัดรถ',
+  PENDING_ACCEPT: 'รอคนขับตอบรับ',
   DISPATCHED: 'จัดรถแล้ว',
   IN_TRANSIT: 'กำลังขนส่ง',
   DELIVERED: 'ส่งของสำเร็จ',
@@ -9,6 +10,7 @@ export const bookingStatusLabel: Record<BookingStatus, string> = {
 
 export const bookingStatusClass: Record<BookingStatus, string> = {
   WAITING_DISPATCH: 'bg-amber-100 text-amber-700',
+  PENDING_ACCEPT: 'bg-yellow-100 text-yellow-700',
   DISPATCHED: 'bg-blue-100 text-blue-700',
   IN_TRANSIT: 'bg-indigo-100 text-indigo-700',
   DELIVERED: 'bg-green-100 text-green-700',

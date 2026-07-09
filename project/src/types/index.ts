@@ -6,11 +6,12 @@ export type BookingJobType = 'ลงมือ' | 'พาเลทโรงงา
  * สถานะวงจรชีวิตของงาน (job lifecycle) แยกจากสถานะการเงิน (BillingStatus) โดยเจตนา
  * ตามหลักที่ว่า "ส่งของเสร็จ = งานจบ" ไม่เท่ากับ "วางบิล = แปลงงานเป็นเงิน"
  * WAITING_DISPATCH: ลงงานแล้ว รอจัดคนขับ/รถ/น้ำมัน (ราคาแก้ไขได้อิสระ)
- * DISPATCHED: จัดคนขับ+รถ+น้ำมันแล้ว (ราคาถูกล็อก แก้ได้เฉพาะ admin)
+ * PENDING_ACCEPT: จัดคนขับแล้ว รอคนขับตอบรับงานใน Driver App ภายใน 15 นาที ไม่งั้นถูกยกเลิกอัตโนมัติ กลับไป WAITING_DISPATCH
+ * DISPATCHED: คนขับตอบรับงานแล้ว (ราคาถูกล็อก แก้ได้เฉพาะ admin)
  * IN_TRANSIT: คนขับกดเริ่มขนส่งแล้ว กำลังวิ่งงาน
  * DELIVERED: ส่งของสำเร็จแล้ว (มี POD หรือจบงานผ่านออฟฟิศ)
  */
-export type BookingStatus = 'WAITING_DISPATCH' | 'DISPATCHED' | 'IN_TRANSIT' | 'DELIVERED'
+export type BookingStatus = 'WAITING_DISPATCH' | 'PENDING_ACCEPT' | 'DISPATCHED' | 'IN_TRANSIT' | 'DELIVERED'
 
 /**
  * สถานะฝั่งการเงิน มีความหมายเมื่องานเป็น DELIVERED แล้วเท่านั้น

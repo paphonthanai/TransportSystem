@@ -46,8 +46,11 @@
                 <div class="text-xs text-muted">{{ booking.driverName || '-' }}</div>
               </td>
               <td class="px-4 py-3">
-                <div class="flex flex-wrap gap-1">
+                <div class="flex flex-wrap items-center gap-1">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
+                  <span v-if="booking.status === 'PENDING_ACCEPT'" class="text-[11px] text-muted">
+                    เหลือ {{ formatCountdown(remainingAcceptSeconds(booking)) }}
+                  </span>
                   <span
                     v-if="booking.status === 'DELIVERED' && booking.billingStatus"
                     :class="['text-xs font-semibold px-2 py-1 rounded-full', billingStatusClass[booking.billingStatus]]"
@@ -222,6 +225,15 @@
               <div><span class="text-muted">พิกัดหน้างาน:</span> {{ viewTarget.siteCoords || '-' }}</div>
               <div><span class="text-muted">ทะเบียนรถ:</span> {{ viewTarget.plate || '-' }}</div>
               <div><span class="text-muted">คนขับ:</span> {{ viewTarget.driverName || '-' }}</div>
+              <div v-if="viewTarget.dispatchedAt">
+                <span class="text-muted">วันที่จ่ายงาน:</span> {{ formatDate(viewTarget.dispatchedAt) }}
+              </div>
+              <div v-if="viewTarget.transitStartedAt">
+                <span class="text-muted">วันที่เดินทาง/เริ่มงาน:</span> {{ formatDate(viewTarget.transitStartedAt) }}
+              </div>
+              <div v-if="viewTarget.completedAt" class="col-span-2">
+                <span class="text-muted">วันที่ส่งของ (ของถึง/พนักงานขับรถกดจบงาน):</span> {{ formatDate(viewTarget.completedAt) }}
+              </div>
             </div>
 
             <div v-if="!canEditPrice(viewTarget)" class="grid grid-cols-2 gap-3">
@@ -300,7 +312,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useAppStore } from '@/stores/app'
 import type { Booking, BookingCategory, BookingStatus, DebtAdjustment } from '@/types'
@@ -313,15 +325,34 @@ const appStore = useAppStore()
 
 const searchQuery = ref('')
 
+// นาฬิกาสำหรับนับถอยหลังเวลาที่เหลือให้คนขับตอบรับงาน (PENDING_ACCEPT)
+const now = ref(Date.now())
+let clockTimer: number
+onMounted(() => {
+  clockTimer = window.setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
+})
+onUnmounted(() => clearInterval(clockTimer))
+
+const ACCEPT_TIMEOUT_MS = 15 * 60 * 1000
+const remainingAcceptSeconds = (booking: Booking) => {
+  if (!booking.dispatchedAt) return 0
+  const deadline = new Date(booking.dispatchedAt).getTime() + ACCEPT_TIMEOUT_MS
+  return Math.max(0, Math.floor((deadline - now.value) / 1000))
+}
+const formatCountdown = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
+
 const driverOptions = ['สมชาย ทองดี', 'ประเสริฐ มั่นคง', 'วิรัตน์ ใจกล้า', 'สมหมาย เพียรงาน', 'ธีรพงษ์ ขยันยิ่ง']
 
 const isAdmin = computed(() => appStore.currentRole === 'admin')
 
 const statusRank: Record<BookingStatus, number> = {
   WAITING_DISPATCH: 0,
-  DISPATCHED: 1,
-  IN_TRANSIT: 2,
-  DELIVERED: 3,
+  PENDING_ACCEPT: 1,
+  DISPATCHED: 2,
+  IN_TRANSIT: 3,
+  DELIVERED: 4,
 }
 
 const sortedBookings = computed(() =>
@@ -353,6 +384,7 @@ const productLabel = (booking: Booking) => {
 }
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-')
 
 // --- View details & price edit ---
 const viewTarget = ref<Booking | null>(null)
