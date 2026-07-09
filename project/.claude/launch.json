@@ -14,6 +14,13 @@
       "runtimeArgs": ["--prefix", "D:\\Transport\\ui-ux\\project", "run", "dev"],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "--", "--port", "4173"],
+      "port": 4173,
+      "autoPort": true
     }
   ]
 }

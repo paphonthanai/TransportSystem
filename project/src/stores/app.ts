@@ -23,10 +23,8 @@ export const useAppStore = defineStore('app', () => {
       icon: 'tour',
       label: 'ตารางขนส่ง',
       children: [
-        { id: '2-1', icon: 'assignment', label: 'ตารางจองงาน · Fleet Cements', route: '/booking/cements' },
-        { id: '2-2', icon: 'pending_actions', label: 'สถานะงาน · Fleet Cements', route: '/job-status/cements' },
-        { id: '2-3', icon: 'assignment', label: 'ตารางจองงาน · Fleet Ceramics', route: '/booking/ceramics' },
-        { id: '2-4', icon: 'pending_actions', label: 'สถานะงาน · Fleet Ceramics', route: '/job-status/ceramics' },
+        { id: '2-1', icon: 'category', label: 'Fleet Cements', route: '/booking/cements' },
+        { id: '2-2', icon: 'category', label: 'Fleet Ceramics', route: '/booking/ceramics' },
       ],
     },
     {

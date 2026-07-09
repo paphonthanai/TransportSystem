@@ -26,12 +26,6 @@ const routes: RouteRecordRaw[] = [
         props: true,
       },
       {
-        path: 'job-status/:fleet',
-        name: 'JobStatus',
-        component: () => import('@/views/JobStatusView.vue'),
-        props: true,
-      },
-      {
         path: 'documents',
         name: 'Documents',
         component: () => import('@/views/DocumentsView.vue'),
@@ -45,6 +39,12 @@ const routes: RouteRecordRaw[] = [
         path: 'documents/:docId',
         name: 'InvoiceDocument',
         component: () => import('@/views/InvoiceDocumentView.vue'),
+        props: true,
+      },
+      {
+        path: 'job/:bookingId',
+        name: 'JobDocument',
+        component: () => import('@/views/JobDocumentView.vue'),
         props: true,
       },
       {

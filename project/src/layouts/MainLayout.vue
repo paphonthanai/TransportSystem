@@ -154,10 +154,8 @@ onMounted(() => {
 const getScreenTitle = () => {
   const routes: Record<string, string> = {
     '/': 'Dashboard',
-    '/booking/cements': 'ตารางจองงาน · Fleet Cements',
-    '/booking/ceramics': 'ตารางจองงาน · Fleet Ceramics',
-    '/job-status/cements': 'สถานะงาน · Fleet Cements',
-    '/job-status/ceramics': 'สถานะงาน · Fleet Ceramics',
+    '/booking/cements': 'รายการงาน · Fleet Cements',
+    '/booking/ceramics': 'รายการงาน · Fleet Ceramics',
     '/documents': 'เอกสารขาย',
     '/billing': 'ใบวางบิล',
     '/wht-certificates': 'หนังสือรับรองการหักภาษี ณ ที่จ่าย',
@@ -172,6 +170,7 @@ const getScreenTitle = () => {
     '/settings/logs': 'ตั้งค่า · Log',
   }
   if (currentRoute.path.startsWith('/documents/')) return 'เอกสารขาย · พิมพ์เอกสาร'
+  if (currentRoute.path.startsWith('/job/')) return 'รายละเอียดงาน · ใบเสนอราคา/PO'
   return routes[currentRoute.path] || 'Dashboard'
 }
 

@@ -27,8 +27,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   const role = ref<string | null>(null)
 
-  // Development mode mock authentication
-  const isDevelopment = import.meta.env.DEV
+  // Demo credentials: used for client-facing preview builds so the demo login
+  // works without needing real Firebase Auth accounts. Matched by email regardless
+  // of dev/production build; any other email falls through to real Firebase Auth.
   const demoCredentials: Record<string, { password: string; name: string; role: string }> = {
     'admin@thanthara.co.th': { password: 'password123', name: 'Admin User', role: 'admin' },
     'manager@thanthara.co.th': { password: 'password123', name: 'Manager User', role: 'manager' },
@@ -40,16 +41,14 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value = null
     try {
-      // Try Firebase first
-      if (!isDevelopment || (isDevelopment && !demoCredentials[email as keyof typeof demoCredentials])) {
+      const credentials = demoCredentials[email as keyof typeof demoCredentials]
+      if (!credentials) {
         await signInWithEmailAndPassword(auth, email, password)
       } else {
-        // Development mode: use mock authentication
-        const credentials = demoCredentials[email as keyof typeof demoCredentials]
-        if (!credentials || credentials.password !== password) {
+        if (credentials.password !== password) {
           throw new Error('Invalid email or password')
         }
-        
+
         // Simulate async operation
         await new Promise(resolve => setTimeout(resolve, 800))
         

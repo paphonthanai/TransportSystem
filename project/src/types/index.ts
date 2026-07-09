@@ -14,9 +14,9 @@ export type BookingJobType = 'ลงมือ' | 'พาเลทโรงงา
 export type BookingStatus = 'WAITING_DISPATCH' | 'PENDING_ACCEPT' | 'DISPATCHED' | 'IN_TRANSIT' | 'DELIVERED'
 
 /**
- * สถานะฝั่งการเงิน มีความหมายเมื่องานเป็น DELIVERED แล้วเท่านั้น
- * UNBILLED: ยังไม่ถูกจัดเข้ารอบบิล
- * IN_BATCH: อยู่ในรอบบิล รอตรวจสอบ/ออกใบแจ้งหนี้
+ * สถานะฝั่งการเงิน
+ * UNBILLED: ยังไม่ถูกจัดเข้ารอบบิล (ปัจจุบันแทบไม่เกิดขึ้น เพราะงานเข้ารอบบิลอัตโนมัติทันทีที่จัดรถ)
+ * IN_BATCH: อยู่ในรอบบิล (เข้าอัตโนมัติตั้งแต่ตอนจัดรถ ไม่ต้องรอส่งของสำเร็จ) รอตรวจสอบ/ออกใบแจ้งหนี้
  * HOLD: ตรวจสอบแล้วไม่ผ่าน (POD ไม่ครบ/ราคาไม่ตรง) พักไว้ก่อน
  * INVOICED: ออกใบแจ้งหนี้แล้ว
  * PAID: ลูกค้าชำระแล้ว ปิดรอบ
@@ -42,6 +42,10 @@ export interface Booking {
   id: string
   category: BookingCategory
   docNo: string
+  /** เลขที่ใบสั่งงาน (PO) จากลูกค้า ถ้ามี */
+  po?: string
+  /** วันที่ขนส่ง (แยกจากวันที่ลงข้อมูล/createdAt) */
+  shipDate?: Date
   customer: string
   siteName: string
   district: string
@@ -49,6 +53,10 @@ export interface Booking {
   cementTypes?: string[]
   /** เฉพาะ Fleet Cements: ประเภทงาน 3 แบบ */
   jobType?: BookingJobType
+  /** น้ำหนักสินค้า (ตัน) เมื่อคิดค่าเที่ยวตามน้ำหนัก */
+  weight?: number
+  /** จำนวนสินค้า (ชิ้น) เมื่อคิดค่าเที่ยวตามจำนวนชิ้น */
+  qty?: number
   allowance: number
   /** ค่าเที่ยวที่ใช้คำนวณจริง (ต้นทุน/เบี้ยเลี้ยง) */
   tripFee: number

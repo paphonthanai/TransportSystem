@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
-import { getStorage } from 'firebase/storage'
+import { connectAuthEmulator, getAuth } from 'firebase/auth'
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
+import { connectStorageEmulator, getStorage } from 'firebase/storage'
 
 // Replace with your Firebase config
 const firebaseConfig = {
@@ -20,5 +20,18 @@ const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const storage = getStorage(app)
+
+// Local dev connects to the Firebase Emulator Suite (see .env.development).
+// Production builds (.env.production) leave this false and hit real Firebase.
+// Guarded with a global flag so Vite HMR re-running this module doesn't try
+// to connect twice, which throws.
+const g = globalThis as unknown as { __firebaseEmulatorsConnected?: boolean }
+if (import.meta.env.VITE_USE_EMULATOR === 'true' && !g.__firebaseEmulatorsConnected) {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
+  connectFirestoreEmulator(db, '127.0.0.1', 8080)
+  connectStorageEmulator(storage, '127.0.0.1', 9199)
+  g.__firebaseEmulatorsConnected = true
+  console.info('[firebase] connected to local emulators')
+}
 
 export default app

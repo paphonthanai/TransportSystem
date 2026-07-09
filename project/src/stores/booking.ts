@@ -22,6 +22,8 @@ export interface SalesDocument {
   receiptNumber?: string
   /** เลขที่อ้างอิง (เช่น เลขที่เอกสารงานที่รวมอยู่ในบิลนี้) */
   reference?: string
+  /** เอกสาร POD ที่แนบตอนบันทึกรับชำระ (บังคับแนบ เพราะใบแจ้งหนี้ออกได้ก่อนงานส่งของสำเร็จ) */
+  podImage?: string
 }
 
 const fixedCeramicsCustomer = 'บจก. ศรีไทยคอนกรีต'
@@ -40,7 +42,7 @@ const DOCUMENTS_KEY = 'tms_documents_v2'
 const BATCHES_KEY = 'tms_batches_v2'
 const LOGS_KEY = 'tms_logs_v1'
 
-const BOOKING_DATE_FIELDS = ['createdAt', 'dispatchedAt', 'transitStartedAt', 'completedAt', 'billedAt'] as const
+const BOOKING_DATE_FIELDS = ['createdAt', 'shipDate', 'dispatchedAt', 'transitStartedAt', 'completedAt', 'billedAt'] as const
 
 function reviveBooking(raw: any): Booking {
   const booking = { ...raw }
@@ -305,6 +307,24 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`แก้ไขราคา ${booking.docNo}: ค่าเที่ยว ${booking.tripFee} บาท, ราคาที่ตกลง ${booking.agreedPrice} บาท`)
   }
 
+  /**
+   * แก้ไขข้อมูลปฏิบัติงาน (น้ำมัน/ข้อมูลหน้างาน) ได้ทุกสถานะงาน
+   * เพราะบางครั้งข้อมูลน้ำมันหรือเบอร์โทร/พิกัดหน้างานมาทีหลัง ไม่ต้องรอให้งานอยู่สถานะใดสถานะหนึ่ง
+   */
+  function updateBookingOps(
+    id: string,
+    data: { fuelLiters?: number; fuelRate?: number; siteContactName?: string; sitePhone?: string; siteCoords?: string }
+  ) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return
+    if (data.fuelLiters !== undefined) booking.fuelLiters = data.fuelLiters
+    if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
+    if (data.siteContactName !== undefined) booking.siteContactName = data.siteContactName || undefined
+    if (data.sitePhone !== undefined) booking.sitePhone = data.sitePhone || undefined
+    if (data.siteCoords !== undefined) booking.siteCoords = data.siteCoords || undefined
+    addLog(`แก้ไขข้อมูลปฏิบัติงาน ${booking.docNo} (น้ำมัน/ข้อมูลหน้างาน)`)
+  }
+
   /** จ่ายงานให้คนขับ: WAITING_DISPATCH -> PENDING_ACCEPT (รอคนขับตอบรับใน Driver App ภายใน 15 นาที) */
   function dispatchBooking(
     id: string,
@@ -320,7 +340,44 @@ export const useBookingStore = defineStore('booking', () => {
     if (extra?.siteCoords) booking.siteCoords = extra.siteCoords
     booking.status = 'PENDING_ACCEPT'
     booking.dispatchedAt = new Date()
-    addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''} (รอคนขับตอบรับ)`)
+    assignToOpenBatch(booking)
+    addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''} (รอคนขับตอบรับ, เข้ารอบบิลอัตโนมัติ)`)
+  }
+
+  /**
+   * เข้ารอบบิลอัตโนมัติทันทีที่จัดรถเสร็จ (ไม่ต้องรอส่งของสำเร็จ)
+   * จัดกลุ่มรอบบิลตามลูกค้า: หาบิลที่ยังเปิดอยู่ (draft) ของลูกค้ารายนั้น ถ้าไม่มีให้เปิดใหม่อัตโนมัติ
+   */
+  function assignToOpenBatch(booking: Booking) {
+    let batch = batches.value.find((b) => b.customer === booking.customer && b.status === 'draft')
+    if (!batch) {
+      batch = {
+        id: `batch${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+        label: `รอบบิล ${booking.customer}`,
+        customer: booking.customer,
+        dateFrom: booking.dispatchedAt || new Date(),
+        dateTo: booking.dispatchedAt || new Date(),
+        bookingIds: [],
+        createdAt: new Date(),
+        status: 'draft',
+      }
+      batches.value.unshift(batch)
+    }
+    if (!batch.bookingIds.includes(booking.id)) batch.bookingIds.push(booking.id)
+    booking.batchId = batch.id
+    booking.billingStatus = 'IN_BATCH'
+    const dispatchedAt = booking.dispatchedAt || new Date()
+    if (dispatchedAt < batch.dateFrom) batch.dateFrom = dispatchedAt
+    if (dispatchedAt > batch.dateTo) batch.dateTo = dispatchedAt
+  }
+
+  /** ถอนงานออกจากรอบบิล (ใช้ตอนยกเลิกการจ่ายงานอัตโนมัติ เพราะคนขับไม่ตอบรับ) */
+  function removeFromBatch(booking: Booking) {
+    if (!booking.batchId) return
+    const batch = batches.value.find((b) => b.id === booking.batchId)
+    if (batch) batch.bookingIds = batch.bookingIds.filter((id) => id !== booking.id)
+    booking.batchId = undefined
+    booking.billingStatus = undefined
   }
 
   /** คนขับกดตอบรับงานใน Driver App: PENDING_ACCEPT -> DISPATCHED */
@@ -337,14 +394,28 @@ export const useBookingStore = defineStore('booking', () => {
     bookings.value.forEach((booking) => {
       if (booking.status !== 'PENDING_ACCEPT' || !booking.dispatchedAt) return
       if (now - new Date(booking.dispatchedAt).getTime() < ACCEPT_TIMEOUT_MS) return
+      removeFromBatch(booking)
       booking.status = 'WAITING_DISPATCH'
       booking.plate = ''
       booking.driverName = undefined
       booking.dispatchedAt = undefined
-      addLog(`ยกเลิกการจ่ายงาน ${booking.docNo} (คนขับไม่ตอบรับภายใน 15 นาที) รอจัดคนขับใหม่`)
+      addLog(`ยกเลิกการจ่ายงาน ${booking.docNo} (คนขับไม่ตอบรับภายใน 15 นาที) รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`)
     })
   }
 
+  /**
+   * เผื่อข้อมูลเก่า (seed หรือ localStorage ก่อนหน้านี้) ที่งานถูกจัดรถไปแล้วแต่ยังไม่เคยเข้ารอบบิล
+   * (เพราะสมัยก่อนรอบบิลต้องสร้างเองและรวมเฉพาะงานที่ DELIVERED) ให้ไล่เข้ารอบบิลอัตโนมัติให้ครบ
+   */
+  function reconcileMissingBatchAssignments() {
+    bookings.value.forEach((booking) => {
+      if (booking.status !== 'WAITING_DISPATCH' && !booking.batchId) {
+        assignToOpenBatch(booking)
+      }
+    })
+  }
+
+  reconcileMissingBatchAssignments()
   checkExpiredDispatches()
   setInterval(checkExpiredDispatches, 30_000)
 
@@ -365,7 +436,7 @@ export const useBookingStore = defineStore('booking', () => {
     booking.debtAdjustments = debtAdjustments
     booking.finalAllowance = Math.round((booking.allowance || 0) - netAdjustment)
     booking.status = 'DELIVERED'
-    booking.billingStatus = 'UNBILLED'
+    // billingStatus ถูกตั้งเป็น IN_BATCH ไปแล้วตั้งแต่ตอนจัดรถ (assignToOpenBatch) ไม่ต้องตั้งซ้ำ
     booking.completedAt = new Date()
     addLog(`จบงาน ${booking.docNo}${booking.podImage ? ' (แนบ POD จากคนขับ)' : ' (ปิดงานโดยออฟฟิศ)'}`)
   }
@@ -379,34 +450,7 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   // --- Billing batch flow ---
-
-  /** รวมงานที่ DELIVERED และยังไม่วางบิล ตามช่วงวันที่ (และลูกค้า ถ้าระบุ) เข้าเป็นรอบบิลใหม่ */
-  function createBillingBatch(params: { label: string; customer?: string; dateFrom: Date; dateTo: Date }) {
-    const matching = bookings.value.filter((b) => {
-      if (b.status !== 'DELIVERED' || b.billingStatus !== 'UNBILLED') return false
-      if (params.customer && b.customer !== params.customer) return false
-      if (!b.completedAt) return false
-      const completed = new Date(b.completedAt)
-      return completed >= params.dateFrom && completed <= params.dateTo
-    })
-    const batch: BillingBatch = {
-      id: `batch${Date.now()}`,
-      label: params.label,
-      customer: params.customer,
-      dateFrom: params.dateFrom,
-      dateTo: params.dateTo,
-      bookingIds: matching.map((b) => b.id),
-      createdAt: new Date(),
-      status: 'draft',
-    }
-    batches.value.unshift(batch)
-    matching.forEach((b) => {
-      b.billingStatus = 'IN_BATCH'
-      b.batchId = batch.id
-    })
-    addLog(`สร้างรอบบิล "${batch.label}" (${matching.length} งาน)`)
-    return batch
-  }
+  // หมายเหตุ: รอบบิลถูกสร้าง/เติมงานอัตโนมัติตอนจัดรถ (ดู assignToOpenBatch) ไม่มีการสร้างรอบบิลด้วยมือแล้ว
 
   const bookingsInBatch = (batchId: string) => computed(() => bookings.value.filter((b) => b.batchId === batchId))
 
@@ -511,10 +555,12 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`ส่งใบแจ้งหนี้ ${doc.number} ให้ลูกค้า`)
   }
 
-  function markInvoicePaid(docId: string) {
+  /** บันทึกรับชำระ ต้องแนบเอกสาร POD ประกอบเสมอ เพราะใบแจ้งหนี้ออกได้ก่อนงานส่งของสำเร็จ */
+  function markInvoicePaid(docId: string, podImage: string) {
     const doc = documents.value.find((d) => d.id === docId)
-    if (!doc) return
+    if (!doc || !podImage) return
     doc.status = 'paid'
+    doc.podImage = podImage
     doc.paidDate = new Date()
     doc.receiptNumber = `RE${new Date().getFullYear() + 543}-${String(
       documents.value.filter((d) => d.receiptNumber).length + 1
@@ -546,12 +592,12 @@ export const useBookingStore = defineStore('booking', () => {
     nextDocNo,
     addBooking,
     updateBookingPrice,
+    updateBookingOps,
     dispatchBooking,
     acceptDispatch,
     startTransit,
     completeJob,
     completeJobByDriver,
-    createBillingBatch,
     bookingsInBatch,
     updateBatch,
     deleteBatch,

@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "emulators": "firebase emulators:start",
+    "deploy": "vite build && firebase deploy --only hosting"
   },
   "dependencies": {
     "vue": "^3.4.0",

@@ -3,15 +3,8 @@
     <!-- ================= Batch List ================= -->
     <template v-if="!selectedBatch">
       <div class="card-lg bg-primary-soft border-primary text-sm text-text">
-        รอบบิล (Billing Batch) คือการรวมงานที่ส่งของสำเร็จแล้วแต่ยังไม่วางบิล เข้าเป็นชุดตามช่วงวันที่/ลูกค้า
-        เพื่อตรวจสอบความถูกต้อง (POD, ราคา, ค่า extra) ก่อนออกใบแจ้งหนี้
-      </div>
-
-      <div class="flex justify-end">
-        <button @click="openCreateBatch" class="btn-primary">
-          <span class="material-symbols-rounded">add</span>
-          สร้างรอบบิลใหม่
-        </button>
+        รอบบิล (Billing Batch) จะถูกสร้างและเติมงานให้อัตโนมัติตามลูกค้า ทันทีที่งานถูกจัดรถ (มอบหมายคนขับ+ทะเบียนรถ) เสร็จ
+        โดยไม่ต้องรอส่งของสำเร็จ ไม่ต้องสร้างรอบบิลเอง เพียงตรวจสอบความถูกต้อง (POD, ราคา, ค่า extra) แล้วเลือกงานที่พร้อมออกใบแจ้งหนี้
       </div>
 
       <div class="card-lg overflow-hidden">
@@ -108,6 +101,7 @@
                 </th>
                 <th class="text-left px-3 py-2 font-semibold text-muted">เลขที่เอกสาร</th>
                 <th class="text-left px-3 py-2 font-semibold text-muted">หน้างาน</th>
+                <th class="text-left px-3 py-2 font-semibold text-muted">สถานะงาน</th>
                 <th class="text-left px-3 py-2 font-semibold text-muted">POD</th>
                 <th class="text-left px-3 py-2 font-semibold text-muted">ราคาตรงตกลงไหม</th>
                 <th class="text-left px-3 py-2 font-semibold text-muted">ค่า extra</th>
@@ -129,6 +123,11 @@
                 </td>
                 <td class="px-3 py-2 font-bold text-primary">{{ booking.docNo }}</td>
                 <td class="px-3 py-2 font-semibold text-text">{{ booking.siteName }}</td>
+                <td class="px-3 py-2">
+                  <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">
+                    {{ bookingStatusLabel[booking.status] }}
+                  </span>
+                </td>
                 <td class="px-3 py-2">
                   <span v-if="booking.podImage" class="inline-flex items-center gap-1 text-green-600 text-xs font-semibold">
                     <span class="material-symbols-rounded text-base">check_circle</span> ครบ
@@ -161,7 +160,7 @@
                 </td>
                 <td class="px-3 py-2">
                   <div class="flex items-center gap-2">
-                    <button @click="openViewDialog(booking)" class="btn-sm">
+                    <button @click="router.push(`/job/${booking.id}`)" class="btn-sm">
                       <span class="material-symbols-rounded text-base">visibility</span>
                       ดูรายละเอียด
                     </button>
@@ -183,7 +182,7 @@
                 </td>
               </tr>
               <tr v-if="batchBookings.length === 0">
-                <td colspan="9" class="px-4 py-8 text-center text-muted">ไม่มีงานในรอบบิลนี้</td>
+                <td colspan="10" class="px-4 py-8 text-center text-muted">ไม่มีงานในรอบบิลนี้</td>
               </tr>
             </tbody>
           </table>
@@ -230,7 +229,7 @@
                       ดูรายละเอียด
                     </button>
                     <button v-if="doc.status === 'draft'" @click="bookingStore.markInvoiceSent(doc.id)" class="btn-sm text-primary">ส่งให้ลูกค้า</button>
-                    <button v-else-if="doc.status === 'sent'" @click="bookingStore.markInvoicePaid(doc.id)" class="btn-sm text-green-700">บันทึกรับชำระ</button>
+                    <button v-else-if="doc.status === 'sent'" @click="openRecordPayment(doc)" class="btn-sm text-green-700">บันทึกรับชำระ</button>
                   </div>
                 </td>
               </tr>
@@ -239,53 +238,6 @@
         </div>
       </div>
     </template>
-
-    <!-- Create Batch Modal -->
-    <Teleport to="body" v-if="showCreateBatch">
-      <div @click="showCreateBatch = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
-        <div @click.stop class="w-full max-w-md bg-surface rounded-2xl shadow-2xl">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="font-bold text-text">สร้างรอบบิลใหม่</div>
-            <button @click="showCreateBatch = false" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
-              <span class="material-symbols-rounded">close</span>
-            </button>
-          </div>
-          <div class="px-6 py-5 space-y-3">
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">ชื่อรอบบิล</label>
-              <input v-model="batchForm.label" class="input-field w-full" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">ลูกค้า</label>
-              <select v-model="batchForm.customer" class="input-field w-full">
-                <option value="">ทุกลูกค้า</option>
-                <option v-for="c in customerOptions" :key="c" :value="c">{{ c }}</option>
-              </select>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-xs font-semibold text-muted mb-1">ตั้งแต่วันที่</label>
-                <input v-model="batchForm.dateFrom" type="date" class="input-field w-full" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-muted mb-1">ถึงวันที่</label>
-                <input v-model="batchForm.dateTo" type="date" class="input-field w-full" />
-              </div>
-            </div>
-            <div class="text-xs text-muted bg-surface-2 rounded-lg p-3">
-              พบงานที่ตรงเงื่อนไข <span class="font-bold text-text">{{ previewCount }}</span> รายการ
-            </div>
-          </div>
-          <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
-            <button @click="showCreateBatch = false" class="btn-secondary">ยกเลิก</button>
-            <button @click="confirmCreateBatch" :disabled="previewCount === 0 || !batchForm.label" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
-              <span class="material-symbols-rounded">add</span>
-              สร้างรอบบิล
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
 
     <!-- Edit Batch Modal -->
     <Teleport to="body" v-if="showEditBatch">
@@ -302,25 +254,8 @@
               <label class="block text-xs font-semibold text-muted mb-1">ชื่อรอบบิล</label>
               <input v-model="editBatchForm.label" class="input-field w-full" />
             </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">ลูกค้า</label>
-              <select v-model="editBatchForm.customer" class="input-field w-full">
-                <option value="">ทุกลูกค้า</option>
-                <option v-for="c in customerOptions" :key="c" :value="c">{{ c }}</option>
-              </select>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-xs font-semibold text-muted mb-1">ตั้งแต่วันที่</label>
-                <input v-model="editBatchForm.dateFrom" type="date" class="input-field w-full" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-muted mb-1">ถึงวันที่</label>
-                <input v-model="editBatchForm.dateTo" type="date" class="input-field w-full" />
-              </div>
-            </div>
             <div class="text-xs text-muted bg-surface-2 rounded-lg p-3">
-              หมายเหตุ: การแก้ไขช่วงวันที่/ลูกค้าจะไม่เปลี่ยนรายการงานที่มีอยู่ในรอบบิลแล้ว
+              ลูกค้าและช่วงวันที่ถูกกำหนดอัตโนมัติตามงานที่จัดรถเข้ารอบบิลนี้ แก้ไขได้เฉพาะชื่อรอบบิล
             </div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
@@ -479,104 +414,43 @@
       </div>
     </Teleport>
 
-    <!-- View / Edit Details Modal -->
-    <Teleport to="body" v-if="viewTarget">
-      <div @click="closeViewDialog" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
-        <div @click.stop class="w-full max-w-lg bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
-            <div>
-              <div class="font-bold text-text">รายละเอียดงาน {{ viewTarget.docNo }}</div>
-              <div class="text-xs text-muted">{{ viewTarget.customer }}</div>
-            </div>
-            <button @click="closeViewDialog" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+    <!-- Record Payment Modal (บังคับแนบ POD ก่อนบันทึกรับชำระ) -->
+    <Teleport to="body" v-if="paymentTarget">
+      <div @click="closeRecordPayment" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
+        <div @click.stop class="w-full max-w-sm bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+            <div class="font-bold text-text">บันทึกรับชำระ {{ paymentTarget.number }}</div>
+            <button @click="closeRecordPayment" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
           </div>
-          <div class="px-6 py-5 space-y-4">
-            <div class="flex items-center justify-between flex-wrap gap-2">
-              <span :class="['text-xs font-semibold px-2 py-1 rounded-full', billingStatusClass[viewTarget.billingStatus || 'UNBILLED']]">
-                {{ billingStatusLabel[viewTarget.billingStatus || 'UNBILLED'] }}
-              </span>
-              <span :class="['text-xs font-semibold px-2 py-1 rounded-full', viewTarget.category === 'cements' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700']">
-                {{ viewTarget.category === 'cements' ? 'Fleet Cements' : 'Fleet Ceramics' }}
-              </span>
+          <div class="px-6 py-5 space-y-3">
+            <div class="text-xs text-muted">
+              ต้องแนบเอกสาร POD ประกอบก่อนจึงจะบันทึกรับชำระได้ (ยอด {{ formatBaht(paymentTarget.amount) }})
             </div>
-
-            <div class="grid grid-cols-2 gap-3 text-sm">
-              <div><span class="text-muted">ชื่อหน้างาน:</span> {{ viewTarget.siteName }}</div>
-              <div><span class="text-muted">อำเภอ:</span> {{ viewTarget.district }}</div>
-              <div class="col-span-2"><span class="text-muted">สินค้า:</span> {{ productLabel(viewTarget) }}</div>
-              <div><span class="text-muted">เบอร์โทรหน้างาน:</span> {{ viewTarget.sitePhone || '-' }}</div>
-              <div><span class="text-muted">พิกัดหน้างาน:</span> {{ viewTarget.siteCoords || '-' }}</div>
-              <div><span class="text-muted">ทะเบียนรถ:</span> {{ viewTarget.plate || '-' }}</div>
-              <div><span class="text-muted">คนขับ:</span> {{ viewTarget.driverName || '-' }}</div>
-            </div>
-
-            <div class="flex items-center justify-between">
-              <div class="text-xs font-semibold text-muted">ค่าเที่ยว / ราคาที่ตกลง</div>
-              <button
-                v-if="!isEditing"
-                @click="startEdit"
-                :disabled="!isAdmin"
-                :title="isAdmin ? 'แก้ไขราคา' : 'ต้องมีสิทธิ์ Admin ในการแก้ไข'"
-                class="btn-sm disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <span class="material-symbols-rounded text-base">edit</span>
-                แก้ไข
-              </button>
-            </div>
-
-            <div v-if="!isEditing" class="grid grid-cols-2 gap-3">
-              <div class="bg-surface-2 rounded-lg p-3">
-                <div class="text-xs text-muted mb-1">ค่าเที่ยว</div>
-                <div class="font-bold text-text">{{ formatBaht(viewTarget.tripFee) }}</div>
-              </div>
-              <div class="bg-surface-2 rounded-lg p-3">
-                <div class="text-xs text-muted mb-1">ราคาที่ตกลง</div>
-                <div class="font-bold text-text">{{ formatBaht(viewTarget.agreedPrice) }}</div>
-              </div>
-            </div>
-            <div v-else class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-xs font-semibold text-muted mb-1">ค่าเที่ยว</label>
-                <input v-model.number="editForm.tripFee" type="number" class="input-field w-full" />
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-muted mb-1">ราคาที่ตกลง</label>
-                <input v-model.number="editForm.agreedPrice" type="number" class="input-field w-full" />
-              </div>
-              <div class="col-span-2 flex justify-end gap-2">
-                <button @click="isEditing = false" class="btn-secondary">ยกเลิก</button>
-                <button @click="saveEdit" class="btn-sm text-primary">
-                  <span class="material-symbols-rounded text-base">save</span>
-                  บันทึกราคา
-                </button>
-              </div>
-            </div>
-
-            <div v-if="viewTarget.extraCharges?.length">
-              <div class="text-xs font-semibold text-muted mb-1">ค่าใช้จ่ายเพิ่มเติม (extra)</div>
-              <div v-for="extra in viewTarget.extraCharges" :key="extra.id" class="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
-                <span class="text-text">{{ extra.label }}</span>
-                <span class="text-text">{{ formatBaht(extra.amount) }}</span>
-              </div>
-            </div>
-
-            <div v-if="viewTarget.debtAdjustments?.length">
-              <div class="text-xs font-semibold text-muted mb-1">รายการเพิ่ม/ลดหนี้ (คนขับ)</div>
-              <div v-for="adj in viewTarget.debtAdjustments" :key="adj.id" class="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
-                <span class="text-text">{{ adj.label || '-' }}</span>
-                <span :class="adj.amount >= 0 ? 'text-red-500' : 'text-green-600'">{{ adj.amount >= 0 ? '-' : '+' }}{{ formatBaht(Math.abs(adj.amount)) }}</span>
-              </div>
-            </div>
-
-            <div v-if="viewTarget.podImage">
-              <div class="text-xs font-semibold text-muted mb-1">รูปหลักฐานการส่งมอบสินค้า (POD)</div>
-              <img :src="viewTarget.podImage" class="w-full max-h-64 object-contain rounded-lg border border-border" />
+            <label class="block border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary transition-all">
+              <input type="file" accept="image/*" class="hidden" @change="onPaymentPodSelected" />
+              <img v-if="paymentPodPreview" :src="paymentPodPreview" class="max-h-48 mx-auto rounded-lg object-contain" />
+              <template v-else>
+                <span class="material-symbols-rounded text-3xl text-muted block mb-1">upload_file</span>
+                <div class="text-sm text-muted">แตะเพื่อแนบเอกสาร POD</div>
+              </template>
+            </label>
+            <div v-if="paymentPodError" class="text-xs text-red-600 flex items-center gap-1">
+              <span class="material-symbols-rounded text-sm">error</span>
+              {{ paymentPodError }}
             </div>
           </div>
-          <div class="flex justify-end gap-3 px-6 py-4 border-t border-border bg-surface sticky bottom-0">
-            <button @click="closeViewDialog" class="btn-secondary">ปิด</button>
+          <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
+            <button @click="closeRecordPayment" class="btn-secondary">ยกเลิก</button>
+            <button
+              @click="confirmRecordPayment"
+              :disabled="!paymentPodPreview"
+              class="h-10 px-4 rounded-lg border-0 bg-green-600 text-white font-semibold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span class="material-symbols-rounded text-base">paid</span>
+              ยืนยันบันทึกรับชำระ
+            </button>
           </div>
         </div>
       </div>
@@ -588,14 +462,12 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
-import { useAppStore } from '@/stores/app'
-import { billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
+import type { SalesDocument } from '@/stores/booking'
+import { billingStatusLabel, billingStatusClass, bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import type { Booking, BillingBatch } from '@/types'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
-const appStore = useAppStore()
-const isAdmin = computed(() => appStore.currentRole === 'admin')
 
 const batches = computed(() => bookingStore.batches)
 const selectedBatchId = ref<string | null>(null)
@@ -664,12 +536,6 @@ function priceMatches(booking: Booking) {
   return bookingTotal(booking) === booking.agreedPrice
 }
 
-const productLabel = (booking: Booking) => {
-  if (booking.category === 'ceramics') return 'ปูนซีเมนต์'
-  const types = (booking.cementTypes || []).filter(Boolean)
-  return types.length ? types.join(', ') : '-'
-}
-
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
@@ -707,83 +573,24 @@ const confirmCreateInvoice = () => {
   showCreateInvoice.value = false
 }
 
-// --- Create batch ---
-const showCreateBatch = ref(false)
-const batchForm = ref({ label: '', customer: '', dateFrom: '', dateTo: '' })
-
-const customerOptions = computed(() => {
-  const set = new Set(
-    bookingStore.bookings.filter((b) => b.status === 'DELIVERED' && b.billingStatus === 'UNBILLED').map((b) => b.customer)
-  )
-  return Array.from(set)
-})
-
-const previewCount = computed(() => {
-  if (!batchForm.value.dateFrom || !batchForm.value.dateTo) return 0
-  const from = new Date(batchForm.value.dateFrom)
-  const to = new Date(batchForm.value.dateTo)
-  to.setHours(23, 59, 59, 999)
-  return bookingStore.bookings.filter((b) => {
-    if (b.status !== 'DELIVERED' || b.billingStatus !== 'UNBILLED') return false
-    if (batchForm.value.customer && b.customer !== batchForm.value.customer) return false
-    if (!b.completedAt) return false
-    const completed = new Date(b.completedAt)
-    return completed >= from && completed <= to
-  }).length
-})
-
-const openCreateBatch = () => {
-  const today = new Date().toISOString().slice(0, 10)
-  batchForm.value = { label: `รอบบิล ${new Date().toLocaleDateString('th-TH')}`, customer: '', dateFrom: today, dateTo: today }
-  showCreateBatch.value = true
-}
-
-const confirmCreateBatch = () => {
-  if (previewCount.value === 0 || !batchForm.value.label) return
-  const from = new Date(batchForm.value.dateFrom)
-  const to = new Date(batchForm.value.dateTo)
-  to.setHours(23, 59, 59, 999)
-  const batch = bookingStore.createBillingBatch({
-    label: batchForm.value.label,
-    customer: batchForm.value.customer || undefined,
-    dateFrom: from,
-    dateTo: to,
-  })
-  showCreateBatch.value = false
-  selectedBatchId.value = batch.id
-}
-
 // --- Edit / delete batch ---
 /** แก้ไข/ลบได้เฉพาะรอบบิลที่ยังไม่มีการออกใบแจ้งหนี้ */
 const canEditBatch = (batch: BillingBatch) => !bookingStore.documents.some((d) => d.batchId === batch.id)
 
 const showEditBatch = ref(false)
 const editBatchTarget = ref<BillingBatch | null>(null)
-const editBatchForm = ref({ label: '', customer: '', dateFrom: '', dateTo: '' })
+const editBatchForm = ref({ label: '' })
 
 const openEditBatch = (batch: BillingBatch) => {
   if (!canEditBatch(batch)) return
   editBatchTarget.value = batch
-  editBatchForm.value = {
-    label: batch.label,
-    customer: batch.customer || '',
-    dateFrom: new Date(batch.dateFrom).toISOString().slice(0, 10),
-    dateTo: new Date(batch.dateTo).toISOString().slice(0, 10),
-  }
+  editBatchForm.value = { label: batch.label }
   showEditBatch.value = true
 }
 
 const confirmEditBatch = () => {
   if (!editBatchTarget.value || !editBatchForm.value.label) return
-  const from = new Date(editBatchForm.value.dateFrom)
-  const to = new Date(editBatchForm.value.dateTo)
-  to.setHours(23, 59, 59, 999)
-  bookingStore.updateBatch(editBatchTarget.value.id, {
-    label: editBatchForm.value.label,
-    customer: editBatchForm.value.customer || undefined,
-    dateFrom: from,
-    dateTo: to,
-  })
+  bookingStore.updateBatch(editBatchTarget.value.id, { label: editBatchForm.value.label })
   showEditBatch.value = false
 }
 
@@ -817,31 +624,46 @@ const confirmAddExtra = () => {
   extraTarget.value = null
 }
 
-// --- View / edit booking details ---
-const viewTarget = ref<Booking | null>(null)
-const isEditing = ref(false)
-const editForm = ref({ tripFee: 0, agreedPrice: 0 })
+// --- Record payment (บังคับแนบ POD ก่อนบันทึกรับชำระ) ---
+const paymentTarget = ref<SalesDocument | null>(null)
+const paymentPodPreview = ref<string | null>(null)
+const paymentPodError = ref('')
 
-const openViewDialog = (booking: Booking) => {
-  viewTarget.value = booking
-  isEditing.value = false
+const openRecordPayment = (doc: SalesDocument) => {
+  paymentTarget.value = doc
+  paymentPodPreview.value = null
+  paymentPodError.value = ''
 }
 
-const closeViewDialog = () => {
-  viewTarget.value = null
-  isEditing.value = false
+const closeRecordPayment = () => {
+  paymentTarget.value = null
 }
 
-const startEdit = () => {
-  if (!viewTarget.value || !isAdmin.value) return
-  editForm.value = { tripFee: viewTarget.value.tripFee, agreedPrice: viewTarget.value.agreedPrice }
-  isEditing.value = true
+const onPaymentPodSelected = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  paymentPodError.value = ''
+  paymentPodPreview.value = null
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    paymentPodError.value = 'ไฟล์ที่แนบไม่ใช่รูปภาพ กรุณาแนบเอกสาร POD ที่ถูกต้อง'
+    input.value = ''
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    paymentPodPreview.value = reader.result as string
+  }
+  reader.onerror = () => {
+    paymentPodError.value = 'ไม่สามารถอ่านไฟล์ได้ กรุณาลองใหม่'
+  }
+  reader.readAsDataURL(file)
 }
 
-const saveEdit = () => {
-  if (!viewTarget.value) return
-  bookingStore.updateBookingPrice(viewTarget.value.id, editForm.value)
-  isEditing.value = false
+const confirmRecordPayment = () => {
+  if (!paymentTarget.value || !paymentPodPreview.value) return
+  bookingStore.markInvoicePaid(paymentTarget.value.id, paymentPodPreview.value)
+  closeRecordPayment()
 }
 </script>
 
