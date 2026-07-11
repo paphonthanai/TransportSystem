@@ -285,45 +285,6 @@
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-                <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">น้ำมัน (ลิตร)</label>
-                  <input v-model.number="item.fuelLiters" type="number" placeholder="0" class="input-field w-full" />
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">เรทน้ำมัน (บาท/ลิตร วันนั้น)</label>
-                  <input v-model.number="item.fuelRate" type="number" placeholder="0" class="input-field w-full" />
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">เบี้ยเลี้ยงคนขับ</label>
-                  <input
-                    v-if="isCements"
-                    v-model.number="item.allowance"
-                    type="number"
-                    placeholder="0"
-                    class="input-field w-full"
-                  />
-                  <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface text-sm text-text font-semibold">
-                    {{ formatBaht(itemCalculatedAllowance) }} (อัตโนมัติ)
-                  </div>
-                </div>
-              </div>
-
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-                <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้ติดต่อหน้างาน (ไม่บังคับ)</label>
-                  <input v-model="item.siteContactName" placeholder="ชื่อผู้ติดต่อ" class="input-field w-full" />
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทรหน้างาน (ไม่บังคับ)</label>
-                  <input v-model="item.sitePhone" placeholder="เบอร์โทร" class="input-field w-full" />
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">พิกัดหน้างาน (ไม่บังคับ)</label>
-                  <input v-model="item.siteCoords" placeholder="โลเคชั่นหน้างาน" class="input-field w-full" />
-                </div>
-              </div>
-
               <div class="flex items-center justify-between mt-4 pt-4 border-t border-border">
                 <div class="text-sm text-text">
                   ค่าเที่ยว <span class="font-bold">{{ formatBaht(itemComputedTripFee) }}</span>
@@ -381,6 +342,49 @@
                     </tr>
                   </tfoot>
                 </table>
+              </div>
+            </div>
+
+            <!-- Trip Fee / Fuel Sub-form: แยก container ไว้ด้านล่างสุด กรอกน้ำมัน/เบี้ยเลี้ยง/ข้อมูลติดต่อหน้างานของรายการที่กำลังจะเพิ่ม (กรอกก่อนหรือหลังกดยืนยันด้านบนก็ได้ เพราะยังเป็นข้อมูลของรายการถัดไปที่ยังไม่ได้ยืนยัน) -->
+            <div class="border border-border rounded-xl p-4 bg-surface-2">
+              <h3 class="font-semibold text-text mb-3">ตารางกรอกค่าเที่ยว + ค่าน้ำมัน</h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">น้ำมัน (ลิตร)</label>
+                  <input v-model.number="item.fuelLiters" type="number" placeholder="0" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">เรทน้ำมัน (บาท/ลิตร วันนั้น)</label>
+                  <input v-model.number="item.fuelRate" type="number" placeholder="0" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">เบี้ยเลี้ยงคนขับ</label>
+                  <input
+                    v-if="isCements"
+                    v-model.number="item.allowance"
+                    type="number"
+                    placeholder="0"
+                    class="input-field w-full"
+                  />
+                  <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface text-sm text-text font-semibold">
+                    {{ formatBaht(itemCalculatedAllowance) }} (อัตโนมัติ)
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้ติดต่อหน้างาน (ไม่บังคับ)</label>
+                  <input v-model="item.siteContactName" placeholder="ชื่อผู้ติดต่อ" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทรหน้างาน (ไม่บังคับ)</label>
+                  <input v-model="item.sitePhone" placeholder="เบอร์โทร" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">พิกัดหน้างาน (ไม่บังคับ)</label>
+                  <input v-model="item.siteCoords" placeholder="โลเคชั่นหน้างาน" class="input-field w-full" />
+                </div>
               </div>
             </div>
           </div>
