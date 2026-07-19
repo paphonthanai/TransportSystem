@@ -160,9 +160,9 @@
 
             <div class="border border-black p-3 mb-3 text-sm">
               <div class="font-semibold mb-1">ผู้มีหน้าที่หักภาษี ณ ที่จ่าย</div>
-              <div>{{ companyInfo.name }}</div>
-              <div class="text-xs">{{ companyInfo.address }}</div>
-              <div class="text-xs">เลขประจำตัวผู้เสียภาษีอากร {{ companyInfo.taxId }}</div>
+              <div>{{ documentSettingsStore.settings.company.name }}</div>
+              <div class="text-xs">{{ documentSettingsStore.settings.company.address }}</div>
+              <div class="text-xs">เลขประจำตัวผู้เสียภาษีอากร {{ documentSettingsStore.settings.company.taxId }}</div>
             </div>
 
             <div class="border border-black p-3 mb-3 text-sm">
@@ -201,12 +201,16 @@
               <span class="text-gray-600">ตัวอักษร:</span> ({{ bahtText(whtAmount(viewTarget)) }})
             </div>
 
-            <div class="text-xs text-gray-700 mb-8">
+            <div class="text-xs text-gray-700 mb-2">
               ผู้จ่ายเงินขอรับรองว่าข้อความและตัวเลขดังกล่าวข้างต้นถูกต้องตรงกับความเป็นจริงทุกประการ
+            </div>
+            <div v-if="documentSettingsStore.settings.notes.wht" class="text-xs text-gray-600 mb-8">
+              {{ documentSettingsStore.settings.notes.wht }}
             </div>
 
             <div class="flex justify-end">
               <div class="text-sm text-center w-64">
+                <img v-if="documentSettingsStore.settings.company.stamp" :src="documentSettingsStore.settings.company.stamp" class="w-16 h-16 object-contain mx-auto mb-1 opacity-90" />
                 <div class="border-t border-gray-500 pt-2">ผู้จ่ายเงิน</div>
                 <div class="text-xs text-gray-600 mt-1">วันที่ {{ formatDate(viewTarget.createdAt) }}</div>
               </div>
@@ -221,10 +225,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useWHTCertificateStore } from '@/stores/whtCertificate'
-import { companyInfo, bahtText } from '@/utils/companyInfo'
+import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { bahtText } from '@/utils/companyInfo'
 import type { WHTCertificate, WHTPayeeType } from '@/types'
 
 const whtStore = useWHTCertificateStore()
+const documentSettingsStore = useDocumentSettingsStore()
 const certificates = computed(() => whtStore.certificates)
 
 const payeeTypeLabel: Record<WHTPayeeType, string> = {
@@ -273,7 +279,7 @@ const openCreate = () => {
     payDate: new Date().toISOString().slice(0, 10),
     incomeType: 'ค่าขนส่ง',
     grossAmount: 0,
-    whtRate: 1,
+    whtRate: documentSettingsStore.settings.whtRate,
     note: '',
   }
   showCreate.value = true

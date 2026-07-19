@@ -42,10 +42,22 @@ export interface Booking {
   id: string
   category: BookingCategory
   docNo: string
+  /** เลขที่ใบปล่อยรถ ออกอัตโนมัติทีละงานตอนบันทึก เหมือน docNo */
+  releaseNo?: string
   /** เลขที่ใบสั่งงาน (PO) จากลูกค้า ถ้ามี */
   po?: string
   /** วันที่ขนส่ง (แยกจากวันที่ลงข้อมูล/createdAt) */
   shipDate?: Date
+  /** วันที่คาดว่ารถจะกลับ แก้ไขภายหลังได้ */
+  returnDate?: Date
+  /** เลขที่ชิพเม้น (ถ้ามี) */
+  shipmentNo?: string
+  /** เส้นทางเดินรถ เช่น กรุงเทพ-นครสวรรค์ */
+  route?: string
+  /** ต้นทาง (จุดขึ้นสินค้า) */
+  origin?: string
+  /** ปลายทาง (จุดส่งสินค้า) แยกจากชื่อหน้างาน/อำเภอซึ่งเป็นรายละเอียดที่อยู่ปลายทาง */
+  destination?: string
   customer: string
   siteName: string
   district: string

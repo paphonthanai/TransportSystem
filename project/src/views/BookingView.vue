@@ -79,10 +79,6 @@
                     <span class="material-symbols-rounded text-base">directions</span>
                     เริ่มขนส่ง
                   </button>
-                  <button v-else-if="booking.status === 'IN_TRANSIT'" @click="openCompleteDialog(booking)" class="btn-sm text-green-700">
-                    <span class="material-symbols-rounded text-base">task_alt</span>
-                    จบงาน
-                  </button>
                 </div>
               </td>
             </tr>
@@ -94,9 +90,9 @@
       </div>
     </div>
 
-    <!-- Completed Table -->
+    <!-- In-transit Table -->
     <div class="card-lg overflow-hidden">
-      <div class="font-bold text-text mb-3">งานที่เสร็จแล้ว ({{ completedBookings.length }})</div>
+      <div class="font-bold text-text mb-3">งานที่กำลังขนส่ง ({{ inTransitBookings.length }})</div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
@@ -105,29 +101,29 @@
               <th class="text-left px-4 py-3 font-semibold text-muted">PO</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ชื่อหน้างาน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">อำเภอ</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน' : 'สินค้า' }}</th>
               <th class="text-right px-4 py-3 font-semibold text-muted">น้ำหนัก/จำนวน</th>
-              <th class="text-right px-4 py-3 font-semibold text-muted">เบี้ยเลี้ยง</th>
-              <th class="text-right px-4 py-3 font-semibold text-muted">ค่าเที่ยว</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">สถานะบิล</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">ทะเบียนรถ / คนขับ</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">สถานะ</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="booking in completedBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+            <tr v-for="booking in inTransitBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
               <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
               <td class="px-4 py-3 text-muted">{{ booking.po || '-' }}</td>
               <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
               <td class="px-4 py-3 font-semibold text-text">{{ booking.siteName }}</td>
+              <td class="px-4 py-3 text-muted">{{ booking.district }}</td>
               <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
               <td class="px-4 py-3 text-right text-text">{{ weightQtyLabel(booking) }}</td>
-              <td class="px-4 py-3 text-right text-text">{{ formatBaht(booking.finalAllowance ?? booking.allowance) }}</td>
-              <td class="px-4 py-3 text-right text-text">{{ formatBaht(booking.tripFee) }}</td>
+              <td class="px-4 py-3 text-text">
+                <div class="font-semibold">{{ booking.plate || '-' }}</div>
+                <div class="text-xs text-muted">{{ booking.driverName || '-' }}</div>
+              </td>
               <td class="px-4 py-3">
-                <span v-if="booking.billingStatus" :class="['text-xs font-semibold px-2 py-1 rounded-full', billingStatusClass[booking.billingStatus]]">
-                  {{ billingStatusLabel[booking.billingStatus] }}
-                </span>
-                <span v-else class="text-muted">-</span>
+                <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap items-center gap-2">
@@ -139,10 +135,14 @@
                     <span class="material-symbols-rounded text-base">edit</span>
                     แก้ไข
                   </button>
+                  <button @click="openCompleteDialog(booking)" class="btn-sm text-green-700">
+                    <span class="material-symbols-rounded text-base">task_alt</span>
+                    จบงาน
+                  </button>
                 </div>
               </td>
             </tr>
-            <tr v-if="completedBookings.length === 0">
+            <tr v-if="inTransitBookings.length === 0">
               <td colspan="10" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
@@ -176,31 +176,67 @@
               <h3 class="font-semibold text-text mb-3">ข้อมูลเอกสาร</h3>
               <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">เลขที่ใบปล่อยรถ</label>
+                  <div class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-muted font-medium">
+                    {{ nextReleaseNoPreview }} (อัตโนมัติ)
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">วันที่สร้างงาน</label>
+                  <input v-model="header.jobDate" type="date" class="input-field w-full" />
+                </div>
+                <div class="md:col-span-2">
+                  <label class="block text-xs font-semibold text-muted mb-1">ชื่อลูกค้า</label>
+                  <input
+                    v-model="header.customer"
+                    list="customerNameOptions"
+                    placeholder="ชื่อลูกค้า (พิมพ์ใหม่ได้ หรือเลือกจากสมุดรายชื่อ)"
+                    class="input-field w-full"
+                  />
+                  <datalist id="customerNameOptions">
+                    <option v-for="c in customerStore.customers" :key="c.name" :value="c.name" />
+                  </datalist>
+                </div>
+                <div>
                   <label class="block text-xs font-semibold text-muted mb-1">ใบสั่งงาน (PO)</label>
-                  <input v-model="header.po" placeholder="เลขที่ PO" class="input-field w-full" />
+                  <input v-model="header.po" placeholder="เลขที่ PO (ระบบแนะนำให้เมื่อเลือกลูกค้า)" class="input-field w-full" />
                 </div>
                 <div>
                   <label class="block text-xs font-semibold text-muted mb-1">วันที่ขนส่ง</label>
                   <input v-model="header.shipDate" type="date" class="input-field w-full" />
                 </div>
-                <div class="md:col-span-2">
-                  <label class="block text-xs font-semibold text-muted mb-1">ชื่อลูกค้า</label>
-                  <input
-                    v-if="isCements"
-                    v-model="header.customer"
-                    placeholder="ชื่อย่อลูกค้า เช่น ABC"
-                    class="input-field w-full"
-                  />
-                  <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-medium">
-                    {{ fixedCustomer }}
-                  </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">ทะเบียนรถ <span class="font-normal text-[10px]">(กรอกทีหลังได้)</span></label>
+                  <input v-model="header.plate" list="headerVehicleOptions" placeholder="เช่น 82-4417 กรุงเทพ" class="input-field w-full" />
+                  <datalist id="headerVehicleOptions">
+                    <option v-for="v in vehicleOptions" :key="v" :value="v" />
+                  </datalist>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">คนขับ <span class="font-normal text-[10px]">(กรอกทีหลังได้)</span></label>
+                  <select v-model="header.driverName" class="input-field w-full">
+                    <option value="">เลือกคนขับ...</option>
+                    <option v-for="name in driverOptions" :key="name" :value="name">{{ name }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">วันที่กลับ <span class="font-normal text-[10px]">(แก้ไขทีหลังได้)</span></label>
+                  <input v-model="header.returnDate" type="date" class="input-field w-full" />
                 </div>
               </div>
             </div>
 
             <!-- Line Item Sub-form: กรอกทีละรายการสินค้า/หน้างาน แล้วกดยืนยันเพิ่มลงตาราง -->
             <div class="border border-border rounded-xl p-4 bg-surface-2">
-              <h3 class="font-semibold text-text mb-3">เพิ่มรายการสินค้า</h3>
+              <h3 class="font-semibold text-text mb-1">เพิ่มรายการสินค้า</h3>
+              <div class="text-xs font-bold text-muted uppercase tracking-wide mb-3">รายละเอียดขาไป</div>
+
+              <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted bg-surface rounded-lg px-3 py-2 border border-border mb-3">
+                <div>รหัสลูกค้า: <span class="font-semibold text-text">{{ customerCodeForHeader || '-' }}</span></div>
+                <div>ใบสั่งงาน (PO): <span class="font-semibold text-text">{{ header.po || '-' }}</span></div>
+                <div>วันที่ขน: <span class="font-semibold text-text">{{ header.shipDate || '-' }}</span></div>
+              </div>
+
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label class="block text-xs font-semibold text-muted mb-1">สถานที่ส่งสินค้า (ชื่อหน้างาน)</label>
@@ -210,16 +246,35 @@
                   <label class="block text-xs font-semibold text-muted mb-1">อำเภอ (พิกัดหน้างาน)</label>
                   <input v-model="item.district" placeholder="อำเภอ" class="input-field w-full" />
                 </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">เลขชิพเม้น</label>
+                  <input v-model="item.shipmentNo" placeholder="เลขที่ Shipment" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">เส้นทาง</label>
+                  <input v-model="item.route" placeholder="เช่น กรุงเทพ-นครสวรรค์" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">ต้นทาง</label>
+                  <input v-model="item.origin" placeholder="จุดขึ้นสินค้า" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">ปลายทาง</label>
+                  <input v-model="item.destination" placeholder="จุดส่งสินค้า" class="input-field w-full" />
+                </div>
 
-                <template v-if="isCements">
-                  <div class="md:col-span-2">
-                    <label class="block text-xs font-semibold text-muted mb-1">ชนิดปูน (1-3 ชนิดต่อเที่ยว)</label>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <input v-model="item.cementTypes[0]" placeholder="ชนิดปูน #1" class="input-field w-full" />
-                      <input v-model="item.cementTypes[1]" placeholder="ชนิดปูน #2 (ถ้ามี)" class="input-field w-full" />
-                      <input v-model="item.cementTypes[2]" placeholder="ชนิดปูน #3 (ถ้ามี)" class="input-field w-full" />
-                    </div>
+                <div class="md:col-span-2">
+                  <label class="block text-xs font-semibold text-muted mb-1">สินค้า (1-3 รายการต่อเที่ยว)</label>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <input v-model="item.cementTypes[0]" list="productNameOptions" placeholder="สินค้า #1" class="input-field w-full" />
+                    <input v-model="item.cementTypes[1]" list="productNameOptions" placeholder="สินค้า #2 (ถ้ามี)" class="input-field w-full" />
+                    <input v-model="item.cementTypes[2]" list="productNameOptions" placeholder="สินค้า #3 (ถ้ามี)" class="input-field w-full" />
                   </div>
+                  <datalist id="productNameOptions">
+                    <option v-for="p in productOptionsForFleet" :key="p.id" :value="p.name" />
+                  </datalist>
+                </div>
+                <template v-if="isCements">
                   <div class="md:col-span-2">
                     <label class="block text-xs font-semibold text-muted mb-1">ประเภทงาน</label>
                     <div class="flex gap-2 flex-wrap">
@@ -347,7 +402,8 @@
 
             <!-- Trip Fee / Fuel Sub-form: แยก container ไว้ด้านล่างสุด กรอกน้ำมัน/เบี้ยเลี้ยง/ข้อมูลติดต่อหน้างานของรายการที่กำลังจะเพิ่ม (กรอกก่อนหรือหลังกดยืนยันด้านบนก็ได้ เพราะยังเป็นข้อมูลของรายการถัดไปที่ยังไม่ได้ยืนยัน) -->
             <div class="border border-border rounded-xl p-4 bg-surface-2">
-              <h3 class="font-semibold text-text mb-3">ตารางกรอกค่าเที่ยว + ค่าน้ำมัน</h3>
+              <h3 class="font-semibold text-text mb-1">รายละเอียดขากลับ</h3>
+              <div class="text-xs text-muted mb-3">ตารางกรอกค่าเที่ยว + ค่าน้ำมัน และข้อมูลผู้ติดต่อหน้างาน</div>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label class="block text-xs font-semibold text-muted mb-1">น้ำมัน (ลิตร)</label>
@@ -534,6 +590,10 @@
               <label class="block text-xs font-semibold text-muted mb-1">พิกัดหน้างาน</label>
               <input v-model="editOpsForm.siteCoords" placeholder="โลเคชั่นหน้างาน" class="input-field w-full" />
             </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">วันที่กลับ</label>
+              <input v-model="editOpsForm.returnDate" type="date" class="input-field w-full" />
+            </div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="editOpsTarget = null" class="btn-secondary">ยกเลิก</button>
@@ -549,9 +609,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
+import { useDriversStore } from '@/stores/drivers'
+import { useInventoryStore } from '@/stores/inventory'
+import { useCustomerStore } from '@/stores/customers'
+import { useFuelRateStore } from '@/stores/fuelRates'
 import type { Booking, BookingCategory, BookingJobType, BookingStatus, DebtAdjustment } from '@/types'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
 
@@ -560,6 +624,10 @@ type CalcBasis = 'weight' | 'piece' | 'trip'
 interface CommittedLineItem {
   siteName: string
   district: string
+  shipmentNo?: string
+  route?: string
+  origin?: string
+  destination?: string
   cementTypes?: string[]
   jobType?: BookingJobType
   weight?: number
@@ -578,12 +646,20 @@ const props = defineProps<{ fleet: BookingCategory }>()
 
 const router = useRouter()
 const bookingStore = useBookingStore()
+const driversStore = useDriversStore()
+const inventoryStore = useInventoryStore()
+const customerStore = useCustomerStore()
+const fuelRateStore = useFuelRateStore()
 const fixedCustomer = bookingStore.fixedCustomer
 
 const showDialog = ref(false)
 const searchQuery = ref('')
 
 const isCements = computed(() => props.fleet === 'cements')
+const productOptionsForFleet = computed(() => inventoryStore.products.filter((p) => p.category === props.fleet))
+const customerCodeForHeader = computed(() => customerStore.lookupCustomer(header.value.customer).code)
+const vehicleOptions = computed(() => driversStore.drivers.map((d) => d.vehicle).filter(Boolean))
+const nextReleaseNoPreview = computed(() => bookingStore.nextReleaseNo())
 
 const jobTypeOptions: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
 const calcBasisOptions: { id: CalcBasis; label: string }[] = [
@@ -610,7 +686,9 @@ const remainingAcceptSeconds = (booking: Booking) => {
 }
 const formatCountdown = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
 
-const driverOptions = ['สมชาย ทองดี', 'ประเสริฐ มั่นคง', 'วิรัตน์ ใจกล้า', 'สมหมาย เพียรงาน', 'ธีรพงษ์ ขยันยิ่ง']
+const driverOptions = computed(() =>
+  driversStore.drivers.filter((d) => d.employmentStatus === 'active').map((d) => `${d.firstName} ${d.lastName}`)
+)
 
 const statusRank: Record<BookingStatus, number> = {
   WAITING_DISPATCH: 0,
@@ -633,7 +711,7 @@ const matchesSearch = (b: Booking, q: string) =>
 const inProgressBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return fleetBookings.value
-    .filter((b) => b.status !== 'DELIVERED' && (!q || matchesSearch(b, q)))
+    .filter((b) => b.status !== 'DELIVERED' && b.status !== 'IN_TRANSIT' && (!q || matchesSearch(b, q)))
     .sort((a, b) => {
       const rankDiff = statusRank[a.status] - statusRank[b.status]
       if (rankDiff !== 0) return rankDiff
@@ -641,25 +719,68 @@ const inProgressBookings = computed(() => {
     })
 })
 
-const completedBookings = computed(() => {
+// งานที่คนขับกำลังขนส่งอยู่ (เดิมเคยรวมอยู่ในตารางเดียวกับ "กำลังดำเนินการ" แยกออกมาให้เห็นชัดว่ากำลังวิ่งอยู่)
+const inTransitBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return fleetBookings.value
-    .filter((b) => b.status === 'DELIVERED' && (!q || matchesSearch(b, q)))
-    .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime())
+    .filter((b) => b.status === 'IN_TRANSIT' && (!q || matchesSearch(b, q)))
+    .sort((a, b) => new Date(b.transitStartedAt || 0).getTime() - new Date(a.transitStartedAt || 0).getTime())
 })
 
 // --- Header info: ใช้ร่วมกันทุกรายการสินค้าที่เพิ่มในเซสชันนี้ ---
 const defaultHeader = () => ({
   po: '',
   shipDate: new Date().toISOString().slice(0, 10),
+  jobDate: new Date().toISOString().slice(0, 10),
+  returnDate: '',
   customer: isCements.value ? '' : fixedCustomer,
+  plate: '',
+  driverName: '',
 })
 const header = ref(defaultHeader())
+
+// กรอกช่องคนขับ หรือทะเบียนรถ (จะกรอกตอนสร้างงานเลย หรือเว้นว่างไปกรอกทีหลังตอนส่งงานก็ได้) ให้ดึงข้อมูลคู่กันแบบเดียวกับหน้าส่งงาน
+watch(
+  () => header.value.driverName,
+  (name) => {
+    if (!name) return
+    const vehicle = driversStore.findVehicleByDriverName(name)
+    if (vehicle) header.value.plate = vehicle
+  }
+)
+watch(
+  () => header.value.plate,
+  (plate) => {
+    if (!plate) return
+    const driver = driversStore.findDriverByVehicle(plate)
+    if (driver) header.value.driverName = `${driver.firstName} ${driver.lastName}`
+  }
+)
+
+// เลือกลูกค้าที่มีรหัสผู้ติดต่อในสมุดรายชื่อ และยังไม่ได้กรอกเลข PO เอง -> แนะนำเลข PO ให้อัตโนมัติ (ไม่ทับเลข PO จริงที่กรอกไว้แล้ว)
+watch(
+  () => header.value.customer,
+  (name) => {
+    if (!name || header.value.po) return
+    const now = new Date()
+    const todaysJobCount = bookingStore.bookings.filter((b) => {
+      if (b.customer !== name) return false
+      const d = new Date(b.createdAt)
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+    }).length
+    const suggestion = customerStore.suggestPoNumber(name, todaysJobCount)
+    if (suggestion) header.value.po = suggestion
+  }
+)
 
 // --- Line item sub-form: กรอกทีละรายการ แล้วกดยืนยันเพิ่มลงตาราง ---
 const defaultItem = () => ({
   siteName: '',
   district: '',
+  shipmentNo: '',
+  route: '',
+  origin: '',
+  destination: '',
   cementTypes: ['', '', ''] as string[],
   jobType: undefined as BookingJobType | undefined,
   calcBasis: 'weight' as CalcBasis,
@@ -679,6 +800,39 @@ const defaultItem = () => ({
 const item = ref(defaultItem())
 
 const lineItems = ref<CommittedLineItem[]>([])
+
+// พิมพ์ชื่อหน้างานที่เคยส่งของให้ลูกค้าคนนี้มาก่อน -> ดึงผู้ติดต่อ/เบอร์โทร/พิกัดหน้างานจากงานล่าสุดที่ตรงกันมาให้อัตโนมัติ (ถ้าเจอ และช่องยังว่างอยู่)
+// ถ้าไม่เคยส่งของที่หน้างานนี้มาก่อน ให้ใช้ผู้ติดต่อ/เบอร์โทรเริ่มต้นของลูกค้าจากสมุดรายชื่อแทน
+watch(
+  () => item.value.siteName,
+  (siteName) => {
+    if (!siteName) return
+    if (item.value.siteContactName || item.value.sitePhone || item.value.siteCoords) return
+    const match = bookingStore.bookings
+      .filter((b) => b.customer === header.value.customer && b.siteName.trim().toLowerCase() === siteName.trim().toLowerCase())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+    if (match) {
+      item.value.siteContactName = match.siteContactName || ''
+      item.value.sitePhone = match.sitePhone || ''
+      item.value.siteCoords = match.siteCoords || ''
+      return
+    }
+    const customer = customerStore.lookupCustomer(header.value.customer)
+    item.value.siteContactName = customer.contact || ''
+    item.value.sitePhone = customer.phone || ''
+  }
+)
+
+// กรอกอำเภอ -> ดึงลิตรมาตรฐานของอำเภอนั้น (ถ้าตั้งค่าไว้) และราคาน้ำมันวันนี้มาให้อัตโนมัติ ยังแก้ไขเองได้เพื่อป้องกันการโกงน้ำมัน
+watch(
+  () => item.value.district,
+  (district) => {
+    if (!district) return
+    const rate = fuelRateStore.findRateByDistrict(district)
+    if (rate) item.value.fuelLiters = rate.liters
+    item.value.fuelRate = fuelRateStore.settings.todayPricePerLiter
+  }
+)
 
 const itemComputedTripFee = computed(() => {
   const it = item.value
@@ -703,7 +857,11 @@ const confirmAddItem = () => {
   lineItems.value.push({
     siteName: it.siteName,
     district: it.district,
-    cementTypes: isCements.value ? it.cementTypes.filter(Boolean) : undefined,
+    shipmentNo: it.shipmentNo || undefined,
+    route: it.route || undefined,
+    origin: it.origin || undefined,
+    destination: it.destination || undefined,
+    cementTypes: it.cementTypes.filter(Boolean),
     jobType: isCements.value ? it.jobType : undefined,
     weight: it.calcBasis === 'weight' ? it.weight : undefined,
     qty: it.calcBasis === 'piece' ? it.qty : undefined,
@@ -726,13 +884,9 @@ const removeItem = (idx: number) => {
 const totalTripFee = computed(() => lineItems.value.reduce((sum, li) => sum + li.tripFee, 0))
 const totalAllowance = computed(() => lineItems.value.reduce((sum, li) => sum + li.allowance, 0))
 
-const canSave = computed(() => {
-  const customerValid = !isCements.value || !!header.value.customer
-  return customerValid && lineItems.value.length > 0
-})
+const canSave = computed(() => !!header.value.customer && lineItems.value.length > 0)
 
 const lineItemProductLabel = (li: CommittedLineItem) => {
-  if (!isCements.value) return 'ปูนซีเมนต์'
   const types = (li.cementTypes || []).filter(Boolean)
   return types.length ? types.join(', ') : '-'
 }
@@ -744,7 +898,6 @@ const lineItemWeightQtyLabel = (li: { weight?: number; qty?: number }) => {
 }
 
 const productLabel = (booking: Booking) => {
-  if (booking.category === 'ceramics') return 'ปูนซีเมนต์'
   const types = (booking.cementTypes || []).filter(Boolean)
   return types.length ? types.join(', ') : '-'
 }
@@ -767,15 +920,24 @@ const closeDialog = () => {
 const saveAllItems = () => {
   if (!canSave.value) return
   const shipDate = header.value.shipDate ? new Date(header.value.shipDate) : undefined
+  const returnDate = header.value.returnDate ? new Date(header.value.returnDate) : undefined
+  const createdAt = header.value.jobDate ? new Date(header.value.jobDate) : undefined
   lineItems.value.forEach((li) => {
     bookingStore.addBooking({
       category: props.fleet,
       docNo: bookingStore.nextDocNo(props.fleet),
+      releaseNo: bookingStore.nextReleaseNo(),
       po: header.value.po || undefined,
       shipDate,
+      returnDate,
+      createdAt,
       customer: header.value.customer,
       siteName: li.siteName,
       district: li.district,
+      shipmentNo: li.shipmentNo,
+      route: li.route,
+      origin: li.origin,
+      destination: li.destination,
       cementTypes: li.cementTypes,
       jobType: li.jobType,
       weight: li.weight,
@@ -788,7 +950,8 @@ const saveAllItems = () => {
       siteContactName: li.siteContactName,
       sitePhone: li.sitePhone,
       siteCoords: li.siteCoords,
-      plate: '',
+      plate: header.value.plate || '',
+      driverName: header.value.driverName || undefined,
     })
   })
   closeDialog()
@@ -801,13 +964,31 @@ const dispatchForm = ref({ plate: '', driverName: '', siteContactName: '', siteP
 const openDispatchDialog = (booking: Booking) => {
   dispatchTarget.value = booking
   dispatchForm.value = {
-    plate: '',
-    driverName: '',
+    plate: booking.plate || '',
+    driverName: booking.driverName || '',
     siteContactName: booking.siteContactName || '',
     sitePhone: booking.sitePhone || '',
     siteCoords: booking.siteCoords || '',
   }
 }
+
+// กรอกช่องคนขับ หรือทะเบียนรถ แค่ช่องใดช่องหนึ่ง (หรือเปลี่ยนภายหลัง) ให้ดึงข้อมูลคู่กันจากที่ตั้งค่าไว้ในสมุดรายชื่อคนขับอัตโนมัติเสมอ
+watch(
+  () => dispatchForm.value.driverName,
+  (name) => {
+    if (!name) return
+    const vehicle = driversStore.findVehicleByDriverName(name)
+    if (vehicle) dispatchForm.value.plate = vehicle
+  }
+)
+watch(
+  () => dispatchForm.value.plate,
+  (plate) => {
+    if (!plate) return
+    const driver = driversStore.findDriverByVehicle(plate)
+    if (driver) dispatchForm.value.driverName = `${driver.firstName} ${driver.lastName}`
+  }
+)
 
 const confirmDispatch = () => {
   if (!dispatchTarget.value || !dispatchForm.value.plate) return
@@ -847,7 +1028,7 @@ const confirmComplete = () => {
 
 // --- Edit ops (น้ำมัน/ข้อมูลหน้างาน) แก้ไขได้ทุกสถานะงาน ---
 const editOpsTarget = ref<Booking | null>(null)
-const editOpsForm = ref({ fuelLiters: 0, fuelRate: 0, siteContactName: '', sitePhone: '', siteCoords: '' })
+const editOpsForm = ref({ fuelLiters: 0, fuelRate: 0, siteContactName: '', sitePhone: '', siteCoords: '', returnDate: '' })
 
 const openEditOps = (booking: Booking) => {
   editOpsTarget.value = booking
@@ -857,12 +1038,16 @@ const openEditOps = (booking: Booking) => {
     siteContactName: booking.siteContactName || '',
     sitePhone: booking.sitePhone || '',
     siteCoords: booking.siteCoords || '',
+    returnDate: booking.returnDate ? new Date(booking.returnDate).toISOString().slice(0, 10) : '',
   }
 }
 
 const confirmEditOps = () => {
   if (!editOpsTarget.value) return
-  bookingStore.updateBookingOps(editOpsTarget.value.id, editOpsForm.value)
+  bookingStore.updateBookingOps(editOpsTarget.value.id, {
+    ...editOpsForm.value,
+    returnDate: editOpsForm.value.returnDate ? new Date(editOpsForm.value.returnDate) : undefined,
+  })
   editOpsTarget.value = null
 }
 </script>

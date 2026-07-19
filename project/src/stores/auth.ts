@@ -2,8 +2,10 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth'
 import { auth } from '@/config/firebase'
+import { useOnboardingStore } from '@/stores/onboarding'
 
 export const useAuthStore = defineStore('auth', () => {
+  const onboardingStore = useOnboardingStore()
   const user = ref<User | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -76,6 +78,7 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = mockUser
         role.value = credentials.role
       }
+      onboardingStore.markDone('signedUp')
     } catch (err: any) {
       error.value = err.message
       throw err

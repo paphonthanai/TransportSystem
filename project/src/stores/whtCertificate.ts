@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { useBookingStore } from '@/stores/booking'
+import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import type { WHTCertificate } from '@/types'
 
 const CERTIFICATES_KEY = 'tms_wht_certificates_v1'
@@ -21,6 +22,7 @@ function loadCertificates(): WHTCertificate[] {
 
 export const useWHTCertificateStore = defineStore('whtCertificate', () => {
   const bookingStore = useBookingStore()
+  const documentSettingsStore = useDocumentSettingsStore()
 
   const certificates = ref<WHTCertificate[]>(loadCertificates())
 
@@ -33,7 +35,8 @@ export const useWHTCertificateStore = defineStore('whtCertificate', () => {
   })
 
   function nextNumber() {
-    return `WHT${new Date().getFullYear() + 543}-${String(certificates.value.length + 1).padStart(4, '0')}`
+    const numbering = documentSettingsStore.settings.numbering.wht
+    return `${numbering.prefix}${new Date().getFullYear() + 543}-${documentSettingsStore.padNumber(certificates.value.length + 1, numbering.padding)}`
   }
 
   function addCertificate(data: Omit<WHTCertificate, 'id' | 'number' | 'createdAt'>) {

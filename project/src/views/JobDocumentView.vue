@@ -26,10 +26,13 @@
       <!-- Printable PO / Quotation Sheet -->
       <div id="print-area" class="print-sheet bg-white text-black rounded-xl shadow-default border border-border p-10 max-w-3xl mx-auto">
         <div class="flex items-start justify-between border-b-2 border-black pb-4 mb-4">
-          <div>
-            <div class="text-lg font-bold">{{ companyInfo.name }}</div>
-            <div class="text-xs leading-relaxed max-w-xs">{{ companyInfo.address }}</div>
-            <div class="text-xs">เลขประจำตัวผู้เสียภาษี: {{ companyInfo.taxId }}</div>
+          <div class="flex items-start gap-3">
+            <img v-if="documentSettingsStore.settings.company.logo" :src="documentSettingsStore.settings.company.logo" class="w-14 h-14 object-contain flex-shrink-0" />
+            <div>
+              <div class="text-lg font-bold">{{ documentSettingsStore.settings.company.name }}</div>
+              <div class="text-xs leading-relaxed max-w-xs">{{ documentSettingsStore.settings.company.address }}</div>
+              <div class="text-xs">เลขประจำตัวผู้เสียภาษี: {{ documentSettingsStore.settings.company.taxId }}</div>
+            </div>
           </div>
           <div class="text-right">
             <div class="text-xl font-bold">{{ docTitleTh }}</div>
@@ -101,7 +104,7 @@
         <div class="flex justify-between items-start mb-6">
           <div class="text-sm">
             <div class="text-gray-600 text-xs">จำนวนเงินเป็นตัวอักษร</div>
-            <div class="font-semibold">({{ bahtText(booking.agreedPrice || booking.tripFee) }})</div>
+            <div class="font-semibold">({{ bahtText(grandTotal) }})</div>
           </div>
           <div class="w-64 text-sm space-y-1">
             <div class="flex justify-between">
@@ -112,13 +115,13 @@
               <span class="text-gray-600">ราคาที่ตกลงกับลูกค้า</span>
               <span>{{ formatBaht(booking.agreedPrice) }}</span>
             </div>
-            <div class="flex justify-between">
-              <span class="text-gray-600">ภาษีมูลค่าเพิ่ม 0%</span>
-              <span>{{ formatBaht(0) }}</span>
+            <div v-if="showVatRow" class="flex justify-between">
+              <span class="text-gray-600">ภาษีมูลค่าเพิ่ม {{ documentSettingsStore.settings.vatRate }}%</span>
+              <span>{{ formatBaht(vatAmount) }}</span>
             </div>
             <div class="flex justify-between font-bold border-t border-black pt-1">
               <span>จำนวนเงินรวมทั้งสิ้น</span>
-              <span>{{ formatBaht(booking.agreedPrice || booking.tripFee) }}</span>
+              <span>{{ formatBaht(grandTotal) }}</span>
             </div>
           </div>
         </div>
@@ -238,8 +241,9 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAppStore } from '@/stores/app'
-import { companyInfo, bahtText } from '@/utils/companyInfo'
-import { lookupCustomer } from '@/utils/customerDirectory'
+import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useCustomerStore } from '@/stores/customers'
+import { bahtText } from '@/utils/companyInfo'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
 import type { Booking } from '@/types'
 
@@ -247,11 +251,13 @@ const route = useRoute()
 const router = useRouter()
 const bookingStore = useBookingStore()
 const appStore = useAppStore()
+const documentSettingsStore = useDocumentSettingsStore()
+const customerStore = useCustomerStore()
 
 const isAdmin = computed(() => appStore.currentRole === 'admin')
 
 const booking = computed(() => bookingStore.bookings.find((b) => b.id === route.params.bookingId))
-const customer = computed(() => lookupCustomer(booking.value?.customer || ''))
+const customer = computed(() => customerStore.lookupCustomer(booking.value?.customer || ''))
 
 /** ยังไม่จัดคนขับ = ใบสั่งซื้อสินค้า (Purchase Order), จัดคนขับแล้ว = ใบสั่งงานขนส่ง (Work Order) */
 const isDispatched = computed(() => !!booking.value?.driverName)
@@ -283,7 +289,15 @@ const productLabel = (b: Booking) => {
   return types.length ? types.join(', ') : '-'
 }
 
-const formatBaht = (value: number) => Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })
+const subtotalAmount = computed(() => booking.value?.agreedPrice || booking.value?.tripFee || 0)
+const showVatRow = computed(() => documentSettingsStore.settings.calcMode.purchase.vat !== 'included')
+const vatAmount = computed(() =>
+  showVatRow.value ? Math.round((subtotalAmount.value * documentSettingsStore.settings.vatRate) / 100) : 0
+)
+const grandTotal = computed(() => subtotalAmount.value + vatAmount.value)
+
+const formatBaht = (value: number) =>
+  `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-')
 
 const printDoc = () => window.print()

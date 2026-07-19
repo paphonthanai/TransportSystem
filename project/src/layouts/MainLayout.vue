@@ -119,6 +119,8 @@
       @click="appStore.toggleSidebar"
       class="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"
     ></div>
+
+    <OnboardingChecklist />
   </div>
 </template>
 
@@ -128,6 +130,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
+import OnboardingChecklist from '@/components/OnboardingChecklist.vue'
 
 const router = useRouter()
 const currentRoute = useRoute()
@@ -166,8 +169,17 @@ const getScreenTitle = () => {
     '/settings/staff': 'สมุดรายชื่อ · เสมียน (พนักงานออฟฟิศ)',
     '/settings/drivers': 'สมุดรายชื่อ · พนักงานขับรถ',
     '/settings/customers': 'สมุดรายชื่อ · ลูกค้า/คู่ค้า',
-    '/settings/vendors': 'สมุดรายชื่อ · ผู้จำหน่าย',
+    /* '/settings/vendors': 'สมุดรายชื่อ · ผู้จำหน่าย', */
     '/settings/logs': 'ตั้งค่า · Log',
+    '/settings/documents/function': 'ตั้งค่าเอกสาร · ฟังก์ชั่นเอกสาร',
+    '/settings/documents/numbering': 'ตั้งค่าเอกสาร · เลขรันเอกสาร',
+    '/settings/documents/logo': 'ตั้งค่าเอกสาร · โลโก้และตรายาง',
+    '/settings/documents/payment': 'ตั้งค่าเอกสาร · ข้อมูลการรับชำระ',
+    '/settings/documents/currency': 'ตั้งค่าเอกสาร · สกุลเงิน',
+    '/settings/documents/notes': 'ตั้งค่าเอกสาร · หมายเหตุเอกสาร',
+    '/settings/products': 'ตั้งค่า · ตั้งค่าสินค้า',
+    '/settings/fuel': 'ตั้งค่า · ตั้งค่าน้ำมัน',
+    '/inventory': 'คลังสินค้า',
   }
   if (currentRoute.path.startsWith('/documents/')) return 'เอกสารขาย · พิมพ์เอกสาร'
   if (currentRoute.path.startsWith('/job/')) return 'รายละเอียดงาน · ใบเสนอราคา/PO'

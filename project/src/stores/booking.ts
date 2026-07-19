@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useOnboardingStore } from '@/stores/onboarding'
+import { useInventoryStore } from '@/stores/inventory'
 import type { Booking, BookingCategory, DebtAdjustment, BillingBatch, LogEntry } from '@/types'
 
 export interface SalesDocument {
@@ -24,6 +27,12 @@ export interface SalesDocument {
   reference?: string
   /** เอกสาร POD ที่แนบตอนบันทึกรับชำระ (บังคับแนบ เพราะใบแจ้งหนี้ออกได้ก่อนงานส่งของสำเร็จ) */
   podImage?: string
+  /** อัตรา/จำนวนภาษีมูลค่าเพิ่ม คำนวณจากตั้งค่าเอกสาร ณ วันที่ออกใบแจ้งหนี้ */
+  vatRate?: number
+  vatAmount?: number
+  /** อัตรา/จำนวนภาษีหัก ณ ที่จ่าย ที่ลูกค้าจะหักตอนจ่ายเงิน (ถ้าเปิดใช้งานในตั้งค่าเอกสาร) */
+  whtRate?: number
+  whtAmount?: number
 }
 
 const fixedCeramicsCustomer = 'บจก. ศรีไทยคอนกรีต'
@@ -228,6 +237,9 @@ function seedBookings(): Booking[] {
 
 export const useBookingStore = defineStore('booking', () => {
   const authStore = useAuthStore()
+  const documentSettingsStore = useDocumentSettingsStore()
+  const onboardingStore = useOnboardingStore()
+  const inventoryStore = useInventoryStore()
 
   const bookings = ref<Booking[]>(loadBookings())
   const documents = ref<SalesDocument[]>(loadDocuments())
@@ -283,15 +295,28 @@ export const useBookingStore = defineStore('booking', () => {
     return `${prefix}2569-${String(maxSeq + 1).padStart(4, '0')}`
   }
 
-  function addBooking(data: Omit<Booking, 'id' | 'status' | 'createdAt'>) {
+  /** เลขที่ใบปล่อยรถ ออกทีละงานเหมือน docNo แต่ใช้เลขรันร่วมกันทั้ง 2 fleet (ใบปล่อยรถออกจากอู่เดียวกัน) */
+  function nextReleaseNo() {
+    const prefix = 'RL'
+    const maxSeq = bookings.value.reduce((max, b) => {
+      if (!b.releaseNo) return max
+      const seq = Number(b.releaseNo.replace(prefix, '').replace('2569-', ''))
+      return Number.isFinite(seq) && seq > max ? seq : max
+    }, 0)
+    return `${prefix}2569-${String(maxSeq + 1).padStart(4, '0')}`
+  }
+
+  function addBooking(data: Omit<Booking, 'id' | 'status' | 'createdAt'> & { createdAt?: Date }) {
+    const { createdAt, ...rest } = data
     const booking: Booking = {
-      ...data,
+      ...rest,
       id: `b${Date.now()}`,
       status: 'WAITING_DISPATCH',
-      createdAt: new Date(),
+      createdAt: createdAt || new Date(),
     }
     bookings.value.unshift(booking)
     addLog(`ลงงานใหม่ ${booking.docNo} (${booking.customer})`)
+    onboardingStore.markDone('createdFirstBooking')
     return booking
   }
 
@@ -313,7 +338,14 @@ export const useBookingStore = defineStore('booking', () => {
    */
   function updateBookingOps(
     id: string,
-    data: { fuelLiters?: number; fuelRate?: number; siteContactName?: string; sitePhone?: string; siteCoords?: string }
+    data: {
+      fuelLiters?: number
+      fuelRate?: number
+      siteContactName?: string
+      sitePhone?: string
+      siteCoords?: string
+      returnDate?: Date
+    }
   ) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
@@ -322,7 +354,8 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.siteContactName !== undefined) booking.siteContactName = data.siteContactName || undefined
     if (data.sitePhone !== undefined) booking.sitePhone = data.sitePhone || undefined
     if (data.siteCoords !== undefined) booking.siteCoords = data.siteCoords || undefined
-    addLog(`แก้ไขข้อมูลปฏิบัติงาน ${booking.docNo} (น้ำมัน/ข้อมูลหน้างาน)`)
+    if (data.returnDate !== undefined) booking.returnDate = data.returnDate
+    addLog(`แก้ไขข้อมูลปฏิบัติงาน ${booking.docNo} (น้ำมัน/ข้อมูลหน้างาน/วันที่กลับ)`)
   }
 
   /** จ่ายงานให้คนขับ: WAITING_DISPATCH -> PENDING_ACCEPT (รอคนขับตอบรับใน Driver App ภายใน 15 นาที) */
@@ -439,6 +472,9 @@ export const useBookingStore = defineStore('booking', () => {
     // billingStatus ถูกตั้งเป็น IN_BATCH ไปแล้วตั้งแต่ตอนจัดรถ (assignToOpenBatch) ไม่ต้องตั้งซ้ำ
     booking.completedAt = new Date()
     addLog(`จบงาน ${booking.docNo}${booking.podImage ? ' (แนบ POD จากคนขับ)' : ' (ปิดงานโดยออฟฟิศ)'}`)
+    const stock = inventoryStore.recordDeliveryMovement(booking)
+    stock.matched.forEach((m) => addLog(`ตัดสต๊อก ${m} จากงาน ${booking.docNo}`))
+    stock.unmatched.forEach((name) => addLog(`ไม่พบสินค้า "${name}" ในตั้งค่าสินค้า ข้ามการตัดสต๊อกสำหรับ ${booking.docNo}`))
   }
 
   /** จบงานฝั่งคนขับ (บังคับแนบ POD) */
@@ -525,9 +561,15 @@ export const useBookingStore = defineStore('booking', () => {
     const issueDate = new Date()
     const dueDate = new Date(issueDate)
     dueDate.setDate(dueDate.getDate() + creditDays)
+    const invoiceNumbering = documentSettingsStore.settings.numbering.invoice
+    const salesCalcMode = documentSettingsStore.settings.calcMode.sales
+    const vatRate = salesCalcMode.vat === 'included' ? 0 : documentSettingsStore.settings.vatRate
+    const vatAmount = Math.round((amount * vatRate) / 100)
+    const whtRate = salesCalcMode.wht === 'included' ? 0 : documentSettingsStore.settings.whtRate
+    const whtAmount = Math.round((amount * whtRate) / 100)
     const doc: SalesDocument = {
       id: `doc${Date.now()}`,
-      number: `INV${new Date().getFullYear() + 543}-${String(documents.value.length + 1).padStart(4, '0')}`,
+      number: `${invoiceNumbering.prefix}${new Date().getFullYear() + 543}-${documentSettingsStore.padNumber(documents.value.length + 1, invoiceNumbering.padding)}`,
       customer,
       bookingIds: readyBookings.map((b) => b.id),
       amount,
@@ -537,6 +579,10 @@ export const useBookingStore = defineStore('booking', () => {
       creditDays,
       dueDate,
       reference: options?.reference || readyBookings.map((b) => b.docNo).join(', '),
+      vatRate,
+      vatAmount,
+      whtRate,
+      whtAmount,
     }
     documents.value.unshift(doc)
     readyBookings.forEach((b) => {
@@ -545,6 +591,7 @@ export const useBookingStore = defineStore('booking', () => {
     const stillPending = bookings.value.some((b) => b.batchId === batchId && b.billingStatus === 'IN_BATCH')
     if (!stillPending) batch.status = 'invoiced'
     addLog(`ออกใบแจ้งหนี้ ${doc.number} (${readyBookings.length} งาน, ${amount} บาท)`)
+    onboardingStore.markDone('issuedFirstInvoice')
     return doc
   }
 
@@ -562,9 +609,11 @@ export const useBookingStore = defineStore('booking', () => {
     doc.status = 'paid'
     doc.podImage = podImage
     doc.paidDate = new Date()
-    doc.receiptNumber = `RE${new Date().getFullYear() + 543}-${String(
-      documents.value.filter((d) => d.receiptNumber).length + 1
-    ).padStart(4, '0')}`
+    const receiptNumbering = documentSettingsStore.settings.numbering.receipt
+    doc.receiptNumber = `${receiptNumbering.prefix}${new Date().getFullYear() + 543}-${documentSettingsStore.padNumber(
+      documents.value.filter((d) => d.receiptNumber).length + 1,
+      receiptNumbering.padding
+    )}`
     bookings.value.forEach((b) => {
       if (doc.bookingIds.includes(b.id)) b.billingStatus = 'PAID'
     })
@@ -590,6 +639,7 @@ export const useBookingStore = defineStore('booking', () => {
     byFleet,
     pendingBookings,
     nextDocNo,
+    nextReleaseNo,
     addBooking,
     updateBookingPrice,
     updateBookingOps,

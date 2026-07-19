@@ -63,6 +63,54 @@
           </table>
         </div>
       </div>
+
+      <!-- งานที่เสร็จแล้ว (ย้ายมาจากหน้ารายการงาน ให้เห็นพร้อมจัดการวางบิลได้ในหน้าเดียว) -->
+      <div class="card-lg overflow-hidden">
+        <div class="font-bold text-text mb-3">งานที่เสร็จแล้ว ({{ deliveredBookings.length }})</div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-surface-2 border-b border-border">
+              <tr>
+                <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">PO</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">ชื่อหน้างาน</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">สินค้า</th>
+                <th class="text-right px-4 py-3 font-semibold text-muted">เบี้ยเลี้ยง</th>
+                <th class="text-right px-4 py-3 font-semibold text-muted">ค่าเที่ยว</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">สถานะบิล</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="booking in deliveredBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+                <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
+                <td class="px-4 py-3 text-muted">{{ booking.po || '-' }}</td>
+                <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
+                <td class="px-4 py-3 font-semibold text-text">{{ booking.siteName }}</td>
+                <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
+                <td class="px-4 py-3 text-right text-text">{{ formatBaht(booking.finalAllowance ?? booking.allowance) }}</td>
+                <td class="px-4 py-3 text-right text-text">{{ formatBaht(booking.tripFee) }}</td>
+                <td class="px-4 py-3">
+                  <span v-if="booking.billingStatus" :class="['text-xs font-semibold px-2 py-1 rounded-full', billingStatusClass[booking.billingStatus]]">
+                    {{ billingStatusLabel[booking.billingStatus] }}
+                  </span>
+                  <span v-else class="text-muted">-</span>
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <button @click="router.push(`/job/${booking.id}`)" class="btn-sm">
+                    <span class="material-symbols-rounded text-base">visibility</span>
+                    ดูรายละเอียด
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="deliveredBookings.length === 0">
+                <td colspan="9" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่เสร็จแล้ว</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </template>
 
     <!-- ================= Batch Detail ================= -->
@@ -392,14 +440,24 @@
                   <span class="text-muted">รวมเป็นเงิน</span>
                   <span class="text-text">{{ formatBaht(selectedTotal) }}</span>
                 </div>
-                <div class="flex justify-between">
-                  <span class="text-muted">ภาษีมูลค่าเพิ่ม 0%</span>
-                  <span class="text-text">{{ formatBaht(0) }}</span>
+                <div v-if="previewShowVatRow" class="flex justify-between">
+                  <span class="text-muted">ภาษีมูลค่าเพิ่ม {{ documentSettingsStore.settings.vatRate }}%</span>
+                  <span class="text-text">{{ formatBaht(previewVatAmount) }}</span>
                 </div>
                 <div class="flex justify-between font-bold text-text pt-1 border-t border-border">
                   <span>จำนวนเงินรวมทั้งสิ้น</span>
-                  <span>{{ formatBaht(selectedTotal) }}</span>
+                  <span>{{ formatBaht(previewGrandTotal) }}</span>
                 </div>
+                <template v-if="previewShowWhtRow">
+                  <div class="flex justify-between text-red-600">
+                    <span>หัก ภาษี ณ ที่จ่าย {{ documentSettingsStore.settings.whtRate }}%</span>
+                    <span>-{{ formatBaht(previewWhtAmount) }}</span>
+                  </div>
+                  <div class="flex justify-between font-bold text-text pt-1 border-t border-border">
+                    <span>จำนวนเงินที่ต้องชำระ</span>
+                    <span>{{ formatBaht(previewNetPayable) }}</span>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -463,15 +521,29 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import type { SalesDocument } from '@/stores/booking'
+import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { billingStatusLabel, billingStatusClass, bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import type { Booking, BillingBatch } from '@/types'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
+const documentSettingsStore = useDocumentSettingsStore()
 
 const batches = computed(() => bookingStore.batches)
 const selectedBatchId = ref<string | null>(null)
 const selectedBatch = computed(() => batches.value.find((b) => b.id === selectedBatchId.value) || null)
+
+// งานที่ส่งของสำเร็จแล้วทั้งหมด (ทุก fleet) ย้ายมาแสดงในหน้าวางบิลแทนหน้ารายการงาน เพราะขั้นตอนถัดไปคือวางบิลอยู่แล้ว
+const deliveredBookings = computed(() =>
+  bookingStore.bookings
+    .filter((b) => b.status === 'DELIVERED')
+    .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime())
+)
+
+const productLabel = (booking: Booking) => {
+  const types = (booking.cementTypes || []).filter(Boolean)
+  return types.length ? types.join(', ') : '-'
+}
 
 const batchBookings = computed(() => (selectedBatchId.value ? bookingStore.bookingsInBatch(selectedBatchId.value).value : []))
 
@@ -508,6 +580,18 @@ const toggleSelectAll = () => {
 
 const selectedBookings = computed(() => readyBookings.value.filter((b) => selectedIds.value.has(b.id)))
 const selectedTotal = computed(() => selectedBookings.value.reduce((sum, b) => sum + bookingTotal(b), 0))
+
+// --- พรีวิว VAT/หัก ณ ที่จ่าย ตามตั้งค่าเอกสาร (คำนวณจริงตอนกดยืนยันออกใบแจ้งหนี้ใน issueInvoiceFromBatch) ---
+const previewShowVatRow = computed(() => documentSettingsStore.settings.calcMode.sales.vat !== 'included')
+const previewVatAmount = computed(() =>
+  previewShowVatRow.value ? Math.round((selectedTotal.value * documentSettingsStore.settings.vatRate) / 100) : 0
+)
+const previewGrandTotal = computed(() => selectedTotal.value + previewVatAmount.value)
+const previewShowWhtRow = computed(() => documentSettingsStore.settings.calcMode.sales.wht !== 'included')
+const previewWhtAmount = computed(() =>
+  previewShowWhtRow.value ? Math.round((selectedTotal.value * documentSettingsStore.settings.whtRate) / 100) : 0
+)
+const previewNetPayable = computed(() => previewGrandTotal.value - previewWhtAmount.value)
 
 const holdBooking = (booking: Booking) => {
   bookingStore.setBookingHold(booking.id, true)

@@ -1,5 +1,27 @@
 <template>
   <div class="space-y-4">
+    <div class="card-lg">
+      <div class="font-bold text-text mb-3">สรุปสถานะการเงิน</div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="border-l-4 border-green-500 pl-2">
+          <div class="text-[11px] text-muted">รายรับรวม (ชำระแล้ว)</div>
+          <div class="text-sm font-bold text-text">{{ formatBaht(totalPaidRevenue) }}</div>
+        </div>
+        <div class="border-l-4 border-primary pl-2">
+          <div class="text-[11px] text-muted">รอรับชำระ</div>
+          <div class="text-sm font-bold text-text">{{ formatBaht(totalPendingReceivable) }}</div>
+        </div>
+        <div class="border-l-4 border-amber-500 pl-2">
+          <div class="text-[11px] text-muted">ค้างชำระเกินกำหนด</div>
+          <div class="text-sm font-bold text-text">{{ formatBaht(totalOverdue) }}</div>
+        </div>
+        <div class="border-l-4 border-indigo-500 pl-2">
+          <div class="text-[11px] text-muted">ใบแจ้งหนี้เดือนนี้</div>
+          <div class="text-sm font-bold text-text">{{ invoicesThisMonth }} ใบ</div>
+        </div>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4 items-start">
       <!-- รายรับและรายจ่าย -->
       <div class="card-lg">
@@ -201,6 +223,29 @@
 import { ref, computed } from 'vue'
 import DashboardLineChart from '@/components/DashboardLineChart.vue'
 import Pager from '@/components/Pager.vue'
+import { useBookingStore } from '@/stores/booking'
+
+const bookingStore = useBookingStore()
+
+const totalPaidRevenue = computed(() =>
+  bookingStore.documents.filter((d) => d.status === 'paid').reduce((sum, d) => sum + d.amount, 0)
+)
+const totalPendingReceivable = computed(() =>
+  bookingStore.documents.filter((d) => d.status === 'sent').reduce((sum, d) => sum + d.amount, 0)
+)
+const totalOverdue = computed(() => {
+  const today = new Date()
+  return bookingStore.documents
+    .filter((d) => d.status === 'sent' && new Date(d.dueDate) < today)
+    .reduce((sum, d) => sum + d.amount, 0)
+})
+const invoicesThisMonth = computed(() => {
+  const now = new Date()
+  return bookingStore.documents.filter((d) => {
+    const docDate = new Date(d.date)
+    return docDate.getFullYear() === now.getFullYear() && docDate.getMonth() === now.getMonth()
+  }).length
+})
 
 const unitFilter = ref('all')
 const dateRangeFilter = ref('')

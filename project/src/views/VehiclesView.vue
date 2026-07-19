@@ -122,7 +122,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useOnboardingStore } from '@/stores/onboarding'
 import type { Vehicle, VehicleType } from '@/types'
+
+const onboardingStore = useOnboardingStore()
 
 type VehicleForm = Omit<Vehicle, 'id' | 'repairStatus' | 'repairDays'>
 
@@ -168,6 +171,7 @@ const save = () => {
   if (!form.value.plate) return
   if (editingIndex.value === null) {
     vehicles.value.unshift({ ...form.value })
+    onboardingStore.markDone('addedVehicleOrDriver')
   } else {
     vehicles.value[editingIndex.value] = { ...form.value }
   }
