@@ -84,18 +84,48 @@
                 นำทาง
               </a>
             </div>
+            <div class="flex items-center justify-between px-1 pt-1">
+              <div v-for="(step, i) in jobSteps(job)" :key="i" class="flex-1 flex flex-col items-center gap-1">
+                <div
+                  :class="[
+                    'w-2.5 h-2.5 rounded-full',
+                    step.done ? 'bg-green-500' : step.current ? 'bg-primary' : 'bg-surface-2 border border-border',
+                  ]"
+                ></div>
+                <div :class="['text-[9px] text-center leading-tight', step.current ? 'text-primary font-semibold' : 'text-muted']">
+                  {{ step.label }}
+                </div>
+              </div>
+            </div>
             <div v-if="job.status === 'PENDING_ACCEPT'" class="space-y-1.5">
               <div class="text-[11px] text-center text-muted">
                 กรุณาตอบรับภายใน {{ formatCountdown(remainingAcceptSeconds(job)) }} มิฉะนั้นงานจะถูกจัดให้คนขับคนอื่นอัตโนมัติ
               </div>
-              <button
-                @click="bookingStore.acceptDispatch(job.id)"
-                class="w-full h-9 rounded-lg bg-amber-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
-              >
-                <span class="material-symbols-rounded text-base">how_to_reg</span>
-                ตอบรับงาน
-              </button>
+              <div class="flex gap-2">
+                <button
+                  @click="declineJob(job)"
+                  class="flex-1 h-9 rounded-lg border border-red-300 text-red-600 text-xs font-semibold flex items-center justify-center gap-1.5"
+                >
+                  <span class="material-symbols-rounded text-base">cancel</span>
+                  ไม่รับงาน
+                </button>
+                <button
+                  @click="bookingStore.acceptDispatch(job.id)"
+                  class="flex-1 h-9 rounded-lg bg-amber-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+                >
+                  <span class="material-symbols-rounded text-base">how_to_reg</span>
+                  ตอบรับงาน
+                </button>
+              </div>
             </div>
+            <button
+              v-else-if="job.status === 'DISPATCHED' && !job.fuelReceivedAt"
+              @click="bookingStore.markFuelReceived(job.id)"
+              class="w-full h-9 rounded-lg bg-orange-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+            >
+              <span class="material-symbols-rounded text-base">local_gas_station</span>
+              รับน้ำมัน
+            </button>
             <button
               v-else-if="job.status === 'DISPATCHED'"
               @click="bookingStore.startTransit(job.id)"
@@ -103,6 +133,14 @@
             >
               <span class="material-symbols-rounded text-base">directions</span>
               เริ่มขนส่ง
+            </button>
+            <button
+              v-else-if="job.status === 'IN_TRANSIT' && !job.unloadedAt"
+              @click="bookingStore.markUnloaded(job.id)"
+              class="w-full h-9 rounded-lg bg-teal-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+            >
+              <span class="material-symbols-rounded text-base">inventory_2</span>
+              ส่งของ/ลงของเสร็จสิ้น
             </button>
             <button
               v-else-if="job.status === 'IN_TRANSIT'"
@@ -144,6 +182,10 @@
             </button>
           </div>
           <div class="p-5 space-y-3">
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">เลขไมล์สิ้นสุด (กม.)</label>
+              <input v-model.number="podOdometerAfter" type="number" placeholder="0" class="w-full h-9 px-3 rounded-lg border border-border text-sm" />
+            </div>
             <div class="text-xs text-muted">
               ต้องแนบรูปหลักฐานการส่งมอบสินค้า (POD) ให้ถูกต้องก่อนจึงจะกดยืนยันจบงานได้
             </div>
@@ -228,6 +270,29 @@ const remainingAcceptSeconds = (job: Booking) => {
 }
 const formatCountdown = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
 
+// ขั้นตอนงานของคนขับ 5 ช่วง: ตอบรับ -> รับน้ำมัน -> เดินทาง/ขนส่ง -> ลงของ -> จบงาน (แสดงเป็น progress ให้คนขับเห็นว่าอยู่ขั้นไหน)
+const jobSteps = (job: Booking) => {
+  const stepIndex =
+    job.status === 'PENDING_ACCEPT'
+      ? 0
+      : job.status === 'DISPATCHED' && !job.fuelReceivedAt
+        ? 1
+        : job.status === 'DISPATCHED'
+          ? 2
+          : job.status === 'IN_TRANSIT' && !job.unloadedAt
+            ? 2
+            : job.status === 'IN_TRANSIT'
+              ? 3
+              : 4
+  const labels = ['รับงาน', 'รับน้ำมัน', 'เดินทาง/ขนส่ง', 'ลงของเสร็จสิ้น', 'จบงาน']
+  return labels.map((label, i) => ({ label, done: i < stepIndex, current: i === stepIndex }))
+}
+
+const declineJob = (job: Booking) => {
+  if (!window.confirm(`ยืนยันไม่รับงาน ${job.docNo}? งานนี้จะถูกส่งกลับไปรอจัดคนขับใหม่`)) return
+  bookingStore.declineDispatch(job.id)
+}
+
 const recentJobs = computed(() =>
   bookingStore.bookings
     .filter((b) => b.driverName === selectedDriver.value && b.status === 'DELIVERED')
@@ -254,11 +319,13 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 const completeTarget = ref<Booking | null>(null)
 const podPreview = ref<string | null>(null)
 const podError = ref('')
+const podOdometerAfter = ref(0)
 
 const openComplete = (job: Booking) => {
   completeTarget.value = job
   podPreview.value = null
   podError.value = ''
+  podOdometerAfter.value = job.odometerAfter || 0
 }
 
 const closeComplete = () => {
@@ -288,7 +355,7 @@ const onPodSelected = (event: Event) => {
 
 const confirmComplete = () => {
   if (!completeTarget.value || !podPreview.value) return
-  bookingStore.completeJobByDriver(completeTarget.value.id, podPreview.value)
+  bookingStore.completeJobByDriver(completeTarget.value.id, podPreview.value, podOdometerAfter.value || undefined)
   closeComplete()
 }
 </script>

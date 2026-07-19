@@ -8,8 +8,8 @@
       </button>
     </div>
 
-    <!-- Search -->
-    <div class="flex gap-3 flex-wrap">
+    <!-- Search + Ship Date Filter -->
+    <div class="flex gap-3 flex-wrap items-center">
       <div class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface border border-border flex-1 max-w-sm">
         <span class="material-symbols-rounded text-muted">search</span>
         <input
@@ -19,11 +19,22 @@
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-rounded text-muted text-lg">calendar_month</span>
+        <input v-model="shipDateFilter" type="date" :disabled="showAllDates" class="input-field disabled:opacity-40" />
+      </div>
+      <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
+        <input v-model="showAllDates" type="checkbox" class="w-4 h-4" />
+        แสดงทุกวัน
+      </label>
     </div>
 
     <!-- In-progress Table -->
     <div class="card-lg overflow-hidden">
-      <div class="font-bold text-text mb-3">งานที่กำลังดำเนินการ ({{ inProgressBookings.length }})</div>
+      <div class="font-bold text-text mb-3">
+        งานที่กำลังดำเนินการ ({{ inProgressBookings.length }})
+        <span class="font-normal text-xs text-muted">{{ dateFilterLabel }}</span>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
@@ -36,6 +47,8 @@
               <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน' : 'สินค้า' }}</th>
               <th class="text-right px-4 py-3 font-semibold text-muted">น้ำหนัก/จำนวน</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ทะเบียนรถ / คนขับ</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่สร้างงาน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ขนส่ง</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">สถานะ</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
@@ -51,8 +64,18 @@
               <td class="px-4 py-3 text-right text-text">{{ weightQtyLabel(booking) }}</td>
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ booking.plate || '-' }}</div>
-                <div class="text-xs text-muted">{{ booking.driverName || '-' }}</div>
+                <div class="text-xs text-muted flex items-center gap-1">
+                  {{ booking.driverName || '-' }}
+                  <span
+                    v-if="booking.driverName && driverTripNumberForBooking(booking) > 1"
+                    class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700"
+                  >
+                    เที่ยวที่ {{ driverTripNumberForBooking(booking) }}
+                  </span>
+                </div>
               </td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.createdAt) }}</td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.shipDate) }}</td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap items-center gap-1">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
@@ -60,6 +83,7 @@
                     เหลือ {{ formatCountdown(remainingAcceptSeconds(booking)) }}
                   </span>
                 </div>
+                <div v-if="driverStepLabel(booking)" class="text-[11px] text-muted mt-0.5">{{ driverStepLabel(booking) }}</div>
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap items-center gap-2">
@@ -67,13 +91,17 @@
                     <span class="material-symbols-rounded text-base">visibility</span>
                     ดูรายละเอียด
                   </button>
-                  <button @click="openEditOps(booking)" class="btn-sm">
+                  <button @click="openEditBooking(booking)" class="btn-sm">
                     <span class="material-symbols-rounded text-base">edit</span>
                     แก้ไข
                   </button>
                   <button v-if="booking.status === 'WAITING_DISPATCH'" @click="openDispatchDialog(booking)" class="btn-sm text-primary">
                     <span class="material-symbols-rounded text-base">local_shipping</span>
                     กรอกทะเบียน / ส่งงาน
+                  </button>
+                  <button v-else-if="booking.status === 'PENDING_ACCEPT'" @click="openDispatchDialog(booking)" class="btn-sm text-amber-700">
+                    <span class="material-symbols-rounded text-base">sync_alt</span>
+                    เปลี่ยนคนขับ/รถ
                   </button>
                   <button v-else-if="booking.status === 'DISPATCHED'" @click="bookingStore.startTransit(booking.id)" class="btn-sm text-indigo-700">
                     <span class="material-symbols-rounded text-base">directions</span>
@@ -83,7 +111,7 @@
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
-              <td colspan="10" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -92,7 +120,10 @@
 
     <!-- In-transit Table -->
     <div class="card-lg overflow-hidden">
-      <div class="font-bold text-text mb-3">งานที่กำลังขนส่ง ({{ inTransitBookings.length }})</div>
+      <div class="font-bold text-text mb-3">
+        งานที่กำลังขนส่ง ({{ inTransitBookings.length }})
+        <span class="font-normal text-xs text-muted">{{ dateFilterLabel }}</span>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
@@ -105,6 +136,8 @@
               <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน' : 'สินค้า' }}</th>
               <th class="text-right px-4 py-3 font-semibold text-muted">น้ำหนัก/จำนวน</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ทะเบียนรถ / คนขับ</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่สร้างงาน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ขนส่ง</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">สถานะ</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
@@ -120,10 +153,21 @@
               <td class="px-4 py-3 text-right text-text">{{ weightQtyLabel(booking) }}</td>
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ booking.plate || '-' }}</div>
-                <div class="text-xs text-muted">{{ booking.driverName || '-' }}</div>
+                <div class="text-xs text-muted flex items-center gap-1">
+                  {{ booking.driverName || '-' }}
+                  <span
+                    v-if="booking.driverName && driverTripNumberForBooking(booking) > 1"
+                    class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700"
+                  >
+                    เที่ยวที่ {{ driverTripNumberForBooking(booking) }}
+                  </span>
+                </div>
               </td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.createdAt) }}</td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.shipDate) }}</td>
               <td class="px-4 py-3">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
+                <div v-if="driverStepLabel(booking)" class="text-[11px] text-muted mt-0.5">{{ driverStepLabel(booking) }}</div>
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap items-center gap-2">
@@ -131,7 +175,7 @@
                     <span class="material-symbols-rounded text-base">visibility</span>
                     ดูรายละเอียด
                   </button>
-                  <button @click="openEditOps(booking)" class="btn-sm">
+                  <button @click="openEditBooking(booking)" class="btn-sm">
                     <span class="material-symbols-rounded text-base">edit</span>
                     แก้ไข
                   </button>
@@ -143,7 +187,7 @@
               </td>
             </tr>
             <tr v-if="inTransitBookings.length === 0">
-              <td colspan="10" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -216,7 +260,7 @@
                   <label class="block text-xs font-semibold text-muted mb-1">คนขับ <span class="font-normal text-[10px]">(กรอกทีหลังได้)</span></label>
                   <select v-model="header.driverName" class="input-field w-full">
                     <option value="">เลือกคนขับ...</option>
-                    <option v-for="name in driverOptions" :key="name" :value="name">{{ name }}</option>
+                    <option v-for="name in driverOptions" :key="name" :value="name">{{ driverOptionLabel(name) }}</option>
                   </select>
                 </div>
                 <div>
@@ -258,18 +302,11 @@
                   <label class="block text-xs font-semibold text-muted mb-1">ต้นทาง</label>
                   <input v-model="item.origin" placeholder="จุดขึ้นสินค้า" class="input-field w-full" />
                 </div>
-                <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">ปลายทาง</label>
-                  <input v-model="item.destination" placeholder="จุดส่งสินค้า" class="input-field w-full" />
-                </div>
 
                 <div class="md:col-span-2">
-                  <label class="block text-xs font-semibold text-muted mb-1">สินค้า (1-3 รายการต่อเที่ยว)</label>
-                  <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    <input v-model="item.cementTypes[0]" list="productNameOptions" placeholder="สินค้า #1" class="input-field w-full" />
-                    <input v-model="item.cementTypes[1]" list="productNameOptions" placeholder="สินค้า #2 (ถ้ามี)" class="input-field w-full" />
-                    <input v-model="item.cementTypes[2]" list="productNameOptions" placeholder="สินค้า #3 (ถ้ามี)" class="input-field w-full" />
-                  </div>
+                  <label class="block text-xs font-semibold text-muted mb-1">สินค้า</label>
+                  <input v-model="item.cementTypes[0]" list="productNameOptions" placeholder="สินค้า" class="input-field w-full" />
+                  <div class="text-[10px] text-muted mt-1">สินค้าหลายชนิดในงานเดียวกัน ให้เพิ่มเป็นคนละรายการ (กดยืนยันเพิ่มรายการสินค้าแยกกันแต่ละชนิด)</div>
                   <datalist id="productNameOptions">
                     <option v-for="p in productOptionsForFleet" :key="p.id" :value="p.name" />
                   </datalist>
@@ -295,39 +332,20 @@
               </div>
 
               <div class="mt-4">
-                <label class="block text-xs font-semibold text-muted mb-1">คิดค่าเที่ยวตาม</label>
-                <div class="flex gap-2 flex-wrap mb-3">
-                  <button
-                    v-for="basis in calcBasisOptions"
-                    :key="basis.id"
-                    @click="item.calcBasis = basis.id"
-                    :class="[
-                      'px-3 py-2 text-sm font-medium rounded-lg transition-all',
-                      item.calcBasis === basis.id ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
-                    ]"
-                  >
-                    {{ basis.label }}
-                  </button>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div v-if="item.calcBasis === 'weight'">
+                <label class="block text-xs font-semibold text-muted mb-1">ปริมาณสินค้า (ไม่บังคับ ใช้เพื่อบันทึก/ตัดสต๊อก ไม่กระทบราคา)</label>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                  <div>
                     <label class="block text-xs font-semibold text-muted mb-1">น้ำหนัก (ตัน)</label>
                     <input v-model.number="item.weight" type="number" placeholder="0" class="input-field w-full" />
                   </div>
-                  <div v-if="item.calcBasis === 'weight'">
-                    <label class="block text-xs font-semibold text-muted mb-1">ตันละ (บาท)</label>
-                    <input v-model.number="item.ratePerTon" type="number" placeholder="0" class="input-field w-full" />
-                  </div>
-                  <div v-if="item.calcBasis === 'piece'">
+                  <div>
                     <label class="block text-xs font-semibold text-muted mb-1">จำนวน (ชิ้น)</label>
                     <input v-model.number="item.qty" type="number" placeholder="0" class="input-field w-full" />
                   </div>
-                  <div v-if="item.calcBasis === 'piece'">
-                    <label class="block text-xs font-semibold text-muted mb-1">ชิ้นละ (บาท)</label>
-                    <input v-model.number="item.ratePerPiece" type="number" placeholder="0" class="input-field w-full" />
-                  </div>
-                  <div v-if="item.calcBasis === 'trip'">
-                    <label class="block text-xs font-semibold text-muted mb-1">เที่ยวละ (บาท)</label>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">ค่าเที่ยว (บาท)</label>
                     <input v-model.number="item.ratePerTrip" type="number" placeholder="0" class="input-field w-full" />
                   </div>
                   <div>
@@ -343,7 +361,6 @@
               <div class="flex items-center justify-between mt-4 pt-4 border-t border-border">
                 <div class="text-sm text-text">
                   ค่าเที่ยว <span class="font-bold">{{ formatBaht(itemComputedTripFee) }}</span>
-                  <span class="text-muted"> · ค่าน้ำมัน {{ formatBaht(itemFuelCost) }}</span>
                 </div>
                 <button @click="confirmAddItem" :disabled="!canAddItem" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
                   <span class="material-symbols-rounded text-base">playlist_add</span>
@@ -400,19 +417,12 @@
               </div>
             </div>
 
-            <!-- Trip Fee / Fuel Sub-form: แยก container ไว้ด้านล่างสุด กรอกน้ำมัน/เบี้ยเลี้ยง/ข้อมูลติดต่อหน้างานของรายการที่กำลังจะเพิ่ม (กรอกก่อนหรือหลังกดยืนยันด้านบนก็ได้ เพราะยังเป็นข้อมูลของรายการถัดไปที่ยังไม่ได้ยืนยัน) -->
+            <!-- Trip Fee / Fuel Sub-form: แยก container ไว้ด้านล่างสุด กรอกเบี้ยเลี้ยง/ข้อมูลติดต่อหน้างานของรายการที่กำลังจะเพิ่ม (กรอกก่อนหรือหลังกดยืนยันด้านบนก็ได้ เพราะยังเป็นข้อมูลของรายการถัดไปที่ยังไม่ได้ยืนยัน) -->
+            <!-- น้ำมัน/ปลายทาง ย้ายไปกรอกตอนจัดรถแทน (หน้าจัดรถ) เพราะออกได้หลายเที่ยวแต่เติมน้ำมันครั้งเดียว ไม่ต้องกรอกซ้ำทุกเที่ยวตอนสร้างงาน -->
             <div class="border border-border rounded-xl p-4 bg-surface-2">
               <h3 class="font-semibold text-text mb-1">รายละเอียดขากลับ</h3>
-              <div class="text-xs text-muted mb-3">ตารางกรอกค่าเที่ยว + ค่าน้ำมัน และข้อมูลผู้ติดต่อหน้างาน</div>
+              <div class="text-xs text-muted mb-3">ตารางกรอกเบี้ยเลี้ยง และข้อมูลผู้ติดต่อหน้างาน (น้ำมัน/ปลายทางกรอกตอนจัดรถ)</div>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">น้ำมัน (ลิตร)</label>
-                  <input v-model.number="item.fuelLiters" type="number" placeholder="0" class="input-field w-full" />
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">เรทน้ำมัน (บาท/ลิตร วันนั้น)</label>
-                  <input v-model.number="item.fuelRate" type="number" placeholder="0" class="input-field w-full" />
-                </div>
                 <div>
                   <label class="block text-xs font-semibold text-muted mb-1">เบี้ยเลี้ยงคนขับ</label>
                   <input
@@ -423,7 +433,7 @@
                     class="input-field w-full"
                   />
                   <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface text-sm text-text font-semibold">
-                    {{ formatBaht(itemCalculatedAllowance) }} (อัตโนมัติ)
+                    {{ formatBaht(itemCalculatedAllowance) }} (ประมาณการ ยังไม่หักค่าน้ำมัน จะคำนวณใหม่ตอนจัดรถ)
                   </div>
                 </div>
               </div>
@@ -462,7 +472,9 @@
       <div @click="dispatchTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6 animate-fade">
         <div @click.stop class="w-full max-w-lg bg-surface rounded-2xl shadow-2xl animate-slide">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="font-bold text-text">ส่งงาน {{ dispatchTarget.docNo }}</div>
+            <div class="font-bold text-text">
+              {{ dispatchTarget.status === 'PENDING_ACCEPT' ? 'เปลี่ยนคนขับ/รถ' : 'ส่งงาน' }} {{ dispatchTarget.docNo }}
+            </div>
             <button @click="dispatchTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
@@ -476,8 +488,32 @@
               <label class="block text-xs font-semibold text-muted mb-1">คนขับ</label>
               <select v-model="dispatchForm.driverName" class="input-field w-full">
                 <option value="">เลือกคนขับ...</option>
-                <option v-for="name in driverOptions" :key="name" :value="name">{{ name }}</option>
+                <option v-for="name in driverOptions" :key="name" :value="name">{{ driverOptionLabel(name) }}</option>
               </select>
+            </div>
+            <div class="text-xs font-semibold text-muted pt-2 border-t border-border">
+              น้ำมัน (กรอกครั้งเดียวใช้ได้กับหลายเที่ยวของคนขับคนนี้)
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">น้ำมัน (ลิตร)</label>
+                <input v-model.number="dispatchForm.fuelLiters" type="number" placeholder="0" class="input-field w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">เรทน้ำมัน (บาท/ลิตร วันนั้น)</label>
+                <input v-model.number="dispatchForm.fuelRate" type="number" placeholder="0" class="input-field w-full" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">ปลายทาง</label>
+              <input v-model="dispatchForm.destination" placeholder="จุดส่งสินค้า" class="input-field w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">
+                เลขไมล์เริ่มต้น (กม.)
+                <span class="text-[10px] font-normal text-muted">(ดึงจากเลขไมล์สิ้นสุดเที่ยวก่อนของรถคันนี้ให้อัตโนมัติ)</span>
+              </label>
+              <input v-model.number="dispatchForm.odometerBefore" type="number" placeholder="0" class="input-field w-full" />
             </div>
             <div class="text-xs font-semibold text-muted pt-2 border-t border-border">
               ข้อมูลหน้างาน (ใส่ทีหลังได้)
@@ -499,7 +535,7 @@
             <button @click="dispatchTarget = null" class="btn-secondary">ยกเลิก</button>
             <button @click="confirmDispatch" :disabled="!dispatchForm.plate" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
               <span class="material-symbols-rounded">send</span>
-              ส่งงาน
+              {{ dispatchTarget?.status === 'PENDING_ACCEPT' ? 'ยืนยันเปลี่ยนคนขับ/รถ' : 'ส่งงาน' }}
             </button>
           </div>
         </div>
@@ -520,7 +556,27 @@
             </button>
           </div>
           <div class="px-6 py-5 space-y-3">
-            <div class="flex items-center justify-between text-sm">
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">
+                เลขไมล์สิ้นสุด (กม.)
+                <span class="text-[10px] font-normal text-muted">(เมื่อรถกลับถึง ใช้คำนวณระยะทาง/อัตราสิ้นเปลืองน้ำมัน)</span>
+              </label>
+              <input v-model.number="completeOdometerAfter" type="number" placeholder="0" class="input-field w-full" />
+            </div>
+            <div v-if="completeMileageSummary" class="grid grid-cols-2 gap-2 text-xs bg-surface-2 rounded-lg p-3 border border-border">
+              <div>ระยะทางเที่ยวนี้: <span class="font-semibold text-text">{{ completeMileageSummary.distanceKm }} กม.</span></div>
+              <div>สะสม: <span class="font-semibold text-text">{{ completeMileageSummary.cumulativeKm }} กม.</span></div>
+              <div>เฉลี่ย: <span class="font-semibold text-text">{{ completeMileageSummary.avgKmPerLiter ?? '-' }} กม./ลิตร</span></div>
+              <div>น้ำมันที่กำหนด: <span class="font-semibold text-text">{{ completeMileageSummary.standardFuelLiters ?? '-' }} ล.</span></div>
+              <div class="col-span-2">
+                ชดเชยน้ำมัน:
+                <span :class="['font-semibold', (completeMileageSummary.fuelCompensation ?? 0) >= 0 ? 'text-green-700' : 'text-red-700']">
+                  {{ completeMileageSummary.fuelCompensation !== null ? formatBaht(completeMileageSummary.fuelCompensation) : '-' }}
+                </span>
+                <span class="text-muted"> (บวก = คนขับใช้น้ำมันน้อยกว่ากำหนด, ลบ = ใช้เกินกำหนด)</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-sm pt-2 border-t border-border">
               <span class="text-muted">เบี้ยเลี้ยงเดิม</span>
               <span class="font-bold text-text">{{ formatBaht(completeTarget.allowance) }}</span>
             </div>
@@ -556,48 +612,159 @@
       </div>
     </Teleport>
 
-    <!-- Edit Ops Dialog (น้ำมัน/ข้อมูลหน้างาน แก้ไขได้ทุกสถานะ) -->
-    <Teleport to="body" v-if="editOpsTarget">
-      <div @click="editOpsTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6 animate-fade">
-        <div @click.stop class="w-full max-w-md bg-surface rounded-2xl shadow-2xl animate-slide">
-          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="font-bold text-text">แก้ไขข้อมูล {{ editOpsTarget.docNo }}</div>
-            <button @click="editOpsTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+    <!-- Edit Booking Dialog (แก้ไขได้ทุกสถานะงาน ใช้ฟอร์มเดียวกับตอนสร้างงาน) -->
+    <Teleport to="body" v-if="editTarget">
+      <div @click="editTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6 animate-fade">
+        <div @click.stop class="w-full max-w-3xl bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto animate-slide">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
+            <div class="font-bold text-text">แก้ไขงาน {{ editTarget.docNo }}</div>
+            <button @click="editTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
           </div>
-          <div class="px-6 py-5 space-y-3">
-            <div class="text-xs text-muted">แก้ไขได้ทุกสถานะงาน เผื่อกรณีข้อมูลน้ำมัน/หน้างานมาทีหลัง</div>
-            <div class="grid grid-cols-2 gap-3">
+          <div class="px-6 py-5 space-y-6">
+            <div class="text-xs text-muted">แก้ไขได้ทุกสถานะงาน ไม่จำกัดสิทธิ์ ใช้ฟอร์มเดียวกับตอนสร้างงาน</div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label class="block text-xs font-semibold text-muted mb-1">น้ำมัน (ลิตร)</label>
-                <input v-model.number="editOpsForm.fuelLiters" type="number" placeholder="0" class="input-field w-full" />
+                <label class="block text-xs font-semibold text-muted mb-1">ใบสั่งงาน (PO)</label>
+                <input v-model="editForm.po" placeholder="เลขที่ PO" class="input-field w-full" />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-muted mb-1">เรทน้ำมัน (บาท/ลิตร)</label>
-                <input v-model.number="editOpsForm.fuelRate" type="number" placeholder="0" class="input-field w-full" />
+                <label class="block text-xs font-semibold text-muted mb-1">วันที่ขนส่ง</label>
+                <input v-model="editForm.shipDate" type="date" class="input-field w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">วันที่กลับ</label>
+                <input v-model="editForm.returnDate" type="date" class="input-field w-full" />
               </div>
             </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้ติดต่อหน้างาน</label>
-              <input v-model="editOpsForm.siteContactName" placeholder="ชื่อผู้ติดต่อ" class="input-field w-full" />
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">สถานที่ส่งสินค้า (ชื่อหน้างาน)</label>
+                <input v-model="editForm.siteName" placeholder="ชื่อหน้างาน" class="input-field w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">อำเภอ (พิกัดหน้างาน)</label>
+                <input v-model="editForm.district" placeholder="อำเภอ" class="input-field w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">เลขชิพเม้น</label>
+                <input v-model="editForm.shipmentNo" placeholder="เลขที่ Shipment" class="input-field w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">เส้นทาง</label>
+                <input v-model="editForm.route" placeholder="เช่น กรุงเทพ-นครสวรรค์" class="input-field w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">ต้นทาง</label>
+                <input v-model="editForm.origin" placeholder="จุดขึ้นสินค้า" class="input-field w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">ปลายทาง</label>
+                <input v-model="editForm.destination" placeholder="จุดส่งสินค้า" class="input-field w-full" />
+              </div>
+
+              <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-muted mb-1">สินค้า</label>
+                <input v-model="editForm.cementTypes[0]" list="productNameOptions" placeholder="สินค้า" class="input-field w-full" />
+              </div>
+              <template v-if="isCements">
+                <div class="md:col-span-2">
+                  <label class="block text-xs font-semibold text-muted mb-1">ประเภทงาน</label>
+                  <div class="flex gap-2 flex-wrap">
+                    <button
+                      v-for="jt in jobTypeOptions"
+                      :key="jt"
+                      @click="editForm.jobType = jt"
+                      :class="[
+                        'px-3 py-2 text-sm font-medium rounded-lg transition-all',
+                        editForm.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
+                      ]"
+                    >
+                      {{ jt }}
+                    </button>
+                  </div>
+                </div>
+              </template>
             </div>
+
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทรหน้างาน</label>
-              <input v-model="editOpsForm.sitePhone" placeholder="เบอร์โทร" class="input-field w-full" />
+              <label class="block text-xs font-semibold text-muted mb-1">ปริมาณสินค้า (ไม่บังคับ ใช้เพื่อบันทึก/ตัดสต๊อก ไม่กระทบราคา)</label>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">น้ำหนัก (ตัน)</label>
+                  <input v-model.number="editForm.weight" type="number" placeholder="0" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">จำนวน (ชิ้น)</label>
+                  <input v-model.number="editForm.qty" type="number" placeholder="0" class="input-field w-full" />
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">ค่าเที่ยว (บาท)</label>
+                  <input v-model.number="editForm.ratePerTrip" type="number" placeholder="0" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">
+                    ราคาที่ตกลงกับลูกค้า (บาท)
+                    <span class="text-[10px] font-normal text-muted">(ว่างไว้ = ใช้ค่าเที่ยวที่คำนวณได้)</span>
+                  </label>
+                  <input v-model.number="editForm.agreedPrice" type="number" placeholder="auto" class="input-field w-full" />
+                </div>
+              </div>
+              <div class="text-sm text-text mt-3">
+                ค่าเที่ยว <span class="font-bold">{{ formatBaht(editComputedTripFee) }}</span>
+                <span class="text-muted"> · ค่าน้ำมัน {{ formatBaht(editFuelCost) }}</span>
+              </div>
             </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">พิกัดหน้างาน</label>
-              <input v-model="editOpsForm.siteCoords" placeholder="โลเคชั่นหน้างาน" class="input-field w-full" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">วันที่กลับ</label>
-              <input v-model="editOpsForm.returnDate" type="date" class="input-field w-full" />
+
+            <div class="border border-border rounded-xl p-4 bg-surface-2">
+              <h3 class="font-semibold text-text mb-3">น้ำมัน / เบี้ยเลี้ยง / ข้อมูลติดต่อหน้างาน</h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">น้ำมัน (ลิตร)</label>
+                  <input v-model.number="editForm.fuelLiters" type="number" placeholder="0" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">เรทน้ำมัน (บาท/ลิตร)</label>
+                  <input v-model.number="editForm.fuelRate" type="number" placeholder="0" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">เบี้ยเลี้ยงคนขับ</label>
+                  <input
+                    v-if="isCements"
+                    v-model.number="editForm.allowance"
+                    type="number"
+                    placeholder="0"
+                    class="input-field w-full"
+                  />
+                  <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface text-sm text-text font-semibold">
+                    {{ formatBaht(editCalculatedAllowance) }} (อัตโนมัติ)
+                  </div>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้ติดต่อหน้างาน</label>
+                  <input v-model="editForm.siteContactName" placeholder="ชื่อผู้ติดต่อ" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทรหน้างาน</label>
+                  <input v-model="editForm.sitePhone" placeholder="เบอร์โทร" class="input-field w-full" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">พิกัดหน้างาน</label>
+                  <input v-model="editForm.siteCoords" placeholder="โลเคชั่นหน้างาน" class="input-field w-full" />
+                </div>
+              </div>
             </div>
           </div>
-          <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
-            <button @click="editOpsTarget = null" class="btn-secondary">ยกเลิก</button>
-            <button @click="confirmEditOps" class="btn-primary">
+          <div class="flex justify-end gap-3 px-6 py-4 border-t border-border bg-surface sticky bottom-0">
+            <button @click="editTarget = null" class="btn-secondary">ยกเลิก</button>
+            <button @click="confirmEditBooking" class="btn-primary">
               <span class="material-symbols-rounded text-base">save</span>
               บันทึก
             </button>
@@ -618,8 +785,6 @@ import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import type { Booking, BookingCategory, BookingJobType, BookingStatus, DebtAdjustment } from '@/types'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
-
-type CalcBasis = 'weight' | 'piece' | 'trip'
 
 interface CommittedLineItem {
   siteName: string
@@ -662,11 +827,6 @@ const vehicleOptions = computed(() => driversStore.drivers.map((d) => d.vehicle)
 const nextReleaseNoPreview = computed(() => bookingStore.nextReleaseNo())
 
 const jobTypeOptions: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
-const calcBasisOptions: { id: CalcBasis; label: string }[] = [
-  { id: 'weight', label: 'ตามน้ำหนัก' },
-  { id: 'piece', label: 'ตามจำนวนชิ้น' },
-  { id: 'trip', label: 'ต่อเที่ยว (เหมา)' },
-]
 
 // --- นาฬิกาสำหรับนับถอยหลังเวลาที่เหลือให้คนขับตอบรับงาน (PENDING_ACCEPT) ---
 const now = ref(Date.now())
@@ -690,6 +850,66 @@ const driverOptions = computed(() =>
   driversStore.drivers.filter((d) => d.employmentStatus === 'active').map((d) => `${d.firstName} ${d.lastName}`)
 )
 
+const ACTIVE_STATUSES: BookingStatus[] = ['PENDING_ACCEPT', 'DISPATCHED', 'IN_TRANSIT']
+
+const isSameCalendarDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+
+/** ใช้ตัดสินว่า "วันเดียวกัน" ของงานนี้คือวันไหน สำหรับนับเที่ยวที่ N และกรองตามวันขนส่ง: ใช้วันที่ขนส่งเป็นหลัก ถ้าไม่มีค่อย fallback เป็นวันที่สร้างงาน */
+const bookingDayKey = (b: Booking) => new Date(b.shipDate || b.createdAt)
+
+/** เรียงงานทั้งหมด (ทุก fleet) ของคนขับคนนี้ในวันเดียวกับ refDate ตามเวลาที่จ่ายงาน เพื่อนับว่าเป็นเที่ยวที่เท่าไหร่ */
+const driverBookingsForDay = (driverName: string, refDate: Date) =>
+  bookingStore.bookings
+    .filter((b) => b.driverName === driverName && isSameCalendarDay(bookingDayKey(b), refDate))
+    .sort((a, b) => new Date(a.dispatchedAt || a.createdAt).getTime() - new Date(b.dispatchedAt || b.createdAt).getTime())
+
+const driverTripNumberForBooking = (booking: Booking) => {
+  if (!booking.driverName) return 1
+  const list = driverBookingsForDay(booking.driverName, bookingDayKey(booking))
+  const idx = list.findIndex((b) => b.id === booking.id)
+  return idx === -1 ? 1 : idx + 1
+}
+
+/** งานล่าสุดที่คนขับคนนี้กำลังวิ่งอยู่ (ยังไม่ DELIVERED) ถ้ามี ใช้บอกสถานะว่าง/ไม่ว่างตอนเลือกคนขับ */
+const activeBookingForDriver = (name: string) =>
+  bookingStore.bookings
+    .filter((b) => b.driverName === name && ACTIVE_STATUSES.includes(b.status))
+    .sort((a, b) => new Date(b.dispatchedAt || b.createdAt).getTime() - new Date(a.dispatchedAt || a.createdAt).getTime())[0]
+
+/** ป้ายชื่อคนขับใน dropdown บอกว่าว่างหรือกำลังวิ่งเที่ยวที่เท่าไหร่ เพื่อให้จัดคิวเที่ยวถัดไปล่วงหน้าได้อย่างตั้งใจ */
+const driverOptionLabel = (name: string) => {
+  const activeBooking = activeBookingForDriver(name)
+  if (!activeBooking) return `${name} — ว่าง`
+  const tripNo = driverTripNumberForBooking(activeBooking)
+  return `${name} — กำลังวิ่งเที่ยวที่ ${tripNo} (${activeBooking.docNo})`
+}
+
+// --- กรองรายการงานตามวันที่ขนส่ง (shipDate) ค่าเริ่มต้นคือวันนี้ เพื่อรองรับการจองคิวเที่ยวถัดไปล่วงหน้าโดยไม่ปนกับงานวันอื่น ---
+const shipDateFilter = ref(new Date().toISOString().slice(0, 10))
+const showAllDates = ref(false)
+
+const matchesDateFilter = (b: Booking) => {
+  if (showAllDates.value || !shipDateFilter.value) return true
+  return isSameCalendarDay(bookingDayKey(b), new Date(shipDateFilter.value))
+}
+
+const dateFilterLabel = computed(() => {
+  if (showAllDates.value) return '(แสดงทุกวัน)'
+  if (!shipDateFilter.value) return ''
+  return `· ${new Date(shipDateFilter.value).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}`
+})
+
+const formatShortDate = (date?: Date) =>
+  date ? new Date(date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
+
+/** สถานะย่อยของคนขับระหว่าง DISPATCHED/IN_TRANSIT (รับน้ำมัน/ลงของ) ให้ dispatcher เห็นความคืบหน้าโดยไม่ต้องเปลี่ยนสถานะหลัก */
+const driverStepLabel = (booking: Booking) => {
+  if (booking.status === 'DISPATCHED') return booking.fuelReceivedAt ? 'รับน้ำมันแล้ว รอออกเดินทาง' : 'รอรับน้ำมัน'
+  if (booking.status === 'IN_TRANSIT') return booking.unloadedAt ? 'ลงของแล้ว รอจบงาน' : 'กำลังเดินทาง'
+  return ''
+}
+
 const statusRank: Record<BookingStatus, number> = {
   WAITING_DISPATCH: 0,
   PENDING_ACCEPT: 1,
@@ -711,7 +931,9 @@ const matchesSearch = (b: Booking, q: string) =>
 const inProgressBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return fleetBookings.value
-    .filter((b) => b.status !== 'DELIVERED' && b.status !== 'IN_TRANSIT' && (!q || matchesSearch(b, q)))
+    .filter(
+      (b) => b.status !== 'DELIVERED' && b.status !== 'IN_TRANSIT' && matchesDateFilter(b) && (!q || matchesSearch(b, q))
+    )
     .sort((a, b) => {
       const rankDiff = statusRank[a.status] - statusRank[b.status]
       if (rankDiff !== 0) return rankDiff
@@ -723,7 +945,7 @@ const inProgressBookings = computed(() => {
 const inTransitBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return fleetBookings.value
-    .filter((b) => b.status === 'IN_TRANSIT' && (!q || matchesSearch(b, q)))
+    .filter((b) => b.status === 'IN_TRANSIT' && matchesDateFilter(b) && (!q || matchesSearch(b, q)))
     .sort((a, b) => new Date(b.transitStartedAt || 0).getTime() - new Date(a.transitStartedAt || 0).getTime())
 })
 
@@ -761,15 +983,21 @@ watch(
 watch(
   () => header.value.customer,
   (name) => {
-    if (!name || header.value.po) return
-    const now = new Date()
-    const todaysJobCount = bookingStore.bookings.filter((b) => {
-      if (b.customer !== name) return false
-      const d = new Date(b.createdAt)
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
-    }).length
-    const suggestion = customerStore.suggestPoNumber(name, todaysJobCount)
-    if (suggestion) header.value.po = suggestion
+    if (!name) return
+    if (!header.value.po) {
+      const now = new Date()
+      const todaysJobCount = bookingStore.bookings.filter((b) => {
+        if (b.customer !== name) return false
+        const d = new Date(b.createdAt)
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+      }).length
+      const suggestion = customerStore.suggestPoNumber(name, todaysJobCount)
+      if (suggestion) header.value.po = suggestion
+    }
+    // เลือกลูกค้าปุ๊บ ดึงผู้ติดต่อ/เบอร์โทรจากสมุดรายชื่อลูกค้ามาให้ทันที (ถ้าช่องยังว่างอยู่) ไม่ต้องรอพิมพ์ชื่อหน้างานซ้ำ
+    const customer = customerStore.lookupCustomer(name)
+    if (!item.value.siteContactName) item.value.siteContactName = customer.contact || ''
+    if (!item.value.sitePhone) item.value.sitePhone = customer.phone || ''
   }
 )
 
@@ -783,11 +1011,8 @@ const defaultItem = () => ({
   destination: '',
   cementTypes: ['', '', ''] as string[],
   jobType: undefined as BookingJobType | undefined,
-  calcBasis: 'weight' as CalcBasis,
   weight: 0,
   qty: 0,
-  ratePerTon: 0,
-  ratePerPiece: 0,
   ratePerTrip: 0,
   agreedPrice: 0,
   fuelLiters: 0,
@@ -801,45 +1026,34 @@ const item = ref(defaultItem())
 
 const lineItems = ref<CommittedLineItem[]>([])
 
-// พิมพ์ชื่อหน้างานที่เคยส่งของให้ลูกค้าคนนี้มาก่อน -> ดึงผู้ติดต่อ/เบอร์โทร/พิกัดหน้างานจากงานล่าสุดที่ตรงกันมาให้อัตโนมัติ (ถ้าเจอ และช่องยังว่างอยู่)
-// ถ้าไม่เคยส่งของที่หน้างานนี้มาก่อน ให้ใช้ผู้ติดต่อ/เบอร์โทรเริ่มต้นของลูกค้าจากสมุดรายชื่อแทน
+// พิมพ์ชื่อหน้างานที่เคยส่งของให้ลูกค้าคนนี้มาก่อน -> ดึงผู้ติดต่อ/เบอร์โทร/พิกัดหน้างานจากงานล่าสุดที่ตรงกันมาให้อัตโนมัติ (แม่นกว่าข้อมูลลูกค้าทั่วไป)
+// override เฉพาะช่องที่ยังว่าง หรือยังเป็นค่า default ที่ดึงมาจากสมุดรายชื่อลูกค้าตอนเลือกลูกค้า (ไม่ทับค่าที่ผู้ใช้พิมพ์เองไว้แล้ว)
 watch(
   () => item.value.siteName,
   (siteName) => {
     if (!siteName) return
-    if (item.value.siteContactName || item.value.sitePhone || item.value.siteCoords) return
+    const customer = customerStore.lookupCustomer(header.value.customer)
     const match = bookingStore.bookings
       .filter((b) => b.customer === header.value.customer && b.siteName.trim().toLowerCase() === siteName.trim().toLowerCase())
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
     if (match) {
-      item.value.siteContactName = match.siteContactName || ''
-      item.value.sitePhone = match.sitePhone || ''
-      item.value.siteCoords = match.siteCoords || ''
+      if (!item.value.siteContactName || item.value.siteContactName === customer.contact) {
+        item.value.siteContactName = match.siteContactName || item.value.siteContactName
+      }
+      if (!item.value.sitePhone || item.value.sitePhone === customer.phone) {
+        item.value.sitePhone = match.sitePhone || item.value.sitePhone
+      }
+      if (!item.value.siteCoords) item.value.siteCoords = match.siteCoords || ''
       return
     }
-    const customer = customerStore.lookupCustomer(header.value.customer)
-    item.value.siteContactName = customer.contact || ''
-    item.value.sitePhone = customer.phone || ''
+    if (!item.value.siteContactName) item.value.siteContactName = customer.contact || ''
+    if (!item.value.sitePhone) item.value.sitePhone = customer.phone || ''
   }
 )
 
-// กรอกอำเภอ -> ดึงลิตรมาตรฐานของอำเภอนั้น (ถ้าตั้งค่าไว้) และราคาน้ำมันวันนี้มาให้อัตโนมัติ ยังแก้ไขเองได้เพื่อป้องกันการโกงน้ำมัน
-watch(
-  () => item.value.district,
-  (district) => {
-    if (!district) return
-    const rate = fuelRateStore.findRateByDistrict(district)
-    if (rate) item.value.fuelLiters = rate.liters
-    item.value.fuelRate = fuelRateStore.settings.todayPricePerLiter
-  }
-)
+// น้ำมันย้ายไปกรอกตอนจัดรถแทน (ดู openDispatchDialog) ไม่ตั้งค่าตอนสร้างงานแล้ว เพราะออกได้หลายเที่ยวแต่เติมน้ำมันครั้งเดียว
 
-const itemComputedTripFee = computed(() => {
-  const it = item.value
-  if (it.calcBasis === 'weight') return (it.weight || 0) * (it.ratePerTon || 0)
-  if (it.calcBasis === 'piece') return (it.qty || 0) * (it.ratePerPiece || 0)
-  return it.ratePerTrip || 0
-})
+const itemComputedTripFee = computed(() => item.value.ratePerTrip || 0)
 
 const itemFuelCost = computed(() => (item.value.fuelLiters || 0) * (item.value.fuelRate || 0))
 
@@ -863,8 +1077,8 @@ const confirmAddItem = () => {
     destination: it.destination || undefined,
     cementTypes: it.cementTypes.filter(Boolean),
     jobType: isCements.value ? it.jobType : undefined,
-    weight: it.calcBasis === 'weight' ? it.weight : undefined,
-    qty: it.calcBasis === 'piece' ? it.qty : undefined,
+    weight: it.weight || undefined,
+    qty: it.qty || undefined,
     tripFee: itemComputedTripFee.value,
     agreedPrice: it.agreedPrice || itemComputedTripFee.value,
     allowance: itemDisplayedAllowance.value,
@@ -959,7 +1173,50 @@ const saveAllItems = () => {
 
 // --- Dispatch flow ---
 const dispatchTarget = ref<Booking | null>(null)
-const dispatchForm = ref({ plate: '', driverName: '', siteContactName: '', sitePhone: '', siteCoords: '' })
+const dispatchForm = ref({
+  plate: '',
+  driverName: '',
+  siteContactName: '',
+  sitePhone: '',
+  siteCoords: '',
+  destination: '',
+  fuelLiters: 0,
+  fuelRate: 0,
+  odometerBefore: 0,
+})
+
+/** เลขไมล์สิ้นสุดล่าสุดของรถคันนี้ (จากเที่ยวก่อนหน้าที่จบงานแล้ว) เอาไว้ตั้งเป็นเลขไมล์เริ่มต้นของเที่ยวใหม่ให้อัตโนมัติ */
+const latestOdometerForPlate = (plate: string, excludeId: string) =>
+  bookingStore.bookings
+    .filter((b) => b.plate === plate && b.id !== excludeId && b.odometerAfter !== undefined)
+    .sort((a, b) => new Date(b.completedAt || b.dispatchedAt || 0).getTime() - new Date(a.completedAt || a.dispatchedAt || 0).getTime())[0]
+
+/** เที่ยวล่าสุดของคนขับคนนี้ที่จ่ายงานไปวันนี้แล้ว (เอาไว้ดึงค่าน้ำมันที่กรอกไว้แล้วมาเติมให้ ไม่ต้องกรอกซ้ำทุกเที่ยว) */
+const latestFuelForDriverToday = (driverName: string, excludeId: string) => {
+  const today = new Date()
+  return bookingStore.bookings
+    .filter(
+      (b) =>
+        b.driverName === driverName &&
+        b.id !== excludeId &&
+        (b.fuelLiters || b.fuelRate) &&
+        b.dispatchedAt &&
+        isSameCalendarDay(new Date(b.dispatchedAt), today)
+    )
+    .sort((a, b) => new Date(b.dispatchedAt || 0).getTime() - new Date(a.dispatchedAt || 0).getTime())[0]
+}
+
+/**
+ * แนะนำค่าน้ำมันให้ตอนจัดรถ: ลำดับความสำคัญคือ (1) น้ำมันที่คนขับคนนี้กรอกไว้แล้ววันนี้ (กรอกครั้งเดียวใช้ได้หลายเที่ยว)
+ * (2) ถ้ายังไม่เคยกรอก ใช้ลิตรมาตรฐานของอำเภอปลายทาง + ราคาน้ำมันวันนี้ (ถ้าตั้งค่าไว้)
+ */
+const suggestFuel = (driverName: string, excludeId: string, district: string) => {
+  const prevFuel = driverName ? latestFuelForDriverToday(driverName, excludeId) : undefined
+  if (prevFuel) return { fuelLiters: prevFuel.fuelLiters || 0, fuelRate: prevFuel.fuelRate || 0 }
+  const districtRate = fuelRateStore.findRateByDistrict(district)
+  if (districtRate) return { fuelLiters: districtRate.liters, fuelRate: fuelRateStore.settings.todayPricePerLiter }
+  return null
+}
 
 const openDispatchDialog = (booking: Booking) => {
   dispatchTarget.value = booking
@@ -969,6 +1226,21 @@ const openDispatchDialog = (booking: Booking) => {
     siteContactName: booking.siteContactName || '',
     sitePhone: booking.sitePhone || '',
     siteCoords: booking.siteCoords || '',
+    destination: booking.destination || '',
+    fuelLiters: booking.fuelLiters || 0,
+    fuelRate: booking.fuelRate || 0,
+    odometerBefore: booking.odometerBefore || 0,
+  }
+  if (!dispatchForm.value.fuelLiters && !dispatchForm.value.fuelRate) {
+    const suggestion = suggestFuel(dispatchForm.value.driverName, booking.id, booking.district)
+    if (suggestion) {
+      dispatchForm.value.fuelLiters = suggestion.fuelLiters
+      dispatchForm.value.fuelRate = suggestion.fuelRate
+    }
+  }
+  if (!dispatchForm.value.odometerBefore && dispatchForm.value.plate) {
+    const prevOdometer = latestOdometerForPlate(dispatchForm.value.plate, booking.id)
+    if (prevOdometer) dispatchForm.value.odometerBefore = prevOdometer.odometerAfter || 0
   }
 }
 
@@ -979,6 +1251,14 @@ watch(
     if (!name) return
     const vehicle = driversStore.findVehicleByDriverName(name)
     if (vehicle) dispatchForm.value.plate = vehicle
+    // เลือกคนขับแล้ว ถ้ายังไม่ได้กรอกน้ำมันเอง ลองดึงน้ำมันที่กรอกไว้แล้วของคนขับคนนี้วันนี้มาเติมให้ (กรอกครั้งเดียวใช้ได้หลายเที่ยว)
+    if (!dispatchForm.value.fuelLiters && !dispatchForm.value.fuelRate && dispatchTarget.value) {
+      const suggestion = suggestFuel(name, dispatchTarget.value.id, dispatchTarget.value.district)
+      if (suggestion) {
+        dispatchForm.value.fuelLiters = suggestion.fuelLiters
+        dispatchForm.value.fuelRate = suggestion.fuelRate
+      }
+    }
   }
 )
 watch(
@@ -987,6 +1267,11 @@ watch(
     if (!plate) return
     const driver = driversStore.findDriverByVehicle(plate)
     if (driver) dispatchForm.value.driverName = `${driver.firstName} ${driver.lastName}`
+    // เลือกรถแล้ว ถ้ายังไม่ได้กรอกเลขไมล์เริ่มต้นเอง ดึงเลขไมล์สิ้นสุดของเที่ยวก่อนหน้าของรถคันนี้มาให้อัตโนมัติ
+    if (!dispatchForm.value.odometerBefore && dispatchTarget.value) {
+      const prevOdometer = latestOdometerForPlate(plate, dispatchTarget.value.id)
+      if (prevOdometer) dispatchForm.value.odometerBefore = prevOdometer.odometerAfter || 0
+    }
   }
 )
 
@@ -997,6 +1282,10 @@ const confirmDispatch = () => {
     siteContactName: dispatchForm.value.siteContactName || undefined,
     sitePhone: dispatchForm.value.sitePhone || undefined,
     siteCoords: dispatchForm.value.siteCoords || undefined,
+    destination: dispatchForm.value.destination || undefined,
+    fuelLiters: dispatchForm.value.fuelLiters,
+    fuelRate: dispatchForm.value.fuelRate,
+    odometerBefore: dispatchForm.value.odometerBefore,
   })
   dispatchTarget.value = null
 }
@@ -1004,10 +1293,12 @@ const confirmDispatch = () => {
 // --- Complete job flow ---
 const completeTarget = ref<Booking | null>(null)
 const debtAdjustments = ref<DebtAdjustment[]>([])
+const completeOdometerAfter = ref(0)
 
 const openCompleteDialog = (booking: Booking) => {
   completeTarget.value = booking
   debtAdjustments.value = []
+  completeOdometerAfter.value = booking.odometerAfter || 0
 }
 
 const addAdjustmentRow = () => {
@@ -1020,35 +1311,120 @@ const finalAllowance = computed(() => {
   return Math.round((completeTarget.value.allowance || 0) - net)
 })
 
+/** สรุประยะทาง/อัตราสิ้นเปลืองน้ำมัน/ชดเชยน้ำมัน เมื่อกรอกเลขไมล์สิ้นสุดแล้ว (เทียบกับน้ำมันที่กรอกไว้ตอนจัดรถ + ลิตรมาตรฐานของอำเภอ) */
+const completeMileageSummary = computed(() => {
+  const booking = completeTarget.value
+  if (!booking || !completeOdometerAfter.value || !booking.odometerBefore) return null
+  const distanceKm = completeOdometerAfter.value - booking.odometerBefore
+  if (distanceKm <= 0) return null
+  const cumulativeKm =
+    bookingStore.bookings
+      .filter((b) => b.plate === booking.plate && b.id !== booking.id && b.odometerBefore !== undefined && b.odometerAfter !== undefined)
+      .reduce((sum, b) => sum + ((b.odometerAfter || 0) - (b.odometerBefore || 0)), 0) + distanceKm
+  const avgKmPerLiter = booking.fuelLiters ? Math.round((distanceKm / booking.fuelLiters) * 100) / 100 : null
+  const districtRate = fuelRateStore.findRateByDistrict(booking.district)
+  const standardFuelLiters = districtRate ? districtRate.liters : null
+  const fuelCompensation = standardFuelLiters !== null ? Math.round((standardFuelLiters - (booking.fuelLiters || 0)) * (booking.fuelRate || 0)) : null
+  return { distanceKm, cumulativeKm, avgKmPerLiter, standardFuelLiters, fuelCompensation }
+})
+
 const confirmComplete = () => {
   if (!completeTarget.value) return
-  bookingStore.completeJob(completeTarget.value.id, debtAdjustments.value.filter((d) => d.label || d.amount))
+  bookingStore.completeJob(
+    completeTarget.value.id,
+    debtAdjustments.value.filter((d) => d.label || d.amount),
+    completeOdometerAfter.value || undefined
+  )
   completeTarget.value = null
 }
 
-// --- Edit ops (น้ำมัน/ข้อมูลหน้างาน) แก้ไขได้ทุกสถานะงาน ---
-const editOpsTarget = ref<Booking | null>(null)
-const editOpsForm = ref({ fuelLiters: 0, fuelRate: 0, siteContactName: '', sitePhone: '', siteCoords: '', returnDate: '' })
+// --- Edit booking แบบเต็ม (ใช้ฟอร์มเดียวกับตอนสร้างงาน) แก้ไขได้ทุกสถานะงาน ---
+const editTarget = ref<Booking | null>(null)
+const editForm = ref({
+  po: '',
+  shipDate: '',
+  returnDate: '',
+  siteName: '',
+  district: '',
+  shipmentNo: '',
+  route: '',
+  origin: '',
+  destination: '',
+  cementTypes: ['', '', ''] as string[],
+  jobType: undefined as BookingJobType | undefined,
+  weight: 0,
+  qty: 0,
+  ratePerTrip: 0,
+  agreedPrice: 0,
+  fuelLiters: 0,
+  fuelRate: 0,
+  allowance: 0,
+  siteContactName: '',
+  sitePhone: '',
+  siteCoords: '',
+})
 
-const openEditOps = (booking: Booking) => {
-  editOpsTarget.value = booking
-  editOpsForm.value = {
+const editComputedTripFee = computed(() => editForm.value.ratePerTrip || 0)
+const editFuelCost = computed(() => (editForm.value.fuelLiters || 0) * (editForm.value.fuelRate || 0))
+const editCalculatedAllowance = computed(() => Math.round(editComputedTripFee.value * 0.99 * 0.62 - editFuelCost.value))
+const editDisplayedAllowance = computed(() => (isCements.value ? editForm.value.allowance || 0 : editCalculatedAllowance.value))
+
+const toDateInput = (d?: Date) => (d ? new Date(d).toISOString().slice(0, 10) : '')
+
+const openEditBooking = (booking: Booking) => {
+  editTarget.value = booking
+  editForm.value = {
+    po: booking.po || '',
+    shipDate: toDateInput(booking.shipDate),
+    returnDate: toDateInput(booking.returnDate),
+    siteName: booking.siteName,
+    district: booking.district,
+    shipmentNo: booking.shipmentNo || '',
+    route: booking.route || '',
+    origin: booking.origin || '',
+    destination: booking.destination || '',
+    cementTypes: [booking.cementTypes?.[0] || '', booking.cementTypes?.[1] || '', booking.cementTypes?.[2] || ''],
+    jobType: booking.jobType,
+    weight: booking.weight || 0,
+    qty: booking.qty || 0,
+    ratePerTrip: booking.tripFee,
+    agreedPrice: booking.agreedPrice,
     fuelLiters: booking.fuelLiters || 0,
     fuelRate: booking.fuelRate || 0,
+    allowance: booking.allowance || 0,
     siteContactName: booking.siteContactName || '',
     sitePhone: booking.sitePhone || '',
     siteCoords: booking.siteCoords || '',
-    returnDate: booking.returnDate ? new Date(booking.returnDate).toISOString().slice(0, 10) : '',
   }
 }
 
-const confirmEditOps = () => {
-  if (!editOpsTarget.value) return
-  bookingStore.updateBookingOps(editOpsTarget.value.id, {
-    ...editOpsForm.value,
-    returnDate: editOpsForm.value.returnDate ? new Date(editOpsForm.value.returnDate) : undefined,
+const confirmEditBooking = () => {
+  if (!editTarget.value) return
+  const f = editForm.value
+  bookingStore.updateBookingFull(editTarget.value.id, {
+    po: f.po || undefined,
+    shipDate: f.shipDate ? new Date(f.shipDate) : undefined,
+    returnDate: f.returnDate ? new Date(f.returnDate) : undefined,
+    siteName: f.siteName,
+    district: f.district,
+    shipmentNo: f.shipmentNo || undefined,
+    route: f.route || undefined,
+    origin: f.origin || undefined,
+    destination: f.destination || undefined,
+    cementTypes: f.cementTypes.filter(Boolean),
+    jobType: isCements.value ? f.jobType : undefined,
+    weight: f.weight || undefined,
+    qty: f.qty || undefined,
+    tripFee: editComputedTripFee.value,
+    agreedPrice: f.agreedPrice || editComputedTripFee.value,
+    allowance: editDisplayedAllowance.value,
+    fuelLiters: f.fuelLiters,
+    fuelRate: f.fuelRate,
+    siteContactName: f.siteContactName || undefined,
+    sitePhone: f.sitePhone || undefined,
+    siteCoords: f.siteCoords || undefined,
   })
-  editOpsTarget.value = null
+  editTarget.value = null
 }
 </script>
 

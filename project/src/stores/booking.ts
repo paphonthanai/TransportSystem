@@ -310,7 +310,7 @@ export const useBookingStore = defineStore('booking', () => {
     const { createdAt, ...rest } = data
     const booking: Booking = {
       ...rest,
-      id: `b${Date.now()}`,
+      id: `b${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
       status: 'WAITING_DISPATCH',
       createdAt: createdAt || new Date(),
     }
@@ -358,11 +358,76 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`แก้ไขข้อมูลปฏิบัติงาน ${booking.docNo} (น้ำมัน/ข้อมูลหน้างาน/วันที่กลับ)`)
   }
 
+  /**
+   * แก้ไขข้อมูลงานแบบเต็ม (หน้างาน/สินค้า/ราคา/น้ำมัน/ข้อมูลติดต่อ) ได้ทุกสถานะงาน ไม่จำกัดสิทธิ์
+   * ใช้ฟอร์มเดียวกับตอนสร้างงาน เพื่อให้แก้ไขได้อิสระเมื่อข้อมูลหน้างานเปลี่ยนหลังจ่ายงานไปแล้ว
+   */
+  function updateBookingFull(
+    id: string,
+    data: {
+      siteName?: string
+      district?: string
+      po?: string
+      shipDate?: Date
+      returnDate?: Date
+      shipmentNo?: string
+      route?: string
+      origin?: string
+      destination?: string
+      cementTypes?: string[]
+      jobType?: Booking['jobType']
+      weight?: number
+      qty?: number
+      tripFee?: number
+      agreedPrice?: number
+      allowance?: number
+      fuelLiters?: number
+      fuelRate?: number
+      siteContactName?: string
+      sitePhone?: string
+      siteCoords?: string
+    }
+  ) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return
+    if (data.siteName !== undefined) booking.siteName = data.siteName
+    if (data.district !== undefined) booking.district = data.district
+    if (data.po !== undefined) booking.po = data.po || undefined
+    if (data.shipDate !== undefined) booking.shipDate = data.shipDate
+    if (data.returnDate !== undefined) booking.returnDate = data.returnDate
+    if (data.shipmentNo !== undefined) booking.shipmentNo = data.shipmentNo || undefined
+    if (data.route !== undefined) booking.route = data.route || undefined
+    if (data.origin !== undefined) booking.origin = data.origin || undefined
+    if (data.destination !== undefined) booking.destination = data.destination || undefined
+    if (data.cementTypes !== undefined) booking.cementTypes = data.cementTypes
+    if (data.jobType !== undefined) booking.jobType = data.jobType
+    if (data.weight !== undefined) booking.weight = data.weight
+    if (data.qty !== undefined) booking.qty = data.qty
+    if (data.tripFee !== undefined) booking.tripFee = data.tripFee
+    if (data.agreedPrice !== undefined) booking.agreedPrice = data.agreedPrice
+    if (data.allowance !== undefined) booking.allowance = data.allowance
+    if (data.fuelLiters !== undefined) booking.fuelLiters = data.fuelLiters
+    if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
+    if (data.siteContactName !== undefined) booking.siteContactName = data.siteContactName || undefined
+    if (data.sitePhone !== undefined) booking.sitePhone = data.sitePhone || undefined
+    if (data.siteCoords !== undefined) booking.siteCoords = data.siteCoords || undefined
+    addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`)
+  }
+
   /** จ่ายงานให้คนขับ: WAITING_DISPATCH -> PENDING_ACCEPT (รอคนขับตอบรับใน Driver App ภายใน 15 นาที) */
   function dispatchBooking(
     id: string,
     plate: string,
-    extra?: { driverName?: string; siteContactName?: string; sitePhone?: string; siteCoords?: string }
+    extra?: {
+      driverName?: string
+      siteContactName?: string
+      sitePhone?: string
+      siteCoords?: string
+      destination?: string
+      fuelLiters?: number
+      fuelRate?: number
+      odometerBefore?: number
+    }
   ) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
@@ -371,6 +436,14 @@ export const useBookingStore = defineStore('booking', () => {
     if (extra?.siteContactName) booking.siteContactName = extra.siteContactName
     if (extra?.sitePhone) booking.sitePhone = extra.sitePhone
     if (extra?.siteCoords) booking.siteCoords = extra.siteCoords
+    if (extra?.destination) booking.destination = extra.destination
+    if (extra?.odometerBefore !== undefined) booking.odometerBefore = extra.odometerBefore
+    // น้ำมันกรอกตอนจัดรถ (ไม่ใช่ตอนสร้างงาน) เพราะออกรถหลายเที่ยวแต่เติมน้ำมันครั้งเดียวได้ -> คำนวณเบี้ยเลี้ยงใหม่ให้ Fleet Ceramics ที่อิงค่าน้ำมันเป็นหลัก (Cements กรอกเบี้ยเลี้ยงเองอยู่แล้ว ไม่กระทบ)
+    if (extra?.fuelLiters !== undefined) booking.fuelLiters = extra.fuelLiters
+    if (extra?.fuelRate !== undefined) booking.fuelRate = extra.fuelRate
+    if (booking.category === 'ceramics' && (extra?.fuelLiters !== undefined || extra?.fuelRate !== undefined)) {
+      booking.allowance = Math.round(booking.tripFee * 0.99 * 0.62 - (booking.fuelLiters || 0) * (booking.fuelRate || 0))
+    }
     booking.status = 'PENDING_ACCEPT'
     booking.dispatchedAt = new Date()
     assignToOpenBatch(booking)
@@ -421,6 +494,34 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`คนขับตอบรับงาน ${booking.docNo}`)
   }
 
+  /** คนขับกดไม่รับงานใน Driver App: ยกเลิกการจ่ายงาน กลับไปรอจัดคนขับใหม่ทันที (เหมือน checkExpiredDispatches แต่ตั้งใจกดเอง) */
+  function declineDispatch(id: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking || booking.status !== 'PENDING_ACCEPT') return
+    removeFromBatch(booking)
+    booking.status = 'WAITING_DISPATCH'
+    booking.plate = ''
+    booking.driverName = undefined
+    booking.dispatchedAt = undefined
+    addLog(`คนขับไม่รับงาน ${booking.docNo} รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`)
+  }
+
+  /** คนขับกดรับน้ำมันใน Driver App ระหว่างสถานะ DISPATCHED (ก่อนกดเริ่มขนส่ง) */
+  function markFuelReceived(id: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking || booking.status !== 'DISPATCHED') return
+    booking.fuelReceivedAt = new Date()
+    addLog(`คนขับรับน้ำมัน ${booking.docNo}`)
+  }
+
+  /** คนขับกดส่งของ/ลงของเสร็จสิ้นใน Driver App ระหว่างสถานะ IN_TRANSIT (ก่อนกดจบงาน) */
+  function markUnloaded(id: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking || booking.status !== 'IN_TRANSIT') return
+    booking.unloadedAt = new Date()
+    addLog(`คนขับลงของเสร็จสิ้น ${booking.docNo}`)
+  }
+
   /** ตรวจงานที่รอคนขับตอบรับเกิน 15 นาที ยกเลิกการจ่ายงานและกลับไปรอจัดคนขับใหม่อัตโนมัติ */
   function checkExpiredDispatches() {
     const now = Date.now()
@@ -462,12 +563,13 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /** จบงานฝั่งออฟฟิศ (มีเพิ่ม/ลดหนี้ แต่ไม่บังคับ POD) */
-  function completeJob(id: string, debtAdjustments: DebtAdjustment[]) {
+  function completeJob(id: string, debtAdjustments: DebtAdjustment[], odometerAfter?: number) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
     const netAdjustment = debtAdjustments.reduce((sum, d) => sum + d.amount, 0)
     booking.debtAdjustments = debtAdjustments
     booking.finalAllowance = Math.round((booking.allowance || 0) - netAdjustment)
+    if (odometerAfter !== undefined) booking.odometerAfter = odometerAfter
     booking.status = 'DELIVERED'
     // billingStatus ถูกตั้งเป็น IN_BATCH ไปแล้วตั้งแต่ตอนจัดรถ (assignToOpenBatch) ไม่ต้องตั้งซ้ำ
     booking.completedAt = new Date()
@@ -478,11 +580,11 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /** จบงานฝั่งคนขับ (บังคับแนบ POD) */
-  function completeJobByDriver(id: string, podImage: string) {
+  function completeJobByDriver(id: string, podImage: string, odometerAfter?: number) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
     booking.podImage = podImage
-    completeJob(id, [])
+    completeJob(id, [], odometerAfter)
   }
 
   // --- Billing batch flow ---
@@ -643,8 +745,12 @@ export const useBookingStore = defineStore('booking', () => {
     addBooking,
     updateBookingPrice,
     updateBookingOps,
+    updateBookingFull,
     dispatchBooking,
     acceptDispatch,
+    declineDispatch,
+    markFuelReceived,
+    markUnloaded,
     startTransit,
     completeJob,
     completeJobByDriver,

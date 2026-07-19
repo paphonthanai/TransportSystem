@@ -79,16 +79,16 @@
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td class="border border-gray-400 px-2 py-1">1</td>
+            <tr v-for="(row, i) in productRows" :key="row.name + i">
+              <td class="border border-gray-400 px-2 py-1">{{ i + 1 }}</td>
               <td class="border border-gray-400 px-2 py-1">
-                {{ booking.siteName }} ({{ booking.district }}) · {{ productLabel(booking) }}
+                {{ booking.siteName }} ({{ booking.district }}) · {{ row.name }}
                 <span v-if="booking.jobType" class="text-xs text-gray-600">· {{ booking.jobType }}</span>
               </td>
-              <td class="border border-gray-400 px-2 py-1 text-right">{{ lineQty }}</td>
-              <td class="border border-gray-400 px-2 py-1">{{ lineUnit }}</td>
-              <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(lineUnitPrice) }}</td>
-              <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(booking.tripFee) }}</td>
+              <td class="border border-gray-400 px-2 py-1 text-right">1</td>
+              <td class="border border-gray-400 px-2 py-1">เที่ยว</td>
+              <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
+              <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
             </tr>
             <tr v-for="n in fillerRows" :key="'filler' + n">
               <td class="border border-gray-400 px-2 py-1 h-7">&nbsp;</td>
@@ -153,6 +153,21 @@
           <div v-if="booking.dispatchedAt"><span class="text-muted">วันที่จ่ายงาน:</span> {{ formatDate(booking.dispatchedAt) }}</div>
           <div v-if="booking.transitStartedAt"><span class="text-muted">วันที่เริ่มขนส่ง:</span> {{ formatDate(booking.transitStartedAt) }}</div>
           <div v-if="booking.completedAt"><span class="text-muted">วันที่ส่งของสำเร็จ:</span> {{ formatDate(booking.completedAt) }}</div>
+          <div v-if="booking.odometerBefore !== undefined"><span class="text-muted">เลขไมล์เริ่มต้น:</span> {{ booking.odometerBefore }} กม.</div>
+          <div v-if="booking.odometerAfter !== undefined"><span class="text-muted">เลขไมล์สิ้นสุด:</span> {{ booking.odometerAfter }} กม.</div>
+        </div>
+
+        <div v-if="mileageSummary" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm bg-surface-2 rounded-lg p-3 border border-border">
+          <div>ระยะทางเที่ยวนี้: <span class="font-semibold text-text">{{ mileageSummary.distanceKm }} กม.</span></div>
+          <div>สะสม: <span class="font-semibold text-text">{{ mileageSummary.cumulativeKm }} กม.</span></div>
+          <div>เฉลี่ย: <span class="font-semibold text-text">{{ mileageSummary.avgKmPerLiter ?? '-' }} กม./ลิตร</span></div>
+          <div>น้ำมันที่กำหนด: <span class="font-semibold text-text">{{ mileageSummary.standardFuelLiters ?? '-' }} ล.</span></div>
+          <div class="col-span-2 md:col-span-4">
+            ชดเชยน้ำมัน:
+            <span :class="['font-semibold', (mileageSummary.fuelCompensation ?? 0) >= 0 ? 'text-green-700' : 'text-red-700']">
+              {{ mileageSummary.fuelCompensation !== null ? formatBaht(mileageSummary.fuelCompensation) : '-' }}
+            </span>
+          </div>
         </div>
 
         <div class="flex items-center justify-between">
@@ -243,6 +258,7 @@ import { useBookingStore } from '@/stores/booking'
 import { useAppStore } from '@/stores/app'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
+import { useFuelRateStore } from '@/stores/fuelRates'
 import { bahtText } from '@/utils/companyInfo'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
 import type { Booking } from '@/types'
@@ -253,6 +269,7 @@ const bookingStore = useBookingStore()
 const appStore = useAppStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
+const fuelRateStore = useFuelRateStore()
 
 const isAdmin = computed(() => appStore.currentRole === 'admin')
 
@@ -266,28 +283,44 @@ const docTitleEn = computed(() => (isDispatched.value ? 'WORK ORDER' : 'PURCHASE
 
 const fillerRows = computed(() => 3)
 
-const lineUnit = computed(() => {
-  if (!booking.value) return 'เที่ยว'
-  if (booking.value.weight) return 'ตัน'
-  if (booking.value.qty) return 'ชิ้น'
-  return 'เที่ยว'
-})
-
-const lineQty = computed(() => {
-  if (!booking.value) return 1
-  return booking.value.weight || booking.value.qty || 1
-})
-
-const lineUnitPrice = computed(() => {
-  if (!booking.value) return 0
-  return lineQty.value ? Math.round((booking.value.tripFee || 0) / lineQty.value) : booking.value.tripFee || 0
-})
-
 const productLabel = (b: Booking) => {
   if (b.category === 'ceramics') return 'ปูนซีเมนต์'
   const types = (b.cementTypes || []).filter(Boolean)
   return types.length ? types.join(', ') : '-'
 }
+
+/**
+ * แยกสินค้า 1 เที่ยวที่มีได้ 2-3 ชนิดออกเป็นคนละแถวในตารางเอกสาร (ไม่รวมชื่อสินค้าไว้แถวเดียวกัน)
+ * ค่าเที่ยวคิดเป็นก้อนเดียวของทั้งเที่ยว จึงหารเฉลี่ยเท่าๆ กันตามจำนวนสินค้า (ปัดเศษไปรวมไว้แถวสุดท้ายให้ยอดรวมตรงกับค่าเที่ยวจริง)
+ */
+const productRows = computed(() => {
+  if (!booking.value) return []
+  const names = booking.value.category === 'ceramics' ? ['ปูนซีเมนต์'] : (booking.value.cementTypes || []).filter(Boolean)
+  const list = names.length ? names : ['-']
+  const tripFee = booking.value.tripFee || 0
+  const base = Math.floor(tripFee / list.length)
+  return list.map((name, i) => ({
+    name,
+    amount: i === list.length - 1 ? tripFee - base * (list.length - 1) : base,
+  }))
+})
+
+/** สรุประยะทาง/อัตราสิ้นเปลืองน้ำมัน/ชดเชยน้ำมัน เมื่อมีเลขไมล์เริ่มต้น-สิ้นสุดครบแล้ว */
+const mileageSummary = computed(() => {
+  const b = booking.value
+  if (!b || b.odometerBefore === undefined || b.odometerAfter === undefined) return null
+  const distanceKm = b.odometerAfter - b.odometerBefore
+  if (distanceKm <= 0) return null
+  const cumulativeKm =
+    bookingStore.bookings
+      .filter((x) => x.plate === b.plate && x.id !== b.id && x.odometerBefore !== undefined && x.odometerAfter !== undefined)
+      .reduce((sum, x) => sum + ((x.odometerAfter || 0) - (x.odometerBefore || 0)), 0) + distanceKm
+  const avgKmPerLiter = b.fuelLiters ? Math.round((distanceKm / b.fuelLiters) * 100) / 100 : null
+  const districtRate = fuelRateStore.findRateByDistrict(b.district)
+  const standardFuelLiters = districtRate ? districtRate.liters : null
+  const fuelCompensation = standardFuelLiters !== null ? Math.round((standardFuelLiters - (b.fuelLiters || 0)) * (b.fuelRate || 0)) : null
+  return { distanceKm, cumulativeKm, avgKmPerLiter, standardFuelLiters, fuelCompensation }
+})
 
 const subtotalAmount = computed(() => booking.value?.agreedPrice || booking.value?.tripFee || 0)
 const showVatRow = computed(() => documentSettingsStore.settings.calcMode.purchase.vat !== 'included')

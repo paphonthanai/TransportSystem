@@ -81,6 +81,10 @@ export interface Booking {
   siteCoords?: string
   plate?: string
   driverName?: string
+  /** เลขไมล์เริ่มต้น (กม.) ก่อนออกเที่ยวนี้ กรอกตอนจัดรถ ใช้คำนวณระยะทาง/อัตราสิ้นเปลืองน้ำมัน */
+  odometerBefore?: number
+  /** เลขไมล์สิ้นสุด (กม.) เมื่อกลับถึง กรอกตอนจบงาน */
+  odometerAfter?: number
   status: BookingStatus
   debtAdjustments?: DebtAdjustment[]
   /** เบี้ยเลี้ยงหลังกระทบยอดเพิ่ม/ลดหนี้ ตอนกดจบงาน */
@@ -95,7 +99,11 @@ export interface Booking {
   batchId?: string
   createdAt: Date
   dispatchedAt?: Date
+  /** เวลาที่คนขับกดรับน้ำมัน (ระหว่างสถานะ DISPATCHED ก่อนกดเริ่มขนส่ง) */
+  fuelReceivedAt?: Date
   transitStartedAt?: Date
+  /** เวลาที่คนขับกดส่งของ/ลงของเสร็จสิ้น (ระหว่างสถานะ IN_TRANSIT ก่อนกดจบงาน) */
+  unloadedAt?: Date
   completedAt?: Date
   billedAt?: Date
 }
