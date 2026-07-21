@@ -304,12 +304,35 @@
                 </div>
 
                 <div class="md:col-span-2">
-                  <label class="block text-xs font-semibold text-muted mb-1">สินค้า</label>
-                  <input v-model="item.cementTypes[0]" list="productNameOptions" placeholder="สินค้า" class="input-field w-full" />
-                  <div class="text-[10px] text-muted mt-1">สินค้าหลายชนิดในงานเดียวกัน ให้เพิ่มเป็นคนละรายการ (กดยืนยันเพิ่มรายการสินค้าแยกกันแต่ละชนิด)</div>
+                  <label class="block text-xs font-semibold text-muted mb-1">สินค้า (เพิ่มได้หลายรายการต่อเที่ยว)</label>
+                  <div class="flex gap-2">
+                    <input
+                      v-model="productDraft"
+                      list="productNameOptions"
+                      placeholder="พิมพ์หรือเลือกชื่อสินค้า แล้วกดเพิ่ม"
+                      class="input-field flex-1"
+                      @keydown.enter.prevent="addProductToItem"
+                    />
+                    <button type="button" @click="addProductToItem" class="btn-secondary">
+                      <span class="material-symbols-rounded text-base">add</span>
+                      เพิ่ม
+                    </button>
+                  </div>
                   <datalist id="productNameOptions">
                     <option v-for="p in productOptionsForFleet" :key="p.id" :value="p.name" />
                   </datalist>
+                  <div v-if="item.cementTypes.filter(Boolean).length" class="flex flex-wrap gap-2 mt-2">
+                    <span
+                      v-for="(p, idx) in item.cementTypes.filter(Boolean)"
+                      :key="idx"
+                      class="inline-flex items-center gap-1 text-xs font-semibold pl-3 pr-1 py-1 rounded-full bg-primary-soft text-primary"
+                    >
+                      {{ p }}
+                      <button type="button" @click="removeProductFromItem(idx)" class="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/50">
+                        <span class="material-symbols-rounded text-sm">close</span>
+                      </button>
+                    </span>
+                  </div>
                 </div>
                 <template v-if="isCements">
                   <div class="md:col-span-2">
@@ -667,8 +690,35 @@
               </div>
 
               <div class="md:col-span-2">
-                <label class="block text-xs font-semibold text-muted mb-1">สินค้า</label>
-                <input v-model="editForm.cementTypes[0]" list="productNameOptions" placeholder="สินค้า" class="input-field w-full" />
+                <label class="block text-xs font-semibold text-muted mb-1">สินค้า (เพิ่มได้หลายรายการต่อเที่ยว)</label>
+                <div class="flex gap-2">
+                  <input
+                    v-model="editProductDraft"
+                    list="editProductNameOptions"
+                    placeholder="พิมพ์หรือเลือกชื่อสินค้า แล้วกดเพิ่ม"
+                    class="input-field flex-1"
+                    @keydown.enter.prevent="addProductToEdit"
+                  />
+                  <button type="button" @click="addProductToEdit" class="btn-secondary">
+                    <span class="material-symbols-rounded text-base">add</span>
+                    เพิ่ม
+                  </button>
+                  <datalist id="editProductNameOptions">
+                    <option v-for="p in productOptionsForFleet" :key="p.id" :value="p.name" />
+                  </datalist>
+                </div>
+                <div v-if="editForm.cementTypes.filter(Boolean).length" class="flex flex-wrap gap-2 mt-2">
+                  <span
+                    v-for="(p, idx) in editForm.cementTypes.filter(Boolean)"
+                    :key="idx"
+                    class="inline-flex items-center gap-1 text-xs font-semibold pl-3 pr-1 py-1 rounded-full bg-primary-soft text-primary"
+                  >
+                    {{ p }}
+                    <button type="button" @click="removeProductFromEdit(idx)" class="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/50">
+                      <span class="material-symbols-rounded text-sm">close</span>
+                    </button>
+                  </span>
+                </div>
               </div>
               <template v-if="isCements">
                 <div class="md:col-span-2">
@@ -1009,7 +1059,7 @@ const defaultItem = () => ({
   route: '',
   origin: '',
   destination: '',
-  cementTypes: ['', '', ''] as string[],
+  cementTypes: [] as string[],
   jobType: undefined as BookingJobType | undefined,
   weight: 0,
   qty: 0,
@@ -1023,6 +1073,17 @@ const defaultItem = () => ({
   siteCoords: '',
 })
 const item = ref(defaultItem())
+
+const productDraft = ref('')
+const addProductToItem = () => {
+  const val = productDraft.value.trim()
+  if (!val) return
+  item.value.cementTypes.push(val)
+  productDraft.value = ''
+}
+const removeProductFromItem = (idx: number) => {
+  item.value.cementTypes.splice(idx, 1)
+}
 
 const lineItems = ref<CommittedLineItem[]>([])
 
@@ -1350,7 +1411,7 @@ const editForm = ref({
   route: '',
   origin: '',
   destination: '',
-  cementTypes: ['', '', ''] as string[],
+  cementTypes: [] as string[],
   jobType: undefined as BookingJobType | undefined,
   weight: 0,
   qty: 0,
@@ -1383,7 +1444,7 @@ const openEditBooking = (booking: Booking) => {
     route: booking.route || '',
     origin: booking.origin || '',
     destination: booking.destination || '',
-    cementTypes: [booking.cementTypes?.[0] || '', booking.cementTypes?.[1] || '', booking.cementTypes?.[2] || ''],
+    cementTypes: [...(booking.cementTypes || [])].filter(Boolean),
     jobType: booking.jobType,
     weight: booking.weight || 0,
     qty: booking.qty || 0,
@@ -1396,6 +1457,18 @@ const openEditBooking = (booking: Booking) => {
     sitePhone: booking.sitePhone || '',
     siteCoords: booking.siteCoords || '',
   }
+  editProductDraft.value = ''
+}
+
+const editProductDraft = ref('')
+const addProductToEdit = () => {
+  const val = editProductDraft.value.trim()
+  if (!val) return
+  editForm.value.cementTypes.push(val)
+  editProductDraft.value = ''
+}
+const removeProductFromEdit = (idx: number) => {
+  editForm.value.cementTypes.splice(idx, 1)
 }
 
 const confirmEditBooking = () => {

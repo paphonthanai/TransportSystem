@@ -99,8 +99,11 @@ export const useInventoryStore = defineStore('inventory', () => {
     const productNames = booking.cementTypes?.length ? booking.cementTypes : booking.category === 'ceramics' ? ['ปูนซีเมนต์'] : []
     const result = { matched: [] as string[], unmatched: [] as string[] }
     if (productNames.length === 0) return result
-    const qty = booking.qty || booking.weight || 1
-    productNames.forEach((name) => {
+    // เที่ยวเดียวมีได้หลายสินค้า แบ่งน้ำหนัก/จำนวนรวมของทั้งเที่ยวเฉลี่ยเท่าๆ กันตามจำนวนสินค้า (ปัดเศษไปรวมไว้รายการสุดท้ายให้ยอดรวมตรงกับของจริง)
+    const totalQty = booking.qty || booking.weight || 1
+    const base = Math.floor(totalQty / productNames.length)
+    productNames.forEach((name, i) => {
+      const qty = i === productNames.length - 1 ? totalQty - base * (productNames.length - 1) : base
       const product = products.value.find((p) => p.name === name || name.includes(p.name))
       if (!product) {
         result.unmatched.push(name)
