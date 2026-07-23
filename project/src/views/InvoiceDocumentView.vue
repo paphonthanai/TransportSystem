@@ -92,7 +92,7 @@
           <tr v-for="(booking, idx) in docBookings" :key="booking.id">
             <td class="border border-gray-400 px-2 py-1">{{ idx + 1 }}</td>
             <td class="border border-gray-400 px-2 py-1">
-              {{ booking.docNo }} · {{ booking.siteName }} ({{ booking.district }})
+              {{ booking.docNo }} · {{ destinationLabel(booking) }}
               <span class="text-xs text-gray-600">- {{ formatDate(booking.completedAt) }}</span>
             </td>
             <td class="border border-gray-400 px-2 py-1 text-right">1</td>
@@ -218,6 +218,12 @@ const docNote = computed(() => documentSettingsStore.settings.notes[docMode.valu
 const formatBaht = (value: number) =>
   `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-')
+
+const destinationLabel = (booking: Booking) => {
+  if (!booking.destinations.length) return '-'
+  const first = booking.destinations[0].name
+  return booking.destinations.length > 1 ? `${first} +${booking.destinations.length - 1} ที่อื่น` : first
+}
 
 const printDoc = () => window.print()
 </script>

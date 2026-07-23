@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 
-const FUEL_KEY = 'tms_fuel_settings_v1'
+const FUEL_KEY = 'tms_fuel_settings_v2'
 
 export interface FuelRate {
+  province: string
   district: string
   /** ลิตรมาตรฐานสำหรับเที่ยวไปอำเภอนี้ ใช้เป็นค่าตั้งต้นให้ดึงมากรอกในหน้าสร้างงาน แก้ไขเองได้ */
   liters: number
@@ -18,10 +19,10 @@ export interface FuelSettings {
 function defaultSettings(): FuelSettings {
   return {
     rates: [
-      { district: 'เมืองนครสวรรค์', liters: 40 },
-      { district: 'เมืองราชบุรี', liters: 35 },
-      { district: 'ศรีราชา', liters: 30 },
-      { district: 'บางปะอิน', liters: 25 },
+      { province: 'นครสวรรค์', district: 'เมืองนครสวรรค์', liters: 40 },
+      { province: 'ราชบุรี', district: 'เมืองราชบุรี', liters: 35 },
+      { province: 'ชลบุรี', district: 'ศรีราชา', liters: 30 },
+      { province: 'พระนครศรีอยุธยา', district: 'บางปะอิน', liters: 25 },
     ],
     todayPricePerLiter: 32,
   }
@@ -48,16 +49,27 @@ export const useFuelRateStore = defineStore('fuelRates', () => {
     }
   })
 
-  /** หาลิตรมาตรฐานตามอำเภอ (จับคู่แบบ exact หรือ substring กันกรณีพิมพ์ต่างกันเล็กน้อย) */
-  const findRateByDistrict = (district: string): FuelRate | null => {
-    const trimmed = district.trim()
-    if (!trimmed) return null
+  const matchText = (a: string, b: string) => a === b || a.includes(b) || b.includes(a)
+
+  /** หาลิตรมาตรฐานตามจังหวัด+อำเภอ (จับคู่จังหวัดก่อน แล้วค่อยจับคู่อำเภอภายในจังหวัดนั้น กันชื่ออำเภอซ้ำกันคนละจังหวัด) */
+  const findRate = (province: string, district: string): FuelRate | null => {
+    const p = province.trim()
+    const d = district.trim()
+    if (!p || !d) return null
     return (
-      settings.value.rates.find(
-        (r) => r.district === trimmed || r.district.includes(trimmed) || trimmed.includes(r.district)
-      ) || null
+      settings.value.rates.find((r) => matchText(r.province, p) && matchText(r.district, d)) || null
     )
   }
 
-  return { settings, findRateByDistrict }
+  /** รายชื่อจังหวัดทั้งหมดที่ตั้งค่าไว้ (ไม่ซ้ำ) ใช้เป็น datalist ตอนสร้างงาน */
+  const provincesList = computed(() => [...new Set(settings.value.rates.map((r) => r.province))].sort())
+
+  /** รายชื่ออำเภอที่อยู่ในจังหวัดที่เลือก ใช้ filter ตัวเลือกอำเภอตอนสร้างงาน */
+  const districtsForProvince = (province: string) => {
+    const p = province.trim()
+    if (!p) return [...new Set(settings.value.rates.map((r) => r.district))].sort()
+    return [...new Set(settings.value.rates.filter((r) => matchText(r.province, p)).map((r) => r.district))].sort()
+  }
+
+  return { settings, findRate, provincesList, districtsForProvince }
 })

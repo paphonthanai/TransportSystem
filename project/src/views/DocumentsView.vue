@@ -38,6 +38,10 @@
                     <span class="material-symbols-rounded text-base">paid</span>
                     บันทึกรับชำระ
                   </button>
+                  <button v-else-if="doc.status === 'paid' && !doc.receiptNumber" @click="bookingStore.issueReceipt(doc.id)" class="btn-sm text-purple-700">
+                    <span class="material-symbols-rounded text-base">receipt_long</span>
+                    ออกใบเสร็จ
+                  </button>
                   <button
                     v-else
                     :disabled="!canEdit"

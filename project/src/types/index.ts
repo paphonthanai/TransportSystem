@@ -5,13 +5,26 @@ export type BookingJobType = 'ลงมือ' | 'พาเลทโรงงา
 /**
  * สถานะวงจรชีวิตของงาน (job lifecycle) แยกจากสถานะการเงิน (BillingStatus) โดยเจตนา
  * ตามหลักที่ว่า "ส่งของเสร็จ = งานจบ" ไม่เท่ากับ "วางบิล = แปลงงานเป็นเงิน"
- * WAITING_DISPATCH: ลงงานแล้ว รอจัดคนขับ/รถ/น้ำมัน (ราคาแก้ไขได้อิสระ)
- * PENDING_ACCEPT: จัดคนขับแล้ว รอคนขับตอบรับงานใน Driver App ภายใน 15 นาที ไม่งั้นถูกยกเลิกอัตโนมัติ กลับไป WAITING_DISPATCH
- * DISPATCHED: คนขับตอบรับงานแล้ว (ราคาถูกล็อก แก้ได้เฉพาะ admin)
- * IN_TRANSIT: คนขับกดเริ่มขนส่งแล้ว กำลังวิ่งงาน
- * DELIVERED: ส่งของสำเร็จแล้ว (มี POD หรือจบงานผ่านออฟฟิศ)
+ * WAITING_DISPATCH: ลงงานแล้ว รอจัดคนขับ/รถ (ราคาแก้ไขได้อิสระ)
+ * ASSIGNED: จัดคนขับแล้ว รอคนขับตอบรับงานใน Driver App ภายใน 15 นาที ไม่งั้นถูกยกเลิกอัตโนมัติ กลับไป WAITING_DISPATCH
+ * ACCEPTED: คนขับตอบรับงานแล้ว (ราคาถูกล็อก แก้ได้เฉพาะ admin)
+ * FUEL_RECEIVED: คนขับกดรับน้ำมันแล้ว
+ * LOADING: คนขับกดเริ่มรับสินค้าที่ต้นทาง
+ * LOADED: รับสินค้าครบแล้ว — จุดที่ตัดสต๊อกออกจากคลังต้นทาง (ครั้งเดียวทั้งงาน)
+ * IN_TRANSIT: คนขับกดเริ่มขนส่งแล้ว กำลังวิ่งไปยังปลายทางต่างๆ
+ * DELIVERING: ส่งของถึงอย่างน้อย 1 ปลายทางแล้ว แต่ยังไม่ครบทุกปลายทาง
+ * DELIVERED: ส่งของครบทุกปลายทางแล้ว (หรือจบงานผ่านออฟฟิศ)
  */
-export type BookingStatus = 'WAITING_DISPATCH' | 'PENDING_ACCEPT' | 'DISPATCHED' | 'IN_TRANSIT' | 'DELIVERED'
+export type BookingStatus =
+  | 'WAITING_DISPATCH'
+  | 'ASSIGNED'
+  | 'ACCEPTED'
+  | 'FUEL_RECEIVED'
+  | 'LOADING'
+  | 'LOADED'
+  | 'IN_TRANSIT'
+  | 'DELIVERING'
+  | 'DELIVERED'
 
 /**
  * สถานะฝั่งการเงิน
@@ -38,6 +51,55 @@ export interface ExtraCharge {
   amount: number
 }
 
+/**
+ * รายการสินค้า 1 รายการภายในปลายทาง (Destination/Stop) — 1 ปลายทางมีได้หลายรายการสินค้า
+ * ไม่มีข้อมูลปลายทาง/ผู้ติดต่อในตัวเองอีกต่อไป (ย้ายขึ้นไปอยู่ที่ Destination) เพราะสินค้าหลายรายการอาจอยู่ปลายทางเดียวกัน
+ */
+export interface JobItem {
+  id: string
+  /** ชื่อสินค้า จับคู่กับสินค้าที่ตั้งค่าไว้ในคลังสินค้า */
+  product: string
+  /** จำนวน/น้ำหนักของรายการนี้ ตามหน่วยของสินค้า */
+  qty: number
+  /** หน่วยนับ ดึงมาจากสินค้าที่เลือกอัตโนมัติ ไม่ให้พิมพ์เอง เพื่อให้ตัดสต๊อกตรงหน่วย */
+  unit: string
+  /** เฉพาะ Fleet Cements: ประเภทงาน 3 แบบ แยกได้ต่อรายการสินค้า (สินค้าคนละชนิดในปลายทางเดียวกันอาจถูกจัดการต่างวิธีกัน) */
+  jobType?: BookingJobType
+}
+
+/**
+ * ปลายทาง/จุดส่งของ 1 จุดภายในงาน/เที่ยวรถ (Job/Trip) — 1 งานมีได้หลายปลายทาง
+ * แต่ละปลายทางมีที่อยู่/ผู้ติดต่อ/พิกัด/ลำดับการส่ง/สถานะการส่งของ/POD เป็นของตัวเอง
+ * และมีรายการสินค้า (JobItem) ได้หลายรายการ (สินค้าหลายชนิดที่ไปส่งจุดเดียวกันไม่ต้องกรอกที่อยู่ซ้ำ)
+ * (1 งานยังคงเป็น 1 รถ/1 คนขับ/1 เที่ยว/1 ค่าเที่ยว/1 สถานะงานรวม เสมอ — การเพิ่มปลายทาง/รายการไม่ทำให้เกิดงานใหม่)
+ */
+export interface Destination {
+  id: string
+  /** สถานที่ส่งสินค้า (ชื่อหน้างาน) */
+  name: string
+  /** จังหวัดของปลายทางนี้ ใช้จับคู่กับตั้งค่าน้ำมัน (จังหวัด+อำเภอ) เพื่อคำนวณลิตรน้ำมันมาตรฐานของปลายทางนี้ */
+  province: string
+  district: string
+  address?: string
+  contactName?: string
+  contactPhone?: string
+  /** พิกัด GPS ที่ parse ได้จากลิงก์/ข้อความที่ผู้ใช้กรอก ใช้ต่อกับแผนที่/คำนวณระยะทางในอนาคต */
+  latitude?: number
+  longitude?: number
+  /** ข้อความ/ลิงก์ต้นฉบับที่ผู้ใช้กรอกไว้ (เช่น ลิงก์ Google Maps) เก็บคู่กับ latitude/longitude เสมอ */
+  mapUrl?: string
+  /** ลำดับการส่งของ (0 = จุดแรก) ใช้จัดเรียงเส้นทางตอนจัดรถ */
+  sequence: number
+  /** สถานะการส่งของของปลายทางนี้ */
+  deliveryStatus: 'PENDING' | 'DELIVERING' | 'DELIVERED'
+  deliveredAt?: Date
+  /** ชื่อผู้รับสินค้าที่ปลายทางนี้ */
+  deliveredBy?: string
+  /** รูปหลักฐานการส่งมอบสินค้า (POD) ของปลายทางนี้โดยเฉพาะ */
+  podImage?: string
+  items: JobItem[]
+}
+
 export interface Booking {
   id: string
   category: BookingCategory
@@ -50,35 +112,22 @@ export interface Booking {
   shipDate?: Date
   /** วันที่คาดว่ารถจะกลับ แก้ไขภายหลังได้ */
   returnDate?: Date
-  /** เลขที่ชิพเม้น (ถ้ามี) */
+  /** เลขที่ชิพเม้น (ถ้ามี) — ระดับงาน เพราะเป็นเที่ยวรถเดียวกัน */
   shipmentNo?: string
-  /** เส้นทางเดินรถ เช่น กรุงเทพ-นครสวรรค์ */
+  /** เส้นทางเดินรถทั้งเที่ยว เช่น กรุงเทพ-นครสวรรค์-เชียงใหม่ */
   route?: string
-  /** ต้นทาง (จุดขึ้นสินค้า) */
+  /** ต้นทาง (จุดขึ้นสินค้า) ระดับงาน */
   origin?: string
-  /** ปลายทาง (จุดส่งสินค้า) แยกจากชื่อหน้างาน/อำเภอซึ่งเป็นรายละเอียดที่อยู่ปลายทาง */
-  destination?: string
   customer: string
-  siteName: string
-  district: string
-  /** เฉพาะ Fleet Cements: รหัสปูน 1-3 ชนิดต่อเที่ยว */
-  cementTypes?: string[]
-  /** เฉพาะ Fleet Cements: ประเภทงาน 3 แบบ */
-  jobType?: BookingJobType
-  /** น้ำหนักสินค้า (ตัน) เมื่อคิดค่าเที่ยวตามน้ำหนัก */
-  weight?: number
-  /** จำนวนสินค้า (ชิ้น) เมื่อคิดค่าเที่ยวตามจำนวนชิ้น */
-  qty?: number
+  /** ปลายทางภายในงานนี้ (1 งานมีได้หลายปลายทาง แต่ละปลายทางมีสินค้าได้หลายรายการ) */
+  destinations: Destination[]
   allowance: number
-  /** ค่าเที่ยวที่ใช้คำนวณจริง (ต้นทุน/เบี้ยเลี้ยง) */
+  /** ค่าเที่ยวรวมทั้งเที่ยว (1 งาน = 1 ค่าเที่ยว ไม่แยกตามรายการสินค้า) */
   tripFee: number
   /** ราคาที่ตกลงกับลูกค้าไว้ ใช้เทียบตอนตรวจสอบก่อนวางบิล แก้ไขได้อิสระตอน WAITING_DISPATCH เท่านั้น (หลังจากนั้นแก้ได้เฉพาะ admin) */
   agreedPrice: number
   fuelLiters: number
   fuelRate: number
-  siteContactName?: string
-  sitePhone?: string
-  siteCoords?: string
   plate?: string
   driverName?: string
   /** เลขไมล์เริ่มต้น (กม.) ก่อนออกเที่ยวนี้ กรอกตอนจัดรถ ใช้คำนวณระยะทาง/อัตราสิ้นเปลืองน้ำมัน */
@@ -89,7 +138,7 @@ export interface Booking {
   debtAdjustments?: DebtAdjustment[]
   /** เบี้ยเลี้ยงหลังกระทบยอดเพิ่ม/ลดหนี้ ตอนกดจบงาน */
   finalAllowance?: number
-  /** รูปหลักฐานการส่งมอบสินค้า (Proof of Delivery) ที่คนขับแนบตอนกดจบงานจาก Driver App */
+  /** รูปหลักฐานการส่งมอบสินค้า (POD) ล่าสุด = ของปลายทางสุดท้ายที่ส่งสำเร็จ เก็บไว้ที่ระดับงานเพื่อความเข้ากันได้กับหน้าจอที่แสดง POD เดียว */
   podImage?: string
   /** สถานะการเงิน มีผลเมื่อ status เป็น DELIVERED เท่านั้น */
   billingStatus?: BillingStatus
@@ -99,11 +148,13 @@ export interface Booking {
   batchId?: string
   createdAt: Date
   dispatchedAt?: Date
-  /** เวลาที่คนขับกดรับน้ำมัน (ระหว่างสถานะ DISPATCHED ก่อนกดเริ่มขนส่ง) */
+  /** เวลาที่คนขับกดรับน้ำมัน (สถานะ FUEL_RECEIVED) */
   fuelReceivedAt?: Date
+  /** เวลาที่คนขับกดยืนยันรับสินค้าครบที่ต้นทาง (สถานะ LOADED) — จุดที่ตัดสต๊อก */
+  goodsReceivedAt?: Date
+  /** ผู้ดำเนินการยืนยันรับสินค้า (ปกติคือชื่อคนขับที่ล็อกอินอยู่) */
+  goodsReceivedBy?: string
   transitStartedAt?: Date
-  /** เวลาที่คนขับกดส่งของ/ลงของเสร็จสิ้น (ระหว่างสถานะ IN_TRANSIT ก่อนกดจบงาน) */
-  unloadedAt?: Date
   completedAt?: Date
   billedAt?: Date
 }

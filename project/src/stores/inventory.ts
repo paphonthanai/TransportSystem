@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import type { Booking } from '@/types'
+import type { Booking, JobItem } from '@/types'
 
 const PRODUCTS_KEY = 'tms_products_v1'
 const MOVEMENTS_KEY = 'tms_stock_movements_v1'
@@ -92,25 +92,21 @@ export const useInventoryStore = defineStore('inventory', () => {
   }
 
   /**
-   * ตัดสต๊อกอัตโนมัติเมื่องานส่งของสำเร็จ โดยจับคู่ชื่อสินค้ากับ cementTypes ของงาน (best-effort)
+   * ตัดสต๊อกอัตโนมัติเมื่อคนขับกดยืนยันรับสินค้าครบที่ต้นทาง (สถานะ LOADED) ตัดตามจำนวนของแต่ละรายการสินค้า (JobItem) ในงานนั้นโดยตรง
+   * ไม่หารเฉลี่ย เพราะแต่ละรายการมีจำนวนของตัวเองอยู่แล้ว ตัดครั้งเดียวทั้งงาน (ทุกปลายทางรวมกัน) เพราะรถขนสินค้าออกจากต้นทางพร้อมกันหมด
+   * ไม่ระบุ items = ตัดทุกปลายทางของงานนี้ (เช่น ปิดงานฝั่งออฟฟิศแบบไม่ผ่าน flow ปกติ)
    * คืนค่าสรุปรายการที่ตัดสต๊อกสำเร็จ/ไม่พบสินค้า ให้ผู้เรียกนำไปบันทึก log เอง (กันปัญหา circular import กับ booking store)
    */
-  function recordDeliveryMovement(booking: Booking): { matched: string[]; unmatched: string[] } {
-    const productNames = booking.cementTypes?.length ? booking.cementTypes : booking.category === 'ceramics' ? ['ปูนซีเมนต์'] : []
+  function recordDeliveryMovement(booking: Booking, items?: JobItem[]): { matched: string[]; unmatched: string[] } {
     const result = { matched: [] as string[], unmatched: [] as string[] }
-    if (productNames.length === 0) return result
-    // เที่ยวเดียวมีได้หลายสินค้า แบ่งน้ำหนัก/จำนวนรวมของทั้งเที่ยวเฉลี่ยเท่าๆ กันตามจำนวนสินค้า (ปัดเศษไปรวมไว้รายการสุดท้ายให้ยอดรวมตรงกับของจริง)
-    const totalQty = booking.qty || booking.weight || 1
-    const base = Math.floor(totalQty / productNames.length)
-    productNames.forEach((name, i) => {
-      const qty = i === productNames.length - 1 ? totalQty - base * (productNames.length - 1) : base
-      const product = products.value.find((p) => p.name === name || name.includes(p.name))
+    ;(items ?? booking.destinations.flatMap((d) => d.items)).forEach((item) => {
+      const product = products.value.find((p) => p.name === item.product || item.product.includes(p.name))
       if (!product) {
-        result.unmatched.push(name)
+        result.unmatched.push(item.product)
         return
       }
-      addMovement({ productId: product.id, type: 'out', qty, refBookingId: booking.id, note: `ส่งของสำเร็จ ${booking.docNo}` })
-      result.matched.push(`${product.name} ${qty} ${product.unit}`)
+      addMovement({ productId: product.id, type: 'out', qty: item.qty, refBookingId: booking.id, note: `รับสินค้าที่ต้นทาง ${booking.docNo}` })
+      result.matched.push(`${product.name} ${item.qty} ${product.unit}`)
     })
     return result
   }

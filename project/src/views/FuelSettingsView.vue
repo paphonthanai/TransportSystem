@@ -24,24 +24,26 @@
       <table class="min-w-[560px] w-full text-sm border-separate border-spacing-0">
         <thead class="bg-surface-2 text-left text-xs text-muted">
           <tr>
+            <th class="px-4 py-3 font-semibold">จังหวัด</th>
             <th class="px-4 py-3 font-semibold">อำเภอ</th>
             <th class="px-4 py-3 font-semibold text-right">ลิตรมาตรฐาน/เที่ยว</th>
             <th class="px-4 py-3 font-semibold"></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(rate, idx) in fuelRateStore.settings.rates" :key="rate.district" class="border-t border-border hover:bg-surface-2 transition-colors">
+          <tr v-for="rate in sortedRates" :key="rate.province + rate.district" class="border-t border-border hover:bg-surface-2 transition-colors">
+            <td class="px-4 py-3 text-text">{{ rate.province }}</td>
             <td class="px-4 py-3 font-semibold text-text">{{ rate.district }}</td>
             <td class="px-4 py-3 text-right text-text">{{ rate.liters }} ลิตร</td>
             <td class="px-4 py-3 text-right">
               <div class="flex justify-end gap-2">
                 <button @click="openDialog(rate)" class="btn-sm">แก้ไข</button>
-                <button @click="removeRate(idx)" class="btn-sm text-red-600">ลบ</button>
+                <button @click="removeRate(rate)" class="btn-sm text-red-600">ลบ</button>
               </div>
             </td>
           </tr>
           <tr v-if="fuelRateStore.settings.rates.length === 0">
-            <td colspan="3" class="px-4 py-8 text-center text-muted">ยังไม่มีข้อมูลอำเภอ</td>
+            <td colspan="4" class="px-4 py-8 text-center text-muted">ยังไม่มีข้อมูลอำเภอ</td>
           </tr>
         </tbody>
       </table>
@@ -58,6 +60,13 @@
           </div>
           <div class="px-6 py-5 space-y-3">
             <div>
+              <label class="block text-xs font-semibold text-muted mb-1">จังหวัด</label>
+              <input v-model="form.province" list="fuelProvinceOptions" class="input-field w-full" />
+              <datalist id="fuelProvinceOptions">
+                <option v-for="p in fuelRateStore.provincesList" :key="p" :value="p" />
+              </datalist>
+            </div>
+            <div>
               <label class="block text-xs font-semibold text-muted mb-1">อำเภอ</label>
               <input v-model="form.district" class="input-field w-full" />
             </div>
@@ -65,10 +74,11 @@
               <label class="block text-xs font-semibold text-muted mb-1">ลิตรมาตรฐาน/เที่ยว</label>
               <input v-model.number="form.liters" type="number" min="0" class="input-field w-full" />
             </div>
+            <div v-if="formError" class="text-xs text-red-600">{{ formError }}</div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="showDialog = false" class="btn-secondary">ยกเลิก</button>
-            <button @click="save" :disabled="!form.district" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">บันทึก</button>
+            <button @click="save" :disabled="!form.province || !form.district" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">บันทึก</button>
           </div>
         </div>
       </div>
@@ -77,28 +87,42 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useFuelRateStore, type FuelRate } from '@/stores/fuelRates'
 
 const fuelRateStore = useFuelRateStore()
 
+const sortedRates = computed(() =>
+  [...fuelRateStore.settings.rates].sort((a, b) => a.province.localeCompare(b.province) || a.district.localeCompare(b.district))
+)
+
 const showDialog = ref(false)
 const editingIndex = ref<number | null>(null)
-const form = ref<FuelRate>({ district: '', liters: 0 })
+const form = ref<FuelRate>({ province: '', district: '', liters: 0 })
+const formError = ref('')
 
 const openDialog = (rate?: FuelRate) => {
+  formError.value = ''
   if (rate) {
-    editingIndex.value = fuelRateStore.settings.rates.findIndex((r) => r.district === rate.district)
+    editingIndex.value = fuelRateStore.settings.rates.findIndex((r) => r.province === rate.province && r.district === rate.district)
     form.value = { ...rate }
   } else {
     editingIndex.value = null
-    form.value = { district: '', liters: 0 }
+    form.value = { province: '', district: '', liters: 0 }
   }
   showDialog.value = true
 }
 
 const save = () => {
-  if (!form.value.district) return
+  formError.value = ''
+  if (!form.value.province || !form.value.district) return
+  const dupIndex = fuelRateStore.settings.rates.findIndex(
+    (r) => r.province === form.value.province && r.district === form.value.district
+  )
+  if (dupIndex !== -1 && dupIndex !== editingIndex.value) {
+    formError.value = 'จังหวัด/อำเภอนี้มีอยู่แล้ว กรุณาแก้ไขรายการเดิมแทน'
+    return
+  }
   if (editingIndex.value === null) {
     fuelRateStore.settings.rates.unshift({ ...form.value })
   } else {
@@ -107,8 +131,9 @@ const save = () => {
   showDialog.value = false
 }
 
-const removeRate = (idx: number) => {
-  fuelRateStore.settings.rates.splice(idx, 1)
+const removeRate = (rate: FuelRate) => {
+  const idx = fuelRateStore.settings.rates.findIndex((r) => r.province === rate.province && r.district === rate.district)
+  if (idx !== -1) fuelRateStore.settings.rates.splice(idx, 1)
 }
 </script>
 

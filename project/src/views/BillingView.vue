@@ -87,7 +87,7 @@
                 <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
                 <td class="px-4 py-3 text-muted">{{ booking.po || '-' }}</td>
                 <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
-                <td class="px-4 py-3 font-semibold text-text">{{ booking.siteName }}</td>
+                <td class="px-4 py-3 font-semibold text-text">{{ destinationLabel(booking) }}</td>
                 <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
                 <td class="px-4 py-3 text-right text-text">{{ formatBaht(booking.finalAllowance ?? booking.allowance) }}</td>
                 <td class="px-4 py-3 text-right text-text">{{ formatBaht(booking.tripFee) }}</td>
@@ -170,14 +170,14 @@
                   />
                 </td>
                 <td class="px-3 py-2 font-bold text-primary">{{ booking.docNo }}</td>
-                <td class="px-3 py-2 font-semibold text-text">{{ booking.siteName }}</td>
+                <td class="px-3 py-2 font-semibold text-text">{{ destinationLabel(booking) }}</td>
                 <td class="px-3 py-2">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">
                     {{ bookingStatusLabel[booking.status] }}
                   </span>
                 </td>
                 <td class="px-3 py-2">
-                  <span v-if="booking.podImage" class="inline-flex items-center gap-1 text-green-600 text-xs font-semibold">
+                  <span v-if="hasAllPods(booking)" class="inline-flex items-center gap-1 text-green-600 text-xs font-semibold">
                     <span class="material-symbols-rounded text-base">check_circle</span> ครบ
                   </span>
                   <span v-else class="inline-flex items-center gap-1 text-red-500 text-xs font-semibold">
@@ -278,6 +278,11 @@
                     </button>
                     <button v-if="doc.status === 'draft'" @click="bookingStore.markInvoiceSent(doc.id)" class="btn-sm text-primary">ส่งให้ลูกค้า</button>
                     <button v-else-if="doc.status === 'sent'" @click="openRecordPayment(doc)" class="btn-sm text-green-700">บันทึกรับชำระ</button>
+                    <button v-else-if="doc.status === 'paid' && !doc.receiptNumber" @click="bookingStore.issueReceipt(doc.id)" class="btn-sm text-purple-700">
+                      <span class="material-symbols-rounded text-base">receipt_long</span>
+                      ออกใบเสร็จ
+                    </button>
+                    <span v-else-if="doc.receiptNumber" class="text-xs text-muted">ใบเสร็จ {{ doc.receiptNumber }}</span>
                   </div>
                 </td>
               </tr>
@@ -422,7 +427,7 @@
                   <tr v-for="(booking, idx) in selectedBookings" :key="booking.id" class="border-b border-border last:border-0">
                     <td class="px-3 py-2 text-text">{{ idx + 1 }}</td>
                     <td class="px-3 py-2 text-text">
-                      <div class="font-semibold">{{ booking.docNo }} · {{ booking.siteName }}</div>
+                      <div class="font-semibold">{{ booking.docNo }} · {{ destinationLabel(booking) }}</div>
                       <div class="text-xs text-muted">{{ formatDate(booking.completedAt) }}</div>
                     </td>
                     <td class="px-3 py-2 text-right text-text">1</td>
@@ -541,9 +546,19 @@ const deliveredBookings = computed(() =>
 )
 
 const productLabel = (booking: Booking) => {
-  const types = (booking.cementTypes || []).filter(Boolean)
-  return types.length ? types.join(', ') : '-'
+  const names = [...new Set(booking.destinations.flatMap((d) => d.items).map((i) => i.product).filter(Boolean))]
+  return names.length ? names.join(', ') : '-'
 }
+
+const destinationLabel = (booking: Booking) => {
+  if (!booking.destinations.length) return '-'
+  const first = booking.destinations[0].name
+  return booking.destinations.length > 1 ? `${first} +${booking.destinations.length - 1} ที่อื่น` : first
+}
+
+/** ทุกปลายทางของงานนี้ส่งของสำเร็จพร้อม POD ครบหรือไม่ (แยกจาก booking.podImage เดี่ยวๆ แบบเดิม เพราะตอนนี้แต่ละปลายทางมี POD ของตัวเอง) */
+const hasAllPods = (booking: Booking) =>
+  booking.destinations.length > 0 && booking.destinations.every((d) => d.deliveryStatus === 'DELIVERED' && !!d.podImage)
 
 const batchBookings = computed(() => (selectedBatchId.value ? bookingStore.bookingsInBatch(selectedBatchId.value).value : []))
 

@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useInventoryStore } from '@/stores/inventory'
-import type { Booking, BookingCategory, DebtAdjustment, BillingBatch, LogEntry } from '@/types'
+import type { Booking, BookingCategory, DebtAdjustment, BillingBatch, LogEntry, JobItem, Destination } from '@/types'
 
 export interface SalesDocument {
   id: string
@@ -45,8 +45,11 @@ const ACCEPT_TIMEOUT_MS = 15 * 60 * 1000
  * เพื่อให้หน้า Admin (สั่งงาน/จบงาน/วางบิล) กับหน้า Driver App ที่เปิดคนละแท็บ
  * เห็นข้อมูลชุดเดียวกันและอัปเดตหากันแบบเรียลไทม์ผ่าน storage event
  * (v2: เปลี่ยนโครงสร้างสถานะงาน/บิล จึงขึ้น key ใหม่เพื่อไม่ให้ข้อมูลรูปแบบเก่าปนกัน)
+ * (v3: ย้ายหน้างาน/สินค้า/น้ำหนัก/ผู้ติดต่อจาก flat field เป็น items: JobItem[] เพื่อให้ 1 งานมีหลายปลายทาง/สินค้าได้)
+ * (v4: แยกปลายทางออกเป็น destinations: Destination[] โดยแต่ละปลายทางมี items: JobItem[] ของตัวเอง — ปลายทางเดียวกันมีสินค้าหลายรายการได้โดยไม่ต้องกรอกที่อยู่ซ้ำ
+ *      + ขยายสถานะงานเป็น 9 ขั้นตอน (เพิ่ม ASSIGNED/ACCEPTED/FUEL_RECEIVED/LOADING/LOADED/DELIVERING) + ตัดสต๊อกตอนรับสินค้า (LOADED) แทนตอนส่งของ)
  */
-const BOOKINGS_KEY = 'tms_bookings_v2'
+const BOOKINGS_KEY = 'tms_bookings_v4'
 const DOCUMENTS_KEY = 'tms_documents_v2'
 const BATCHES_KEY = 'tms_batches_v2'
 const LOGS_KEY = 'tms_logs_v1'
@@ -58,6 +61,10 @@ function reviveBooking(raw: any): Booking {
   for (const field of BOOKING_DATE_FIELDS) {
     if (booking[field]) booking[field] = new Date(booking[field])
   }
+  if (booking.goodsReceivedAt) booking.goodsReceivedAt = new Date(booking.goodsReceivedAt)
+  booking.destinations = (booking.destinations || []).map((dest: any) =>
+    dest.deliveredAt ? { ...dest, deliveredAt: new Date(dest.deliveredAt) } : dest
+  )
   return booking as Booking
 }
 
@@ -126,18 +133,24 @@ function seedBookings(): Booking[] {
       category: 'cements',
       docNo: 'CM2569-0001',
       customer: 'ABC',
-      siteName: 'ไซต์งาน นครสวรรค์',
-      district: 'เมืองนครสวรรค์',
-      cementTypes: ['ปูนซีเมนต์ M402'],
-      jobType: 'ลงมือ',
+      destinations: [
+        {
+          id: 'b1-d1',
+          name: 'ไซต์งาน นครสวรรค์',
+          province: 'นครสวรรค์',
+          district: 'เมืองนครสวรรค์',
+          contactName: 'คุณสมชาย',
+          contactPhone: '081-234-5678',
+          sequence: 0,
+          deliveryStatus: 'PENDING',
+          items: [{ id: 'b1-i1', product: 'ปูนซีเมนต์ M402', qty: 10, unit: 'ตัน', jobType: 'ลงมือ' }],
+        },
+      ],
       allowance: 350,
       tripFee: 4500,
       agreedPrice: 4500,
       fuelLiters: 40,
       fuelRate: 32,
-      siteContactName: 'คุณสมชาย',
-      sitePhone: '081-234-5678',
-      siteCoords: '',
       plate: '',
       status: 'WAITING_DISPATCH',
       createdAt: now,
@@ -147,16 +160,22 @@ function seedBookings(): Booking[] {
       category: 'ceramics',
       docNo: 'CR2569-0002',
       customer: fixedCeramicsCustomer,
-      siteName: 'ไซต์งาน ชลบุรี',
-      district: 'ศรีราชา',
+      destinations: [
+        {
+          id: 'b2-d1',
+          name: 'ไซต์งาน ชลบุรี',
+          province: 'ชลบุรี',
+          district: 'ศรีราชา',
+          sequence: 0,
+          deliveryStatus: 'PENDING',
+          items: [{ id: 'b2-i1', product: 'ปูนซีเมนต์', qty: 1, unit: 'เที่ยว' }],
+        },
+      ],
       allowance: 0,
       tripFee: 3800,
       agreedPrice: 3800,
       fuelLiters: 35,
       fuelRate: 32,
-      siteContactName: '',
-      sitePhone: '',
-      siteCoords: '',
       plate: '',
       status: 'WAITING_DISPATCH',
       createdAt: now,
@@ -166,21 +185,39 @@ function seedBookings(): Booking[] {
       category: 'cements',
       docNo: 'CM2569-0002',
       customer: 'XYZ',
-      siteName: 'ไซต์งาน ราชบุรี',
-      district: 'เมืองราชบุรี',
-      cementTypes: ['ปูนซีเมนต์ M401', 'ปูนซีเมนต์ M402'],
-      jobType: 'พาเลทโรงงาน',
+      // ตัวอย่างงานเดียวมีหลายปลายทาง/สินค้าคนละชนิด — ยังเป็น 1 งาน/1 ค่าเที่ยว/1 รถ/1 คนขับเหมือนเดิม
+      destinations: [
+        {
+          id: 'b3-d1',
+          name: 'ไซต์งาน ราชบุรี',
+          province: 'ราชบุรี',
+          district: 'เมืองราชบุรี',
+          contactName: 'คุณวิชัย',
+          contactPhone: '089-111-2233',
+          sequence: 0,
+          deliveryStatus: 'PENDING',
+          items: [{ id: 'b3-i1', product: 'ปูนซีเมนต์ M401', qty: 10, unit: 'ตัน', jobType: 'พาเลทโรงงาน' }],
+        },
+        {
+          id: 'b3-d2',
+          name: 'ไซต์งาน เชียงใหม่',
+          province: 'เชียงใหม่',
+          district: 'เมืองเชียงใหม่',
+          contactName: 'คุณประยูร',
+          contactPhone: '086-222-9911',
+          sequence: 1,
+          deliveryStatus: 'PENDING',
+          items: [{ id: 'b3-i2', product: 'ปูนซีเมนต์ M402', qty: 5, unit: 'ตัน', jobType: 'พาเลทโรงงาน' }],
+        },
+      ],
       allowance: 320,
       tripFee: 4200,
       agreedPrice: 4200,
       fuelLiters: 38,
       fuelRate: 32,
-      siteContactName: 'คุณวิชัย',
-      sitePhone: '089-111-2233',
-      siteCoords: '',
       plate: '71-3390 ราชบุรี',
       driverName: 'วิรัตน์ ใจกล้า',
-      status: 'DISPATCHED',
+      status: 'ACCEPTED',
       createdAt: now,
       dispatchedAt: now,
     },
@@ -189,21 +226,31 @@ function seedBookings(): Booking[] {
       category: 'ceramics',
       docNo: 'CR2569-0003',
       customer: fixedCeramicsCustomer,
-      siteName: 'ไซต์งาน อยุธยา',
-      district: 'บางปะอิน',
+      destinations: [
+        {
+          id: 'b3b-d1',
+          name: 'ไซต์งาน อยุธยา',
+          province: 'พระนครศรีอยุธยา',
+          district: 'บางปะอิน',
+          contactName: 'คุณอนุชา',
+          contactPhone: '082-555-1122',
+          sequence: 0,
+          deliveryStatus: 'PENDING',
+          items: [{ id: 'b3b-i1', product: 'ปูนซีเมนต์', qty: 1, unit: 'เที่ยว' }],
+        },
+      ],
       allowance: 0,
       tripFee: 4100,
       agreedPrice: 4100,
       fuelLiters: 33,
       fuelRate: 32,
-      siteContactName: 'คุณอนุชา',
-      sitePhone: '082-555-1122',
-      siteCoords: '',
       plate: '72-6628 อยุธยา',
       driverName: 'สมหมาย เพียรงาน',
       status: 'IN_TRANSIT',
       createdAt: now,
       dispatchedAt: now,
+      goodsReceivedAt: now,
+      goodsReceivedBy: 'สมหมาย เพียรงาน',
       transitStartedAt: now,
     },
     {
@@ -211,8 +258,21 @@ function seedBookings(): Booking[] {
       category: 'ceramics',
       docNo: 'CR2569-0001',
       customer: fixedCeramicsCustomer,
-      siteName: 'ไซต์งาน นครสวรรค์',
-      district: 'เมืองนครสวรรค์',
+      destinations: [
+        {
+          id: 'b4-d1',
+          name: 'ไซต์งาน นครสวรรค์',
+          province: 'นครสวรรค์',
+          district: 'เมืองนครสวรรค์',
+          contactName: 'คุณสมชาย',
+          contactPhone: '081-234-5678',
+          sequence: 0,
+          deliveryStatus: 'DELIVERED',
+          deliveredAt: now,
+          deliveredBy: 'คุณสมชาย',
+          items: [{ id: 'b4-i1', product: 'ปูนซีเมนต์', qty: 1, unit: 'เที่ยว' }],
+        },
+      ],
       allowance: 1549,
       finalAllowance: 1449,
       debtAdjustments: [{ id: 'seed-adj-1', label: 'ค่าปรับความล่าช้า', amount: 100 }],
@@ -220,15 +280,14 @@ function seedBookings(): Booking[] {
       agreedPrice: 4400,
       fuelLiters: 36,
       fuelRate: 32,
-      siteContactName: 'คุณสมชาย',
-      sitePhone: '081-234-5678',
-      siteCoords: '',
       plate: '70-8821 สระบุรี',
       driverName: 'สมชาย ทองดี',
       status: 'DELIVERED',
       billingStatus: 'UNBILLED',
       createdAt: now,
       dispatchedAt: now,
+      goodsReceivedAt: now,
+      goodsReceivedBy: 'สมชาย ทองดี',
       transitStartedAt: now,
       completedAt: now,
     },
@@ -341,9 +400,6 @@ export const useBookingStore = defineStore('booking', () => {
     data: {
       fuelLiters?: number
       fuelRate?: number
-      siteContactName?: string
-      sitePhone?: string
-      siteCoords?: string
       returnDate?: Date
     }
   ) {
@@ -351,11 +407,8 @@ export const useBookingStore = defineStore('booking', () => {
     if (!booking) return
     if (data.fuelLiters !== undefined) booking.fuelLiters = data.fuelLiters
     if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
-    if (data.siteContactName !== undefined) booking.siteContactName = data.siteContactName || undefined
-    if (data.sitePhone !== undefined) booking.sitePhone = data.sitePhone || undefined
-    if (data.siteCoords !== undefined) booking.siteCoords = data.siteCoords || undefined
     if (data.returnDate !== undefined) booking.returnDate = data.returnDate
-    addLog(`แก้ไขข้อมูลปฏิบัติงาน ${booking.docNo} (น้ำมัน/ข้อมูลหน้างาน/วันที่กลับ)`)
+    addLog(`แก้ไขข้อมูลปฏิบัติงาน ${booking.docNo} (น้ำมัน/วันที่กลับ)`)
   }
 
   /**
@@ -365,67 +418,63 @@ export const useBookingStore = defineStore('booking', () => {
   function updateBookingFull(
     id: string,
     data: {
-      siteName?: string
-      district?: string
+      destinations?: Destination[]
       po?: string
       shipDate?: Date
       returnDate?: Date
       shipmentNo?: string
       route?: string
       origin?: string
-      destination?: string
-      cementTypes?: string[]
-      jobType?: Booking['jobType']
-      weight?: number
-      qty?: number
       tripFee?: number
       agreedPrice?: number
       allowance?: number
       fuelLiters?: number
       fuelRate?: number
-      siteContactName?: string
-      sitePhone?: string
-      siteCoords?: string
     }
   ) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
-    if (data.siteName !== undefined) booking.siteName = data.siteName
-    if (data.district !== undefined) booking.district = data.district
+    if (data.destinations !== undefined) booking.destinations = data.destinations
     if (data.po !== undefined) booking.po = data.po || undefined
     if (data.shipDate !== undefined) booking.shipDate = data.shipDate
     if (data.returnDate !== undefined) booking.returnDate = data.returnDate
     if (data.shipmentNo !== undefined) booking.shipmentNo = data.shipmentNo || undefined
     if (data.route !== undefined) booking.route = data.route || undefined
     if (data.origin !== undefined) booking.origin = data.origin || undefined
-    if (data.destination !== undefined) booking.destination = data.destination || undefined
-    if (data.cementTypes !== undefined) booking.cementTypes = data.cementTypes
-    if (data.jobType !== undefined) booking.jobType = data.jobType
-    if (data.weight !== undefined) booking.weight = data.weight
-    if (data.qty !== undefined) booking.qty = data.qty
     if (data.tripFee !== undefined) booking.tripFee = data.tripFee
     if (data.agreedPrice !== undefined) booking.agreedPrice = data.agreedPrice
     if (data.allowance !== undefined) booking.allowance = data.allowance
     if (data.fuelLiters !== undefined) booking.fuelLiters = data.fuelLiters
     if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
-    if (data.siteContactName !== undefined) booking.siteContactName = data.siteContactName || undefined
-    if (data.sitePhone !== undefined) booking.sitePhone = data.sitePhone || undefined
-    if (data.siteCoords !== undefined) booking.siteCoords = data.siteCoords || undefined
     addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`)
   }
 
-  /** จ่ายงานให้คนขับ: WAITING_DISPATCH -> PENDING_ACCEPT (รอคนขับตอบรับใน Driver App ภายใน 15 นาที) */
+  /** เพิ่มปลายทางใหม่ (พร้อมรายการสินค้า) เข้าไปในงานที่มีอยู่แล้ว (ใช้ตอนจัดรถแล้วมีปลายทางเพิ่มทีหลัง) ไม่สร้างงาน/เลขที่เอกสารใหม่ */
+  function addDestination(
+    id: string,
+    destination: Omit<Destination, 'id' | 'items' | 'deliveryStatus' | 'sequence'> & { items: Omit<JobItem, 'id'>[] }
+  ) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return
+    const newDestination: Destination = {
+      ...destination,
+      id: `dest${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+      sequence: booking.destinations.length,
+      deliveryStatus: 'PENDING',
+      items: destination.items.map((item) => ({ ...item, id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}` })),
+    }
+    booking.destinations.push(newDestination)
+    const productSummary = newDestination.items.map((i) => `${i.product} ${i.qty} ${i.unit}`).join(', ')
+    addLog(`เพิ่มปลายทาง ${booking.docNo}: ${newDestination.name} (${productSummary})`)
+    return newDestination
+  }
+
+  /** จ่ายงานให้คนขับ: WAITING_DISPATCH -> ASSIGNED (รอคนขับตอบรับใน Driver App ภายใน 15 นาที) */
   function dispatchBooking(
     id: string,
     plate: string,
     extra?: {
       driverName?: string
-      siteContactName?: string
-      sitePhone?: string
-      siteCoords?: string
-      destination?: string
-      fuelLiters?: number
-      fuelRate?: number
       odometerBefore?: number
     }
   ) {
@@ -433,18 +482,9 @@ export const useBookingStore = defineStore('booking', () => {
     if (!booking) return
     booking.plate = plate
     if (extra?.driverName) booking.driverName = extra.driverName
-    if (extra?.siteContactName) booking.siteContactName = extra.siteContactName
-    if (extra?.sitePhone) booking.sitePhone = extra.sitePhone
-    if (extra?.siteCoords) booking.siteCoords = extra.siteCoords
-    if (extra?.destination) booking.destination = extra.destination
     if (extra?.odometerBefore !== undefined) booking.odometerBefore = extra.odometerBefore
-    // น้ำมันกรอกตอนจัดรถ (ไม่ใช่ตอนสร้างงาน) เพราะออกรถหลายเที่ยวแต่เติมน้ำมันครั้งเดียวได้ -> คำนวณเบี้ยเลี้ยงใหม่ให้ Fleet Ceramics ที่อิงค่าน้ำมันเป็นหลัก (Cements กรอกเบี้ยเลี้ยงเองอยู่แล้ว ไม่กระทบ)
-    if (extra?.fuelLiters !== undefined) booking.fuelLiters = extra.fuelLiters
-    if (extra?.fuelRate !== undefined) booking.fuelRate = extra.fuelRate
-    if (booking.category === 'ceramics' && (extra?.fuelLiters !== undefined || extra?.fuelRate !== undefined)) {
-      booking.allowance = Math.round(booking.tripFee * 0.99 * 0.62 - (booking.fuelLiters || 0) * (booking.fuelRate || 0))
-    }
-    booking.status = 'PENDING_ACCEPT'
+    // น้ำมันคำนวณและล็อกไว้ตั้งแต่ตอนสร้างงานแล้ว (จากจังหวัด/อำเภอของแต่ละปลายทาง) ตอนจัดรถจึงไม่ต้องกรอก/คำนวณซ้ำ
+    booking.status = 'ASSIGNED'
     booking.dispatchedAt = new Date()
     assignToOpenBatch(booking)
     addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''} (รอคนขับตอบรับ, เข้ารอบบิลอัตโนมัติ)`)
@@ -486,18 +526,18 @@ export const useBookingStore = defineStore('booking', () => {
     booking.billingStatus = undefined
   }
 
-  /** คนขับกดตอบรับงานใน Driver App: PENDING_ACCEPT -> DISPATCHED */
+  /** คนขับกดตอบรับงานใน Driver App: ASSIGNED -> ACCEPTED */
   function acceptDispatch(id: string) {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking || booking.status !== 'PENDING_ACCEPT') return
-    booking.status = 'DISPATCHED'
+    if (!booking || booking.status !== 'ASSIGNED') return
+    booking.status = 'ACCEPTED'
     addLog(`คนขับตอบรับงาน ${booking.docNo}`)
   }
 
   /** คนขับกดไม่รับงานใน Driver App: ยกเลิกการจ่ายงาน กลับไปรอจัดคนขับใหม่ทันที (เหมือน checkExpiredDispatches แต่ตั้งใจกดเอง) */
   function declineDispatch(id: string) {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking || booking.status !== 'PENDING_ACCEPT') return
+    if (!booking || booking.status !== 'ASSIGNED') return
     removeFromBatch(booking)
     booking.status = 'WAITING_DISPATCH'
     booking.plate = ''
@@ -506,27 +546,45 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`คนขับไม่รับงาน ${booking.docNo} รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`)
   }
 
-  /** คนขับกดรับน้ำมันใน Driver App ระหว่างสถานะ DISPATCHED (ก่อนกดเริ่มขนส่ง) */
+  /** คนขับกดรับน้ำมันใน Driver App ระหว่างสถานะ ACCEPTED: ACCEPTED -> FUEL_RECEIVED */
   function markFuelReceived(id: string) {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking || booking.status !== 'DISPATCHED') return
+    if (!booking || booking.status !== 'ACCEPTED') return
+    booking.status = 'FUEL_RECEIVED'
     booking.fuelReceivedAt = new Date()
     addLog(`คนขับรับน้ำมัน ${booking.docNo}`)
   }
 
-  /** คนขับกดส่งของ/ลงของเสร็จสิ้นใน Driver App ระหว่างสถานะ IN_TRANSIT (ก่อนกดจบงาน) */
-  function markUnloaded(id: string) {
+  /** คนขับกดเริ่มรับสินค้าที่ต้นทาง: FUEL_RECEIVED -> LOADING */
+  function startLoading(id: string) {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking || booking.status !== 'IN_TRANSIT') return
-    booking.unloadedAt = new Date()
-    addLog(`คนขับลงของเสร็จสิ้น ${booking.docNo}`)
+    if (!booking || booking.status !== 'FUEL_RECEIVED') return
+    booking.status = 'LOADING'
+    addLog(`เริ่มรับสินค้าที่ต้นทาง ${booking.docNo}`)
+  }
+
+  /**
+   * คนขับกดยืนยันรับสินค้าครบแล้ว: LOADING -> LOADED
+   * จุดนี้คือจุดตัดสต๊อกของงานทั้งใบ (ทุกปลายทาง ทุกรายการสินค้า) ครั้งเดียว เพราะรถขนสินค้าทั้งหมดออกจากต้นทางพร้อมกัน
+   */
+  function confirmGoodsReceived(id: string, receivedBy?: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking || booking.status !== 'LOADING') return
+    booking.status = 'LOADED'
+    booking.goodsReceivedAt = new Date()
+    booking.goodsReceivedBy = receivedBy || authStore.userName || booking.driverName
+    addLog(`รับสินค้าครบที่ต้นทาง ${booking.docNo} (โดย ${booking.goodsReceivedBy})`)
+    const allItems = booking.destinations.flatMap((d) => d.items)
+    const stock = inventoryStore.recordDeliveryMovement(booking, allItems)
+    stock.matched.forEach((m) => addLog(`ตัดสต๊อก ${m} จากงาน ${booking.docNo}`))
+    stock.unmatched.forEach((name) => addLog(`ไม่พบสินค้า "${name}" ในตั้งค่าสินค้า ข้ามการตัดสต๊อกสำหรับ ${booking.docNo}`))
   }
 
   /** ตรวจงานที่รอคนขับตอบรับเกิน 15 นาที ยกเลิกการจ่ายงานและกลับไปรอจัดคนขับใหม่อัตโนมัติ */
   function checkExpiredDispatches() {
     const now = Date.now()
     bookings.value.forEach((booking) => {
-      if (booking.status !== 'PENDING_ACCEPT' || !booking.dispatchedAt) return
+      if (booking.status !== 'ASSIGNED' || !booking.dispatchedAt) return
       if (now - new Date(booking.dispatchedAt).getTime() < ACCEPT_TIMEOUT_MS) return
       removeFromBatch(booking)
       booking.status = 'WAITING_DISPATCH'
@@ -553,19 +611,28 @@ export const useBookingStore = defineStore('booking', () => {
   checkExpiredDispatches()
   setInterval(checkExpiredDispatches, 30_000)
 
-  /** คนขับกดเริ่มขนส่ง: DISPATCHED -> IN_TRANSIT */
+  /** คนขับกดเริ่มขนส่ง: LOADED -> IN_TRANSIT */
   function startTransit(id: string) {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking || booking.status !== 'DISPATCHED') return
+    if (!booking || booking.status !== 'LOADED') return
     booking.status = 'IN_TRANSIT'
     booking.transitStartedAt = new Date()
     addLog(`เริ่มขนส่ง ${booking.docNo}`)
   }
 
-  /** จบงานฝั่งออฟฟิศ (มีเพิ่ม/ลดหนี้ แต่ไม่บังคับ POD) */
+  /**
+   * จบงานฝั่งออฟฟิศ (มีเพิ่ม/ลดหนี้ แต่ไม่บังคับ POD) — ปิดงานทั้งหมดทีเดียว รวมถึงปลายทางที่ยังไม่ได้กดส่งของทีละจุด
+   * ไม่ตัดสต๊อกซ้ำที่นี่ เพราะสต๊อกถูกตัดไปแล้วครั้งเดียวตอนสถานะ LOADED (ดู confirmGoodsReceived)
+   */
   function completeJob(id: string, debtAdjustments: DebtAdjustment[], odometerAfter?: number) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
+    booking.destinations.forEach((dest) => {
+      if (dest.deliveryStatus !== 'DELIVERED') {
+        dest.deliveryStatus = 'DELIVERED'
+        dest.deliveredAt = dest.deliveredAt || new Date()
+      }
+    })
     const netAdjustment = debtAdjustments.reduce((sum, d) => sum + d.amount, 0)
     booking.debtAdjustments = debtAdjustments
     booking.finalAllowance = Math.round((booking.allowance || 0) - netAdjustment)
@@ -574,17 +641,40 @@ export const useBookingStore = defineStore('booking', () => {
     // billingStatus ถูกตั้งเป็น IN_BATCH ไปแล้วตั้งแต่ตอนจัดรถ (assignToOpenBatch) ไม่ต้องตั้งซ้ำ
     booking.completedAt = new Date()
     addLog(`จบงาน ${booking.docNo}${booking.podImage ? ' (แนบ POD จากคนขับ)' : ' (ปิดงานโดยออฟฟิศ)'}`)
-    const stock = inventoryStore.recordDeliveryMovement(booking)
-    stock.matched.forEach((m) => addLog(`ตัดสต๊อก ${m} จากงาน ${booking.docNo}`))
-    stock.unmatched.forEach((name) => addLog(`ไม่พบสินค้า "${name}" ในตั้งค่าสินค้า ข้ามการตัดสต๊อกสำหรับ ${booking.docNo}`))
   }
 
-  /** จบงานฝั่งคนขับ (บังคับแนบ POD) */
-  function completeJobByDriver(id: string, podImage: string, odometerAfter?: number) {
-    const booking = bookings.value.find((b) => b.id === id)
-    if (!booking) return
-    booking.podImage = podImage
-    completeJob(id, [], odometerAfter)
+  /**
+   * คนขับกดส่งของสำเร็จทีละปลายทาง (Destination) แนบ POD + ชื่อผู้รับของจุดนั้นโดยเฉพาะ
+   * ไม่ตัดสต๊อกที่นี่ (ตัดไปแล้วตอนรับสินค้าที่ต้นทาง — สถานะ LOADED)
+   * เมื่อส่งครบทุกจุดแล้ว งานทั้งใบจะจบอัตโนมัติ (เลขไมล์สิ้นสุด/เบี้ยเลี้ยงสุทธิ/สถานะ DELIVERED)
+   */
+  function deliverDestination(
+    bookingId: string,
+    destinationId: string,
+    podImage: string,
+    deliveredBy: string,
+    odometerAfter?: number
+  ) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
+    const destination = booking?.destinations.find((d) => d.id === destinationId)
+    if (!booking || !destination || destination.deliveryStatus === 'DELIVERED') return
+    destination.deliveryStatus = 'DELIVERED'
+    destination.podImage = podImage
+    destination.deliveredBy = deliveredBy
+    destination.deliveredAt = new Date()
+    addLog(`ส่งของสำเร็จ ${booking.docNo}: ${destination.name} (ผู้รับ: ${deliveredBy})`)
+
+    const allDelivered = booking.destinations.every((d) => d.deliveryStatus === 'DELIVERED')
+    if (allDelivered) {
+      if (odometerAfter !== undefined) booking.odometerAfter = odometerAfter
+      booking.podImage = podImage
+      booking.finalAllowance = booking.finalAllowance ?? booking.allowance
+      booking.status = 'DELIVERED'
+      booking.completedAt = new Date()
+      addLog(`จบงาน ${booking.docNo} (ส่งของครบทุกปลายทางแล้ว)`)
+    } else if (booking.status === 'IN_TRANSIT') {
+      booking.status = 'DELIVERING'
+    }
   }
 
   // --- Billing batch flow ---
@@ -704,18 +794,16 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`ส่งใบแจ้งหนี้ ${doc.number} ให้ลูกค้า`)
   }
 
-  /** บันทึกรับชำระ ต้องแนบเอกสาร POD ประกอบเสมอ เพราะใบแจ้งหนี้ออกได้ก่อนงานส่งของสำเร็จ */
+  /**
+   * บันทึกรับชำระ ต้องแนบเอกสาร POD ประกอบเสมอ เพราะใบแจ้งหนี้ออกได้ก่อนงานส่งของสำเร็จ
+   * ไม่ออกใบเสร็จอัตโนมัติที่นี่ — การชำระเงินกับการออกใบเสร็จเป็นคนละขั้นตอน คนละสถานะ (ดู issueReceipt)
+   */
   function markInvoicePaid(docId: string, podImage: string) {
     const doc = documents.value.find((d) => d.id === docId)
     if (!doc || !podImage) return
     doc.status = 'paid'
     doc.podImage = podImage
     doc.paidDate = new Date()
-    const receiptNumbering = documentSettingsStore.settings.numbering.receipt
-    doc.receiptNumber = `${receiptNumbering.prefix}${new Date().getFullYear() + 543}-${documentSettingsStore.padNumber(
-      documents.value.filter((d) => d.receiptNumber).length + 1,
-      receiptNumbering.padding
-    )}`
     bookings.value.forEach((b) => {
       if (doc.bookingIds.includes(b.id)) b.billingStatus = 'PAID'
     })
@@ -728,7 +816,20 @@ export const useBookingStore = defineStore('booking', () => {
         if (settled) batch.status = 'paid'
       }
     }
-    addLog(`บันทึกรับชำระใบแจ้งหนี้ ${doc.number} (${doc.amount} บาท) ออกใบเสร็จ ${doc.receiptNumber}`)
+    addLog(`บันทึกรับชำระใบแจ้งหนี้ ${doc.number} (${doc.amount} บาท)`)
+  }
+
+  /** ออกใบเสร็จรับเงิน เป็นการกระทำแยกต่างหากจากการบันทึกรับชำระ ต้องชำระแล้วเท่านั้นจึงออกใบเสร็จได้ */
+  function issueReceipt(docId: string) {
+    const doc = documents.value.find((d) => d.id === docId)
+    if (!doc || doc.status !== 'paid' || doc.receiptNumber) return
+    const receiptNumbering = documentSettingsStore.settings.numbering.receipt
+    doc.receiptNumber = `${receiptNumbering.prefix}${new Date().getFullYear() + 543}-${documentSettingsStore.padNumber(
+      documents.value.filter((d) => d.receiptNumber).length + 1,
+      receiptNumbering.padding
+    )}`
+    addLog(`ออกใบเสร็จรับเงิน ${doc.receiptNumber} สำหรับใบแจ้งหนี้ ${doc.number}`)
+    return doc.receiptNumber
   }
 
   return {
@@ -746,14 +847,16 @@ export const useBookingStore = defineStore('booking', () => {
     updateBookingPrice,
     updateBookingOps,
     updateBookingFull,
+    addDestination,
     dispatchBooking,
     acceptDispatch,
     declineDispatch,
     markFuelReceived,
-    markUnloaded,
+    startLoading,
+    confirmGoodsReceived,
     startTransit,
     completeJob,
-    completeJobByDriver,
+    deliverDestination,
     bookingsInBatch,
     updateBatch,
     deleteBatch,
@@ -763,5 +866,6 @@ export const useBookingStore = defineStore('booking', () => {
     issueInvoiceFromBatch,
     markInvoiceSent,
     markInvoicePaid,
+    issueReceipt,
   }
 })

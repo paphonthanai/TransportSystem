@@ -71,29 +71,23 @@
           <thead class="bg-gray-100">
             <tr>
               <th class="border border-gray-400 px-2 py-1 text-left w-10">ลำดับ</th>
-              <th class="border border-gray-400 px-2 py-1 text-left">รายละเอียด</th>
-              <th class="border border-gray-400 px-2 py-1 text-right w-16">จำนวน</th>
+              <th class="border border-gray-400 px-2 py-1 text-left">รายละเอียด (ปลายทาง / สินค้า)</th>
+              <th class="border border-gray-400 px-2 py-1 text-right w-20">ปริมาณ</th>
               <th class="border border-gray-400 px-2 py-1 text-left w-16">หน่วย</th>
-              <th class="border border-gray-400 px-2 py-1 text-right w-28">ราคาต่อหน่วย</th>
-              <th class="border border-gray-400 px-2 py-1 text-right w-28">จำนวนเงิน</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, i) in productRows" :key="row.name + i">
+            <tr v-for="(row, i) in productRows" :key="row.destinationName + row.product + i">
               <td class="border border-gray-400 px-2 py-1">{{ i + 1 }}</td>
               <td class="border border-gray-400 px-2 py-1">
-                {{ booking.siteName }} ({{ booking.district }}) · {{ row.name }}
-                <span v-if="booking.jobType" class="text-xs text-gray-600">· {{ booking.jobType }}</span>
+                {{ row.destinationName }} ({{ row.province }} · {{ row.district }}) · {{ row.product }}
+                <span v-if="row.jobType" class="text-xs text-gray-600">· {{ row.jobType }}</span>
               </td>
-              <td class="border border-gray-400 px-2 py-1 text-right">1</td>
-              <td class="border border-gray-400 px-2 py-1">เที่ยว</td>
-              <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
-              <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
+              <td class="border border-gray-400 px-2 py-1 text-right">{{ row.qty }}</td>
+              <td class="border border-gray-400 px-2 py-1">{{ row.unit }}</td>
             </tr>
             <tr v-for="n in fillerRows" :key="'filler' + n">
               <td class="border border-gray-400 px-2 py-1 h-7">&nbsp;</td>
-              <td class="border border-gray-400 px-2 py-1"></td>
-              <td class="border border-gray-400 px-2 py-1"></td>
               <td class="border border-gray-400 px-2 py-1"></td>
               <td class="border border-gray-400 px-2 py-1"></td>
               <td class="border border-gray-400 px-2 py-1"></td>
@@ -146,8 +140,6 @@
         </div>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div><span class="text-muted">เบอร์โทรหน้างาน:</span> {{ booking.sitePhone || '-' }}</div>
-          <div><span class="text-muted">พิกัดหน้างาน:</span> {{ booking.siteCoords || '-' }}</div>
           <div><span class="text-muted">ทะเบียนรถ:</span> {{ booking.plate || '-' }}</div>
           <div><span class="text-muted">คนขับ:</span> {{ booking.driverName || '-' }}</div>
           <div v-if="booking.dispatchedAt"><span class="text-muted">วันที่จ่ายงาน:</span> {{ formatDate(booking.dispatchedAt) }}</div>
@@ -155,6 +147,31 @@
           <div v-if="booking.completedAt"><span class="text-muted">วันที่ส่งของสำเร็จ:</span> {{ formatDate(booking.completedAt) }}</div>
           <div v-if="booking.odometerBefore !== undefined"><span class="text-muted">เลขไมล์เริ่มต้น:</span> {{ booking.odometerBefore }} กม.</div>
           <div v-if="booking.odometerAfter !== undefined"><span class="text-muted">เลขไมล์สิ้นสุด:</span> {{ booking.odometerAfter }} กม.</div>
+        </div>
+
+        <div v-if="booking.destinations.length" class="space-y-2">
+          <div class="text-xs font-semibold text-muted">ที่อยู่/ผู้ติดต่อ/พิกัด/สถานะการส่งของแต่ละปลายทาง</div>
+          <div
+            v-for="(dest, idx) in booking.destinations"
+            :key="dest.id"
+            class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm bg-surface-2 rounded-lg p-3 border border-border"
+          >
+            <div class="col-span-2 md:col-span-4 font-semibold text-text flex items-center justify-between">
+              <span>{{ idx + 1 }}. {{ dest.name }} ({{ dest.province }} · {{ dest.district }})</span>
+              <span :class="dest.deliveryStatus === 'DELIVERED' ? 'text-green-600' : 'text-amber-600'" class="text-xs font-semibold">
+                {{ dest.deliveryStatus === 'DELIVERED' ? `ส่งแล้ว (ผู้รับ: ${dest.deliveredBy})` : 'รอส่ง' }}
+              </span>
+            </div>
+            <div v-if="dest.address" class="col-span-2 md:col-span-4"><span class="text-muted">ที่อยู่:</span> {{ dest.address }}</div>
+            <div class="col-span-1"><span class="text-muted">รายการสินค้า:</span> {{ dest.items.map((i) => `${i.product} ${i.qty} ${i.unit}`).join(', ') }}</div>
+            <div><span class="text-muted">ผู้ติดต่อ:</span> {{ dest.contactName || '-' }}</div>
+            <div><span class="text-muted">เบอร์โทร:</span> {{ dest.contactPhone || '-' }}</div>
+            <div class="col-span-2">
+              <span class="text-muted">พิกัด:</span>
+              {{ dest.latitude !== undefined && dest.longitude !== undefined ? `${dest.latitude}, ${dest.longitude}` : dest.mapUrl || '-' }}
+            </div>
+            <img v-if="dest.podImage" :src="dest.podImage" class="col-span-2 md:col-span-4 max-h-32 object-contain rounded border border-border" />
+          </div>
         </div>
 
         <div v-if="mileageSummary" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm bg-surface-2 rounded-lg p-3 border border-border">
@@ -284,25 +301,24 @@ const docTitleEn = computed(() => (isDispatched.value ? 'WORK ORDER' : 'PURCHASE
 const fillerRows = computed(() => 3)
 
 const productLabel = (b: Booking) => {
-  if (b.category === 'ceramics') return 'ปูนซีเมนต์'
-  const types = (b.cementTypes || []).filter(Boolean)
-  return types.length ? types.join(', ') : '-'
+  const names = [...new Set(b.destinations.flatMap((d) => d.items).map((i) => i.product).filter(Boolean))]
+  return names.length ? names.join(', ') : '-'
 }
 
-/**
- * แยกสินค้า 1 เที่ยวที่มีได้ 2-3 ชนิดออกเป็นคนละแถวในตารางเอกสาร (ไม่รวมชื่อสินค้าไว้แถวเดียวกัน)
- * ค่าเที่ยวคิดเป็นก้อนเดียวของทั้งเที่ยว จึงหารเฉลี่ยเท่าๆ กันตามจำนวนสินค้า (ปัดเศษไปรวมไว้แถวสุดท้ายให้ยอดรวมตรงกับค่าเที่ยวจริง)
- */
+/** แต่ละรายการสินค้าของทุกปลายทางในงานนี้ ขึ้นแถวของตัวเองในตารางเอกสาร คนละแถวไม่รวมกัน */
 const productRows = computed(() => {
   if (!booking.value) return []
-  const names = booking.value.category === 'ceramics' ? ['ปูนซีเมนต์'] : (booking.value.cementTypes || []).filter(Boolean)
-  const list = names.length ? names : ['-']
-  const tripFee = booking.value.tripFee || 0
-  const base = Math.floor(tripFee / list.length)
-  return list.map((name, i) => ({
-    name,
-    amount: i === list.length - 1 ? tripFee - base * (list.length - 1) : base,
-  }))
+  return booking.value.destinations.flatMap((dest) =>
+    dest.items.map((item) => ({
+      product: item.product,
+      qty: item.qty,
+      unit: item.unit,
+      destinationName: dest.name,
+      province: dest.province,
+      district: dest.district,
+      jobType: item.jobType,
+    }))
+  )
 })
 
 /** สรุประยะทาง/อัตราสิ้นเปลืองน้ำมัน/ชดเชยน้ำมัน เมื่อมีเลขไมล์เริ่มต้น-สิ้นสุดครบแล้ว */
@@ -316,8 +332,8 @@ const mileageSummary = computed(() => {
       .filter((x) => x.plate === b.plate && x.id !== b.id && x.odometerBefore !== undefined && x.odometerAfter !== undefined)
       .reduce((sum, x) => sum + ((x.odometerAfter || 0) - (x.odometerBefore || 0)), 0) + distanceKm
   const avgKmPerLiter = b.fuelLiters ? Math.round((distanceKm / b.fuelLiters) * 100) / 100 : null
-  const districtRate = fuelRateStore.findRateByDistrict(b.district)
-  const standardFuelLiters = districtRate ? districtRate.liters : null
+  const standardFuelLiters =
+    b.destinations.reduce((sum, d) => sum + (fuelRateStore.findRate(d.province, d.district)?.liters || 0), 0) || null
   const fuelCompensation = standardFuelLiters !== null ? Math.round((standardFuelLiters - (b.fuelLiters || 0)) * (b.fuelRate || 0)) : null
   return { distanceKm, cumulativeKm, avgKmPerLiter, standardFuelLiters, fuelCompensation }
 })

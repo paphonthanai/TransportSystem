@@ -54,35 +54,56 @@
                 </span>
               </div>
             </div>
-            <div class="text-sm font-semibold text-text">{{ job.siteName }}</div>
-            <div class="grid grid-cols-2 gap-2 text-xs text-text">
-              <div><span class="text-muted">อำเภอ:</span> {{ job.district }}</div>
-              <div><span class="text-muted">น้ำมัน:</span> {{ job.fuelLiters || 0 }} ล.</div>
-              <div class="col-span-2"><span class="text-muted">สินค้า:</span> {{ productLabel(job) }}</div>
-              <div class="col-span-2"><span class="text-muted">ประเภทงาน:</span> {{ job.jobType || '-' }}</div>
-            </div>
-            <div class="flex gap-2 pt-2">
-              <a
-                :href="job.sitePhone ? `tel:${job.sitePhone}` : undefined"
-                :class="[
-                  'flex-1 h-9 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5',
-                  job.sitePhone ? 'bg-primary text-white' : 'bg-surface-2 text-muted cursor-not-allowed pointer-events-none',
-                ]"
-              >
-                <span class="material-symbols-rounded text-base">call</span>
-                {{ job.sitePhone || 'ไม่มีเบอร์โทร' }}
-              </a>
-              <a
-                :href="job.siteCoords ? mapsUrl(job.siteCoords) : undefined"
-                target="_blank"
-                :class="[
-                  'flex-1 h-9 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 border border-border',
-                  job.siteCoords ? 'text-text' : 'text-muted cursor-not-allowed pointer-events-none',
-                ]"
-              >
-                <span class="material-symbols-rounded text-base">near_me</span>
-                นำทาง
-              </a>
+            <div class="text-xs text-text"><span class="text-muted">ต้องรับน้ำมันทั้งหมด:</span> {{ job.fuelLiters || 0 }} ล.</div>
+            <div
+              v-for="(dest, idx) in job.destinations"
+              :key="dest.id"
+              class="rounded-xl bg-surface-2 p-2.5 space-y-1.5"
+            >
+              <div class="text-sm font-semibold text-text">
+                {{ idx + 1 }}. {{ dest.name }} <span class="text-xs text-muted font-normal">({{ dest.province }} · {{ dest.district }})</span>
+              </div>
+              <div v-for="item in dest.items" :key="item.id" class="text-xs text-text">
+                <span class="text-muted">สินค้า:</span> {{ item.product }} {{ item.qty }} {{ item.unit }}
+                <span v-if="item.jobType" class="text-muted">· {{ item.jobType }}</span>
+              </div>
+              <div class="flex gap-2 pt-1">
+                <a
+                  :href="dest.contactPhone ? `tel:${dest.contactPhone}` : undefined"
+                  :class="[
+                    'flex-1 h-8 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5',
+                    dest.contactPhone ? 'bg-primary text-white' : 'bg-white text-muted cursor-not-allowed pointer-events-none',
+                  ]"
+                >
+                  <span class="material-symbols-rounded text-sm">call</span>
+                  {{ dest.contactPhone || 'ไม่มีเบอร์โทร' }}
+                </a>
+                <a
+                  :href="navigateUrl(dest) || undefined"
+                  target="_blank"
+                  :class="[
+                    'flex-1 h-8 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 border border-border',
+                    navigateUrl(dest) ? 'text-text bg-white' : 'text-muted bg-white cursor-not-allowed pointer-events-none',
+                  ]"
+                >
+                  <span class="material-symbols-rounded text-sm">near_me</span>
+                  นำทาง
+                </a>
+              </div>
+              <div v-if="job.status === 'IN_TRANSIT' || job.status === 'DELIVERING'" class="pt-1">
+                <button
+                  v-if="dest.deliveryStatus !== 'DELIVERED'"
+                  @click="openDeliverDestination(job, dest)"
+                  class="w-full h-8 rounded-lg bg-green-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+                >
+                  <span class="material-symbols-rounded text-sm">task_alt</span>
+                  ส่งของจุดนี้
+                </button>
+                <div v-else class="w-full h-8 rounded-lg bg-green-50 text-green-700 text-xs font-semibold flex items-center justify-center gap-1.5">
+                  <span class="material-symbols-rounded text-sm">check_circle</span>
+                  ส่งแล้ว (ผู้รับ: {{ dest.deliveredBy }})
+                </div>
+              </div>
             </div>
             <div class="flex items-center justify-between px-1 pt-1">
               <div v-for="(step, i) in jobSteps(job)" :key="i" class="flex-1 flex flex-col items-center gap-1">
@@ -96,8 +117,12 @@
                   {{ step.label }}
                 </div>
               </div>
+              <div v-if="job.status === 'IN_TRANSIT' || job.status === 'DELIVERING'" class="flex-1 flex flex-col items-center gap-1">
+                <div class="w-2.5 h-2.5 rounded-full bg-primary"></div>
+                <div class="text-[9px] text-center leading-tight text-primary font-semibold">{{ tripProgressLabel(job) }}</div>
+              </div>
             </div>
-            <div v-if="job.status === 'PENDING_ACCEPT'" class="space-y-1.5">
+            <div v-if="job.status === 'ASSIGNED'" class="space-y-1.5">
               <div class="text-[11px] text-center text-muted">
                 กรุณาตอบรับภายใน {{ formatCountdown(remainingAcceptSeconds(job)) }} มิฉะนั้นงานจะถูกจัดให้คนขับคนอื่นอัตโนมัติ
               </div>
@@ -119,7 +144,7 @@
               </div>
             </div>
             <button
-              v-else-if="job.status === 'DISPATCHED' && !job.fuelReceivedAt"
+              v-else-if="job.status === 'ACCEPTED'"
               @click="bookingStore.markFuelReceived(job.id)"
               class="w-full h-9 rounded-lg bg-orange-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
             >
@@ -127,28 +152,28 @@
               รับน้ำมัน
             </button>
             <button
-              v-else-if="job.status === 'DISPATCHED'"
+              v-else-if="job.status === 'FUEL_RECEIVED'"
+              @click="bookingStore.startLoading(job.id)"
+              class="w-full h-9 rounded-lg bg-teal-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+            >
+              <span class="material-symbols-rounded text-base">inventory_2</span>
+              เริ่มรับสินค้า
+            </button>
+            <button
+              v-else-if="job.status === 'LOADING'"
+              @click="openConfirmLoaded(job)"
+              class="w-full h-9 rounded-lg bg-blue-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+            >
+              <span class="material-symbols-rounded text-base">check_circle</span>
+              ยืนยันรับสินค้าครบ
+            </button>
+            <button
+              v-else-if="job.status === 'LOADED'"
               @click="bookingStore.startTransit(job.id)"
               class="w-full h-9 rounded-lg bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
             >
               <span class="material-symbols-rounded text-base">directions</span>
               เริ่มขนส่ง
-            </button>
-            <button
-              v-else-if="job.status === 'IN_TRANSIT' && !job.unloadedAt"
-              @click="bookingStore.markUnloaded(job.id)"
-              class="w-full h-9 rounded-lg bg-teal-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
-            >
-              <span class="material-symbols-rounded text-base">inventory_2</span>
-              ส่งของ/ลงของเสร็จสิ้น
-            </button>
-            <button
-              v-else-if="job.status === 'IN_TRANSIT'"
-              @click="openComplete(job)"
-              class="w-full h-9 rounded-lg bg-green-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
-            >
-              <span class="material-symbols-rounded text-base">task_alt</span>
-              จบงาน
             </button>
           </div>
         </div>
@@ -162,7 +187,7 @@
           <div v-if="recentJobs.length === 0" class="text-center py-6 text-muted text-sm">ยังไม่มีประวัติเที่ยวงาน</div>
           <div v-for="job in recentJobs" :key="job.id" class="flex items-center justify-between py-2 border-b border-border last:border-0">
             <div class="min-w-0">
-              <div class="text-sm font-semibold text-text truncate">{{ job.docNo }} · {{ job.siteName }}</div>
+              <div class="text-sm font-semibold text-text truncate">{{ job.docNo }} · {{ destinationLabel(job) }}</div>
               <div class="text-xs text-muted">{{ formatDate(job.completedAt) }}</div>
             </div>
             <div class="text-sm font-bold text-green-600 whitespace-nowrap">{{ formatBaht(job.finalAllowance ?? job.allowance) }}</div>
@@ -171,23 +196,58 @@
       </div>
     </div>
 
-    <!-- Complete Job with POD Modal -->
-    <Teleport to="body" v-if="completeTarget">
-      <div @click="closeComplete" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-4">
+    <!-- Confirm Goods Received Modal -->
+    <Teleport to="body" v-if="loadingTarget">
+      <div @click="closeConfirmLoaded" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-4">
+        <div @click.stop class="w-full max-w-sm bg-white rounded-2xl shadow-2xl">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-border">
+            <div class="font-bold text-text">ยืนยันรับสินค้าครบ {{ loadingTarget.docNo }}</div>
+            <button @click="closeConfirmLoaded" class="w-8 h-8 rounded-lg hover:bg-surface-2 flex items-center justify-center">
+              <span class="material-symbols-rounded text-lg">close</span>
+            </button>
+          </div>
+          <div class="p-5 space-y-3">
+            <div class="text-xs text-muted">ยืนยันว่ารับสินค้าครบทุกรายการแล้ว ระบบจะตัดสต๊อกสินค้าออกจากคลังต้นทางทันที</div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">ผู้ดำเนินการรับสินค้า</label>
+              <input v-model="goodsReceivedByInput" placeholder="ชื่อผู้รับสินค้า" class="w-full h-9 px-3 rounded-lg border border-border text-sm" />
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 px-5 py-4 border-t border-border">
+            <button @click="closeConfirmLoaded" class="h-9 px-4 rounded-lg border border-border text-sm font-medium text-text">ยกเลิก</button>
+            <button
+              @click="confirmLoaded"
+              class="h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold flex items-center gap-1.5"
+            >
+              <span class="material-symbols-rounded text-base">check_circle</span>
+              ยืนยันรับสินค้าครบ
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Deliver Destination with POD Modal -->
+    <Teleport to="body" v-if="deliverTarget">
+      <div @click="closeDeliverDestination" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-4">
         <div @click.stop class="w-full max-w-sm bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
           <div class="flex items-center justify-between px-5 py-4 border-b border-border">
-            <div class="font-bold text-text">จบงาน {{ completeTarget.docNo }}</div>
-            <button @click="closeComplete" class="w-8 h-8 rounded-lg hover:bg-surface-2 flex items-center justify-center">
+            <div class="font-bold text-text">ส่งของจุดนี้ {{ deliverTarget.destination.name }}</div>
+            <button @click="closeDeliverDestination" class="w-8 h-8 rounded-lg hover:bg-surface-2 flex items-center justify-center">
               <span class="material-symbols-rounded text-lg">close</span>
             </button>
           </div>
           <div class="p-5 space-y-3">
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">เลขไมล์สิ้นสุด (กม.)</label>
+              <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้รับสินค้า</label>
+              <input v-model="deliveredByInput" placeholder="ชื่อผู้รับสินค้า" class="w-full h-9 px-3 rounded-lg border border-border text-sm" />
+            </div>
+            <div v-if="isLastPendingDestination">
+              <label class="block text-xs font-semibold text-muted mb-1">เลขไมล์สิ้นสุด (กม.) <span class="font-normal text-[10px]">(จุดส่งสุดท้ายของงานนี้)</span></label>
               <input v-model.number="podOdometerAfter" type="number" placeholder="0" class="w-full h-9 px-3 rounded-lg border border-border text-sm" />
             </div>
             <div class="text-xs text-muted">
-              ต้องแนบรูปหลักฐานการส่งมอบสินค้า (POD) ให้ถูกต้องก่อนจึงจะกดยืนยันจบงานได้
+              ต้องแนบรูปหลักฐานการส่งมอบสินค้า (POD) ของจุดนี้ให้ถูกต้องก่อนจึงจะกดยืนยันได้
             </div>
             <label class="block border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary transition-all">
               <input type="file" accept="image/*" capture="environment" class="hidden" @change="onPodSelected" />
@@ -203,14 +263,14 @@
             </div>
           </div>
           <div class="flex justify-end gap-2 px-5 py-4 border-t border-border">
-            <button @click="closeComplete" class="h-9 px-4 rounded-lg border border-border text-sm font-medium text-text">ยกเลิก</button>
+            <button @click="closeDeliverDestination" class="h-9 px-4 rounded-lg border border-border text-sm font-medium text-text">ยกเลิก</button>
             <button
-              @click="confirmComplete"
-              :disabled="!podPreview"
+              @click="confirmDeliverDestination"
+              :disabled="!podPreview || !deliveredByInput"
               class="h-9 px-4 rounded-lg bg-green-600 text-white text-sm font-semibold flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-base">task_alt</span>
-              ยืนยันจบงาน
+              ยืนยันส่งของจุดนี้
             </button>
           </div>
         </div>
@@ -224,7 +284,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
-import type { Booking } from '@/types'
+import type { Booking, Destination } from '@/types'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 
 const router = useRouter()
@@ -244,11 +304,11 @@ const logout = async () => {
   router.push('/login')
 }
 
+const ACTIVE_STATUSES = ['ASSIGNED', 'ACCEPTED', 'FUEL_RECEIVED', 'LOADING', 'LOADED', 'IN_TRANSIT', 'DELIVERING'] as const
+
 const activeJobs = computed(() =>
   bookingStore.bookings.filter(
-    (b) =>
-      b.driverName === selectedDriver.value &&
-      (b.status === 'PENDING_ACCEPT' || b.status === 'DISPATCHED' || b.status === 'IN_TRANSIT')
+    (b) => b.driverName === selectedDriver.value && (ACTIVE_STATUSES as readonly string[]).includes(b.status)
   )
 )
 
@@ -270,23 +330,25 @@ const remainingAcceptSeconds = (job: Booking) => {
 }
 const formatCountdown = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
 
-// ขั้นตอนงานของคนขับ 5 ช่วง: ตอบรับ -> รับน้ำมัน -> เดินทาง/ขนส่ง -> ลงของ -> จบงาน (แสดงเป็น progress ให้คนขับเห็นว่าอยู่ขั้นไหน)
+// ขั้นตอนงานของคนขับ 5 ช่วงแรก: ตอบรับ -> รับน้ำมัน -> รับสินค้า -> ยืนยันรับสินค้าครบ -> เดินทาง/ขนส่ง
+// หลังจากนั้นสถานะการส่งของแยกเป็นรายปลายทาง (Destination) ไม่ใช่ขั้นตอนเดียวของทั้งงานอีกต่อไป ดูที่ tripProgressLabel แทน
 const jobSteps = (job: Booking) => {
-  const stepIndex =
-    job.status === 'PENDING_ACCEPT'
-      ? 0
-      : job.status === 'DISPATCHED' && !job.fuelReceivedAt
-        ? 1
-        : job.status === 'DISPATCHED'
-          ? 2
-          : job.status === 'IN_TRANSIT' && !job.unloadedAt
-            ? 2
-            : job.status === 'IN_TRANSIT'
-              ? 3
-              : 4
-  const labels = ['รับงาน', 'รับน้ำมัน', 'เดินทาง/ขนส่ง', 'ลงของเสร็จสิ้น', 'จบงาน']
-  return labels.map((label, i) => ({ label, done: i < stepIndex, current: i === stepIndex }))
+  const order = ['ASSIGNED', 'ACCEPTED', 'FUEL_RECEIVED', 'LOADING', 'LOADED']
+  const labels = ['รับงาน', 'รับน้ำมัน', 'เริ่มรับสินค้า', 'รับสินค้าครบ', 'เดินทาง/ขนส่ง']
+  const idx = order.indexOf(job.status)
+  const stepIndex = idx === -1 ? labels.length : idx
+  return labels.map((label, i) => ({
+    label,
+    done: i < stepIndex,
+    current: i === stepIndex && job.status !== 'IN_TRANSIT' && job.status !== 'DELIVERING',
+  }))
 }
+
+/** จำนวนปลายทางที่ส่งของสำเร็จแล้วของงานนี้ */
+const deliveredCount = (job: Booking) => job.destinations.filter((d) => d.deliveryStatus === 'DELIVERED').length
+
+/** ป้าย "เที่ยวที่ N/M" อิงจากจำนวนปลายทางที่ส่งสำเร็จแล้ว/ทั้งหมด ใช้แทนขั้นตอนสุดท้ายของ stepper ระหว่าง IN_TRANSIT/DELIVERING */
+const tripProgressLabel = (job: Booking) => `เที่ยวที่ ${Math.min(deliveredCount(job) + 1, job.destinations.length)}/${job.destinations.length}`
 
 const declineJob = (job: Booking) => {
   if (!window.confirm(`ยืนยันไม่รับงาน ${job.docNo}? งานนี้จะถูกส่งกลับไปรอจัดคนขับใหม่`)) return
@@ -304,32 +366,66 @@ const totalRecentIncome = computed(() =>
   recentJobs.value.reduce((sum, b) => sum + (b.finalAllowance ?? b.allowance ?? 0), 0)
 )
 
-const productLabel = (booking: Booking) => {
-  if (booking.category === 'ceramics') return 'ปูนซีเมนต์'
-  const types = (booking.cementTypes || []).filter(Boolean)
-  return types.length ? types.join(', ') : '-'
+const destinationLabel = (booking: Booking) => {
+  if (!booking.destinations.length) return '-'
+  const first = booking.destinations[0].name
+  return booking.destinations.length > 1 ? `${first} +${booking.destinations.length - 1} ที่อื่น` : first
 }
 
-const mapsUrl = (coords: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coords)}`
+/** ลิงก์นำทาง: ใช้ลิงก์/พิกัดที่ผู้ใช้กรอกไว้ก่อน ถ้าไม่มีแต่มีพิกัดตัวเลขที่ parse ได้ ให้สร้างลิงก์ค้นหาจากพิกัดนั้นแทน */
+const navigateUrl = (dest: Destination) => {
+  if (dest.mapUrl) return /^https?:\/\//.test(dest.mapUrl) ? dest.mapUrl : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dest.mapUrl)}`
+  if (dest.latitude !== undefined && dest.longitude !== undefined) {
+    return `https://www.google.com/maps/search/?api=1&query=${dest.latitude},${dest.longitude}`
+  }
+  return ''
+}
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
-// --- Complete job with POD photo ---
-const completeTarget = ref<Booking | null>(null)
+// --- Confirm goods received at origin (LOADING -> LOADED, deducts stock once for the whole job) ---
+const loadingTarget = ref<Booking | null>(null)
+const goodsReceivedByInput = ref('')
+
+const openConfirmLoaded = (job: Booking) => {
+  loadingTarget.value = job
+  goodsReceivedByInput.value = job.driverName || ''
+}
+
+const closeConfirmLoaded = () => {
+  loadingTarget.value = null
+}
+
+const confirmLoaded = () => {
+  if (!loadingTarget.value) return
+  bookingStore.confirmGoodsReceived(loadingTarget.value.id, goodsReceivedByInput.value || undefined)
+  closeConfirmLoaded()
+}
+
+// --- Deliver a single Destination (stop) with its own POD photo + recipient name ---
+const deliverTarget = ref<{ booking: Booking; destination: Destination } | null>(null)
+const deliveredByInput = ref('')
 const podPreview = ref<string | null>(null)
 const podError = ref('')
 const podOdometerAfter = ref(0)
 
-const openComplete = (job: Booking) => {
-  completeTarget.value = job
+/** จุดนี้เป็นปลายทางสุดท้ายที่ยังไม่ส่งของงานนี้หรือไม่ (ถ้าใช่ ต้องกรอกเลขไมล์สิ้นสุดด้วย เพราะเป็นจุดที่ปิดงานทั้งใบ) */
+const isLastPendingDestination = computed(() => {
+  if (!deliverTarget.value) return false
+  return deliverTarget.value.booking.destinations.filter((d) => d.deliveryStatus !== 'DELIVERED').length === 1
+})
+
+const openDeliverDestination = (job: Booking, destination: Destination) => {
+  deliverTarget.value = { booking: job, destination }
+  deliveredByInput.value = ''
   podPreview.value = null
   podError.value = ''
   podOdometerAfter.value = job.odometerAfter || 0
 }
 
-const closeComplete = () => {
-  completeTarget.value = null
+const closeDeliverDestination = () => {
+  deliverTarget.value = null
 }
 
 const onPodSelected = (event: Event) => {
@@ -353,9 +449,15 @@ const onPodSelected = (event: Event) => {
   reader.readAsDataURL(file)
 }
 
-const confirmComplete = () => {
-  if (!completeTarget.value || !podPreview.value) return
-  bookingStore.completeJobByDriver(completeTarget.value.id, podPreview.value, podOdometerAfter.value || undefined)
-  closeComplete()
+const confirmDeliverDestination = () => {
+  if (!deliverTarget.value || !podPreview.value || !deliveredByInput.value) return
+  bookingStore.deliverDestination(
+    deliverTarget.value.booking.id,
+    deliverTarget.value.destination.id,
+    podPreview.value,
+    deliveredByInput.value,
+    isLastPendingDestination.value ? podOdometerAfter.value || undefined : undefined
+  )
+  closeDeliverDestination()
 }
 </script>
