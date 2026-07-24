@@ -546,19 +546,19 @@ const deliveredBookings = computed(() =>
 )
 
 const productLabel = (booking: Booking) => {
-  const names = [...new Set(booking.destinations.flatMap((d) => d.items).map((i) => i.product).filter(Boolean))]
+  const names = [...new Set(booking.items.map((i) => i.product).filter(Boolean))]
   return names.length ? names.join(', ') : '-'
 }
 
 const destinationLabel = (booking: Booking) => {
-  if (!booking.destinations.length) return '-'
-  const first = booking.destinations[0].name
-  return booking.destinations.length > 1 ? `${first} +${booking.destinations.length - 1} ที่อื่น` : first
+  if (!booking.items.length) return '-'
+  const first = booking.items[0].siteName
+  return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
 }
 
-/** ทุกปลายทางของงานนี้ส่งของสำเร็จพร้อม POD ครบหรือไม่ (แยกจาก booking.podImage เดี่ยวๆ แบบเดิม เพราะตอนนี้แต่ละปลายทางมี POD ของตัวเอง) */
+/** ทุกรายการของงานนี้ส่งของสำเร็จพร้อม POD ครบหรือไม่ (แยกจาก booking.podImage เดี่ยวๆ แบบเดิม เพราะตอนนี้แต่ละรายการมี POD ของตัวเอง) */
 const hasAllPods = (booking: Booking) =>
-  booking.destinations.length > 0 && booking.destinations.every((d) => d.deliveryStatus === 'DELIVERED' && !!d.podImage)
+  booking.items.length > 0 && booking.items.every((i) => i.deliveryStatus === 'DELIVERED' && !!i.podImage)
 
 const batchBookings = computed(() => (selectedBatchId.value ? bookingStore.bookingsInBatch(selectedBatchId.value).value : []))
 

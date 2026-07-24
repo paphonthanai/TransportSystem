@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useInventoryStore } from '@/stores/inventory'
-import type { Booking, BookingCategory, DebtAdjustment, BillingBatch, LogEntry, JobItem, Destination } from '@/types'
+import type { Booking, BookingCategory, DebtAdjustment, BillingBatch, LogEntry, JobItem } from '@/types'
 
 export interface SalesDocument {
   id: string
@@ -48,8 +48,11 @@ const ACCEPT_TIMEOUT_MS = 15 * 60 * 1000
  * (v3: ย้ายหน้างาน/สินค้า/น้ำหนัก/ผู้ติดต่อจาก flat field เป็น items: JobItem[] เพื่อให้ 1 งานมีหลายปลายทาง/สินค้าได้)
  * (v4: แยกปลายทางออกเป็น destinations: Destination[] โดยแต่ละปลายทางมี items: JobItem[] ของตัวเอง — ปลายทางเดียวกันมีสินค้าหลายรายการได้โดยไม่ต้องกรอกที่อยู่ซ้ำ
  *      + ขยายสถานะงานเป็น 9 ขั้นตอน (เพิ่ม ASSIGNED/ACCEPTED/FUEL_RECEIVED/LOADING/LOADED/DELIVERING) + ตัดสต๊อกตอนรับสินค้า (LOADED) แทนตอนส่งของ)
+ * (v5: ยกเลิก Destination wrapper กลับไปเป็น items: JobItem[] แบบเดิม (1 รายการ = 1 ปลายทาง+1 สินค้า) ตามที่ผู้ใช้ต้องการ
+ *      + เพิ่มการรับสินค้าทีละรายการ (pickupJobItem) แทนการยืนยันรับครบทั้งงานทีเดียว — คนขับเลือกลำดับรับสินค้าเองได้ต่อรายการ (คนละต้นทางได้)
+ *      ตัดสต๊อกทันทีตอนรับแต่ละรายการ ลำดับส่งของ (deliverySequence) คำนวณอัตโนมัติเป็นลำดับย้อนกลับของลำดับรับสินค้า)
  */
-const BOOKINGS_KEY = 'tms_bookings_v4'
+const BOOKINGS_KEY = 'tms_bookings_v5'
 const DOCUMENTS_KEY = 'tms_documents_v2'
 const BATCHES_KEY = 'tms_batches_v2'
 const LOGS_KEY = 'tms_logs_v1'
@@ -62,9 +65,11 @@ function reviveBooking(raw: any): Booking {
     if (booking[field]) booking[field] = new Date(booking[field])
   }
   if (booking.goodsReceivedAt) booking.goodsReceivedAt = new Date(booking.goodsReceivedAt)
-  booking.destinations = (booking.destinations || []).map((dest: any) =>
-    dest.deliveredAt ? { ...dest, deliveredAt: new Date(dest.deliveredAt) } : dest
-  )
+  booking.items = (booking.items || []).map((item: any) => ({
+    ...item,
+    pickedUpAt: item.pickedUpAt ? new Date(item.pickedUpAt) : undefined,
+    deliveredAt: item.deliveredAt ? new Date(item.deliveredAt) : undefined,
+  }))
   return booking as Booking
 }
 
@@ -133,17 +138,18 @@ function seedBookings(): Booking[] {
       category: 'cements',
       docNo: 'CM2569-0001',
       customer: 'ABC',
-      destinations: [
+      items: [
         {
-          id: 'b1-d1',
-          name: 'ไซต์งาน นครสวรรค์',
+          id: 'b1-i1',
+          product: 'ปูนซีเมนต์ M402',
+          qty: 10,
+          unit: 'ตัน',
+          jobType: 'ลงมือ',
+          siteName: 'ไซต์งาน นครสวรรค์',
           province: 'นครสวรรค์',
           district: 'เมืองนครสวรรค์',
-          contactName: 'คุณสมชาย',
-          contactPhone: '081-234-5678',
-          sequence: 0,
-          deliveryStatus: 'PENDING',
-          items: [{ id: 'b1-i1', product: 'ปูนซีเมนต์ M402', qty: 10, unit: 'ตัน', jobType: 'ลงมือ' }],
+          siteContactName: 'คุณสมชาย',
+          sitePhone: '081-234-5678',
         },
       ],
       allowance: 350,
@@ -160,15 +166,15 @@ function seedBookings(): Booking[] {
       category: 'ceramics',
       docNo: 'CR2569-0002',
       customer: fixedCeramicsCustomer,
-      destinations: [
+      items: [
         {
-          id: 'b2-d1',
-          name: 'ไซต์งาน ชลบุรี',
+          id: 'b2-i1',
+          product: 'ปูนซีเมนต์',
+          qty: 1,
+          unit: 'เที่ยว',
+          siteName: 'ไซต์งาน ชลบุรี',
           province: 'ชลบุรี',
           district: 'ศรีราชา',
-          sequence: 0,
-          deliveryStatus: 'PENDING',
-          items: [{ id: 'b2-i1', product: 'ปูนซีเมนต์', qty: 1, unit: 'เที่ยว' }],
         },
       ],
       allowance: 0,
@@ -185,29 +191,31 @@ function seedBookings(): Booking[] {
       category: 'cements',
       docNo: 'CM2569-0002',
       customer: 'XYZ',
-      // ตัวอย่างงานเดียวมีหลายปลายทาง/สินค้าคนละชนิด — ยังเป็น 1 งาน/1 ค่าเที่ยว/1 รถ/1 คนขับเหมือนเดิม
-      destinations: [
+      // ตัวอย่างงานเดียวมีหลายรายการ/ปลายทางคนละที่ — ยังเป็น 1 งาน/1 ค่าเที่ยว/1 รถ/1 คนขับเหมือนเดิม
+      items: [
         {
-          id: 'b3-d1',
-          name: 'ไซต์งาน ราชบุรี',
+          id: 'b3-i1',
+          product: 'ปูนซีเมนต์ M401',
+          qty: 10,
+          unit: 'ตัน',
+          jobType: 'พาเลทโรงงาน',
+          siteName: 'ไซต์งาน ราชบุรี',
           province: 'ราชบุรี',
           district: 'เมืองราชบุรี',
-          contactName: 'คุณวิชัย',
-          contactPhone: '089-111-2233',
-          sequence: 0,
-          deliveryStatus: 'PENDING',
-          items: [{ id: 'b3-i1', product: 'ปูนซีเมนต์ M401', qty: 10, unit: 'ตัน', jobType: 'พาเลทโรงงาน' }],
+          siteContactName: 'คุณวิชัย',
+          sitePhone: '089-111-2233',
         },
         {
-          id: 'b3-d2',
-          name: 'ไซต์งาน เชียงใหม่',
+          id: 'b3-i2',
+          product: 'ปูนซีเมนต์ M402',
+          qty: 5,
+          unit: 'ตัน',
+          jobType: 'พาเลทโรงงาน',
+          siteName: 'ไซต์งาน เชียงใหม่',
           province: 'เชียงใหม่',
           district: 'เมืองเชียงใหม่',
-          contactName: 'คุณประยูร',
-          contactPhone: '086-222-9911',
-          sequence: 1,
-          deliveryStatus: 'PENDING',
-          items: [{ id: 'b3-i2', product: 'ปูนซีเมนต์ M402', qty: 5, unit: 'ตัน', jobType: 'พาเลทโรงงาน' }],
+          siteContactName: 'คุณประยูร',
+          sitePhone: '086-222-9911',
         },
       ],
       allowance: 320,
@@ -226,17 +234,21 @@ function seedBookings(): Booking[] {
       category: 'ceramics',
       docNo: 'CR2569-0003',
       customer: fixedCeramicsCustomer,
-      destinations: [
+      items: [
         {
-          id: 'b3b-d1',
-          name: 'ไซต์งาน อยุธยา',
+          id: 'b3b-i1',
+          product: 'ปูนซีเมนต์',
+          qty: 1,
+          unit: 'เที่ยว',
+          siteName: 'ไซต์งาน อยุธยา',
           province: 'พระนครศรีอยุธยา',
           district: 'บางปะอิน',
-          contactName: 'คุณอนุชา',
-          contactPhone: '082-555-1122',
-          sequence: 0,
-          deliveryStatus: 'PENDING',
-          items: [{ id: 'b3b-i1', product: 'ปูนซีเมนต์', qty: 1, unit: 'เที่ยว' }],
+          siteContactName: 'คุณอนุชา',
+          sitePhone: '082-555-1122',
+          pickupStatus: 'PICKED_UP',
+          pickupSequence: 0,
+          pickedUpAt: now,
+          deliverySequence: 0,
         },
       ],
       allowance: 0,
@@ -258,19 +270,24 @@ function seedBookings(): Booking[] {
       category: 'ceramics',
       docNo: 'CR2569-0001',
       customer: fixedCeramicsCustomer,
-      destinations: [
+      items: [
         {
-          id: 'b4-d1',
-          name: 'ไซต์งาน นครสวรรค์',
+          id: 'b4-i1',
+          product: 'ปูนซีเมนต์',
+          qty: 1,
+          unit: 'เที่ยว',
+          siteName: 'ไซต์งาน นครสวรรค์',
           province: 'นครสวรรค์',
           district: 'เมืองนครสวรรค์',
-          contactName: 'คุณสมชาย',
-          contactPhone: '081-234-5678',
-          sequence: 0,
+          siteContactName: 'คุณสมชาย',
+          sitePhone: '081-234-5678',
+          pickupStatus: 'PICKED_UP',
+          pickupSequence: 0,
+          pickedUpAt: now,
+          deliverySequence: 0,
           deliveryStatus: 'DELIVERED',
           deliveredAt: now,
           deliveredBy: 'คุณสมชาย',
-          items: [{ id: 'b4-i1', product: 'ปูนซีเมนต์', qty: 1, unit: 'เที่ยว' }],
         },
       ],
       allowance: 1549,
@@ -418,7 +435,7 @@ export const useBookingStore = defineStore('booking', () => {
   function updateBookingFull(
     id: string,
     data: {
-      destinations?: Destination[]
+      items?: JobItem[]
       po?: string
       shipDate?: Date
       returnDate?: Date
@@ -434,7 +451,7 @@ export const useBookingStore = defineStore('booking', () => {
   ) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
-    if (data.destinations !== undefined) booking.destinations = data.destinations
+    if (data.items !== undefined) booking.items = data.items
     if (data.po !== undefined) booking.po = data.po || undefined
     if (data.shipDate !== undefined) booking.shipDate = data.shipDate
     if (data.returnDate !== undefined) booking.returnDate = data.returnDate
@@ -449,24 +466,14 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`)
   }
 
-  /** เพิ่มปลายทางใหม่ (พร้อมรายการสินค้า) เข้าไปในงานที่มีอยู่แล้ว (ใช้ตอนจัดรถแล้วมีปลายทางเพิ่มทีหลัง) ไม่สร้างงาน/เลขที่เอกสารใหม่ */
-  function addDestination(
-    id: string,
-    destination: Omit<Destination, 'id' | 'items' | 'deliveryStatus' | 'sequence'> & { items: Omit<JobItem, 'id'>[] }
-  ) {
+  /** เพิ่มรายการสินค้า/ปลายทางใหม่เข้าไปในงานที่มีอยู่แล้ว (ใช้ตอนจัดรถแล้วมีรายการเพิ่มทีหลัง) ไม่สร้างงาน/เลขที่เอกสารใหม่ */
+  function addJobItem(id: string, item: Omit<JobItem, 'id'>) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
-    const newDestination: Destination = {
-      ...destination,
-      id: `dest${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-      sequence: booking.destinations.length,
-      deliveryStatus: 'PENDING',
-      items: destination.items.map((item) => ({ ...item, id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}` })),
-    }
-    booking.destinations.push(newDestination)
-    const productSummary = newDestination.items.map((i) => `${i.product} ${i.qty} ${i.unit}`).join(', ')
-    addLog(`เพิ่มปลายทาง ${booking.docNo}: ${newDestination.name} (${productSummary})`)
-    return newDestination
+    const newItem: JobItem = { ...item, id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}` }
+    booking.items.push(newItem)
+    addLog(`เพิ่มรายการ ${booking.docNo}: ${newItem.siteName} - ${newItem.product} ${newItem.qty} ${newItem.unit}`)
+    return newItem
   }
 
   /** จ่ายงานให้คนขับ: WAITING_DISPATCH -> ASSIGNED (รอคนขับตอบรับใน Driver App ภายใน 15 นาที) */
@@ -564,20 +571,36 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
-   * คนขับกดยืนยันรับสินค้าครบแล้ว: LOADING -> LOADED
-   * จุดนี้คือจุดตัดสต๊อกของงานทั้งใบ (ทุกปลายทาง ทุกรายการสินค้า) ครั้งเดียว เพราะรถขนสินค้าทั้งหมดออกจากต้นทางพร้อมกัน
+   * คนขับกดรับสินค้าทีละรายการที่ต้นทาง (สถานะ LOADING) — คนขับเลือกลำดับรับเองได้ต่อรายการ (คนละต้นทางได้)
+   * ตัดสต๊อกทันทีตอนรับรายการนี้ (ไม่รอครบทั้งงาน) เมื่อรับครบทุกรายการแล้วจะคำนวณลำดับส่งของอัตโนมัติ (ย้อนกลับลำดับรับ) แล้วเลื่อนสถานะเป็น LOADED
    */
-  function confirmGoodsReceived(id: string, receivedBy?: string) {
-    const booking = bookings.value.find((b) => b.id === id)
+  function pickupJobItem(bookingId: string, itemId: string, receivedBy?: string) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
     if (!booking || booking.status !== 'LOADING') return
-    booking.status = 'LOADED'
-    booking.goodsReceivedAt = new Date()
-    booking.goodsReceivedBy = receivedBy || authStore.userName || booking.driverName
-    addLog(`รับสินค้าครบที่ต้นทาง ${booking.docNo} (โดย ${booking.goodsReceivedBy})`)
-    const allItems = booking.destinations.flatMap((d) => d.items)
-    const stock = inventoryStore.recordDeliveryMovement(booking, allItems)
+    const item = booking.items.find((i) => i.id === itemId)
+    if (!item || item.pickupStatus === 'PICKED_UP') return
+
+    const pickedCount = booking.items.filter((i) => i.pickupStatus === 'PICKED_UP').length
+    item.pickupSequence = pickedCount
+    item.pickedUpAt = new Date()
+    item.pickupStatus = 'PICKED_UP'
+    addLog(`รับสินค้า ${booking.docNo}: ${item.product} (${item.siteName}) ลำดับที่ ${pickedCount + 1}`)
+
+    const stock = inventoryStore.recordDeliveryMovement(booking, [item])
     stock.matched.forEach((m) => addLog(`ตัดสต๊อก ${m} จากงาน ${booking.docNo}`))
     stock.unmatched.forEach((name) => addLog(`ไม่พบสินค้า "${name}" ในตั้งค่าสินค้า ข้ามการตัดสต๊อกสำหรับ ${booking.docNo}`))
+
+    const allPickedUp = booking.items.every((i) => i.pickupStatus === 'PICKED_UP')
+    if (allPickedUp) {
+      const maxSeq = Math.max(...booking.items.map((i) => i.pickupSequence ?? 0))
+      booking.items.forEach((i) => {
+        i.deliverySequence = maxSeq - (i.pickupSequence ?? 0)
+      })
+      booking.status = 'LOADED'
+      booking.goodsReceivedAt = new Date()
+      booking.goodsReceivedBy = receivedBy || authStore.userName || booking.driverName
+      addLog(`รับสินค้าครบที่ต้นทาง ${booking.docNo} (โดย ${booking.goodsReceivedBy})`)
+    }
   }
 
   /** ตรวจงานที่รอคนขับตอบรับเกิน 15 นาที ยกเลิกการจ่ายงานและกลับไปรอจัดคนขับใหม่อัตโนมัติ */
@@ -621,16 +644,16 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
-   * จบงานฝั่งออฟฟิศ (มีเพิ่ม/ลดหนี้ แต่ไม่บังคับ POD) — ปิดงานทั้งหมดทีเดียว รวมถึงปลายทางที่ยังไม่ได้กดส่งของทีละจุด
-   * ไม่ตัดสต๊อกซ้ำที่นี่ เพราะสต๊อกถูกตัดไปแล้วครั้งเดียวตอนสถานะ LOADED (ดู confirmGoodsReceived)
+   * จบงานฝั่งออฟฟิศ (มีเพิ่ม/ลดหนี้ แต่ไม่บังคับ POD) — ปิดงานทั้งหมดทีเดียว รวมถึงรายการที่ยังไม่ได้กดส่งของทีละรายการ
+   * ไม่ตัดสต๊อกซ้ำที่นี่ เพราะสต๊อกถูกตัดไปแล้วตอนรับสินค้าแต่ละรายการ (ดู pickupJobItem)
    */
   function completeJob(id: string, debtAdjustments: DebtAdjustment[], odometerAfter?: number) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
-    booking.destinations.forEach((dest) => {
-      if (dest.deliveryStatus !== 'DELIVERED') {
-        dest.deliveryStatus = 'DELIVERED'
-        dest.deliveredAt = dest.deliveredAt || new Date()
+    booking.items.forEach((item) => {
+      if (item.deliveryStatus !== 'DELIVERED') {
+        item.deliveryStatus = 'DELIVERED'
+        item.deliveredAt = item.deliveredAt || new Date()
       }
     })
     const netAdjustment = debtAdjustments.reduce((sum, d) => sum + d.amount, 0)
@@ -644,37 +667,41 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
-   * คนขับกดส่งของสำเร็จทีละปลายทาง (Destination) แนบ POD + ชื่อผู้รับของจุดนั้นโดยเฉพาะ
-   * ไม่ตัดสต๊อกที่นี่ (ตัดไปแล้วตอนรับสินค้าที่ต้นทาง — สถานะ LOADED)
-   * เมื่อส่งครบทุกจุดแล้ว งานทั้งใบจะจบอัตโนมัติ (เลขไมล์สิ้นสุด/เบี้ยเลี้ยงสุทธิ/สถานะ DELIVERED)
+   * คนขับกดส่งของสำเร็จทีละรายการ (JobItem) แนบ POD + ชื่อผู้รับของรายการนั้นโดยเฉพาะ
+   * ไม่ตัดสต๊อกที่นี่ (ตัดไปแล้วตอนรับสินค้าที่ต้นทาง — ดู pickupJobItem)
+   * ไม่ปิดงานอัตโนมัติที่นี่แม้ส่งครบทุกรายการแล้ว — ต้องรอคนขับกดยืนยัน "ดำเนินการเสร็จสิ้น" เอง (ดู finishDriverJob)
    */
-  function deliverDestination(
-    bookingId: string,
-    destinationId: string,
-    podImage: string,
-    deliveredBy: string,
-    odometerAfter?: number
-  ) {
+  function deliverJobItem(bookingId: string, itemId: string, podImage: string, deliveredBy: string) {
     const booking = bookings.value.find((b) => b.id === bookingId)
-    const destination = booking?.destinations.find((d) => d.id === destinationId)
-    if (!booking || !destination || destination.deliveryStatus === 'DELIVERED') return
-    destination.deliveryStatus = 'DELIVERED'
-    destination.podImage = podImage
-    destination.deliveredBy = deliveredBy
-    destination.deliveredAt = new Date()
-    addLog(`ส่งของสำเร็จ ${booking.docNo}: ${destination.name} (ผู้รับ: ${deliveredBy})`)
+    const item = booking?.items.find((i) => i.id === itemId)
+    if (!booking || !item || item.deliveryStatus === 'DELIVERED') return
+    item.deliveryStatus = 'DELIVERED'
+    item.podImage = podImage
+    item.deliveredBy = deliveredBy
+    item.deliveredAt = new Date()
+    addLog(`ส่งของสำเร็จ ${booking.docNo}: ${item.siteName} - ${item.product} (ผู้รับ: ${deliveredBy})`)
 
-    const allDelivered = booking.destinations.every((d) => d.deliveryStatus === 'DELIVERED')
-    if (allDelivered) {
-      if (odometerAfter !== undefined) booking.odometerAfter = odometerAfter
-      booking.podImage = podImage
-      booking.finalAllowance = booking.finalAllowance ?? booking.allowance
-      booking.status = 'DELIVERED'
-      booking.completedAt = new Date()
-      addLog(`จบงาน ${booking.docNo} (ส่งของครบทุกปลายทางแล้ว)`)
-    } else if (booking.status === 'IN_TRANSIT') {
-      booking.status = 'DELIVERING'
-    }
+    if (booking.status === 'IN_TRANSIT') booking.status = 'DELIVERING'
+  }
+
+  /**
+   * คนขับกดยืนยัน "ดำเนินการเสร็จสิ้น" หลังส่งของครบทุกรายการแล้ว — จบงานฝั่งคนขับ (DELIVERING -> DELIVERED)
+   * เป็นจุดที่บันทึกเลขไมล์สิ้นสุด (ย้ายมาจากที่เคยถามในโมดัลส่งของจุดสุดท้าย)
+   */
+  function finishDriverJob(bookingId: string, odometerAfter?: number) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
+    if (!booking) return
+    const allDelivered = booking.items.every((i) => i.deliveryStatus === 'DELIVERED')
+    if (!allDelivered) return
+    if (odometerAfter !== undefined) booking.odometerAfter = odometerAfter
+    const lastDelivered = [...booking.items].sort(
+      (a, b) => (b.deliveredAt ? new Date(b.deliveredAt).getTime() : 0) - (a.deliveredAt ? new Date(a.deliveredAt).getTime() : 0)
+    )[0]
+    if (lastDelivered?.podImage) booking.podImage = lastDelivered.podImage
+    booking.finalAllowance = booking.finalAllowance ?? booking.allowance
+    booking.status = 'DELIVERED'
+    booking.completedAt = new Date()
+    addLog(`จบงาน ${booking.docNo} (คนขับยืนยันดำเนินการเสร็จสิ้น)`)
   }
 
   // --- Billing batch flow ---
@@ -847,16 +874,17 @@ export const useBookingStore = defineStore('booking', () => {
     updateBookingPrice,
     updateBookingOps,
     updateBookingFull,
-    addDestination,
+    addJobItem,
     dispatchBooking,
     acceptDispatch,
     declineDispatch,
     markFuelReceived,
     startLoading,
-    confirmGoodsReceived,
+    pickupJobItem,
     startTransit,
     completeJob,
-    deliverDestination,
+    deliverJobItem,
+    finishDriverJob,
     bookingsInBatch,
     updateBatch,
     deleteBatch,

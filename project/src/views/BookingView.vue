@@ -59,12 +59,12 @@
               <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
               <td class="px-4 py-3 font-semibold text-text">
                 {{ destinationLabel(booking) }}
-                <span class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-surface-2 text-muted">{{ booking.destinations.length }} เที่ยว</span>
+                <span class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-surface-2 text-muted">{{ booking.items.length }} เที่ยว</span>
                 <span
                   v-if="booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING'"
                   class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700"
                 >
-                  ส่งแล้ว {{ deliveredItemCount(booking) }}/{{ booking.destinations.length }}
+                  ส่งแล้ว {{ deliveredItemCount(booking) }}/{{ booking.items.length }}
                 </span>
               </td>
               <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
@@ -148,12 +148,12 @@
               <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
               <td class="px-4 py-3 font-semibold text-text">
                 {{ destinationLabel(booking) }}
-                <span class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-surface-2 text-muted">{{ booking.destinations.length }} เที่ยว</span>
+                <span class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-surface-2 text-muted">{{ booking.items.length }} เที่ยว</span>
                 <span
                   v-if="booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING'"
                   class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700"
                 >
-                  ส่งแล้ว {{ deliveredItemCount(booking) }}/{{ booking.destinations.length }}
+                  ส่งแล้ว {{ deliveredItemCount(booking) }}/{{ booking.items.length }}
                 </span>
               </td>
               <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
@@ -312,11 +312,11 @@
               </div>
             </div>
 
-            <!-- Destination Draft Sub-form: กรอกที่อยู่ปลายทาง แล้วเพิ่มสินค้าได้หลายรายการในปลายทางเดียวกัน ก่อนยืนยันเพิ่มปลายทาง -->
+            <!-- Item Draft Sub-form: 1 แถว = 1 ปลายทาง + 1 สินค้า กรอกครบในฟอร์มเดียวแล้วยืนยันเพิ่มทีละรายการ -->
             <div class="border border-border rounded-xl p-4 bg-surface-2">
-              <h3 class="font-semibold text-text mb-1">เพิ่มปลายทางใหม่</h3>
+              <h3 class="font-semibold text-text mb-1">เพิ่มรายการสินค้า</h3>
               <div class="text-xs text-muted mb-3">
-                ปลายทางที่เพิ่มทั้งหมดจะรวมอยู่ในงาน/เลขที่เอกสารเดียวกัน (1 งาน = 1 เที่ยวรถ) แต่ละปลายทางเพิ่มสินค้าได้หลายรายการโดยไม่ต้องกรอกที่อยู่ซ้ำ
+                รายการที่เพิ่มทั้งหมดจะรวมอยู่ในงาน/เลขที่เอกสารเดียวกัน (1 งาน = 1 เที่ยวรถ) เพิ่มได้หลายรายการ (หลายปลายทาง/หลายสินค้า) ในงานเดียวกัน
               </div>
 
               <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted bg-surface rounded-lg px-3 py-2 border border-border mb-3">
@@ -328,153 +328,134 @@
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label class="block text-xs font-semibold text-muted mb-1">สถานที่ส่งสินค้า (ชื่อหน้างาน)</label>
-                  <input v-model="destinationDraft.name" placeholder="ชื่อหน้างาน" class="input-field w-full" />
+                  <input v-model="itemDraft.siteName" placeholder="ชื่อหน้างาน" class="input-field w-full" />
                 </div>
                 <div>
                   <label class="block text-xs font-semibold text-muted mb-1">จังหวัด</label>
-                  <input v-model="destinationDraft.province" list="destProvinceOptions" placeholder="จังหวัด" class="input-field w-full" />
-                  <datalist id="destProvinceOptions">
+                  <input v-model="itemDraft.province" list="itemProvinceOptions" placeholder="จังหวัด" class="input-field w-full" />
+                  <datalist id="itemProvinceOptions">
                     <option v-for="p in fuelRateStore.provincesList" :key="p" :value="p" />
                   </datalist>
                 </div>
                 <div>
                   <label class="block text-xs font-semibold text-muted mb-1">
                     อำเภอ
-                    <span v-if="destinationDraftStandardLiters !== null" class="font-normal text-[10px]">(ลิตรมาตรฐาน: {{ destinationDraftStandardLiters }} ล.)</span>
+                    <span v-if="itemDraftStandardLiters !== null" class="font-normal text-[10px]">(ลิตรมาตรฐาน: {{ itemDraftStandardLiters }} ล.)</span>
                   </label>
-                  <input v-model="destinationDraft.district" list="destDistrictOptions" placeholder="อำเภอ" class="input-field w-full" />
-                  <datalist id="destDistrictOptions">
-                    <option v-for="d in fuelRateStore.districtsForProvince(destinationDraft.province)" :key="d" :value="d" />
+                  <input v-model="itemDraft.district" list="itemDistrictOptions" placeholder="อำเภอ" class="input-field w-full" />
+                  <datalist id="itemDistrictOptions">
+                    <option v-for="d in fuelRateStore.districtsForProvince(itemDraft.province)" :key="d" :value="d" />
                   </datalist>
                 </div>
                 <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">ที่อยู่ (ไม่บังคับ)</label>
-                  <input v-model="destinationDraft.address" placeholder="ที่อยู่ปลายทาง" class="input-field w-full" />
+                  <label class="block text-xs font-semibold text-muted mb-1">ต้นทาง/จุดรับสินค้า (ไม่บังคับ)</label>
+                  <input v-model="itemDraft.pickupOriginName" list="itemOriginOptions" placeholder="ว่าง = ใช้ต้นทางของงาน" class="input-field w-full" />
+                  <datalist id="itemOriginOptions">
+                    <option v-for="n in originsStore.originNames" :key="n" :value="n" />
+                  </datalist>
                 </div>
                 <div>
                   <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้ติดต่อหน้างาน (ไม่บังคับ)</label>
-                  <input v-model="destinationDraft.contactName" placeholder="ชื่อผู้ติดต่อ" class="input-field w-full" />
+                  <input v-model="itemDraft.siteContactName" placeholder="ชื่อผู้ติดต่อ" class="input-field w-full" />
                 </div>
                 <div>
                   <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทรหน้างาน (ไม่บังคับ)</label>
-                  <input v-model="destinationDraft.contactPhone" placeholder="เบอร์โทร" class="input-field w-full" />
+                  <input v-model="itemDraft.sitePhone" placeholder="เบอร์โทร" class="input-field w-full" />
                 </div>
                 <div class="md:col-span-2">
                   <label class="block text-xs font-semibold text-muted mb-1">พิกัด/ลิงก์ Google Maps หน้างาน (ไม่บังคับ)</label>
-                  <input v-model="destinationDraft.gpsInput" placeholder="วางลิงก์ Google Maps หรือพิกัด lat,lng" class="input-field w-full" />
-                  <div v-if="destinationDraftGps.latitude !== undefined" class="text-[11px] text-muted mt-1">
-                    พิกัด: {{ destinationDraftGps.latitude }}, {{ destinationDraftGps.longitude }}
+                  <input v-model="itemDraft.gpsInput" placeholder="วางลิงก์ Google Maps หรือพิกัด lat,lng" class="input-field w-full" />
+                  <div v-if="itemDraftGps.latitude !== undefined" class="text-[11px] text-muted mt-1">
+                    พิกัด: {{ itemDraftGps.latitude }}, {{ itemDraftGps.longitude }}
                   </div>
-                  <div v-else-if="destinationDraft.gpsInput" class="text-[11px] text-muted mt-1">
+                  <div v-else-if="itemDraft.gpsInput" class="text-[11px] text-muted mt-1">
                     ไม่สามารถอ่านพิกัดจากข้อความนี้ได้ ใช้เป็นลิงก์อ้างอิงแทน
                   </div>
                 </div>
               </div>
 
-              <!-- Product mini-form: เพิ่มสินค้าหลายรายการในปลายทางนี้ก่อนยืนยัน -->
-              <div class="mt-4 pt-4 border-t border-border">
-                <div class="text-xs font-semibold text-muted mb-2">สินค้าที่จะเพิ่มในปลายทางนี้ ({{ destinationDraft.items.length }} รายการ)</div>
-                <div v-if="destinationDraft.items.length" class="space-y-1 mb-3">
-                  <div
-                    v-for="(pi, pidx) in destinationDraft.items"
-                    :key="pi.id"
-                    class="flex items-center justify-between text-sm bg-surface rounded-lg px-3 py-2 border border-border"
-                  >
-                    <div>{{ pi.product }} · {{ pi.qty }} {{ pi.unit }} <span v-if="pi.jobType" class="text-muted">({{ pi.jobType }})</span></div>
-                    <button @click="removeProductFromDestinationDraft(pidx)" class="text-red-500 hover:text-red-700">
-                      <span class="material-symbols-rounded text-base">delete</span>
-                    </button>
-                  </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 pt-4 border-t border-border">
+                <div>
+                  <label class="block text-xs font-semibold text-muted mb-1">สินค้า</label>
+                  <input v-model="itemDraft.product" list="productNameOptions" placeholder="พิมพ์หรือเลือกชื่อสินค้า" class="input-field w-full" />
+                  <datalist id="productNameOptions">
+                    <option v-for="p in productOptionsForFleet" :key="p.id" :value="p.name" />
+                  </datalist>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="grid grid-cols-2 gap-2">
                   <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">สินค้า</label>
-                    <input v-model="productDraft.product" list="productNameOptions" placeholder="พิมพ์หรือเลือกชื่อสินค้า" class="input-field w-full" />
-                    <datalist id="productNameOptions">
-                      <option v-for="p in productOptionsForFleet" :key="p.id" :value="p.name" />
-                    </datalist>
+                    <label class="block text-xs font-semibold text-muted mb-1">ปริมาณ</label>
+                    <input v-model.number="itemDraft.qty" type="number" placeholder="0" class="input-field w-full" />
                   </div>
-                  <div class="grid grid-cols-2 gap-2">
-                    <div>
-                      <label class="block text-xs font-semibold text-muted mb-1">ปริมาณ</label>
-                      <input v-model.number="productDraft.qty" type="number" placeholder="0" class="input-field w-full" />
-                    </div>
-                    <div>
-                      <label class="block text-xs font-semibold text-muted mb-1">หน่วย <span class="font-normal text-[10px]">(จากสินค้า)</span></label>
-                      <input :value="productDraft.unit || '-'" disabled class="input-field w-full opacity-70" />
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">หน่วย <span class="font-normal text-[10px]">(จากสินค้า)</span></label>
+                    <input :value="itemDraft.unit || '-'" disabled class="input-field w-full opacity-70" />
+                  </div>
+                </div>
+                <template v-if="isCements">
+                  <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold text-muted mb-1">ประเภทงาน</label>
+                    <div class="flex gap-2 flex-wrap">
+                      <button
+                        v-for="jt in jobTypeOptions"
+                        :key="jt"
+                        type="button"
+                        @click="itemDraft.jobType = jt"
+                        :class="[
+                          'px-3 py-2 text-sm font-medium rounded-lg transition-all',
+                          itemDraft.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
+                        ]"
+                      >
+                        {{ jt }}
+                      </button>
                     </div>
                   </div>
-                  <template v-if="isCements">
-                    <div class="md:col-span-2">
-                      <label class="block text-xs font-semibold text-muted mb-1">ประเภทงาน</label>
-                      <div class="flex gap-2 flex-wrap">
-                        <button
-                          v-for="jt in jobTypeOptions"
-                          :key="jt"
-                          type="button"
-                          @click="productDraft.jobType = jt"
-                          :class="[
-                            'px-3 py-2 text-sm font-medium rounded-lg transition-all',
-                            productDraft.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
-                          ]"
-                        >
-                          {{ jt }}
-                        </button>
-                      </div>
-                    </div>
-                  </template>
-                </div>
-                <div class="flex justify-end mt-3">
-                  <button
-                    type="button"
-                    @click="confirmAddProductToDestinationDraft"
-                    :disabled="!canAddProductToDestinationDraft"
-                    class="btn-secondary disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <span class="material-symbols-rounded text-base">playlist_add</span>
-                    + เพิ่มสินค้า
-                  </button>
-                </div>
+                </template>
               </div>
 
               <div class="flex items-center justify-end mt-4 pt-4 border-t border-border">
-                <button @click="confirmAddDestinationToDraft" :disabled="!canAddDestinationDraft" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
-                  <span class="material-symbols-rounded text-base">add_location_alt</span>
-                  เพิ่มปลายทาง
+                <button @click="confirmAddItem" :disabled="!canAddItem" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+                  <span class="material-symbols-rounded text-base">playlist_add</span>
+                  ยืนยันเพิ่มรายการสินค้า
                 </button>
               </div>
             </div>
 
-            <!-- Destinations Staging Table: 2 ระดับ (ปลายทาง -> รายการสินค้า) -->
+            <!-- Line Items Staging Table: 1 แถว = 1 ปลายทาง + 1 สินค้า -->
             <div>
-              <h3 class="font-semibold text-text mb-3">ปลายทางในงานนี้ ({{ draftDestinations.length }} ปลายทาง)</h3>
-              <div v-if="draftDestinations.length === 0" class="border border-border rounded-lg px-4 py-6 text-center text-muted text-sm">
-                ยังไม่มีปลายทาง กรอกฟอร์มด้านบนแล้วกดยืนยันเพิ่มปลายทาง
+              <h3 class="font-semibold text-text mb-3">รายการในงานนี้ ({{ lineItems.length }} รายการ)</h3>
+              <div v-if="lineItems.length === 0" class="border border-border rounded-lg px-4 py-6 text-center text-muted text-sm">
+                ยังไม่มีรายการ กรอกฟอร์มด้านบนแล้วกดยืนยันเพิ่มรายการสินค้า
               </div>
-              <div v-else class="space-y-2">
-                <div v-for="(dest, idx) in draftDestinations" :key="dest.id" class="border border-border rounded-lg overflow-hidden">
-                  <div class="flex items-start justify-between gap-2 px-3 py-2 bg-surface-2">
-                    <div>
-                      <div class="font-semibold text-text">
-                        {{ idx + 1 }}. {{ dest.name }} <span class="text-muted font-normal">({{ dest.province }} · {{ dest.district }})</span>
-                      </div>
-                      <div v-if="dest.contactName || dest.contactPhone" class="text-xs text-muted">
-                        {{ dest.contactName || '-' }} {{ dest.contactPhone ? '· ' + dest.contactPhone : '' }}
-                      </div>
-                    </div>
-                    <button @click="removeDraftDestination(idx)" class="text-red-500 hover:text-red-700 flex-shrink-0">
-                      <span class="material-symbols-rounded text-base">delete</span>
-                    </button>
-                  </div>
-                  <div class="divide-y divide-border">
-                    <div v-for="pi in dest.items" :key="pi.id" class="flex items-center justify-between px-3 py-1.5 text-sm">
-                      <span class="text-text">{{ pi.product }}</span>
-                      <span class="text-muted">{{ pi.qty }} {{ pi.unit }} <span v-if="pi.jobType">· {{ pi.jobType }}</span></span>
-                    </div>
-                  </div>
-                </div>
+              <div v-else class="overflow-x-auto border border-border rounded-lg">
+                <table class="w-full text-sm">
+                  <thead class="bg-surface-2 border-b border-border">
+                    <tr>
+                      <th class="text-left px-3 py-2 font-semibold text-muted">ชื่อหน้างาน</th>
+                      <th class="text-left px-3 py-2 font-semibold text-muted">อำเภอ</th>
+                      <th class="text-left px-3 py-2 font-semibold text-muted">ต้นทาง</th>
+                      <th class="text-left px-3 py-2 font-semibold text-muted">สินค้า</th>
+                      <th class="text-right px-3 py-2 font-semibold text-muted">ปริมาณ</th>
+                      <th class="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(li, idx) in lineItems" :key="li.id" class="border-b border-border last:border-0">
+                      <td class="px-3 py-2 font-semibold text-text">{{ li.siteName }} <span class="text-muted font-normal">({{ li.province }})</span></td>
+                      <td class="px-3 py-2 text-muted">{{ li.district }}</td>
+                      <td class="px-3 py-2 text-muted">{{ li.pickupOriginName || '-' }}</td>
+                      <td class="px-3 py-2 text-text">{{ li.product }} <span v-if="li.jobType" class="text-muted">({{ li.jobType }})</span></td>
+                      <td class="px-3 py-2 text-right text-text">{{ li.qty }} {{ li.unit }}</td>
+                      <td class="px-3 py-2 text-right">
+                        <button @click="removeLineItem(idx)" class="text-red-500 hover:text-red-700">
+                          <span class="material-symbols-rounded text-base">delete</span>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-              <div v-if="draftDestinations.length" class="text-sm text-text mt-3">
+              <div v-if="lineItems.length" class="text-sm text-text mt-3">
                 ค่าเที่ยวของงานนี้ (1 เที่ยว): <span class="font-bold">{{ formatBaht(header.tripFee) }}</span>
                 <span class="ml-3 text-muted text-xs">น้ำมันมาตรฐานรวม: {{ computedFuel }} ล.</span>
               </div>
@@ -486,7 +467,7 @@
             <button @click="closeDialog" class="btn-secondary">ยกเลิก</button>
             <button @click="saveAllItems" :disabled="!canSave" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
               <span class="material-symbols-rounded">save</span>
-              บันทึกงาน (1 เที่ยว, {{ draftDestinations.length }} ปลายทาง)
+              บันทึกงาน (1 เที่ยว, {{ lineItems.length }} รายการ)
             </button>
           </div>
         </div>
@@ -533,55 +514,41 @@
             </div>
 
             <div class="text-xs font-semibold text-muted pt-2 border-t border-border">
-              ปลายทางในงานนี้ ({{ dispatchTarget?.destinations.length || 0 }} ปลายทาง)
+              รายการในงานนี้ ({{ dispatchTarget?.items.length || 0 }} รายการ)
             </div>
             <div v-if="dispatchTarget" class="space-y-2">
               <div
-                v-for="(dest, idx) in dispatchTarget.destinations"
-                :key="dest.id"
+                v-for="(li, idx) in dispatchTarget.items"
+                :key="li.id"
                 class="border border-border rounded-lg p-3 text-sm"
               >
                 <div class="flex items-start justify-between gap-2">
                   <div>
-                    <div class="font-semibold text-text">{{ idx + 1 }}. {{ dest.name }} <span class="text-muted font-normal">({{ dest.province }} · {{ dest.district }})</span></div>
-                    <div class="text-xs text-muted mt-0.5">
-                      <span v-for="(pi, pidx) in dest.items" :key="pi.id">{{ pi.product }} · {{ pi.qty }} {{ pi.unit }}<span v-if="pidx < dest.items.length - 1">, </span></span>
+                    <div class="font-semibold text-text">{{ idx + 1 }}. {{ li.siteName }} <span class="text-muted font-normal">({{ li.province }} · {{ li.district }})</span></div>
+                    <div class="text-xs text-muted mt-0.5">{{ li.product }} · {{ li.qty }} {{ li.unit }}</div>
+                    <div v-if="li.siteContactName || li.sitePhone" class="text-xs text-muted">
+                      {{ li.siteContactName || '-' }} {{ li.sitePhone ? '· ' + li.sitePhone : '' }}
                     </div>
-                    <div v-if="dest.contactName || dest.contactPhone" class="text-xs text-muted">
-                      {{ dest.contactName || '-' }} {{ dest.contactPhone ? '· ' + dest.contactPhone : '' }}
+                    <div class="text-xs text-muted">
+                      น้ำมันมาตรฐาน: {{ fuelRateStore.findRate(li.province, li.district)?.liters ?? '-' }} ล.
                     </div>
                   </div>
-                  <div class="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      type="button"
-                      :disabled="idx === 0"
-                      @click="moveDispatchItem(idx, -1)"
-                      class="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-surface-2 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <span class="material-symbols-rounded text-base">arrow_upward</span>
-                    </button>
-                    <button
-                      type="button"
-                      :disabled="idx === dispatchTarget.destinations.length - 1"
-                      @click="moveDispatchItem(idx, 1)"
-                      class="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-surface-2 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <span class="material-symbols-rounded text-base">arrow_downward</span>
-                    </button>
-                  </div>
+                  <button @click="removeDispatchItem(idx)" class="text-red-500 hover:text-red-700 flex-shrink-0">
+                    <span class="material-symbols-rounded text-base">delete</span>
+                  </button>
                 </div>
               </div>
             </div>
 
-            <button v-if="!showAddDestination" type="button" @click="showAddDestination = true" class="btn-secondary w-full justify-center">
+            <button v-if="!showAddDispatchItem" type="button" @click="showAddDispatchItem = true" class="btn-secondary w-full justify-center">
               <span class="material-symbols-rounded text-base">add_location_alt</span>
-              เพิ่มปลายทาง
+              เพิ่มรายการ
             </button>
             <div v-else class="border border-border rounded-lg p-3 space-y-2">
               <div class="grid grid-cols-2 gap-2">
-                <input v-model="dispatchDestinationDraft.name" placeholder="ชื่อหน้างาน" class="input-field w-full" />
+                <input v-model="dispatchItemDraft.siteName" placeholder="ชื่อหน้างาน" class="input-field w-full" />
                 <div>
-                  <input v-model="dispatchDestinationDraft.province" list="dispatchProvinceOptions" placeholder="จังหวัด" class="input-field w-full" />
+                  <input v-model="dispatchItemDraft.province" list="dispatchProvinceOptions" placeholder="จังหวัด" class="input-field w-full" />
                   <datalist id="dispatchProvinceOptions">
                     <option v-for="p in fuelRateStore.provincesList" :key="p" :value="p" />
                   </datalist>
@@ -589,78 +556,59 @@
               </div>
               <div class="grid grid-cols-2 gap-2">
                 <div>
-                  <input v-model="dispatchDestinationDraft.district" list="dispatchDistrictOptions" placeholder="อำเภอ" class="input-field w-full" />
+                  <input v-model="dispatchItemDraft.district" list="dispatchDistrictOptions" placeholder="อำเภอ" class="input-field w-full" />
                   <datalist id="dispatchDistrictOptions">
-                    <option v-for="d in fuelRateStore.districtsForProvince(dispatchDestinationDraft.province)" :key="d" :value="d" />
+                    <option v-for="d in fuelRateStore.districtsForProvince(dispatchItemDraft.province)" :key="d" :value="d" />
                   </datalist>
                 </div>
                 <div class="text-xs text-muted flex items-center">
-                  ลิตรมาตรฐาน: {{ dispatchDestinationStandardLiters }} ล.
+                  ลิตรมาตรฐาน: {{ dispatchItemStandardLiters }} ล.
                 </div>
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <input v-model="dispatchDestinationDraft.contactName" placeholder="ชื่อผู้ติดต่อ (ไม่บังคับ)" class="input-field w-full" />
-                <input v-model="dispatchDestinationDraft.contactPhone" placeholder="เบอร์โทร (ไม่บังคับ)" class="input-field w-full" />
               </div>
               <div>
-                <input v-model="dispatchDestinationDraft.gpsInput" placeholder="พิกัด/ลิงก์ Google Maps (ไม่บังคับ)" class="input-field w-full" />
-                <div v-if="dispatchDestinationGps.latitude !== undefined" class="text-[11px] text-muted mt-1">
-                  พิกัด: {{ dispatchDestinationGps.latitude }}, {{ dispatchDestinationGps.longitude }}
+                <input v-model="dispatchItemDraft.pickupOriginName" list="dispatchOriginOptions" placeholder="ต้นทาง/จุดรับสินค้า (ไม่บังคับ)" class="input-field w-full" />
+                <datalist id="dispatchOriginOptions">
+                  <option v-for="n in originsStore.originNames" :key="n" :value="n" />
+                </datalist>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <input v-model="dispatchItemDraft.siteContactName" placeholder="ชื่อผู้ติดต่อ (ไม่บังคับ)" class="input-field w-full" />
+                <input v-model="dispatchItemDraft.sitePhone" placeholder="เบอร์โทร (ไม่บังคับ)" class="input-field w-full" />
+              </div>
+              <div>
+                <input v-model="dispatchItemDraft.gpsInput" placeholder="พิกัด/ลิงก์ Google Maps (ไม่บังคับ)" class="input-field w-full" />
+                <div v-if="dispatchItemGps.latitude !== undefined" class="text-[11px] text-muted mt-1">
+                  พิกัด: {{ dispatchItemGps.latitude }}, {{ dispatchItemGps.longitude }}
                 </div>
               </div>
 
-              <div class="border-t border-border pt-2 mt-2">
-                <div class="text-xs font-semibold text-muted mb-1">สินค้าที่จะเพิ่มในปลายทางนี้ ({{ dispatchDestinationDraft.items.length }} รายการ)</div>
-                <div v-if="dispatchDestinationDraft.items.length" class="space-y-1 mb-2">
-                  <div
-                    v-for="(pi, pidx) in dispatchDestinationDraft.items"
-                    :key="pi.id"
-                    class="flex items-center justify-between text-xs bg-surface rounded-lg px-2 py-1 border border-border"
-                  >
-                    <span>{{ pi.product }} · {{ pi.qty }} {{ pi.unit }}</span>
-                    <button @click="removeProductFromDispatchDraft(pidx)" class="text-red-500 hover:text-red-700">
-                      <span class="material-symbols-rounded text-sm">delete</span>
-                    </button>
-                  </div>
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                  <input v-model="dispatchProductDraft.product" list="dispatchProductNameOptions" placeholder="สินค้า" class="input-field w-full" />
-                  <input v-model.number="dispatchProductDraft.qty" type="number" placeholder="ปริมาณ" class="input-field w-full" />
-                </div>
-                <datalist id="dispatchProductNameOptions">
-                  <option v-for="p in productOptionsForFleet" :key="p.id" :value="p.name" />
-                </datalist>
-                <template v-if="isCements">
-                  <div class="flex gap-1 flex-wrap mt-2">
-                    <button
-                      v-for="jt in jobTypeOptions"
-                      :key="jt"
-                      type="button"
-                      @click="dispatchProductDraft.jobType = jt"
-                      :class="[
-                        'px-2 py-1 text-xs font-medium rounded-lg transition-all',
-                        dispatchProductDraft.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
-                      ]"
-                    >
-                      {{ jt }}
-                    </button>
-                  </div>
-                </template>
-                <div class="flex justify-end mt-2">
+              <div class="grid grid-cols-2 gap-2 border-t border-border pt-2 mt-2">
+                <input v-model="dispatchItemDraft.product" list="dispatchProductNameOptions" placeholder="สินค้า" class="input-field w-full" />
+                <input v-model.number="dispatchItemDraft.qty" type="number" placeholder="ปริมาณ" class="input-field w-full" />
+              </div>
+              <datalist id="dispatchProductNameOptions">
+                <option v-for="p in productOptionsForFleet" :key="p.id" :value="p.name" />
+              </datalist>
+              <template v-if="isCements">
+                <div class="flex gap-1 flex-wrap mt-2">
                   <button
+                    v-for="jt in jobTypeOptions"
+                    :key="jt"
                     type="button"
-                    @click="confirmAddProductToDispatchDraft"
-                    :disabled="!canAddProductToDispatchDraft"
-                    class="btn-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                    @click="dispatchItemDraft.jobType = jt"
+                    :class="[
+                      'px-2 py-1 text-xs font-medium rounded-lg transition-all',
+                      dispatchItemDraft.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
+                    ]"
                   >
-                    + เพิ่มสินค้า
+                    {{ jt }}
                   </button>
                 </div>
-              </div>
+              </template>
 
               <div class="flex justify-end gap-2 pt-2">
-                <button type="button" @click="showAddDestination = false" class="btn-secondary">ยกเลิก</button>
-                <button type="button" @click="confirmAddDestination" :disabled="!canAddDestination" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+                <button type="button" @click="showAddDispatchItem = false" class="btn-secondary">ยกเลิก</button>
+                <button type="button" @click="confirmAddDispatchItem" :disabled="!canAddDispatchItem" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
                   เพิ่ม
                 </button>
               </div>
@@ -822,46 +770,51 @@
               </div>
             </div>
 
-            <!-- ปลายทาง/รายการสินค้าในงานนี้ -->
+            <!-- รายการสินค้า/ปลายทางในงานนี้ -->
             <div>
-              <h3 class="font-semibold text-text mb-3">ปลายทางในงานนี้ ({{ editDestinations.length }} ปลายทาง)</h3>
-              <div v-if="editDestinations.length === 0" class="border border-border rounded-lg px-4 py-6 text-center text-muted text-sm mb-3">
-                ยังไม่มีปลายทาง กรอกฟอร์มด้านล่างแล้วกดยืนยันเพิ่มปลายทาง
+              <h3 class="font-semibold text-text mb-3">รายการในงานนี้ ({{ editLineItems.length }} รายการ)</h3>
+              <div v-if="editLineItems.length === 0" class="border border-border rounded-lg px-4 py-6 text-center text-muted text-sm mb-3">
+                ยังไม่มีรายการ กรอกฟอร์มด้านล่างแล้วกดยืนยันเพิ่มรายการสินค้า
               </div>
-              <div v-else class="space-y-2 mb-3">
-                <div v-for="(dest, idx) in editDestinations" :key="dest.id" class="border border-border rounded-lg overflow-hidden">
-                  <div class="flex items-start justify-between gap-2 px-3 py-2 bg-surface-2">
-                    <div>
-                      <div class="font-semibold text-text">
-                        {{ idx + 1 }}. {{ dest.name }} <span class="text-muted font-normal">({{ dest.province }} · {{ dest.district }})</span>
-                      </div>
-                      <div v-if="dest.contactName || dest.contactPhone" class="text-xs text-muted">
-                        {{ dest.contactName || '-' }} {{ dest.contactPhone ? '· ' + dest.contactPhone : '' }}
-                      </div>
-                    </div>
-                    <button @click="removeEditDestination(idx)" class="text-red-500 hover:text-red-700 flex-shrink-0">
-                      <span class="material-symbols-rounded text-base">delete</span>
-                    </button>
-                  </div>
-                  <div class="divide-y divide-border">
-                    <div v-for="pi in dest.items" :key="pi.id" class="flex items-center justify-between px-3 py-1.5 text-sm">
-                      <span class="text-text">{{ pi.product }}</span>
-                      <span class="text-muted">{{ pi.qty }} {{ pi.unit }} <span v-if="pi.jobType">· {{ pi.jobType }}</span></span>
-                    </div>
-                  </div>
-                </div>
+              <div v-else class="overflow-x-auto border border-border rounded-lg mb-3">
+                <table class="w-full text-sm">
+                  <thead class="bg-surface-2 border-b border-border">
+                    <tr>
+                      <th class="text-left px-3 py-2 font-semibold text-muted">ชื่อหน้างาน</th>
+                      <th class="text-left px-3 py-2 font-semibold text-muted">อำเภอ</th>
+                      <th class="text-left px-3 py-2 font-semibold text-muted">ต้นทาง</th>
+                      <th class="text-left px-3 py-2 font-semibold text-muted">สินค้า</th>
+                      <th class="text-right px-3 py-2 font-semibold text-muted">ปริมาณ</th>
+                      <th class="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(li, idx) in editLineItems" :key="li.id" class="border-b border-border last:border-0">
+                      <td class="px-3 py-2 font-semibold text-text">{{ li.siteName }} <span class="text-muted font-normal">({{ li.province }})</span></td>
+                      <td class="px-3 py-2 text-muted">{{ li.district }}</td>
+                      <td class="px-3 py-2 text-muted">{{ li.pickupOriginName || '-' }}</td>
+                      <td class="px-3 py-2 text-text">{{ li.product }} <span v-if="li.jobType" class="text-muted">({{ li.jobType }})</span></td>
+                      <td class="px-3 py-2 text-right text-text">{{ li.qty }} {{ li.unit }}</td>
+                      <td class="px-3 py-2 text-right">
+                        <button @click="removeEditLineItem(idx)" class="text-red-500 hover:text-red-700">
+                          <span class="material-symbols-rounded text-base">delete</span>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
               <div class="border border-border rounded-xl p-4 bg-surface-2">
-                <h4 class="font-semibold text-text mb-1 text-sm">เพิ่มปลายทางใหม่</h4>
+                <h4 class="font-semibold text-text mb-1 text-sm">เพิ่มรายการสินค้า</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label class="block text-xs font-semibold text-muted mb-1">สถานที่ส่งสินค้า (ชื่อหน้างาน)</label>
-                    <input v-model="editDestinationDraft.name" placeholder="ชื่อหน้างาน" class="input-field w-full" />
+                    <input v-model="editItemDraft.siteName" placeholder="ชื่อหน้างาน" class="input-field w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-semibold text-muted mb-1">จังหวัด</label>
-                    <input v-model="editDestinationDraft.province" list="editProvinceOptions" placeholder="จังหวัด" class="input-field w-full" />
+                    <input v-model="editItemDraft.province" list="editProvinceOptions" placeholder="จังหวัด" class="input-field w-full" />
                     <datalist id="editProvinceOptions">
                       <option v-for="p in fuelRateStore.provincesList" :key="p" :value="p" />
                     </datalist>
@@ -869,106 +822,83 @@
                   <div>
                     <label class="block text-xs font-semibold text-muted mb-1">
                       อำเภอ
-                      <span v-if="editDestinationDraftStandardLiters !== null" class="font-normal text-[10px]">(ลิตรมาตรฐาน: {{ editDestinationDraftStandardLiters }} ล.)</span>
+                      <span v-if="editItemDraftStandardLiters !== null" class="font-normal text-[10px]">(ลิตรมาตรฐาน: {{ editItemDraftStandardLiters }} ล.)</span>
                     </label>
-                    <input v-model="editDestinationDraft.district" list="editDistrictOptions" placeholder="อำเภอ" class="input-field w-full" />
+                    <input v-model="editItemDraft.district" list="editDistrictOptions" placeholder="อำเภอ" class="input-field w-full" />
                     <datalist id="editDistrictOptions">
-                      <option v-for="d in fuelRateStore.districtsForProvince(editDestinationDraft.province)" :key="d" :value="d" />
+                      <option v-for="d in fuelRateStore.districtsForProvince(editItemDraft.province)" :key="d" :value="d" />
                     </datalist>
                   </div>
                   <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ที่อยู่ (ไม่บังคับ)</label>
-                    <input v-model="editDestinationDraft.address" placeholder="ที่อยู่ปลายทาง" class="input-field w-full" />
+                    <label class="block text-xs font-semibold text-muted mb-1">ต้นทาง/จุดรับสินค้า (ไม่บังคับ)</label>
+                    <input v-model="editItemDraft.pickupOriginName" list="editOriginOptions" placeholder="ว่าง = ใช้ต้นทางของงาน" class="input-field w-full" />
+                    <datalist id="editOriginOptions">
+                      <option v-for="n in originsStore.originNames" :key="n" :value="n" />
+                    </datalist>
                   </div>
                   <div>
                     <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้ติดต่อหน้างาน (ไม่บังคับ)</label>
-                    <input v-model="editDestinationDraft.contactName" placeholder="ชื่อผู้ติดต่อ" class="input-field w-full" />
+                    <input v-model="editItemDraft.siteContactName" placeholder="ชื่อผู้ติดต่อ" class="input-field w-full" />
                   </div>
                   <div>
                     <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทรหน้างาน (ไม่บังคับ)</label>
-                    <input v-model="editDestinationDraft.contactPhone" placeholder="เบอร์โทร" class="input-field w-full" />
+                    <input v-model="editItemDraft.sitePhone" placeholder="เบอร์โทร" class="input-field w-full" />
                   </div>
                   <div class="md:col-span-2">
                     <label class="block text-xs font-semibold text-muted mb-1">พิกัด/ลิงก์ Google Maps หน้างาน (ไม่บังคับ)</label>
-                    <input v-model="editDestinationDraft.gpsInput" placeholder="วางลิงก์ Google Maps หรือพิกัด lat,lng" class="input-field w-full" />
-                    <div v-if="editDestinationDraftGps.latitude !== undefined" class="text-[11px] text-muted mt-1">
-                      พิกัด: {{ editDestinationDraftGps.latitude }}, {{ editDestinationDraftGps.longitude }}
+                    <input v-model="editItemDraft.gpsInput" placeholder="วางลิงก์ Google Maps หรือพิกัด lat,lng" class="input-field w-full" />
+                    <div v-if="editItemDraftGps.latitude !== undefined" class="text-[11px] text-muted mt-1">
+                      พิกัด: {{ editItemDraftGps.latitude }}, {{ editItemDraftGps.longitude }}
                     </div>
-                    <div v-else-if="editDestinationDraft.gpsInput" class="text-[11px] text-muted mt-1">
+                    <div v-else-if="editItemDraft.gpsInput" class="text-[11px] text-muted mt-1">
                       ไม่สามารถอ่านพิกัดจากข้อความนี้ได้ ใช้เป็นลิงก์อ้างอิงแทน
                     </div>
                   </div>
                 </div>
 
-                <div class="mt-4 pt-4 border-t border-border">
-                  <div class="text-xs font-semibold text-muted mb-2">สินค้าที่จะเพิ่มในปลายทางนี้ ({{ editDestinationDraft.items.length }} รายการ)</div>
-                  <div v-if="editDestinationDraft.items.length" class="space-y-1 mb-3">
-                    <div
-                      v-for="(pi, pidx) in editDestinationDraft.items"
-                      :key="pi.id"
-                      class="flex items-center justify-between text-sm bg-surface rounded-lg px-3 py-2 border border-border"
-                    >
-                      <div>{{ pi.product }} · {{ pi.qty }} {{ pi.unit }} <span v-if="pi.jobType" class="text-muted">({{ pi.jobType }})</span></div>
-                      <button @click="removeProductFromEditDestinationDraft(pidx)" class="text-red-500 hover:text-red-700">
-                        <span class="material-symbols-rounded text-base">delete</span>
-                      </button>
-                    </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 pt-4 border-t border-border">
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">สินค้า</label>
+                    <input v-model="editItemDraft.product" list="editProductNameOptions" placeholder="พิมพ์หรือเลือกชื่อสินค้า" class="input-field w-full" />
+                    <datalist id="editProductNameOptions">
+                      <option v-for="p in productOptionsForFleet" :key="p.id" :value="p.name" />
+                    </datalist>
                   </div>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div class="grid grid-cols-2 gap-2">
                     <div>
-                      <label class="block text-xs font-semibold text-muted mb-1">สินค้า</label>
-                      <input v-model="editProductDraft.product" list="editProductNameOptions" placeholder="พิมพ์หรือเลือกชื่อสินค้า" class="input-field w-full" />
-                      <datalist id="editProductNameOptions">
-                        <option v-for="p in productOptionsForFleet" :key="p.id" :value="p.name" />
-                      </datalist>
+                      <label class="block text-xs font-semibold text-muted mb-1">ปริมาณ</label>
+                      <input v-model.number="editItemDraft.qty" type="number" placeholder="0" class="input-field w-full" />
                     </div>
-                    <div class="grid grid-cols-2 gap-2">
-                      <div>
-                        <label class="block text-xs font-semibold text-muted mb-1">ปริมาณ</label>
-                        <input v-model.number="editProductDraft.qty" type="number" placeholder="0" class="input-field w-full" />
-                      </div>
-                      <div>
-                        <label class="block text-xs font-semibold text-muted mb-1">หน่วย <span class="font-normal text-[10px]">(จากสินค้า)</span></label>
-                        <input :value="editProductDraft.unit || '-'" disabled class="input-field w-full opacity-70" />
+                    <div>
+                      <label class="block text-xs font-semibold text-muted mb-1">หน่วย <span class="font-normal text-[10px]">(จากสินค้า)</span></label>
+                      <input :value="editItemDraft.unit || '-'" disabled class="input-field w-full opacity-70" />
+                    </div>
+                  </div>
+                  <template v-if="isCements">
+                    <div class="md:col-span-2">
+                      <label class="block text-xs font-semibold text-muted mb-1">ประเภทงาน</label>
+                      <div class="flex gap-2 flex-wrap">
+                        <button
+                          v-for="jt in jobTypeOptions"
+                          :key="jt"
+                          type="button"
+                          @click="editItemDraft.jobType = jt"
+                          :class="[
+                            'px-3 py-2 text-sm font-medium rounded-lg transition-all',
+                            editItemDraft.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
+                          ]"
+                        >
+                          {{ jt }}
+                        </button>
                       </div>
                     </div>
-                    <template v-if="isCements">
-                      <div class="md:col-span-2">
-                        <label class="block text-xs font-semibold text-muted mb-1">ประเภทงาน</label>
-                        <div class="flex gap-2 flex-wrap">
-                          <button
-                            v-for="jt in jobTypeOptions"
-                            :key="jt"
-                            type="button"
-                            @click="editProductDraft.jobType = jt"
-                            :class="[
-                              'px-3 py-2 text-sm font-medium rounded-lg transition-all',
-                              editProductDraft.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
-                            ]"
-                          >
-                            {{ jt }}
-                          </button>
-                        </div>
-                      </div>
-                    </template>
-                  </div>
-                  <div class="flex justify-end mt-3">
-                    <button
-                      type="button"
-                      @click="confirmAddProductToEditDestinationDraft"
-                      :disabled="!canAddProductToEditDestinationDraft"
-                      class="btn-secondary disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <span class="material-symbols-rounded text-base">playlist_add</span>
-                      + เพิ่มสินค้า
-                    </button>
-                  </div>
+                  </template>
                 </div>
 
-                <div class="flex justify-end mt-3">
-                  <button @click="confirmAddEditDestination" :disabled="!canAddEditDestination" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
-                    <span class="material-symbols-rounded text-base">add_location_alt</span>
-                    เพิ่มปลายทาง
+                <div class="flex justify-end mt-4 pt-4 border-t border-border">
+                  <button @click="confirmAddEditItem" :disabled="!canAddEditItem" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+                    <span class="material-symbols-rounded text-base">playlist_add</span>
+                    ยืนยันเพิ่มรายการสินค้า
                   </button>
                 </div>
               </div>
@@ -995,8 +925,10 @@ import { useDriversStore } from '@/stores/drivers'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
-import type { Booking, BookingCategory, BookingJobType, BookingStatus, DebtAdjustment, JobItem, Destination } from '@/types'
+import { useOriginsStore } from '@/stores/origins'
+import type { Booking, BookingCategory, BookingJobType, BookingStatus, DebtAdjustment, JobItem } from '@/types'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
+import { parseGpsInput } from '@/utils/gps'
 
 const props = defineProps<{ fleet: BookingCategory }>()
 
@@ -1006,6 +938,7 @@ const driversStore = useDriversStore()
 const inventoryStore = useInventoryStore()
 const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
+const originsStore = useOriginsStore()
 const fixedCustomer = bookingStore.fixedCustomer
 
 const showDialog = ref(false)
@@ -1018,23 +951,6 @@ const vehicleOptions = computed(() => driversStore.drivers.map((d) => d.vehicle)
 const nextReleaseNoPreview = computed(() => bookingStore.nextReleaseNo())
 
 const jobTypeOptions: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
-
-/**
- * แปลงข้อความ/ลิงก์พิกัดที่ผู้ใช้วางไว้ เป็นตัวเลข latitude/longitude ถ้าอ่านได้
- * รองรับลิงก์ Google Maps รูปแบบ @lat,lng, ?q=lat,lng, ?ll=lat,lng หรือคู่ตัวเลข "lat,lng" ตรงๆ
- * ไม่ว่าจะ parse ได้หรือไม่ ข้อความดิบจะถูกเก็บแยกไว้เป็น mapUrl เสมอที่จุดเรียกใช้
- */
-function parseGpsInput(raw: string): { latitude?: number; longitude?: number } {
-  if (!raw) return {}
-  const patterns = [/@(-?\d+\.\d+),(-?\d+\.\d+)/, /[?&](?:q|ll)=(-?\d+\.\d+),(-?\d+\.\d+)/]
-  for (const p of patterns) {
-    const m = raw.match(p)
-    if (m) return { latitude: parseFloat(m[1]), longitude: parseFloat(m[2]) }
-  }
-  const bare = raw.match(/^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$/)
-  if (bare) return { latitude: parseFloat(bare[1]), longitude: parseFloat(bare[2]) }
-  return {}
-}
 
 // --- นาฬิกาสำหรับนับถอยหลังเวลาที่เหลือให้คนขับตอบรับงาน (ASSIGNED) ---
 const now = ref(Date.now())
@@ -1130,7 +1046,7 @@ const matchesSearch = (b: Booking, q: string) =>
   b.docNo.toLowerCase().includes(q) ||
   (b.po || '').toLowerCase().includes(q) ||
   b.customer.toLowerCase().includes(q) ||
-  b.destinations.some((d) => d.name.toLowerCase().includes(q)) ||
+  b.items.some((i) => i.siteName.toLowerCase().includes(q)) ||
   (b.plate || '').toLowerCase().includes(q)
 
 const inProgressBookings = computed(() => {
@@ -1216,163 +1132,135 @@ watch(
     }
     // เลือกลูกค้าปุ๊บ ดึงผู้ติดต่อ/เบอร์โทรจากสมุดรายชื่อลูกค้ามาให้ทันที (ถ้าช่องยังว่างอยู่) ไม่ต้องรอพิมพ์ชื่อหน้างานซ้ำ
     const customer = customerStore.lookupCustomer(name)
-    if (!destinationDraft.value.contactName) destinationDraft.value.contactName = customer.contact || ''
-    if (!destinationDraft.value.contactPhone) destinationDraft.value.contactPhone = customer.phone || ''
+    if (!itemDraft.value.siteContactName) itemDraft.value.siteContactName = customer.contact || ''
+    if (!itemDraft.value.sitePhone) itemDraft.value.sitePhone = customer.phone || ''
   }
 )
 
-// --- Destination + Product draft (create dialog): กรอกที่อยู่ปลายทางก่อน แล้วเพิ่มสินค้าได้หลายรายการในปลายทางเดียวกัน ก่อนกดยืนยันเพิ่มปลายทางลงตาราง ---
-const defaultProductDraft = () => ({
+// --- Item draft (create dialog): 1 แถว = 1 ปลายทาง + 1 สินค้า กรอกครบในฟอร์มเดียวแล้วยืนยันเพิ่มทีละรายการลงตาราง ---
+const defaultItemDraft = () => ({
+  siteName: '',
+  province: '',
+  district: '',
+  siteContactName: '',
+  sitePhone: '',
+  gpsInput: '',
+  pickupOriginName: '',
   product: '',
   qty: 0,
   unit: '',
   jobType: undefined as BookingJobType | undefined,
 })
 
-const defaultDestinationDraft = () => ({
-  name: '',
-  province: '',
-  district: '',
-  address: '',
-  contactName: '',
-  contactPhone: '',
-  gpsInput: '',
-  items: [] as JobItem[],
-})
+const itemDraft = ref(defaultItemDraft())
 
-const destinationDraft = ref(defaultDestinationDraft())
-const productDraft = ref(defaultProductDraft())
-
-const destinationDraftStandardLiters = computed(
-  () => fuelRateStore.findRate(destinationDraft.value.province, destinationDraft.value.district)?.liters ?? null
+const itemDraftStandardLiters = computed(
+  () => fuelRateStore.findRate(itemDraft.value.province, itemDraft.value.district)?.liters ?? null
 )
-const destinationDraftGps = computed(() => parseGpsInput(destinationDraft.value.gpsInput))
+const itemDraftGps = computed(() => parseGpsInput(itemDraft.value.gpsInput))
 
 // เลือกสินค้าปุ๊บ ดึงหน่วยนับจากสินค้าที่ตั้งค่าไว้มาให้อัตโนมัติเสมอ ไม่ให้พิมพ์หน่วยเอง กันตัดสต๊อกผิดหน่วย
 watch(
-  () => productDraft.value.product,
+  () => itemDraft.value.product,
   (name) => {
     const match = inventoryStore.products.find((p) => p.name === name)
-    productDraft.value.unit = match?.unit || ''
+    itemDraft.value.unit = match?.unit || ''
   }
 )
 
-const canAddProductToDestinationDraft = computed(() => !!productDraft.value.product && productDraft.value.qty > 0)
-
-const confirmAddProductToDestinationDraft = () => {
-  if (!canAddProductToDestinationDraft.value) return
-  const p = productDraft.value
-  destinationDraft.value.items.push({
-    id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-    product: p.product,
-    qty: p.qty,
-    unit: p.unit,
-    jobType: isCements.value ? p.jobType : undefined,
-  })
-  productDraft.value = defaultProductDraft()
-}
-
-const removeProductFromDestinationDraft = (idx: number) => {
-  destinationDraft.value.items.splice(idx, 1)
-}
-
-// พิมพ์ชื่อหน้างานที่เคยส่งของให้ลูกค้าคนนี้มาก่อน -> ดึงผู้ติดต่อ/เบอร์โทร/พิกัดหน้างานจากปลายทางล่าสุดที่ตรงกันมาให้อัตโนมัติ (แม่นกว่าข้อมูลลูกค้าทั่วไป)
+// พิมพ์ชื่อหน้างานที่เคยส่งของให้ลูกค้าคนนี้มาก่อน -> ดึงผู้ติดต่อ/เบอร์โทร/พิกัดหน้างานจากรายการล่าสุดที่ตรงกันมาให้อัตโนมัติ (แม่นกว่าข้อมูลลูกค้าทั่วไป)
 // override เฉพาะช่องที่ยังว่าง หรือยังเป็นค่า default ที่ดึงมาจากสมุดรายชื่อลูกค้าตอนเลือกลูกค้า (ไม่ทับค่าที่ผู้ใช้พิมพ์เองไว้แล้ว)
 watch(
-  () => destinationDraft.value.name,
+  () => itemDraft.value.siteName,
   (name) => {
     if (!name) return
     const customer = customerStore.lookupCustomer(header.value.customer)
     const match = bookingStore.bookings
       .filter((b) => b.customer === header.value.customer)
-      .flatMap((b) => b.destinations.map((d) => ({ ...d, createdAt: b.createdAt })))
-      .filter((d) => d.name.trim().toLowerCase() === name.trim().toLowerCase())
+      .flatMap((b) => b.items.map((i) => ({ ...i, createdAt: b.createdAt })))
+      .filter((i) => i.siteName.trim().toLowerCase() === name.trim().toLowerCase())
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
     if (match) {
-      if (!destinationDraft.value.contactName || destinationDraft.value.contactName === customer.contact) {
-        destinationDraft.value.contactName = match.contactName || destinationDraft.value.contactName
+      if (!itemDraft.value.siteContactName || itemDraft.value.siteContactName === customer.contact) {
+        itemDraft.value.siteContactName = match.siteContactName || itemDraft.value.siteContactName
       }
-      if (!destinationDraft.value.contactPhone || destinationDraft.value.contactPhone === customer.phone) {
-        destinationDraft.value.contactPhone = match.contactPhone || destinationDraft.value.contactPhone
+      if (!itemDraft.value.sitePhone || itemDraft.value.sitePhone === customer.phone) {
+        itemDraft.value.sitePhone = match.sitePhone || itemDraft.value.sitePhone
       }
-      if (!destinationDraft.value.gpsInput) destinationDraft.value.gpsInput = match.mapUrl || ''
+      if (!itemDraft.value.gpsInput) itemDraft.value.gpsInput = match.mapUrl || ''
       return
     }
-    if (!destinationDraft.value.contactName) destinationDraft.value.contactName = customer.contact || ''
-    if (!destinationDraft.value.contactPhone) destinationDraft.value.contactPhone = customer.phone || ''
+    if (!itemDraft.value.siteContactName) itemDraft.value.siteContactName = customer.contact || ''
+    if (!itemDraft.value.sitePhone) itemDraft.value.sitePhone = customer.phone || ''
   }
 )
 
-const canAddDestinationDraft = computed(
-  () => !!destinationDraft.value.name && !!destinationDraft.value.province && !!destinationDraft.value.district && destinationDraft.value.items.length > 0
+const canAddItem = computed(
+  () =>
+    !!itemDraft.value.siteName &&
+    !!itemDraft.value.province &&
+    !!itemDraft.value.district &&
+    !!itemDraft.value.product &&
+    itemDraft.value.qty > 0
 )
 
-const draftDestinations = ref<Destination[]>([])
+const lineItems = ref<JobItem[]>([])
 
-const confirmAddDestinationToDraft = () => {
-  if (!canAddDestinationDraft.value) return
-  const d = destinationDraft.value
+const confirmAddItem = () => {
+  if (!canAddItem.value) return
+  const d = itemDraft.value
   const gps = parseGpsInput(d.gpsInput)
-  draftDestinations.value.push({
-    id: `destdraft${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-    name: d.name,
+  lineItems.value.push({
+    id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+    siteName: d.siteName,
     province: d.province,
     district: d.district,
-    address: d.address || undefined,
-    contactName: d.contactName || undefined,
-    contactPhone: d.contactPhone || undefined,
+    siteContactName: d.siteContactName || undefined,
+    sitePhone: d.sitePhone || undefined,
     latitude: gps.latitude,
     longitude: gps.longitude,
     mapUrl: d.gpsInput || undefined,
-    sequence: draftDestinations.value.length,
-    deliveryStatus: 'PENDING',
-    items: d.items,
+    pickupOriginName: d.pickupOriginName || undefined,
+    product: d.product,
+    qty: d.qty,
+    unit: d.unit,
+    jobType: isCements.value ? d.jobType : undefined,
   })
-  destinationDraft.value = defaultDestinationDraft()
-  productDraft.value = defaultProductDraft()
+  itemDraft.value = defaultItemDraft()
 }
 
-const removeDraftDestination = (idx: number) => {
-  draftDestinations.value.splice(idx, 1)
-  draftDestinations.value.forEach((d, i) => (d.sequence = i))
+const removeLineItem = (idx: number) => {
+  lineItems.value.splice(idx, 1)
 }
 
-/** รวมลิตรน้ำมันมาตรฐานของทุกปลายทางในงานนี้ (นับครั้งเดียวต่อปลายทาง ไม่ใช่ต่อรายการสินค้า กันนับซ้ำเมื่อปลายทางเดียวมีหลายสินค้า) */
+/** รวมลิตรน้ำมันมาตรฐานของทุกรายการในงานนี้ (นับต่อรายการ ไม่ใช่ต่อปลายทาง — สินค้าคนละชนิดที่ปลายทางเดียวกันจึงนับซ้ำได้) */
 const computedFuel = computed(() =>
-  draftDestinations.value.reduce((sum, d) => sum + (fuelRateStore.findRate(d.province, d.district)?.liters || 0), 0)
+  lineItems.value.reduce((sum, i) => sum + (fuelRateStore.findRate(i.province, i.district)?.liters || 0), 0)
 )
 
-const canSave = computed(
-  () =>
-    !!header.value.customer &&
-    draftDestinations.value.length > 0 &&
-    draftDestinations.value.every((d) => d.items.length > 0) &&
-    header.value.tripFee > 0
-)
+const canSave = computed(() => !!header.value.customer && lineItems.value.length > 0 && header.value.tripFee > 0)
 
 const productLabel = (booking: Booking) => {
-  const names = [...new Set(booking.destinations.flatMap((d) => d.items).map((i) => i.product).filter(Boolean))]
+  const names = [...new Set(booking.items.map((i) => i.product).filter(Boolean))]
   return names.length ? names.join(', ') : '-'
 }
 
 const destinationLabel = (booking: Booking) => {
-  if (!booking.destinations.length) return '-'
-  const first = booking.destinations[0].name
-  return booking.destinations.length > 1 ? `${first} +${booking.destinations.length - 1} ที่อื่น` : first
+  if (!booking.items.length) return '-'
+  const first = booking.items[0].siteName
+  return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
 }
 
-const weightQtyLabel = (booking: Booking) =>
-  booking.destinations.flatMap((d) => d.items).map((i) => `${i.qty} ${i.unit}`).join(', ') || '-'
+const weightQtyLabel = (booking: Booking) => booking.items.map((i) => `${i.qty} ${i.unit}`).join(', ') || '-'
 
-const deliveredItemCount = (booking: Booking) => booking.destinations.filter((d) => d.deliveryStatus === 'DELIVERED').length
+const deliveredItemCount = (booking: Booking) => booking.items.filter((i) => i.deliveryStatus === 'DELIVERED').length
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
 
 const openDialog = () => {
   header.value = defaultHeader()
-  destinationDraft.value = defaultDestinationDraft()
-  productDraft.value = defaultProductDraft()
-  draftDestinations.value = []
+  itemDraft.value = defaultItemDraft()
+  lineItems.value = []
   showDialog.value = true
 }
 
@@ -1397,7 +1285,7 @@ const saveAllItems = () => {
     route: header.value.route || undefined,
     origin: header.value.origin || undefined,
     customer: header.value.customer,
-    destinations: draftDestinations.value,
+    items: lineItems.value,
     allowance: isCements.value ? header.value.allowance || 0 : headerCalculatedAllowance.value,
     tripFee: header.value.tripFee,
     agreedPrice: header.value.agreedPrice || header.value.tripFee,
@@ -1423,100 +1311,81 @@ const latestOdometerForPlate = (plate: string, excludeId: string) =>
     .filter((b) => b.plate === plate && b.id !== excludeId && b.odometerAfter !== undefined)
     .sort((a, b) => new Date(b.completedAt || b.dispatchedAt || 0).getTime() - new Date(a.completedAt || a.dispatchedAt || 0).getTime())[0]
 
-const showAddDestination = ref(false)
-const dispatchDestinationDraft = ref({
-  name: '',
+const showAddDispatchItem = ref(false)
+const defaultDispatchItemDraft = () => ({
+  siteName: '',
   province: '',
   district: '',
-  address: '',
-  contactName: '',
-  contactPhone: '',
+  siteContactName: '',
+  sitePhone: '',
   gpsInput: '',
-  items: [] as JobItem[],
+  pickupOriginName: '',
+  product: '',
+  qty: 0,
+  unit: '',
+  jobType: undefined as BookingJobType | undefined,
 })
-const dispatchProductDraft = ref(defaultProductDraft())
+const dispatchItemDraft = ref(defaultDispatchItemDraft())
 
-const dispatchDestinationStandardLiters = computed(
-  () => fuelRateStore.findRate(dispatchDestinationDraft.value.province, dispatchDestinationDraft.value.district)?.liters ?? 0
+const dispatchItemStandardLiters = computed(
+  () => fuelRateStore.findRate(dispatchItemDraft.value.province, dispatchItemDraft.value.district)?.liters ?? 0
 )
-const dispatchDestinationGps = computed(() => parseGpsInput(dispatchDestinationDraft.value.gpsInput))
+const dispatchItemGps = computed(() => parseGpsInput(dispatchItemDraft.value.gpsInput))
 
 watch(
-  () => dispatchProductDraft.value.product,
+  () => dispatchItemDraft.value.product,
   (name) => {
     const match = inventoryStore.products.find((p) => p.name === name)
-    dispatchProductDraft.value.unit = match?.unit || ''
+    dispatchItemDraft.value.unit = match?.unit || ''
   }
 )
 
-const canAddProductToDispatchDraft = computed(() => !!dispatchProductDraft.value.product && dispatchProductDraft.value.qty > 0)
-
-const confirmAddProductToDispatchDraft = () => {
-  if (!canAddProductToDispatchDraft.value) return
-  const p = dispatchProductDraft.value
-  dispatchDestinationDraft.value.items.push({
-    id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-    product: p.product,
-    qty: p.qty,
-    unit: p.unit,
-    jobType: isCements.value ? p.jobType : undefined,
-  })
-  dispatchProductDraft.value = defaultProductDraft()
-}
-
-const removeProductFromDispatchDraft = (idx: number) => {
-  dispatchDestinationDraft.value.items.splice(idx, 1)
-}
-
-const canAddDestination = computed(
-  () => !!dispatchDestinationDraft.value.name && !!dispatchDestinationDraft.value.district && dispatchDestinationDraft.value.items.length > 0
+const canAddDispatchItem = computed(
+  () => !!dispatchItemDraft.value.siteName && !!dispatchItemDraft.value.district && !!dispatchItemDraft.value.product && dispatchItemDraft.value.qty > 0
 )
 
-const confirmAddDestination = () => {
-  if (!dispatchTarget.value || !canAddDestination.value) return
-  const d = dispatchDestinationDraft.value
+/** เมื่อรายการในงานนี้เปลี่ยน (เพิ่ม/ลบระหว่างจัดรถ) คำนวณน้ำมันมาตรฐานรวมใหม่จากทุกรายการเสมอ ใช้สูตรเดียวกับตอนสร้างงาน (computedFuel) */
+const recomputeDispatchFuel = () => {
+  if (!dispatchTarget.value) return
+  dispatchTarget.value.fuelLiters = dispatchTarget.value.items.reduce(
+    (sum, i) => sum + (fuelRateStore.findRate(i.province, i.district)?.liters || 0),
+    0
+  )
+}
+
+const confirmAddDispatchItem = () => {
+  if (!dispatchTarget.value || !canAddDispatchItem.value) return
+  const d = dispatchItemDraft.value
   const gps = parseGpsInput(d.gpsInput)
-  bookingStore.addDestination(dispatchTarget.value.id, {
-    name: d.name,
+  bookingStore.addJobItem(dispatchTarget.value.id, {
+    siteName: d.siteName,
     province: d.province,
     district: d.district,
-    address: d.address || undefined,
-    contactName: d.contactName || undefined,
-    contactPhone: d.contactPhone || undefined,
+    siteContactName: d.siteContactName || undefined,
+    sitePhone: d.sitePhone || undefined,
     latitude: gps.latitude,
     longitude: gps.longitude,
     mapUrl: d.gpsInput || undefined,
-    items: d.items.map((i) => ({ product: i.product, qty: i.qty, unit: i.unit, jobType: i.jobType })),
+    pickupOriginName: d.pickupOriginName || undefined,
+    product: d.product,
+    qty: d.qty,
+    unit: d.unit,
+    jobType: isCements.value ? d.jobType : undefined,
   })
-  dispatchDestinationDraft.value = {
-    name: '',
-    province: '',
-    district: '',
-    address: '',
-    contactName: '',
-    contactPhone: '',
-    gpsInput: '',
-    items: [],
-  }
-  dispatchProductDraft.value = defaultProductDraft()
-  showAddDestination.value = false
+  dispatchItemDraft.value = defaultDispatchItemDraft()
+  showAddDispatchItem.value = false
+  recomputeDispatchFuel()
 }
 
-/** สลับลำดับปลายทางในงาน (ลำดับ = ลำดับการส่งของ) mutate ตรงบน booking ที่อ้างอิงอยู่ใน store อยู่แล้ว จึง persist ทันที และอัปเดต sequence ให้ตรงลำดับใหม่ */
-const moveDispatchItem = (idx: number, dir: -1 | 1) => {
+const removeDispatchItem = (idx: number) => {
   if (!dispatchTarget.value) return
-  const destinations = dispatchTarget.value.destinations
-  const target = idx + dir
-  if (target < 0 || target >= destinations.length) return
-  const tmp = destinations[idx]
-  destinations[idx] = destinations[target]
-  destinations[target] = tmp
-  destinations.forEach((d, i) => (d.sequence = i))
+  dispatchTarget.value.items.splice(idx, 1)
+  recomputeDispatchFuel()
 }
 
 const openDispatchDialog = (booking: Booking) => {
   dispatchTarget.value = booking
-  showAddDestination.value = false
+  showAddDispatchItem.value = false
   dispatchForm.value = {
     plate: booking.plate || '',
     driverName: booking.driverName || '',
@@ -1593,7 +1462,7 @@ const completeMileageSummary = computed(() => {
       .reduce((sum, b) => sum + ((b.odometerAfter || 0) - (b.odometerBefore || 0)), 0) + distanceKm
   const avgKmPerLiter = booking.fuelLiters ? Math.round((distanceKm / booking.fuelLiters) * 100) / 100 : null
   const standardFuelLiters =
-    booking.destinations.reduce((sum, d) => sum + (fuelRateStore.findRate(d.province, d.district)?.liters || 0), 0) || null
+    booking.items.reduce((sum, i) => sum + (fuelRateStore.findRate(i.province, i.district)?.liters || 0), 0) || null
   const fuelCompensation = standardFuelLiters !== null ? Math.round((standardFuelLiters - (booking.fuelLiters || 0)) * (booking.fuelRate || 0)) : null
   return { distanceKm, cumulativeKm, avgKmPerLiter, standardFuelLiters, fuelCompensation }
 })
@@ -1623,7 +1492,7 @@ const editForm = ref({
   fuelLiters: 0,
   fuelRate: 0,
 })
-const editDestinations = ref<Destination[]>([])
+const editLineItems = ref<JobItem[]>([])
 
 const editFuelCost = computed(() => (editForm.value.fuelLiters || 0) * (editForm.value.fuelRate || 0))
 const editCalculatedAllowance = computed(() => Math.round((editForm.value.tripFee || 0) * 0.99 * 0.62 - editFuelCost.value))
@@ -1631,71 +1500,55 @@ const editDisplayedAllowance = computed(() => (isCements.value ? editForm.value.
 
 const toDateInput = (d?: Date) => (d ? new Date(d).toISOString().slice(0, 10) : '')
 
-const editDestinationDraft = ref(defaultDestinationDraft())
-const editProductDraft = ref(defaultProductDraft())
+const editItemDraft = ref(defaultItemDraft())
 
-const editDestinationDraftStandardLiters = computed(
-  () => fuelRateStore.findRate(editDestinationDraft.value.province, editDestinationDraft.value.district)?.liters ?? null
+const editItemDraftStandardLiters = computed(
+  () => fuelRateStore.findRate(editItemDraft.value.province, editItemDraft.value.district)?.liters ?? null
 )
-const editDestinationDraftGps = computed(() => parseGpsInput(editDestinationDraft.value.gpsInput))
+const editItemDraftGps = computed(() => parseGpsInput(editItemDraft.value.gpsInput))
 
 watch(
-  () => editProductDraft.value.product,
+  () => editItemDraft.value.product,
   (name) => {
     const match = inventoryStore.products.find((p) => p.name === name)
-    editProductDraft.value.unit = match?.unit || ''
+    editItemDraft.value.unit = match?.unit || ''
   }
 )
 
-const canAddProductToEditDestinationDraft = computed(() => !!editProductDraft.value.product && editProductDraft.value.qty > 0)
-
-const confirmAddProductToEditDestinationDraft = () => {
-  if (!canAddProductToEditDestinationDraft.value) return
-  const p = editProductDraft.value
-  editDestinationDraft.value.items.push({
-    id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-    product: p.product,
-    qty: p.qty,
-    unit: p.unit,
-    jobType: isCements.value ? p.jobType : undefined,
-  })
-  editProductDraft.value = defaultProductDraft()
-}
-
-const removeProductFromEditDestinationDraft = (idx: number) => {
-  editDestinationDraft.value.items.splice(idx, 1)
-}
-
-const canAddEditDestination = computed(
-  () => !!editDestinationDraft.value.name && !!editDestinationDraft.value.province && !!editDestinationDraft.value.district && editDestinationDraft.value.items.length > 0
+const canAddEditItem = computed(
+  () =>
+    !!editItemDraft.value.siteName &&
+    !!editItemDraft.value.province &&
+    !!editItemDraft.value.district &&
+    !!editItemDraft.value.product &&
+    editItemDraft.value.qty > 0
 )
 
-const confirmAddEditDestination = () => {
-  if (!canAddEditDestination.value) return
-  const d = editDestinationDraft.value
+const confirmAddEditItem = () => {
+  if (!canAddEditItem.value) return
+  const d = editItemDraft.value
   const gps = parseGpsInput(d.gpsInput)
-  editDestinations.value.push({
-    id: `destdraft${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-    name: d.name,
+  editLineItems.value.push({
+    id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+    siteName: d.siteName,
     province: d.province,
     district: d.district,
-    address: d.address || undefined,
-    contactName: d.contactName || undefined,
-    contactPhone: d.contactPhone || undefined,
+    siteContactName: d.siteContactName || undefined,
+    sitePhone: d.sitePhone || undefined,
     latitude: gps.latitude,
     longitude: gps.longitude,
     mapUrl: d.gpsInput || undefined,
-    sequence: editDestinations.value.length,
-    deliveryStatus: 'PENDING',
-    items: d.items,
+    pickupOriginName: d.pickupOriginName || undefined,
+    product: d.product,
+    qty: d.qty,
+    unit: d.unit,
+    jobType: isCements.value ? d.jobType : undefined,
   })
-  editDestinationDraft.value = defaultDestinationDraft()
-  editProductDraft.value = defaultProductDraft()
+  editItemDraft.value = defaultItemDraft()
 }
 
-const removeEditDestination = (idx: number) => {
-  editDestinations.value.splice(idx, 1)
-  editDestinations.value.forEach((d, i) => (d.sequence = i))
+const removeEditLineItem = (idx: number) => {
+  editLineItems.value.splice(idx, 1)
 }
 
 const openEditBooking = (booking: Booking) => {
@@ -1713,16 +1566,15 @@ const openEditBooking = (booking: Booking) => {
     fuelLiters: booking.fuelLiters || 0,
     fuelRate: booking.fuelRate || 0,
   }
-  editDestinations.value = booking.destinations.map((d) => ({ ...d, items: d.items.map((i) => ({ ...i })) }))
-  editDestinationDraft.value = defaultDestinationDraft()
-  editProductDraft.value = defaultProductDraft()
+  editLineItems.value = booking.items.map((i) => ({ ...i }))
+  editItemDraft.value = defaultItemDraft()
 }
 
 const confirmEditBooking = () => {
   if (!editTarget.value) return
   const f = editForm.value
   bookingStore.updateBookingFull(editTarget.value.id, {
-    destinations: editDestinations.value,
+    items: editLineItems.value,
     po: f.po || undefined,
     shipDate: f.shipDate ? new Date(f.shipDate) : undefined,
     returnDate: f.returnDate ? new Date(f.returnDate) : undefined,

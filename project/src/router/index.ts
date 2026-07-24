@@ -138,6 +138,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/FuelSettingsView.vue'),
       },
       {
+        path: 'settings/origins',
+        name: 'SettingsOrigins',
+        component: () => import('@/views/OriginsView.vue'),
+      },
+      {
         path: 'inventory',
         name: 'Inventory',
         component: () => import('@/views/StockView.vue'),

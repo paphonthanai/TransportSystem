@@ -84,6 +84,7 @@ export const useAppStore = defineStore('app', () => {
         },
         { id: '5-4', icon: 'inventory_2', label: 'ตั้งค่าสินค้า', route: '/settings/products' },
         { id: '5-4b', icon: 'local_gas_station', label: 'ตั้งค่าน้ำมัน', route: '/settings/fuel' },
+        { id: '5-4c', icon: 'factory', label: 'ต้นทาง/จุดรับสินค้า', route: '/settings/origins' },
         { id: '5-5', icon: 'history', label: 'Log', route: '/settings/logs' },
       ],
     },

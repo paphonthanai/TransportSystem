@@ -220,9 +220,9 @@ const formatBaht = (value: number) =>
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-')
 
 const destinationLabel = (booking: Booking) => {
-  if (!booking.destinations.length) return '-'
-  const first = booking.destinations[0].name
-  return booking.destinations.length > 1 ? `${first} +${booking.destinations.length - 1} ที่อื่น` : first
+  if (!booking.items.length) return '-'
+  const first = booking.items[0].siteName
+  return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
 }
 
 const printDoc = () => window.print()

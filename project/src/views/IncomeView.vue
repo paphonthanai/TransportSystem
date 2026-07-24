@@ -48,7 +48,7 @@ const driverIncome = computed(() => {
     const driver = b.driverName as string
     const entry = byDriver.get(driver) || { trips: 0, baseAllowance: 0, debtNet: 0, netIncome: 0 }
     const net = b.debtAdjustments?.reduce((sum, d) => sum + d.amount, 0) || 0
-    entry.trips += b.destinations.length
+    entry.trips += b.items.length
     entry.baseAllowance += b.allowance || 0
     entry.debtNet += net
     entry.netIncome += b.finalAllowance ?? b.allowance ?? 0

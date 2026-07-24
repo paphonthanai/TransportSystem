@@ -149,28 +149,28 @@
           <div v-if="booking.odometerAfter !== undefined"><span class="text-muted">เลขไมล์สิ้นสุด:</span> {{ booking.odometerAfter }} กม.</div>
         </div>
 
-        <div v-if="booking.destinations.length" class="space-y-2">
-          <div class="text-xs font-semibold text-muted">ที่อยู่/ผู้ติดต่อ/พิกัด/สถานะการส่งของแต่ละปลายทาง</div>
+        <div v-if="booking.items.length" class="space-y-2">
+          <div class="text-xs font-semibold text-muted">ที่อยู่/ผู้ติดต่อ/พิกัด/ต้นทาง/สถานะการรับ-ส่งของแต่ละรายการ</div>
           <div
-            v-for="(dest, idx) in booking.destinations"
-            :key="dest.id"
+            v-for="(item, idx) in booking.items"
+            :key="item.id"
             class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm bg-surface-2 rounded-lg p-3 border border-border"
           >
             <div class="col-span-2 md:col-span-4 font-semibold text-text flex items-center justify-between">
-              <span>{{ idx + 1 }}. {{ dest.name }} ({{ dest.province }} · {{ dest.district }})</span>
-              <span :class="dest.deliveryStatus === 'DELIVERED' ? 'text-green-600' : 'text-amber-600'" class="text-xs font-semibold">
-                {{ dest.deliveryStatus === 'DELIVERED' ? `ส่งแล้ว (ผู้รับ: ${dest.deliveredBy})` : 'รอส่ง' }}
+              <span>{{ idx + 1 }}. {{ item.siteName }} ({{ item.province }} · {{ item.district }})</span>
+              <span :class="item.deliveryStatus === 'DELIVERED' ? 'text-green-600' : 'text-amber-600'" class="text-xs font-semibold">
+                {{ item.deliveryStatus === 'DELIVERED' ? `ส่งแล้ว (ผู้รับ: ${item.deliveredBy})` : 'รอส่ง' }}
               </span>
             </div>
-            <div v-if="dest.address" class="col-span-2 md:col-span-4"><span class="text-muted">ที่อยู่:</span> {{ dest.address }}</div>
-            <div class="col-span-1"><span class="text-muted">รายการสินค้า:</span> {{ dest.items.map((i) => `${i.product} ${i.qty} ${i.unit}`).join(', ') }}</div>
-            <div><span class="text-muted">ผู้ติดต่อ:</span> {{ dest.contactName || '-' }}</div>
-            <div><span class="text-muted">เบอร์โทร:</span> {{ dest.contactPhone || '-' }}</div>
+            <div class="col-span-1"><span class="text-muted">รายการสินค้า:</span> {{ item.product }} {{ item.qty }} {{ item.unit }}</div>
+            <div><span class="text-muted">ต้นทาง:</span> {{ item.pickupOriginName || booking.origin || '-' }}</div>
+            <div><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName || '-' }}</div>
+            <div><span class="text-muted">เบอร์โทร:</span> {{ item.sitePhone || '-' }}</div>
             <div class="col-span-2">
               <span class="text-muted">พิกัด:</span>
-              {{ dest.latitude !== undefined && dest.longitude !== undefined ? `${dest.latitude}, ${dest.longitude}` : dest.mapUrl || '-' }}
+              {{ item.latitude !== undefined && item.longitude !== undefined ? `${item.latitude}, ${item.longitude}` : item.mapUrl || '-' }}
             </div>
-            <img v-if="dest.podImage" :src="dest.podImage" class="col-span-2 md:col-span-4 max-h-32 object-contain rounded border border-border" />
+            <img v-if="item.podImage" :src="item.podImage" class="col-span-2 md:col-span-4 max-h-32 object-contain rounded border border-border" />
           </div>
         </div>
 
@@ -301,24 +301,22 @@ const docTitleEn = computed(() => (isDispatched.value ? 'WORK ORDER' : 'PURCHASE
 const fillerRows = computed(() => 3)
 
 const productLabel = (b: Booking) => {
-  const names = [...new Set(b.destinations.flatMap((d) => d.items).map((i) => i.product).filter(Boolean))]
+  const names = [...new Set(b.items.map((i) => i.product).filter(Boolean))]
   return names.length ? names.join(', ') : '-'
 }
 
-/** แต่ละรายการสินค้าของทุกปลายทางในงานนี้ ขึ้นแถวของตัวเองในตารางเอกสาร คนละแถวไม่รวมกัน */
+/** แต่ละรายการสินค้าในงานนี้ ขึ้นแถวของตัวเองในตารางเอกสาร คนละแถวไม่รวมกัน */
 const productRows = computed(() => {
   if (!booking.value) return []
-  return booking.value.destinations.flatMap((dest) =>
-    dest.items.map((item) => ({
-      product: item.product,
-      qty: item.qty,
-      unit: item.unit,
-      destinationName: dest.name,
-      province: dest.province,
-      district: dest.district,
-      jobType: item.jobType,
-    }))
-  )
+  return booking.value.items.map((item) => ({
+    product: item.product,
+    qty: item.qty,
+    unit: item.unit,
+    destinationName: item.siteName,
+    province: item.province,
+    district: item.district,
+    jobType: item.jobType,
+  }))
 })
 
 /** สรุประยะทาง/อัตราสิ้นเปลืองน้ำมัน/ชดเชยน้ำมัน เมื่อมีเลขไมล์เริ่มต้น-สิ้นสุดครบแล้ว */
@@ -333,7 +331,7 @@ const mileageSummary = computed(() => {
       .reduce((sum, x) => sum + ((x.odometerAfter || 0) - (x.odometerBefore || 0)), 0) + distanceKm
   const avgKmPerLiter = b.fuelLiters ? Math.round((distanceKm / b.fuelLiters) * 100) / 100 : null
   const standardFuelLiters =
-    b.destinations.reduce((sum, d) => sum + (fuelRateStore.findRate(d.province, d.district)?.liters || 0), 0) || null
+    b.items.reduce((sum, i) => sum + (fuelRateStore.findRate(i.province, i.district)?.liters || 0), 0) || null
   const fuelCompensation = standardFuelLiters !== null ? Math.round((standardFuelLiters - (b.fuelLiters || 0)) * (b.fuelRate || 0)) : null
   return { distanceKm, cumulativeKm, avgKmPerLiter, standardFuelLiters, fuelCompensation }
 })

@@ -92,14 +92,13 @@ export const useInventoryStore = defineStore('inventory', () => {
   }
 
   /**
-   * ตัดสต๊อกอัตโนมัติเมื่อคนขับกดยืนยันรับสินค้าครบที่ต้นทาง (สถานะ LOADED) ตัดตามจำนวนของแต่ละรายการสินค้า (JobItem) ในงานนั้นโดยตรง
-   * ไม่หารเฉลี่ย เพราะแต่ละรายการมีจำนวนของตัวเองอยู่แล้ว ตัดครั้งเดียวทั้งงาน (ทุกปลายทางรวมกัน) เพราะรถขนสินค้าออกจากต้นทางพร้อมกันหมด
-   * ไม่ระบุ items = ตัดทุกปลายทางของงานนี้ (เช่น ปิดงานฝั่งออฟฟิศแบบไม่ผ่าน flow ปกติ)
+   * ตัดสต๊อกอัตโนมัติเมื่อคนขับกดรับสินค้าแต่ละรายการที่ต้นทาง (ดู pickupJobItem) ตัดตามจำนวนของรายการสินค้า (JobItem) นั้นโดยตรง
+   * ไม่ระบุ items = ตัดทุกรายการของงานนี้ (เช่น ปิดงานฝั่งออฟฟิศแบบไม่ผ่าน flow ปกติ)
    * คืนค่าสรุปรายการที่ตัดสต๊อกสำเร็จ/ไม่พบสินค้า ให้ผู้เรียกนำไปบันทึก log เอง (กันปัญหา circular import กับ booking store)
    */
   function recordDeliveryMovement(booking: Booking, items?: JobItem[]): { matched: string[]; unmatched: string[] } {
     const result = { matched: [] as string[], unmatched: [] as string[] }
-    ;(items ?? booking.destinations.flatMap((d) => d.items)).forEach((item) => {
+    ;(items ?? booking.items).forEach((item) => {
       const product = products.value.find((p) => p.name === item.product || item.product.includes(p.name))
       if (!product) {
         result.unmatched.push(item.product)
