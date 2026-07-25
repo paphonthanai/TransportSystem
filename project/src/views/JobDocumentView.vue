@@ -130,140 +130,175 @@
         </div>
       </div>
 
-      <!-- Internal Ops Info (ไม่พิมพ์ - สำหรับเจ้าหน้าที่เท่านั้น) -->
-      <div class="card-lg no-print space-y-4">
-        <div class="flex items-center justify-between">
-          <div class="font-bold text-text">ข้อมูลภายใน (ไม่พิมพ์)</div>
-          <span :class="['text-xs font-semibold px-2 py-1 rounded-full', booking.category === 'cements' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700']">
-            {{ booking.category === 'cements' ? 'Fleet Cements' : 'Fleet Ceramics' }}
-          </span>
-        </div>
-
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div><span class="text-muted">ทะเบียนรถ:</span> {{ booking.plate || '-' }}</div>
-          <div><span class="text-muted">คนขับ:</span> {{ booking.driverName || '-' }}</div>
-          <div v-if="booking.dispatchedAt"><span class="text-muted">วันที่จ่ายงาน:</span> {{ formatDate(booking.dispatchedAt) }}</div>
-          <div v-if="booking.transitStartedAt"><span class="text-muted">วันที่เริ่มขนส่ง:</span> {{ formatDate(booking.transitStartedAt) }}</div>
-          <div v-if="booking.completedAt"><span class="text-muted">วันที่ส่งของสำเร็จ:</span> {{ formatDate(booking.completedAt) }}</div>
-          <div v-if="booking.odometerBefore !== undefined"><span class="text-muted">เลขไมล์เริ่มต้น:</span> {{ booking.odometerBefore }} กม.</div>
-          <div v-if="booking.odometerAfter !== undefined"><span class="text-muted">เลขไมล์สิ้นสุด:</span> {{ booking.odometerAfter }} กม.</div>
-        </div>
-
-        <div v-if="booking.items.length" class="space-y-2">
-          <div class="text-xs font-semibold text-muted">ที่อยู่/ผู้ติดต่อ/พิกัด/ต้นทาง/สถานะการรับ-ส่งของแต่ละรายการ</div>
-          <div
-            v-for="(item, idx) in booking.items"
-            :key="item.id"
-            class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm bg-surface-2 rounded-lg p-3 border border-border"
-          >
-            <div class="col-span-2 md:col-span-4 font-semibold text-text flex items-center justify-between">
-              <span>{{ idx + 1 }}. {{ item.siteName }} ({{ item.province }} · {{ item.district }})</span>
-              <span :class="item.deliveryStatus === 'DELIVERED' ? 'text-green-600' : 'text-amber-600'" class="text-xs font-semibold">
-                {{ item.deliveryStatus === 'DELIVERED' ? `ส่งแล้ว (ผู้รับ: ${item.deliveredBy})` : 'รอส่ง' }}
-              </span>
-            </div>
-            <div class="col-span-1"><span class="text-muted">รายการสินค้า:</span> {{ item.product }} {{ item.qty }} {{ item.unit }}</div>
-            <div><span class="text-muted">ต้นทาง:</span> {{ item.pickupOriginName || booking.origin || '-' }}</div>
-            <div><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName || '-' }}</div>
-            <div><span class="text-muted">เบอร์โทร:</span> {{ item.sitePhone || '-' }}</div>
-            <div class="col-span-2">
-              <span class="text-muted">พิกัด:</span>
-              {{ item.latitude !== undefined && item.longitude !== undefined ? `${item.latitude}, ${item.longitude}` : item.mapUrl || '-' }}
-            </div>
-            <img v-if="item.podImage" :src="item.podImage" class="col-span-2 md:col-span-4 max-h-32 object-contain rounded border border-border" />
-          </div>
-        </div>
-
-        <div v-if="mileageSummary" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm bg-surface-2 rounded-lg p-3 border border-border">
-          <div>ระยะทางเที่ยวนี้: <span class="font-semibold text-text">{{ mileageSummary.distanceKm }} กม.</span></div>
-          <div>สะสม: <span class="font-semibold text-text">{{ mileageSummary.cumulativeKm }} กม.</span></div>
-          <div>เฉลี่ย: <span class="font-semibold text-text">{{ mileageSummary.avgKmPerLiter ?? '-' }} กม./ลิตร</span></div>
-          <div>น้ำมันที่กำหนด: <span class="font-semibold text-text">{{ mileageSummary.standardFuelLiters ?? '-' }} ล.</span></div>
-          <div class="col-span-2 md:col-span-4">
-            ชดเชยน้ำมัน:
-            <span :class="['font-semibold', (mileageSummary.fuelCompensation ?? 0) >= 0 ? 'text-green-700' : 'text-red-700']">
-              {{ mileageSummary.fuelCompensation !== null ? formatBaht(mileageSummary.fuelCompensation) : '-' }}
-            </span>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between">
-          <div class="text-xs font-semibold text-muted">ค่าเที่ยว / ราคาที่ตกลง</div>
-          <button
-            v-if="!isEditing"
-            @click="startEdit"
-            :disabled="!canEditPrice"
-            :title="canEditPrice ? 'แก้ไขราคา' : 'ราคาถูกล็อกหลังจัดรถแล้ว แก้ไขได้เฉพาะ Admin'"
-            class="btn-sm disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <span class="material-symbols-rounded text-base">edit</span>
-            แก้ไข
-          </button>
-        </div>
-        <div v-if="!isEditing" class="grid grid-cols-2 gap-3">
-          <div class="bg-surface-2 rounded-lg p-3">
-            <div class="text-xs text-muted mb-1">ค่าเที่ยว</div>
-            <div class="font-bold text-text">{{ formatBaht(booking.tripFee) }}</div>
-          </div>
-          <div class="bg-surface-2 rounded-lg p-3">
-            <div class="text-xs text-muted mb-1">ราคาที่ตกลง</div>
-            <div class="font-bold text-text">{{ formatBaht(booking.agreedPrice) }}</div>
-          </div>
-        </div>
-        <div v-else class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-muted mb-1">ค่าเที่ยว</label>
-            <input v-model.number="priceForm.tripFee" type="number" class="input-field w-full" />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-muted mb-1">ราคาที่ตกลง</label>
-            <input v-model.number="priceForm.agreedPrice" type="number" class="input-field w-full" />
-          </div>
-          <div class="col-span-2 flex justify-end gap-2">
-            <button @click="isEditing = false" class="btn-secondary">ยกเลิก</button>
-            <button @click="savePrice" class="btn-sm text-primary">
-              <span class="material-symbols-rounded text-base">save</span>
-              บันทึกราคา
-            </button>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div class="bg-surface-2 rounded-lg p-3">
-            <div class="text-xs text-muted mb-1">น้ำมัน</div>
-            <div class="font-bold text-text">{{ booking.fuelLiters || 0 }} ล. x {{ formatBaht(booking.fuelRate) }}</div>
-          </div>
-          <div class="bg-surface-2 rounded-lg p-3">
-            <div class="text-xs text-muted mb-1">เบี้ยเลี้ยง</div>
-            <div class="font-bold text-text">{{ formatBaht(booking.allowance) }}</div>
-          </div>
-          <div v-if="booking.finalAllowance !== undefined" class="bg-primary text-white rounded-lg p-3 col-span-2">
-            <div class="text-xs opacity-90 mb-1">เบี้ยเลี้ยงสุทธิ</div>
-            <div class="font-bold">{{ formatBaht(booking.finalAllowance) }}</div>
-          </div>
-        </div>
-
-        <div v-if="booking.extraCharges?.length">
-          <div class="text-xs font-semibold text-muted mb-1">ค่าใช้จ่ายเพิ่มเติม (extra)</div>
-          <div v-for="extra in booking.extraCharges" :key="extra.id" class="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
-            <span class="text-text">{{ extra.label }}</span>
-            <span class="text-text">{{ formatBaht(extra.amount) }}</span>
-          </div>
-        </div>
-
-        <div v-if="booking.debtAdjustments?.length">
-          <div class="text-xs font-semibold text-muted mb-1">รายการเพิ่ม/ลดหนี้</div>
-          <div v-for="adj in booking.debtAdjustments" :key="adj.id" class="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
-            <span class="text-text">{{ adj.label || '-' }}</span>
-            <span :class="adj.amount >= 0 ? 'text-red-500' : 'text-green-600'">{{ adj.amount >= 0 ? '-' : '+' }}{{ formatBaht(Math.abs(adj.amount)) }}</span>
-          </div>
-        </div>
-
-        <div v-if="booking.podImage">
-          <div class="text-xs font-semibold text-muted mb-1">รูปหลักฐานการส่งมอบสินค้า (POD)</div>
-          <img :src="booking.podImage" class="w-full max-h-64 object-contain rounded-lg border border-border" />
-        </div>
+      <div class="flex justify-center no-print">
+        <button @click="detailDrawerOpen = true" class="btn-secondary">
+          <span class="material-symbols-rounded text-base">info</span>
+          ดูรายละเอียดเพิ่มเติม
+        </button>
       </div>
+
+      <!-- Detail Side Drawer: ข้อมูลปฏิบัติการ/ราคา/ค่าใช้จ่าย ที่ไม่ได้แสดงในใบเสนอราคา/PO -->
+      <Teleport to="body" v-if="detailDrawerOpen">
+        <div
+          @click="detailDrawerOpen = false"
+          class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 no-print"
+        >
+          <div
+            @click.stop
+            class="fixed inset-y-0 right-0 w-full max-w-md bg-surface shadow-2xl overflow-y-auto transform transition-transform duration-300 ease-out translate-x-0"
+          >
+            <div class="sticky top-0 bg-surface border-b border-border px-5 py-4 flex items-center justify-between z-10">
+              <div class="font-bold text-text">รายละเอียดเพิ่มเติม</div>
+              <button @click="detailDrawerOpen = false" class="btn-icon">
+                <span class="material-symbols-rounded">close</span>
+              </button>
+            </div>
+
+            <div class="p-5 space-y-5">
+              <!-- ข้อมูลปฏิบัติการ -->
+              <div>
+                <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">ข้อมูลปฏิบัติการ</div>
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                  <div><span class="text-muted">ทะเบียนรถ:</span> {{ booking.plate || '-' }}</div>
+                  <div><span class="text-muted">คนขับ:</span> {{ booking.driverName || '-' }}</div>
+                  <div><span class="text-muted">ต้นทาง:</span> {{ booking.origin || '-' }}</div>
+                  <div v-if="booking.dispatchedAt"><span class="text-muted">วันที่จ่ายงาน:</span> {{ formatDate(booking.dispatchedAt) }}</div>
+                  <div v-if="booking.transitStartedAt"><span class="text-muted">วันที่เริ่มขนส่ง:</span> {{ formatDate(booking.transitStartedAt) }}</div>
+                  <div v-if="booking.completedAt"><span class="text-muted">วันที่ส่งของสำเร็จ:</span> {{ formatDate(booking.completedAt) }}</div>
+                  <div v-if="booking.odometerBefore !== undefined"><span class="text-muted">เลขไมล์เริ่มต้น:</span> {{ booking.odometerBefore }} กม.</div>
+                  <div v-if="booking.odometerAfter !== undefined"><span class="text-muted">เลขไมล์สิ้นสุด:</span> {{ booking.odometerAfter }} กม.</div>
+                </div>
+              </div>
+
+              <!-- รายละเอียดปลายทาง/สินค้าแต่ละรายการ -->
+              <div v-if="booking.items.length" class="border-t border-border pt-4">
+                <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">รายละเอียดปลายทาง/สินค้าแต่ละรายการ</div>
+                <div class="space-y-2">
+                  <div
+                    v-for="(item, idx) in booking.items"
+                    :key="item.id"
+                    class="text-sm bg-surface-2 rounded-lg p-3 border border-border space-y-1"
+                  >
+                    <div class="font-semibold text-text flex items-center justify-between">
+                      <span>{{ idx + 1 }}. {{ item.siteName }}</span>
+                      <span :class="item.deliveryStatus === 'DELIVERED' ? 'text-green-600' : 'text-amber-600'" class="text-xs font-semibold">
+                        {{ item.deliveryStatus === 'DELIVERED' ? `ส่งแล้ว (ผู้รับ: ${item.deliveredBy})` : 'รอส่ง' }}
+                      </span>
+                    </div>
+                    <div class="text-xs text-muted">{{ item.province }} · {{ item.district }}</div>
+                    <div><span class="text-muted">สินค้า:</span> {{ item.product }} {{ item.qty }} {{ item.unit }}</div>
+                    <div><span class="text-muted">ต้นทาง:</span> {{ item.pickupOriginName || booking.origin || '-' }}</div>
+                    <div><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName || '-' }} {{ item.sitePhone ? '· ' + item.sitePhone : '' }}</div>
+                    <div>
+                      <span class="text-muted">พิกัด:</span>
+                      {{ item.latitude !== undefined && item.longitude !== undefined ? `${item.latitude}, ${item.longitude}` : item.mapUrl || '-' }}
+                    </div>
+                    <img v-if="item.podImage" :src="item.podImage" class="w-full max-h-32 object-contain rounded border border-border" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- สรุประยะทาง/น้ำมัน -->
+              <div v-if="mileageSummary" class="border-t border-border pt-4">
+                <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">สรุประยะทาง/น้ำมัน</div>
+                <div class="grid grid-cols-2 gap-3 text-sm bg-surface-2 rounded-lg p-3 border border-border">
+                  <div>ระยะทางเที่ยวนี้: <span class="font-semibold text-text">{{ mileageSummary.distanceKm }} กม.</span></div>
+                  <div>สะสม: <span class="font-semibold text-text">{{ mileageSummary.cumulativeKm }} กม.</span></div>
+                  <div>เฉลี่ย: <span class="font-semibold text-text">{{ mileageSummary.avgKmPerLiter ?? '-' }} กม./ลิตร</span></div>
+                  <div>น้ำมันที่กำหนด: <span class="font-semibold text-text">{{ mileageSummary.standardFuelLiters ?? '-' }} ล.</span></div>
+                  <div class="col-span-2">
+                    ชดเชยน้ำมัน:
+                    <span :class="['font-semibold', (mileageSummary.fuelCompensation ?? 0) >= 0 ? 'text-green-700' : 'text-red-700']">
+                      {{ mileageSummary.fuelCompensation !== null ? formatBaht(mileageSummary.fuelCompensation) : '-' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ราคา/ค่าใช้จ่าย -->
+              <div class="border-t border-border pt-4 space-y-3">
+                <div class="flex items-center justify-between">
+                  <div class="text-xs font-bold text-muted uppercase tracking-wide">ราคา/ค่าใช้จ่าย</div>
+                  <button
+                    v-if="!isEditing"
+                    @click="startEdit"
+                    :disabled="!canEditPrice"
+                    :title="canEditPrice ? 'แก้ไขราคา' : 'ราคาถูกล็อกหลังจัดรถแล้ว แก้ไขได้เฉพาะ Admin'"
+                    class="btn-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <span class="material-symbols-rounded text-base">edit</span>
+                    แก้ไข
+                  </button>
+                </div>
+                <div v-if="!isEditing" class="grid grid-cols-2 gap-3">
+                  <div class="bg-surface-2 rounded-lg p-3">
+                    <div class="text-xs text-muted mb-1">ค่าเที่ยว</div>
+                    <div class="font-bold text-text">{{ formatBaht(booking.tripFee) }}</div>
+                  </div>
+                  <div class="bg-surface-2 rounded-lg p-3">
+                    <div class="text-xs text-muted mb-1">ราคาที่ตกลง</div>
+                    <div class="font-bold text-text">{{ formatBaht(booking.agreedPrice) }}</div>
+                  </div>
+                </div>
+                <div v-else class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">ค่าเที่ยว</label>
+                    <input v-model.number="priceForm.tripFee" type="number" class="input-field w-full" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">ราคาที่ตกลง</label>
+                    <input v-model.number="priceForm.agreedPrice" type="number" class="input-field w-full" />
+                  </div>
+                  <div class="col-span-2 flex justify-end gap-2">
+                    <button @click="isEditing = false" class="btn-secondary">ยกเลิก</button>
+                    <button @click="savePrice" class="btn-sm text-primary">
+                      <span class="material-symbols-rounded text-base">save</span>
+                      บันทึกราคา
+                    </button>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="bg-surface-2 rounded-lg p-3">
+                    <div class="text-xs text-muted mb-1">น้ำมัน</div>
+                    <div class="font-bold text-text">{{ booking.fuelLiters || 0 }} ล. x {{ formatBaht(booking.fuelRate) }}</div>
+                  </div>
+                  <div class="bg-surface-2 rounded-lg p-3">
+                    <div class="text-xs text-muted mb-1">เบี้ยเลี้ยง</div>
+                    <div class="font-bold text-text">{{ formatBaht(booking.allowance) }}</div>
+                  </div>
+                  <div v-if="booking.finalAllowance !== undefined" class="bg-primary text-white rounded-lg p-3 col-span-2">
+                    <div class="text-xs opacity-90 mb-1">เบี้ยเลี้ยงสุทธิ</div>
+                    <div class="font-bold">{{ formatBaht(booking.finalAllowance) }}</div>
+                  </div>
+                </div>
+
+                <div v-if="booking.extraCharges?.length">
+                  <div class="text-xs font-semibold text-muted mb-1">ค่าใช้จ่ายเพิ่มเติม (extra)</div>
+                  <div v-for="extra in booking.extraCharges" :key="extra.id" class="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
+                    <span class="text-text">{{ extra.label }}</span>
+                    <span class="text-text">{{ formatBaht(extra.amount) }}</span>
+                  </div>
+                </div>
+
+                <div v-if="booking.debtAdjustments?.length">
+                  <div class="text-xs font-semibold text-muted mb-1">รายการเพิ่ม/ลดหนี้</div>
+                  <div v-for="adj in booking.debtAdjustments" :key="adj.id" class="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
+                    <span class="text-text">{{ adj.label || '-' }}</span>
+                    <span :class="adj.amount >= 0 ? 'text-red-500' : 'text-green-600'">{{ adj.amount >= 0 ? '-' : '+' }}{{ formatBaht(Math.abs(adj.amount)) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- POD -->
+              <div v-if="booking.podImage" class="border-t border-border pt-4">
+                <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">รูปหลักฐานการส่งมอบสินค้า (POD)</div>
+                <img :src="booking.podImage" class="w-full max-h-64 object-contain rounded-lg border border-border" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </template>
   </div>
 </template>
@@ -292,6 +327,8 @@ const isAdmin = computed(() => appStore.currentRole === 'admin')
 
 const booking = computed(() => bookingStore.bookings.find((b) => b.id === route.params.bookingId))
 const customer = computed(() => customerStore.lookupCustomer(booking.value?.customer || ''))
+
+const detailDrawerOpen = ref(false)
 
 /** ยังไม่จัดคนขับ = ใบสั่งซื้อสินค้า (Purchase Order), จัดคนขับแล้ว = ใบสั่งงานขนส่ง (Work Order) */
 const isDispatched = computed(() => !!booking.value?.driverName)
@@ -368,37 +405,3 @@ const savePrice = () => {
   isEditing.value = false
 }
 </script>
-
-<style scoped>
-.input-field {
-  @apply h-10 px-3 border border-border rounded-lg bg-surface text-text text-sm font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:ring-opacity-20 transition-all;
-}
-
-.btn-primary {
-  @apply h-10 px-4 rounded-lg border-0 bg-primary text-white font-semibold text-sm flex items-center gap-2 cursor-pointer transition-all hover:opacity-90 shadow-md;
-}
-
-.btn-secondary {
-  @apply h-10 px-3 rounded-lg border border-border bg-surface text-text font-medium text-sm flex items-center gap-2 cursor-pointer hover:bg-surface-2;
-}
-
-.btn-sm {
-  @apply h-8 px-2 rounded-lg border border-border bg-surface font-medium text-xs inline-flex items-center gap-1.5 cursor-pointer hover:bg-surface-2;
-}
-
-.card-lg {
-  @apply bg-surface border border-border rounded-xl shadow-default p-5;
-}
-
-@media print {
-  .no-print {
-    display: none !important;
-  }
-  .print-sheet {
-    box-shadow: none !important;
-    border: none !important;
-    margin: 0 !important;
-    max-width: 100% !important;
-  }
-}
-</style>

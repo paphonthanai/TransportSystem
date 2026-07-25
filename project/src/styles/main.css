@@ -173,3 +173,33 @@ body {
     @apply translate-x-0;
   }
 }
+
+/*
+ * Print isolation: several pages (JobDocumentView, InvoiceDocumentView, WHTCertificateView) render a
+ * printable document inside `#print-area`. Each of those components has its own `.no-print`/`@media print`
+ * rules in a SCOPED <style> block, but Vue's scoped CSS only ever matches elements rendered by that same
+ * component (via a `data-v-*` attribute) — it can never reach the sidebar/topbar chrome rendered by
+ * MainLayout.vue, so `window.print()` always printed the whole app shell around the document.
+ * Fix once, globally: hide everything, then re-show only `#print-area` and its descendants.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #print-area,
+  #print-area * {
+    visibility: visible;
+  }
+
+  #print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+}
