@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import type { JobItem, PricingMode } from '@/types'
 
 const FUEL_KEY = 'tms_fuel_settings_v2'
 
@@ -8,6 +9,8 @@ export interface FuelRate {
   district: string
   /** ลิตรมาตรฐานสำหรับเที่ยวไปอำเภอนี้ ใช้เป็นค่าตั้งต้นให้ดึงมากรอกในหน้าสร้างงาน แก้ไขเองได้ */
   liters: number
+  /** แท็กสาย/เส้นทาง (เช่น "สายเหนือ", "สายอีสาน") ไม่บังคับ — ใช้เตือนเมื่อรวมปลายทางคนละสายในงานเดียวกัน และใช้เลือกค่าน้ำมันสูงสุดของสายนั้นแทนการรวมทุกจุด (ไปสายเดียวกันหลายจุด = ขับผ่านจุดใกล้ระหว่างทาง ไม่ต้องนับซ้ำ) */
+  corridor?: string
 }
 
 export interface FuelSettings {
@@ -71,5 +74,35 @@ export const useFuelRateStore = defineStore('fuelRates', () => {
     return [...new Set(settings.value.rates.filter((r) => matchText(r.province, p)).map((r) => r.district))].sort()
   }
 
-  return { settings, findRate, provincesList, districtsForProvince }
+  /**
+   * รวมลิตรน้ำมันมาตรฐานของงาน ตาม pricingMode:
+   * SINGLE_DESTINATION - หลาย JobItem แชร์ปลายทางเดียวกัน (รายการแรก/รายการหลัก) จึงคำนวณครั้งเดียว ไม่คูณตามจำนวนรายการ
+   * MULTI_DESTINATION - แต่ละรายการปลายทางต่างกันได้ กลุ่มตามแท็กสาย (corridor) แล้วใช้ค่าสูงสุดของแต่ละสาย (ไปสายเดียวกันหลายจุด = ขับผ่านจุดใกล้ระหว่างทาง ไม่ต้องนับซ้ำ)
+   * แล้วรวมยอดสูงสุดของทุกสายเข้าด้วยกัน — รายการที่ไม่มีแท็กสายถือเป็นสายของตัวเอง จึงรวมกันตรงๆ เหมือน Logic เดิมทุกประการถ้ายังไม่ได้ตั้งค่าสาย
+   */
+  const standardFuelLiters = (items: JobItem[], pricingMode?: PricingMode): number => {
+    if (items.length === 0) return 0
+    const isMulti = (pricingMode ?? 'SINGLE_DESTINATION') === 'MULTI_DESTINATION'
+    if (!isMulti) return findRate(items[0].province, items[0].district)?.liters || 0
+    const byGroup = new Map<string, number>()
+    items.forEach((item, idx) => {
+      const rate = findRate(item.province, item.district)
+      if (!rate) return
+      const key = rate.corridor || `__item_${idx}`
+      byGroup.set(key, Math.max(byGroup.get(key) || 0, rate.liters))
+    })
+    return [...byGroup.values()].reduce((sum, v) => sum + v, 0)
+  }
+
+  /** true = ปลายทางนี้อยู่คนละสายกับปลายทางอื่นที่มีแท็กสายแล้วในงานเดียวกัน (ใช้เตือนเท่านั้น ไม่บล็อกการเพิ่มรายการ) */
+  const isDifferentCorridor = (province: string, district: string, otherItems: { province: string; district: string }[]): boolean => {
+    const rate = findRate(province, district)
+    if (!rate?.corridor) return false
+    return otherItems.some((i) => {
+      const other = findRate(i.province, i.district)
+      return !!other?.corridor && other.corridor !== rate.corridor
+    })
+  }
+
+  return { settings, findRate, provincesList, districtsForProvince, standardFuelLiters, isDifferentCorridor }
 })

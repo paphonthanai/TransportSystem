@@ -26,6 +26,7 @@
           <tr>
             <th class="px-4 py-3 font-semibold">จังหวัด</th>
             <th class="px-4 py-3 font-semibold">อำเภอ</th>
+            <th class="px-4 py-3 font-semibold">สาย/เส้นทาง</th>
             <th class="px-4 py-3 font-semibold text-right">ลิตรมาตรฐาน/เที่ยว</th>
             <th class="px-4 py-3 font-semibold"></th>
           </tr>
@@ -34,6 +35,7 @@
           <tr v-for="rate in sortedRates" :key="rate.province + rate.district" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 text-text">{{ rate.province }}</td>
             <td class="px-4 py-3 font-semibold text-text">{{ rate.district }}</td>
+            <td class="px-4 py-3 text-muted">{{ rate.corridor || '-' }}</td>
             <td class="px-4 py-3 text-right text-text">{{ rate.liters }} ลิตร</td>
             <td class="px-4 py-3 text-right">
               <div class="flex justify-end gap-2">
@@ -43,7 +45,7 @@
             </td>
           </tr>
           <tr v-if="fuelRateStore.settings.rates.length === 0">
-            <td colspan="4" class="px-4 py-8 text-center text-muted">ยังไม่มีข้อมูลอำเภอ</td>
+            <td colspan="5" class="px-4 py-8 text-center text-muted">ยังไม่มีข้อมูลอำเภอ</td>
           </tr>
         </tbody>
       </table>
@@ -74,6 +76,13 @@
               <label class="block text-xs font-semibold text-muted mb-1">ลิตรมาตรฐาน/เที่ยว</label>
               <input v-model.number="form.liters" type="number" min="0" class="input-field w-full" />
             </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">
+                สาย/เส้นทาง
+                <span class="font-normal text-[10px]">(ไม่บังคับ เช่น สายเหนือ, สายอีสาน)</span>
+              </label>
+              <input v-model="form.corridor" class="input-field w-full" />
+            </div>
             <div v-if="formError" class="text-xs text-red-600">{{ formError }}</div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
@@ -98,7 +107,7 @@ const sortedRates = computed(() =>
 
 const showDialog = ref(false)
 const editingIndex = ref<number | null>(null)
-const form = ref<FuelRate>({ province: '', district: '', liters: 0 })
+const form = ref<FuelRate>({ province: '', district: '', liters: 0, corridor: '' })
 const formError = ref('')
 
 const openDialog = (rate?: FuelRate) => {
@@ -108,7 +117,7 @@ const openDialog = (rate?: FuelRate) => {
     form.value = { ...rate }
   } else {
     editingIndex.value = null
-    form.value = { province: '', district: '', liters: 0 }
+    form.value = { province: '', district: '', liters: 0, corridor: '' }
   }
   showDialog.value = true
 }
@@ -123,10 +132,11 @@ const save = () => {
     formError.value = 'จังหวัด/อำเภอนี้มีอยู่แล้ว กรุณาแก้ไขรายการเดิมแทน'
     return
   }
+  const resolved = { ...form.value, corridor: form.value.corridor?.trim() || undefined }
   if (editingIndex.value === null) {
-    fuelRateStore.settings.rates.unshift({ ...form.value })
+    fuelRateStore.settings.rates.unshift(resolved)
   } else {
-    fuelRateStore.settings.rates[editingIndex.value] = { ...form.value }
+    fuelRateStore.settings.rates[editingIndex.value] = resolved
   }
   showDialog.value = false
 }

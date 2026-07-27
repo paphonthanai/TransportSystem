@@ -52,9 +52,9 @@
               <span class="text-gray-600">เลขที่เอกสาร</span>
               <span class="font-bold">{{ booking.docNo }}</span>
             </div>
-            <div v-if="booking.po" class="flex justify-between">
+            <div class="flex justify-between">
               <span class="text-gray-600">ใบสั่งงาน (PO)</span>
-              <span>{{ booking.po }}</span>
+              <span>{{ booking.po || '-' }}</span>
             </div>
             <div class="flex justify-between">
               <span class="text-gray-600">วันที่ออกเอกสาร</span>
@@ -193,8 +193,15 @@
                       <span class="text-muted">พิกัด:</span>
                       {{ item.latitude !== undefined && item.longitude !== undefined ? `${item.latitude}, ${item.longitude}` : item.mapUrl || '-' }}
                     </div>
+                    <div v-if="isMulti" class="font-semibold text-text">
+                      <span class="text-muted font-normal">ค่าเที่ยว:</span>
+                      {{ formatBaht(item.tripFee || 0) }} x {{ item.tripCount || 1 }} = {{ formatBaht((item.tripFee || 0) * (item.tripCount || 1)) }}
+                    </div>
                     <img v-if="item.podImage" :src="item.podImage" class="w-full max-h-32 object-contain rounded border border-border" />
                   </div>
+                </div>
+                <div v-if="isMulti" class="text-sm text-text mt-2 text-right font-semibold">
+                  รวมค่าเที่ยวทั้งงาน: {{ formatBaht(booking.tripFee) }}
                 </div>
               </div>
 
@@ -220,7 +227,7 @@
                 <div class="flex items-center justify-between">
                   <div class="text-xs font-bold text-muted uppercase tracking-wide">ราคา/ค่าใช้จ่าย</div>
                   <button
-                    v-if="!isEditing"
+                    v-if="!isEditing && !isMulti"
                     @click="startEdit"
                     :disabled="!canEditPrice"
                     :title="canEditPrice ? 'แก้ไขราคา' : 'ราคาถูกล็อกหลังจัดรถแล้ว แก้ไขได้เฉพาะ Admin'"
@@ -229,6 +236,9 @@
                     <span class="material-symbols-rounded text-base">edit</span>
                     แก้ไข
                   </button>
+                </div>
+                <div v-if="isMulti" class="text-[11px] text-muted -mt-2">
+                  งานนี้แยกค่าเที่ยวตามปลายทาง — แก้ไขราคาแบบแยกปลายทางได้ที่หน้าแก้ไขงาน (ปุ่มแก้ไขงานในรายการงาน)
                 </div>
                 <div v-if="!isEditing" class="grid grid-cols-2 gap-3">
                   <div class="bg-surface-2 rounded-lg p-3">
@@ -326,6 +336,8 @@ const fuelRateStore = useFuelRateStore()
 const isAdmin = computed(() => appStore.currentRole === 'admin')
 
 const booking = computed(() => bookingStore.bookings.find((b) => b.id === route.params.bookingId))
+/** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง — แก้ไขราคาต้องทำผ่านหน้าแก้ไขงานเท่านั้น ไม่ใช่หน้านี้ */
+const isMulti = computed(() => (booking.value?.pricingMode ?? 'SINGLE_DESTINATION') === 'MULTI_DESTINATION')
 const customer = computed(() => customerStore.lookupCustomer(booking.value?.customer || ''))
 
 const detailDrawerOpen = ref(false)
@@ -367,8 +379,7 @@ const mileageSummary = computed(() => {
       .filter((x) => x.plate === b.plate && x.id !== b.id && x.odometerBefore !== undefined && x.odometerAfter !== undefined)
       .reduce((sum, x) => sum + ((x.odometerAfter || 0) - (x.odometerBefore || 0)), 0) + distanceKm
   const avgKmPerLiter = b.fuelLiters ? Math.round((distanceKm / b.fuelLiters) * 100) / 100 : null
-  const standardFuelLiters =
-    b.items.reduce((sum, i) => sum + (fuelRateStore.findRate(i.province, i.district)?.liters || 0), 0) || null
+  const standardFuelLiters = fuelRateStore.standardFuelLiters(b.items, b.pricingMode) || null
   const fuelCompensation = standardFuelLiters !== null ? Math.round((standardFuelLiters - (b.fuelLiters || 0)) * (b.fuelRate || 0)) : null
   return { distanceKm, cumulativeKm, avgKmPerLiter, standardFuelLiters, fuelCompensation }
 })
@@ -391,7 +402,7 @@ const isEditing = ref(false)
 const priceForm = ref({ tripFee: 0, agreedPrice: 0 })
 
 /** ราคาแก้ไขได้อิสระตอน WAITING_DISPATCH เท่านั้น หลังจากนั้นต้องเป็น admin */
-const canEditPrice = computed(() => !!booking.value && (booking.value.status === 'WAITING_DISPATCH' || isAdmin.value))
+const canEditPrice = computed(() => !!booking.value && !isMulti.value && (booking.value.status === 'WAITING_DISPATCH' || isAdmin.value))
 
 const startEdit = () => {
   if (!booking.value || !canEditPrice.value) return

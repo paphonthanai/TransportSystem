@@ -26,6 +26,18 @@ const routes: RouteRecordRaw[] = [
         props: true,
       },
       {
+        path: 'booking/:fleet/new',
+        name: 'BookingCreate',
+        component: () => import('@/views/BookingCreateView.vue'),
+        props: true,
+      },
+      {
+        path: 'booking/:fleet/:id/edit',
+        name: 'BookingEdit',
+        component: () => import('@/views/BookingEditView.vue'),
+        props: true,
+      },
+      {
         path: 'documents',
         name: 'Documents',
         component: () => import('@/views/DocumentsView.vue'),

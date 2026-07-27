@@ -3,6 +3,13 @@ export type BookingCategory = 'cements' | 'ceramics'
 export type BookingJobType = 'ลงมือ' | 'พาเลทโรงงาน' | 'พาเลทฟรี'
 
 /**
+ * โหมดการคิดราคาค่าเที่ยวของงาน — ตั้งตอนสร้างงาน แก้ไขภายหลังได้ (ผ่าน confirmation เท่านั้น ดู switchPricingMode ใน stores/booking.ts)
+ * SINGLE_DESTINATION (ค่า default เสมอ รวมถึงงานเก่าที่ไม่มีฟิลด์นี้): กรอกค่าเที่ยวครั้งเดียวทั้งงาน (booking.tripFee) ไม่ว่ามีกี่รายการ/ปลายทาง — พฤติกรรมเดิมของระบบ
+ * MULTI_DESTINATION: แต่ละรายการ (JobItem) มีค่าเที่ยว+จำนวนเที่ยวเป็นของตัวเอง แล้วรวมเป็น booking.tripFee โดยอัตโนมัติ
+ */
+export type PricingMode = 'SINGLE_DESTINATION' | 'MULTI_DESTINATION'
+
+/**
  * สถานะวงจรชีวิตของงาน (job lifecycle) แยกจากสถานะการเงิน (BillingStatus) โดยเจตนา
  * ตามหลักที่ว่า "ส่งของเสร็จ = งานจบ" ไม่เท่ากับ "วางบิล = แปลงงานเป็นเงิน"
  * WAITING_DISPATCH: ลงงานแล้ว รอจัดคนขับ/รถ (ราคาแก้ไขได้อิสระ)
@@ -108,6 +115,13 @@ export interface JobItem {
   /** ชื่อผู้รับสินค้าที่ปลายทางนี้ */
   deliveredBy?: string
   deliveredAt?: Date
+  /** ค่าเที่ยวของรายการนี้ — มีค่าเฉพาะงาน MULTI_DESTINATION เท่านั้น (งาน SINGLE_DESTINATION ราคาทั้งหมดอยู่ที่ booking.tripFee แทน) */
+  tripFee?: number
+  /**
+   * จำนวนเที่ยวสำหรับคิดราคา (pricing multiplier, itemTotal = tripFee * tripCount) — มีค่าเฉพาะงาน MULTI_DESTINATION, ค่าเริ่มต้น = 1
+   * คำเตือน: นี่ไม่ใช่จำนวนครั้งที่รถวิ่งจริง — 1 Booking ยังคงเป็น 1 รถ/1 คนขับ/1 การจัดรถเสมอ ห้ามใช้ค่านี้แทนหรือปนกับแนวคิด "เที่ยวรถจริง"
+   */
+  tripCount?: number
 }
 
 export interface Booking {
@@ -132,8 +146,10 @@ export interface Booking {
   /** รายการสินค้า/ปลายทางภายในงานนี้ (1 งานมีได้หลายรายการ) */
   items: JobItem[]
   allowance: number
-  /** ค่าเที่ยวรวมทั้งเที่ยว (1 งาน = 1 ค่าเที่ยว ไม่แยกตามรายการสินค้า) */
+  /** ค่าเที่ยวรวมทั้งเที่ยว — งาน SINGLE_DESTINATION กรอกตรงนี้โดยตรง, งาน MULTI_DESTINATION เป็นผลรวมที่คำนวณจาก items[].tripFee*tripCount เสมอ */
   tripFee: number
+  /** โหมดคิดราคาของงานนี้ — ไม่มีค่า (undefined) ถือเป็น 'SINGLE_DESTINATION' เสมอ (ความเข้ากันได้กับข้อมูลเก่าใน localStorage) */
+  pricingMode?: PricingMode
   /** ราคาที่ตกลงกับลูกค้าไว้ ใช้เทียบตอนตรวจสอบก่อนวางบิล แก้ไขได้อิสระตอน WAITING_DISPATCH เท่านั้น (หลังจากนั้นแก้ได้เฉพาะ admin) */
   agreedPrice: number
   fuelLiters: number

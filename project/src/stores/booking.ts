@@ -4,7 +4,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useInventoryStore } from '@/stores/inventory'
-import type { Booking, BookingCategory, DebtAdjustment, BillingBatch, LogEntry, JobItem } from '@/types'
+import type { Booking, BookingCategory, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
+
+/** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง, ไม่มีค่า pricingMode (ข้อมูลเก่า) ถือเป็น SINGLE_DESTINATION เสมอ */
+export function isMultiPricing(booking: Booking) {
+  return (booking.pricingMode ?? 'SINGLE_DESTINATION') === 'MULTI_DESTINATION'
+}
 
 export interface SalesDocument {
   id: string
@@ -447,6 +452,8 @@ export const useBookingStore = defineStore('booking', () => {
       allowance?: number
       fuelLiters?: number
       fuelRate?: number
+      /** ค่านี้เป็นแค่ passthrough setter สำหรับกรณีบันทึกแบบปกติ (โหมดไม่เปลี่ยน) — การ "เปลี่ยนโหมด" จริงต้องผ่าน switchPricingMode เท่านั้น เพื่อให้มี confirmation/reset ตามกฎ */
+      pricingMode?: PricingMode
     }
   ) {
     const booking = bookings.value.find((b) => b.id === id)
@@ -463,7 +470,28 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.allowance !== undefined) booking.allowance = data.allowance
     if (data.fuelLiters !== undefined) booking.fuelLiters = data.fuelLiters
     if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
+    if (data.pricingMode !== undefined) booking.pricingMode = data.pricingMode
     addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`)
+  }
+
+  /**
+   * เปลี่ยนโหมดคิดราคาของงาน (SINGLE_DESTINATION <-> MULTI_DESTINATION)
+   * resolvedItems/resolvedTripFee ต้องผ่านการตรวจสอบ/ยืนยันจากผู้ใช้ที่ชั้น UI มาแล้วเสมอ (ฟังก์ชันนี้แค่เขียนค่าที่ resolve แล้ว ไม่คำนวณหรือ validate ซ้ำ)
+   * เป็นจุดเดียวที่เขียนค่า pricingMode + tripFee (ระดับงาน) + items (ระดับรายการ) พร้อมกัน เพื่อไม่ให้ 3 ค่านี้ไม่ตรงกัน
+   */
+  function switchPricingMode(bookingId: string, newMode: PricingMode, resolvedItems: JobItem[], resolvedTripFee: number) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
+    if (!booking) return
+    const oldMode = booking.pricingMode ?? 'SINGLE_DESTINATION'
+    if (oldMode === newMode) return
+    booking.pricingMode = newMode
+    booking.items = resolvedItems
+    booking.tripFee = resolvedTripFee
+    addLog(
+      `เปลี่ยนโหมดคิดราคา ${booking.docNo}: ${oldMode === 'SINGLE_DESTINATION' ? 'รวมทั้งเที่ยว' : 'แยกตามปลายทาง'} → ${
+        newMode === 'SINGLE_DESTINATION' ? 'รวมทั้งเที่ยว' : 'แยกตามปลายทาง'
+      } (ค่าเที่ยวรวมใหม่: ${resolvedTripFee} บาท)`
+    )
   }
 
   /** เพิ่มรายการสินค้า/ปลายทางใหม่เข้าไปในงานที่มีอยู่แล้ว (ใช้ตอนจัดรถแล้วมีรายการเพิ่มทีหลัง) ไม่สร้างงาน/เลขที่เอกสารใหม่ */
@@ -874,6 +902,7 @@ export const useBookingStore = defineStore('booking', () => {
     updateBookingPrice,
     updateBookingOps,
     updateBookingFull,
+    switchPricingMode,
     addJobItem,
     dispatchBooking,
     acceptDispatch,
