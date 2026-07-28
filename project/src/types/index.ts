@@ -34,9 +34,9 @@ export type BookingStatus =
   | 'DELIVERED'
 
 /**
- * สถานะฝั่งการเงิน
- * UNBILLED: ยังไม่ถูกจัดเข้ารอบบิล (ปัจจุบันแทบไม่เกิดขึ้น เพราะงานเข้ารอบบิลอัตโนมัติทันทีที่จัดรถ)
- * IN_BATCH: อยู่ในรอบบิล (เข้าอัตโนมัติตั้งแต่ตอนจัดรถ ไม่ต้องรอส่งของสำเร็จ) รอตรวจสอบ/ออกใบแจ้งหนี้
+ * สถานะฝั่งการเงิน — เป็นอิสระจาก BookingStatus โดยเจตนา ไม่ผูกกับสถานะงานขนส่งเลย
+ * UNBILLED: ค่าเริ่มต้นของทุกงาน ยังไม่ถูกดึงเข้ารอบบิล (ไม่เกี่ยวกับว่างานจะจัดรถ/ส่งของถึงไหนแล้ว)
+ * IN_BATCH: ผู้ใช้เลือกงาน UNBILLED เองที่หน้าใบวางบิลแล้วดึงเข้ารอบบิล รอตรวจสอบ/ออกใบแจ้งหนี้
  * HOLD: ตรวจสอบแล้วไม่ผ่าน (POD ไม่ครบ/ราคาไม่ตรง) พักไว้ก่อน
  * INVOICED: ออกใบแจ้งหนี้แล้ว
  * PAID: ลูกค้าชำระแล้ว ปิดรอบ
@@ -166,7 +166,7 @@ export interface Booking {
   finalAllowance?: number
   /** รูปหลักฐานการส่งมอบสินค้า (POD) ล่าสุด = ของปลายทางสุดท้ายที่ส่งสำเร็จ เก็บไว้ที่ระดับงานเพื่อความเข้ากันได้กับหน้าจอที่แสดง POD เดียว */
   podImage?: string
-  /** สถานะการเงิน มีผลเมื่อ status เป็น DELIVERED เท่านั้น */
+  /** สถานะการเงิน เป็นอิสระจาก status (BookingStatus) โดยสิ้นเชิง — ค่าเริ่มต้น UNBILLED เสมอ เปลี่ยนได้เฉพาะผ่านหน้าใบวางบิล (addBookingsToBatch / issueInvoiceFromBatch) เท่านั้น */
   billingStatus?: BillingStatus
   /** ค่าใช้จ่ายเพิ่มเติมที่เรียกเก็บลูกค้า เพิ่มได้ตอนตรวจสอบรอบบิล */
   extraCharges?: ExtraCharge[]
@@ -218,14 +218,24 @@ export interface LogEntry {
 
 export interface BillingBatch {
   id: string
+  /** เลขที่วางบิล (เช่น VB2569-0001) ออกให้อัตโนมัติครั้งเดียวตอนสร้างรายการวางบิล ใช้เป็นตัวระบุหลักแทน label */
+  number: string
   label: string
-  /** ถ้าระบุ = รอบบิลเฉพาะลูกค้ารายนี้ ถ้าไม่ระบุ = รวมทุกลูกค้าในช่วงวันที่ */
+  /** ถ้าระบุ = รายการวางบิลเฉพาะลูกค้ารายนี้ ถ้าไม่ระบุ = รวมทุกลูกค้าในช่วงวันที่ */
   customer?: string
   dateFrom: Date
   dateTo: Date
   bookingIds: string[]
   createdAt: Date
-  status: 'draft' | 'invoiced' | 'paid'
+  /**
+   * workflow ของรายการวางบิลนี้เอง (แยกจาก Booking.billingStatus และ SalesDocument.status โดยเจตนา)
+   * BILLING_PENDING: สร้างรายการแล้ว รอออกเอกสารวางบิล/ใบแจ้งหนี้
+   * BILLED: ออกเอกสารวางบิล/ใบแจ้งหนี้ครบทุกงานในรายการแล้ว
+   * WAITING_PAYMENT: ส่งเอกสารให้ลูกค้าครบแล้ว รอรับชำระ
+   * PAID: รับชำระครบถ้วนแล้ว
+   * CLOSED: ปิดรายการแล้ว (กดปิดเองหลังชำระครบ)
+   */
+  status: 'BILLING_PENDING' | 'BILLED' | 'WAITING_PAYMENT' | 'PAID' | 'CLOSED'
 }
 
 export interface Job {

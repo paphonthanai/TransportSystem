@@ -25,6 +25,7 @@ export interface DocumentSettings {
     invoice: { prefix: string; padding: number }
     receipt: { prefix: string; padding: number }
     wht: { prefix: string; padding: number }
+    billingList: { prefix: string; padding: number }
   }
   payment: {
     bankName: string
@@ -62,6 +63,7 @@ function defaultSettings(): DocumentSettings {
       invoice: { prefix: 'INV', padding: 4 },
       receipt: { prefix: 'RE', padding: 4 },
       wht: { prefix: 'WHT', padding: 4 },
+      billingList: { prefix: 'VB', padding: 4 },
     },
     payment: {
       bankName: '',
@@ -96,6 +98,7 @@ function mergeWithDefaults(raw: any): DocumentSettings {
       invoice: { ...def.numbering.invoice, ...raw?.numbering?.invoice },
       receipt: { ...def.numbering.receipt, ...raw?.numbering?.receipt },
       wht: { ...def.numbering.wht, ...raw?.numbering?.wht },
+      billingList: { ...def.numbering.billingList, ...raw?.numbering?.billingList },
     },
     payment: { ...def.payment, ...raw?.payment },
     currency: { ...def.currency, ...raw?.currency },

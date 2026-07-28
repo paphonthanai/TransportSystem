@@ -38,13 +38,14 @@ import { useOnboardingStore } from '@/stores/onboarding'
 const documentSettingsStore = useDocumentSettingsStore()
 const onboardingStore = useOnboardingStore()
 
-const docTypes: { key: 'invoice' | 'receipt' | 'wht'; label: string }[] = [
+const docTypes: { key: 'invoice' | 'receipt' | 'wht' | 'billingList'; label: string }[] = [
   { key: 'invoice', label: 'ใบแจ้งหนี้' },
   { key: 'receipt', label: 'ใบเสร็จรับเงิน' },
   { key: 'wht', label: 'หนังสือรับรองหัก ณ ที่จ่าย' },
+  { key: 'billingList', label: 'รายการวางบิล' },
 ]
 
-const preview = (key: 'invoice' | 'receipt' | 'wht') => {
+const preview = (key: 'invoice' | 'receipt' | 'wht' | 'billingList') => {
   const cfg = documentSettingsStore.settings.numbering[key]
   const year = new Date().getFullYear() + 543
   return `${cfg.prefix}${year}-${String(1).padStart(cfg.padding || 1, '0')}`

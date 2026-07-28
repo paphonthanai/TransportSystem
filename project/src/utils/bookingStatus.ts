@@ -26,7 +26,7 @@ export const bookingStatusClass: Record<BookingStatus, string> = {
 
 export const billingStatusLabel: Record<BillingStatus, string> = {
   UNBILLED: 'ยังไม่วางบิล',
-  IN_BATCH: 'อยู่ในรอบบิล',
+  IN_BATCH: 'อยู่ในรายการวางบิล',
   HOLD: 'พักบิล',
   INVOICED: 'ออกใบแจ้งหนี้แล้ว',
   PAID: 'ชำระแล้ว',

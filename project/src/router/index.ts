@@ -155,6 +155,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/OriginsView.vue'),
       },
       {
+        path: 'settings/billing-rule',
+        name: 'SettingsBillingRule',
+        component: () => import('@/views/BillingRuleSettingsView.vue'),
+      },
+      {
         path: 'inventory',
         name: 'Inventory',
         component: () => import('@/views/StockView.vue'),

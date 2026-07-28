@@ -182,7 +182,7 @@ const getScreenTitle = () => {
     '/inventory': 'คลังสินค้า',
   }
   if (currentRoute.path.startsWith('/documents/')) return 'เอกสารขาย · พิมพ์เอกสาร'
-  if (currentRoute.path.startsWith('/job/')) return 'รายละเอียดงาน · ใบเสนอราคา/PO'
+  if (currentRoute.path.startsWith('/job/')) return 'รายละเอียดงาน'
   if (currentRoute.path.endsWith('/new')) return 'สร้างงานขนส่งใหม่'
   if (currentRoute.path.endsWith('/edit')) return 'แก้ไขงานขนส่ง'
   return routes[currentRoute.path] || 'Dashboard'

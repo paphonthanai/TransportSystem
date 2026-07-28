@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useInventoryStore } from '@/stores/inventory'
+import { useBillingRuleStore } from '@/stores/billingRule'
 import type { Booking, BookingCategory, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
 
 /** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง, ไม่มีค่า pricingMode (ข้อมูลเก่า) ถือเป็น SINGLE_DESTINATION เสมอ */
@@ -56,10 +57,11 @@ const ACCEPT_TIMEOUT_MS = 15 * 60 * 1000
  * (v5: ยกเลิก Destination wrapper กลับไปเป็น items: JobItem[] แบบเดิม (1 รายการ = 1 ปลายทาง+1 สินค้า) ตามที่ผู้ใช้ต้องการ
  *      + เพิ่มการรับสินค้าทีละรายการ (pickupJobItem) แทนการยืนยันรับครบทั้งงานทีเดียว — คนขับเลือกลำดับรับสินค้าเองได้ต่อรายการ (คนละต้นทางได้)
  *      ตัดสต๊อกทันทีตอนรับแต่ละรายการ ลำดับส่งของ (deliverySequence) คำนวณอัตโนมัติเป็นลำดับย้อนกลับของลำดับรับสินค้า)
+ * (batches v3: เปลี่ยน BillingBatch.status จาก 'draft'/'invoiced'/'paid' เป็น 5 สถานะใหม่ + เพิ่ม number จึงขึ้น key ใหม่)
  */
 const BOOKINGS_KEY = 'tms_bookings_v5'
 const DOCUMENTS_KEY = 'tms_documents_v2'
-const BATCHES_KEY = 'tms_batches_v2'
+const BATCHES_KEY = 'tms_batches_v3'
 const LOGS_KEY = 'tms_logs_v1'
 
 const BOOKING_DATE_FIELDS = ['createdAt', 'shipDate', 'dispatchedAt', 'transitStartedAt', 'completedAt', 'billedAt'] as const
@@ -164,6 +166,7 @@ function seedBookings(): Booking[] {
       fuelRate: 32,
       plate: '',
       status: 'WAITING_DISPATCH',
+      billingStatus: 'UNBILLED',
       createdAt: now,
     },
     {
@@ -189,6 +192,7 @@ function seedBookings(): Booking[] {
       fuelRate: 32,
       plate: '',
       status: 'WAITING_DISPATCH',
+      billingStatus: 'UNBILLED',
       createdAt: now,
     },
     {
@@ -231,6 +235,7 @@ function seedBookings(): Booking[] {
       plate: '71-3390 ราชบุรี',
       driverName: 'วิรัตน์ ใจกล้า',
       status: 'ACCEPTED',
+      billingStatus: 'UNBILLED',
       createdAt: now,
       dispatchedAt: now,
     },
@@ -264,6 +269,7 @@ function seedBookings(): Booking[] {
       plate: '72-6628 อยุธยา',
       driverName: 'สมหมาย เพียรงาน',
       status: 'IN_TRANSIT',
+      billingStatus: 'UNBILLED',
       createdAt: now,
       dispatchedAt: now,
       goodsReceivedAt: now,
@@ -321,6 +327,7 @@ export const useBookingStore = defineStore('booking', () => {
   const documentSettingsStore = useDocumentSettingsStore()
   const onboardingStore = useOnboardingStore()
   const inventoryStore = useInventoryStore()
+  const billingRuleStore = useBillingRuleStore()
 
   const bookings = ref<Booking[]>(loadBookings())
   const documents = ref<SalesDocument[]>(loadDocuments())
@@ -394,6 +401,7 @@ export const useBookingStore = defineStore('booking', () => {
       id: `b${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
       status: 'WAITING_DISPATCH',
       createdAt: createdAt || new Date(),
+      billingStatus: 'UNBILLED',
     }
     bookings.value.unshift(booking)
     addLog(`ลงงานใหม่ ${booking.docNo} (${booking.customer})`)
@@ -504,7 +512,11 @@ export const useBookingStore = defineStore('booking', () => {
     return newItem
   }
 
-  /** จ่ายงานให้คนขับ: WAITING_DISPATCH -> ASSIGNED (รอคนขับตอบรับใน Driver App ภายใน 15 นาที) */
+  /**
+   * จ่ายงานให้คนขับ: WAITING_DISPATCH -> ASSIGNED (รอคนขับตอบรับใน Driver App ภายใน 15 นาที)
+   * เรียกซ้ำได้ทุกสถานะก่อนส่งของสำเร็จเพื่อ "เปลี่ยนรถ/คนขับ" — ถ้างานถูกตอบรับไปแล้ว (ACCEPTED ขึ้นไป)
+   * จะแค่แก้ไขทะเบียนรถ/คนขับ โดยไม่รีเซ็ตสถานะ/ความคืบหน้าของงานที่ทำไปแล้วกลับไปเป็น ASSIGNED
+   */
   function dispatchBooking(
     id: string,
     plate: string,
@@ -519,46 +531,68 @@ export const useBookingStore = defineStore('booking', () => {
     if (extra?.driverName) booking.driverName = extra.driverName
     if (extra?.odometerBefore !== undefined) booking.odometerBefore = extra.odometerBefore
     // น้ำมันคำนวณและล็อกไว้ตั้งแต่ตอนสร้างงานแล้ว (จากจังหวัด/อำเภอของแต่ละปลายทาง) ตอนจัดรถจึงไม่ต้องกรอก/คำนวณซ้ำ
+    // การวางบิลแยกอิสระจากการจัดรถโดยเจตนา — booking.billingStatus ยังคง UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล (ดู addBookingsToBatch)
+    const alreadyAccepted = booking.status !== 'WAITING_DISPATCH' && booking.status !== 'ASSIGNED'
+    if (alreadyAccepted) {
+      addLog(`เปลี่ยนรถ/คนขับ ${booking.docNo} เป็นทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''}`)
+      return
+    }
     booking.status = 'ASSIGNED'
     booking.dispatchedAt = new Date()
-    assignToOpenBatch(booking)
-    addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''} (รอคนขับตอบรับ, เข้ารอบบิลอัตโนมัติ)`)
+    addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''} (รอคนขับตอบรับ)`)
   }
 
   /**
-   * เข้ารอบบิลอัตโนมัติทันทีที่จัดรถเสร็จ (ไม่ต้องรอส่งของสำเร็จ)
-   * จัดกลุ่มรอบบิลตามลูกค้า: หาบิลที่ยังเปิดอยู่ (draft) ของลูกค้ารายนั้น ถ้าไม่มีให้เปิดใหม่อัตโนมัติ
+   * ดึงงานที่ยังไม่วางบิล (UNBILLED) ของลูกค้าเดียวกันเข้ารอบบิลเดียวกัน (สร้างรอบ draft ใหม่ให้ลูกค้านั้นถ้ายังไม่มี)
+   * เรียกจากหน้าใบวางบิลเมื่อผู้ใช้เลือกงานเองแล้วกด "รวมเข้ารอบบิล" — ไม่ใช่ automatic ตอนจัดรถอีกต่อไป
+   * คืนค่า null ถ้าไม่มีงาน UNBILLED ที่ตรงเงื่อนไข หรือรายการที่เลือกไม่ได้เป็นลูกค้าเดียวกันทั้งหมด
    */
-  function assignToOpenBatch(booking: Booking) {
-    let batch = batches.value.find((b) => b.customer === booking.customer && b.status === 'draft')
+  function addBookingsToBatch(bookingIds: string[]) {
+    const targets = bookings.value.filter(
+      (b) => bookingIds.includes(b.id) && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED' && billingRuleStore.isEligible(b)
+    )
+    if (targets.length === 0) return null
+    const customer = targets[0].customer
+    if (!targets.every((b) => b.customer === customer)) return null
+    let batch = batches.value.find((b) => b.customer === customer && b.status === 'BILLING_PENDING')
     if (!batch) {
+      const billingListNumbering = documentSettingsStore.settings.numbering.billingList
+      const number = `${billingListNumbering.prefix}${new Date().getFullYear() + 543}-${documentSettingsStore.padNumber(
+        batches.value.length + 1,
+        billingListNumbering.padding
+      )}`
       batch = {
         id: `batch${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-        label: `รอบบิล ${booking.customer}`,
-        customer: booking.customer,
-        dateFrom: booking.dispatchedAt || new Date(),
-        dateTo: booking.dispatchedAt || new Date(),
+        number,
+        label: `รายการวางบิล ${customer}`,
+        customer,
+        dateFrom: targets[0].dispatchedAt || targets[0].createdAt,
+        dateTo: targets[0].dispatchedAt || targets[0].createdAt,
         bookingIds: [],
         createdAt: new Date(),
-        status: 'draft',
+        status: 'BILLING_PENDING',
       }
       batches.value.unshift(batch)
     }
-    if (!batch.bookingIds.includes(booking.id)) batch.bookingIds.push(booking.id)
-    booking.batchId = batch.id
-    booking.billingStatus = 'IN_BATCH'
-    const dispatchedAt = booking.dispatchedAt || new Date()
-    if (dispatchedAt < batch.dateFrom) batch.dateFrom = dispatchedAt
-    if (dispatchedAt > batch.dateTo) batch.dateTo = dispatchedAt
+    targets.forEach((booking) => {
+      if (!batch!.bookingIds.includes(booking.id)) batch!.bookingIds.push(booking.id)
+      booking.batchId = batch!.id
+      booking.billingStatus = 'IN_BATCH'
+      const d = booking.dispatchedAt || booking.createdAt
+      if (d < batch!.dateFrom) batch!.dateFrom = d
+      if (d > batch!.dateTo) batch!.dateTo = d
+    })
+    addLog(`เพิ่ม ${targets.length} งานเข้ารายการวางบิล "${batch.number}"`)
+    return batch
   }
 
-  /** ถอนงานออกจากรอบบิล (ใช้ตอนยกเลิกการจ่ายงานอัตโนมัติ เพราะคนขับไม่ตอบรับ) */
+  /** ถอนงานออกจากรอบบิล (ใช้ตอนยกเลิกการจ่ายงานอัตโนมัติ เพราะคนขับไม่ตอบรับ) กลับไปเป็นยังไม่วางบิล */
   function removeFromBatch(booking: Booking) {
     if (!booking.batchId) return
     const batch = batches.value.find((b) => b.id === booking.batchId)
     if (batch) batch.bookingIds = batch.bookingIds.filter((id) => id !== booking.id)
     booking.batchId = undefined
-    booking.billingStatus = undefined
+    booking.billingStatus = 'UNBILLED'
   }
 
   /** คนขับกดตอบรับงานใน Driver App: ASSIGNED -> ACCEPTED */
@@ -646,19 +680,6 @@ export const useBookingStore = defineStore('booking', () => {
     })
   }
 
-  /**
-   * เผื่อข้อมูลเก่า (seed หรือ localStorage ก่อนหน้านี้) ที่งานถูกจัดรถไปแล้วแต่ยังไม่เคยเข้ารอบบิล
-   * (เพราะสมัยก่อนรอบบิลต้องสร้างเองและรวมเฉพาะงานที่ DELIVERED) ให้ไล่เข้ารอบบิลอัตโนมัติให้ครบ
-   */
-  function reconcileMissingBatchAssignments() {
-    bookings.value.forEach((booking) => {
-      if (booking.status !== 'WAITING_DISPATCH' && !booking.batchId) {
-        assignToOpenBatch(booking)
-      }
-    })
-  }
-
-  reconcileMissingBatchAssignments()
   checkExpiredDispatches()
   setInterval(checkExpiredDispatches, 30_000)
 
@@ -689,7 +710,7 @@ export const useBookingStore = defineStore('booking', () => {
     booking.finalAllowance = Math.round((booking.allowance || 0) - netAdjustment)
     if (odometerAfter !== undefined) booking.odometerAfter = odometerAfter
     booking.status = 'DELIVERED'
-    // billingStatus ถูกตั้งเป็น IN_BATCH ไปแล้วตั้งแต่ตอนจัดรถ (assignToOpenBatch) ไม่ต้องตั้งซ้ำ
+    // billingStatus ไม่เกี่ยวกับสถานะงานเลย ปล่อยไว้ตามเดิม (UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล)
     booking.completedAt = new Date()
     addLog(`จบงาน ${booking.docNo}${booking.podImage ? ' (แนบ POD จากคนขับ)' : ' (ปิดงานโดยออฟฟิศ)'}`)
   }
@@ -733,7 +754,7 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   // --- Billing batch flow ---
-  // หมายเหตุ: รอบบิลถูกสร้าง/เติมงานอัตโนมัติตอนจัดรถ (ดู assignToOpenBatch) ไม่มีการสร้างรอบบิลด้วยมือแล้ว
+  // หมายเหตุ: รอบบิลไม่ถูกสร้าง/เติมงานอัตโนมัติอีกต่อไป — ผู้ใช้ต้องเลือกงาน UNBILLED เองที่หน้าใบวางบิลแล้วกด "รวมเข้ารอบบิล" (ดู addBookingsToBatch)
 
   const bookingsInBatch = (batchId: string) => computed(() => bookings.value.filter((b) => b.batchId === batchId))
 
@@ -745,10 +766,10 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.customer !== undefined) batch.customer = data.customer || undefined
     if (data.dateFrom !== undefined) batch.dateFrom = data.dateFrom
     if (data.dateTo !== undefined) batch.dateTo = data.dateTo
-    addLog(`แก้ไขรอบบิล "${batch.label}"`)
+    addLog(`แก้ไขรายการวางบิล "${batch.number}"`)
   }
 
-  /** ลบรอบบิล ได้เฉพาะรอบที่ยังไม่มีการออกใบแจ้งหนี้ (ปลดงานทั้งหมดกลับไปเป็นยังไม่วางบิล) */
+  /** ลบรายการวางบิล ได้เฉพาะรายการที่ยังไม่มีการออกใบแจ้งหนี้ (ปลดงานทั้งหมดกลับไปเป็นยังไม่วางบิล) */
   function deleteBatch(batchId: string) {
     const batch = batches.value.find((b) => b.id === batchId)
     if (!batch) return false
@@ -761,7 +782,7 @@ export const useBookingStore = defineStore('booking', () => {
       }
     })
     batches.value = batches.value.filter((b) => b.id !== batchId)
-    addLog(`ลบรอบบิล "${batch.label}"`)
+    addLog(`ลบรายการวางบิล "${batch.number}"`)
     return true
   }
 
@@ -836,7 +857,7 @@ export const useBookingStore = defineStore('booking', () => {
       b.billingStatus = 'INVOICED'
     })
     const stillPending = bookings.value.some((b) => b.batchId === batchId && b.billingStatus === 'IN_BATCH')
-    if (!stillPending) batch.status = 'invoiced'
+    if (!stillPending) batch.status = 'BILLED'
     addLog(`ออกใบแจ้งหนี้ ${doc.number} (${readyBookings.length} งาน, ${amount} บาท)`)
     onboardingStore.markDone('issuedFirstInvoice')
     return doc
@@ -847,6 +868,13 @@ export const useBookingStore = defineStore('booking', () => {
     if (!doc) return
     doc.status = 'sent'
     addLog(`ส่งใบแจ้งหนี้ ${doc.number} ให้ลูกค้า`)
+    if (doc.batchId) {
+      const batch = batches.value.find((b) => b.id === doc.batchId)
+      if (batch && batch.status === 'BILLED') {
+        const allSent = documents.value.filter((d) => d.batchId === batch.id).every((d) => d.status !== 'draft')
+        if (allSent) batch.status = 'WAITING_PAYMENT'
+      }
+    }
   }
 
   /**
@@ -868,10 +896,18 @@ export const useBookingStore = defineStore('booking', () => {
         const settled = bookings.value
           .filter((b) => b.batchId === batch.id)
           .every((b) => b.billingStatus === 'PAID' || b.billingStatus === 'HOLD')
-        if (settled) batch.status = 'paid'
+        if (settled) batch.status = 'PAID'
       }
     }
     addLog(`บันทึกรับชำระใบแจ้งหนี้ ${doc.number} (${doc.amount} บาท)`)
+  }
+
+  /** ปิดรายการวางบิลด้วยตนเอง หลังชำระครบแล้ว (ขั้นตอนสุดท้ายของ workflow) */
+  function closeBatch(batchId: string) {
+    const batch = batches.value.find((b) => b.id === batchId)
+    if (!batch || batch.status !== 'PAID') return
+    batch.status = 'CLOSED'
+    addLog(`ปิดรายการวางบิล "${batch.number}"`)
   }
 
   /** ออกใบเสร็จรับเงิน เป็นการกระทำแยกต่างหากจากการบันทึกรับชำระ ต้องชำระแล้วเท่านั้นจึงออกใบเสร็จได้ */
@@ -915,8 +951,10 @@ export const useBookingStore = defineStore('booking', () => {
     deliverJobItem,
     finishDriverJob,
     bookingsInBatch,
+    addBookingsToBatch,
     updateBatch,
     deleteBatch,
+    closeBatch,
     setBookingHold,
     addExtraCharge,
     removeExtraCharge,

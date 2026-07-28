@@ -30,11 +30,12 @@
     </div>
 
     <!-- In-progress Table -->
-    <div class="card-lg overflow-hidden">
+    <div>
       <div class="font-bold text-text mb-3">
         งานที่กำลังดำเนินการ ({{ inProgressBookings.length }})
         <span class="font-normal text-xs text-muted">{{ dateFilterLabel }}</span>
       </div>
+      <div class="card-lg overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
@@ -84,14 +85,23 @@
                 </div>
               </td>
               <td class="px-4 py-3">
-                <BookingActionMenu
-                  :booking="booking"
-                  @view="router.push(`/job/${booking.id}`)"
-                  @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
-                  @dispatch="openDispatchDialog(booking)"
-                  @start-transit="bookingStore.startTransit(booking.id)"
-                  @complete="openCompleteDialog(booking)"
-                />
+                <div class="flex items-center gap-2">
+                  <button v-if="booking.status === 'WAITING_DISPATCH'" @click="openDispatchDialog(booking)" class="btn-sm text-primary">
+                    <span class="material-symbols-rounded text-base">local_shipping</span>
+                    จัดรถ / ส่งงาน
+                  </button>
+                  <button v-else @click="openDispatchDialog(booking)" class="btn-sm text-amber-700">
+                    <span class="material-symbols-rounded text-base">sync_alt</span>
+                    เปลี่ยนรถ / คนขับ
+                  </button>
+                  <BookingActionMenu
+                    :booking="booking"
+                    @view="router.push(`/job/${booking.id}`)"
+                    @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
+                    @start-transit="bookingStore.startTransit(booking.id)"
+                    @complete="openCompleteDialog(booking)"
+                  />
+                </div>
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
@@ -100,14 +110,16 @@
           </tbody>
         </table>
       </div>
+      </div>
     </div>
 
     <!-- In-transit Table -->
-    <div class="card-lg overflow-hidden">
+    <div>
       <div class="font-bold text-text mb-3">
         งานที่กำลังขนส่ง ({{ inTransitBookings.length }})
         <span class="font-normal text-xs text-muted">{{ dateFilterLabel }}</span>
       </div>
+      <div class="card-lg overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
@@ -158,14 +170,19 @@
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
               </td>
               <td class="px-4 py-3">
-                <BookingActionMenu
-                  :booking="booking"
-                  @view="router.push(`/job/${booking.id}`)"
-                  @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
-                  @dispatch="openDispatchDialog(booking)"
-                  @start-transit="bookingStore.startTransit(booking.id)"
-                  @complete="openCompleteDialog(booking)"
-                />
+                <div class="flex items-center gap-2">
+                  <button @click="openDispatchDialog(booking)" class="btn-sm text-amber-700">
+                    <span class="material-symbols-rounded text-base">sync_alt</span>
+                    เปลี่ยนรถ / คนขับ
+                  </button>
+                  <BookingActionMenu
+                    :booking="booking"
+                    @view="router.push(`/job/${booking.id}`)"
+                    @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
+                    @start-transit="bookingStore.startTransit(booking.id)"
+                    @complete="openCompleteDialog(booking)"
+                  />
+                </div>
               </td>
             </tr>
             <tr v-if="inTransitBookings.length === 0">
@@ -173,6 +190,7 @@
             </tr>
           </tbody>
         </table>
+      </div>
       </div>
     </div>
 
@@ -182,7 +200,7 @@
         <div @click.stop class="w-full max-w-lg bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto animate-slide">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
             <div class="font-bold text-text">
-              {{ dispatchTarget.status === 'ASSIGNED' ? 'เปลี่ยนคนขับ/รถ' : 'ส่งงาน' }} {{ dispatchTarget.docNo }}
+              {{ isReassignDispatch ? 'เปลี่ยนคนขับ/รถ' : 'ส่งงาน' }} {{ dispatchTarget.docNo }}
             </div>
             <button @click="dispatchTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
@@ -238,14 +256,17 @@
                       ค่าเที่ยว: {{ formatBaht((li.tripFee || 0) * (li.tripCount || 1)) }} ({{ formatBaht(li.tripFee || 0) }} x {{ li.tripCount || 1 }})
                     </div>
                   </div>
-                  <button @click="removeDispatchItem(idx)" class="text-red-500 hover:text-red-700 flex-shrink-0">
+                  <button v-if="canEditDispatchItems" @click="removeDispatchItem(idx)" class="text-red-500 hover:text-red-700 flex-shrink-0">
                     <span class="material-symbols-rounded text-base">delete</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            <button v-if="!showAddDispatchItem" type="button" @click="showAddDispatchItem = true" class="btn-secondary w-full justify-center">
+            <div v-if="!canEditDispatchItems" class="text-xs text-muted">
+              งานถูกตอบรับไปแล้ว แก้ไขรายการปลายทางไม่ได้ — เปลี่ยนได้เฉพาะรถ/คนขับ
+            </div>
+            <button v-else-if="!showAddDispatchItem" type="button" @click="showAddDispatchItem = true" class="btn-secondary w-full justify-center">
               <span class="material-symbols-rounded text-base">add_location_alt</span>
               เพิ่มรายการ
             </button>
@@ -333,7 +354,7 @@
             <button @click="dispatchTarget = null" class="btn-secondary">ยกเลิก</button>
             <button @click="confirmDispatch" :disabled="!dispatchForm.plate" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
               <span class="material-symbols-rounded">send</span>
-              {{ dispatchTarget?.status === 'ASSIGNED' ? 'ยืนยันเปลี่ยนคนขับ/รถ' : 'ส่งงาน' }}
+              {{ isReassignDispatch ? 'ยืนยันเปลี่ยนคนขับ/รถ' : 'ส่งงาน' }}
             </button>
           </div>
         </div>
@@ -592,6 +613,13 @@ const dispatchForm = ref({
   driverName: '',
   odometerBefore: 0,
 })
+
+/** งานที่ถูกจัดรถไปแล้ว (ไม่ใช่ครั้งแรก) — เปิด dialog นี้ซ้ำได้ทุกสถานะก่อนส่งของสำเร็จเพื่อ "เปลี่ยนรถ/คนขับ" */
+const isReassignDispatch = computed(() => !!dispatchTarget.value && dispatchTarget.value.status !== 'WAITING_DISPATCH')
+/** แก้ไขรายการปลายทางในงานได้เฉพาะก่อนคนขับตอบรับ เพื่อไม่ให้ปนกับความคืบหน้าที่ทำไปแล้ว (รับสินค้า/ส่งของ) */
+const canEditDispatchItems = computed(
+  () => dispatchTarget.value?.status === 'WAITING_DISPATCH' || dispatchTarget.value?.status === 'ASSIGNED'
+)
 
 /** เลขไมล์สิ้นสุดล่าสุดของรถคันนี้ (จากเที่ยวก่อนหน้าที่จบงานแล้ว) เอาไว้ตั้งเป็นเลขไมล์เริ่มต้นของเที่ยวใหม่ให้อัตโนมัติ */
 const latestOdometerForPlate = (plate: string, excludeId: string) =>

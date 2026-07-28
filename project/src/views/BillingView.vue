@@ -3,8 +3,8 @@
     <!-- ================= Batch List ================= -->
     <template v-if="!selectedBatch">
       <div class="card-lg bg-primary-soft border-primary text-sm text-text">
-        รอบบิล (Billing Batch) จะถูกสร้างและเติมงานให้อัตโนมัติตามลูกค้า ทันทีที่งานถูกจัดรถ (มอบหมายคนขับ+ทะเบียนรถ) เสร็จ
-        โดยไม่ต้องรอส่งของสำเร็จ ไม่ต้องสร้างรอบบิลเอง เพียงตรวจสอบความถูกต้อง (POD, ราคา, ค่า extra) แล้วเลือกงานที่พร้อมออกใบแจ้งหนี้
+        เลือกงานที่ "ยังไม่วางบิล" ของลูกค้าเดียวกันด้านล่าง แล้วกด "รวมเข้ารายการวางบิล" เพื่อรวมเป็นรายการวางบิลเดียวกัน (ไม่ต้องรอส่งของสำเร็จ)
+        จากนั้นเปิดรายการวางบิลเพื่อตรวจสอบความถูกต้อง (POD, ราคา, ค่า extra) แล้วเลือกงานที่พร้อม กด "สร้างใบแจ้งหนี้"
       </div>
 
       <div class="card-lg overflow-hidden">
@@ -12,7 +12,7 @@
           <table class="w-full text-sm">
             <thead class="bg-surface-2 border-b border-border">
               <tr>
-                <th class="text-left px-4 py-3 font-semibold text-muted">รอบบิล</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่วางบิล</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ช่วงวันที่</th>
                 <th class="text-right px-4 py-3 font-semibold text-muted">จำนวนงาน</th>
@@ -22,7 +22,7 @@
             </thead>
             <tbody>
               <tr v-for="batch in batches" :key="batch.id" class="border-b border-border hover:bg-surface-2 transition-colors">
-                <td class="px-4 py-3 font-semibold text-text">{{ batch.label }}</td>
+                <td class="px-4 py-3 font-semibold text-text">{{ batch.number }}</td>
                 <td class="px-4 py-3 text-text">{{ batch.customer || 'ทุกลูกค้า' }}</td>
                 <td class="px-4 py-3 text-muted">{{ formatDate(batch.dateFrom) }} - {{ formatDate(batch.dateTo) }}</td>
                 <td class="px-4 py-3 text-right text-text">{{ batch.bookingIds.length }}</td>
@@ -38,7 +38,7 @@
                     <button
                       @click="openEditBatch(batch)"
                       :disabled="!canEditBatch(batch)"
-                      :title="canEditBatch(batch) ? 'แก้ไขรอบบิล' : 'ออกใบแจ้งหนี้แล้ว ไม่สามารถแก้ไขได้'"
+                      :title="canEditBatch(batch) ? 'แก้ไขรายการวางบิล' : 'ออกใบแจ้งหนี้แล้ว ไม่สามารถแก้ไขได้'"
                       class="btn-sm disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <span class="material-symbols-rounded text-base">edit</span>
@@ -47,7 +47,7 @@
                     <button
                       @click="openDeleteBatch(batch)"
                       :disabled="!canEditBatch(batch)"
-                      :title="canEditBatch(batch) ? 'ลบรอบบิล' : 'ออกใบแจ้งหนี้แล้ว ไม่สามารถลบได้'"
+                      :title="canEditBatch(batch) ? 'ลบรายการวางบิล' : 'ออกใบแจ้งหนี้แล้ว ไม่สามารถลบได้'"
                       class="btn-sm text-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <span class="material-symbols-rounded text-base">delete</span>
@@ -57,46 +57,56 @@
                 </td>
               </tr>
               <tr v-if="batches.length === 0">
-                <td colspan="6" class="px-4 py-8 text-center text-muted">ยังไม่มีรอบบิล</td>
+                <td colspan="6" class="px-4 py-8 text-center text-muted">ยังไม่มีรายการวางบิล</td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <!-- งานที่เสร็จแล้ว (ย้ายมาจากหน้ารายการงาน ให้เห็นพร้อมจัดการวางบิลได้ในหน้าเดียว) -->
+      <!-- งานที่ยังไม่วางบิล (billingStatus = UNBILLED เท่านั้น ไม่เกี่ยวกับสถานะงานขนส่ง) -->
       <div class="card-lg overflow-hidden">
-        <div class="font-bold text-text mb-3">งานที่เสร็จแล้ว ({{ deliveredBookings.length }})</div>
+        <div class="font-bold text-text mb-3">งานที่ยังไม่วางบิล ({{ unbilledBookings.length }})</div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-surface-2 border-b border-border">
               <tr>
+                <th class="px-3 py-2 w-8"></th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
-                <th class="text-left px-4 py-3 font-semibold text-muted">PO</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">สถานะงาน</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">ความพร้อมวางบิล</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ชื่อหน้างาน</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">สินค้า</th>
                 <th class="text-right px-4 py-3 font-semibold text-muted">เบี้ยเลี้ยง</th>
                 <th class="text-right px-4 py-3 font-semibold text-muted">ค่าเที่ยว</th>
-                <th class="text-left px-4 py-3 font-semibold text-muted">สถานะบิล</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted"></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="booking in deliveredBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+              <tr v-for="booking in unbilledBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+                <td class="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    :checked="unbilledSelectedIds.has(booking.id)"
+                    :disabled="!billingRuleStore.isEligible(booking)"
+                    @change="toggleUnbilledSelected(booking.id)"
+                    class="w-4 h-4 disabled:opacity-40 disabled:cursor-not-allowed"
+                  />
+                </td>
                 <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
-                <td class="px-4 py-3 text-muted">{{ booking.po || '-' }}</td>
                 <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
+                <td class="px-4 py-3">
+                  <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span v-if="billingRuleStore.isEligible(booking)" class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">พร้อมวางบิล</span>
+                  <span v-else class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">{{ billingRuleStore.eligibilityReason(booking) }}</span>
+                </td>
                 <td class="px-4 py-3 font-semibold text-text">{{ destinationLabel(booking) }}</td>
                 <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
                 <td class="px-4 py-3 text-right text-text">{{ formatBaht(booking.finalAllowance ?? booking.allowance) }}</td>
                 <td class="px-4 py-3 text-right text-text">{{ formatBaht(booking.tripFee) }}</td>
-                <td class="px-4 py-3">
-                  <span v-if="booking.billingStatus" :class="['text-xs font-semibold px-2 py-1 rounded-full', billingStatusClass[booking.billingStatus]]">
-                    {{ billingStatusLabel[booking.billingStatus] }}
-                  </span>
-                  <span v-else class="text-muted">-</span>
-                </td>
                 <td class="px-4 py-3 text-right">
                   <button @click="router.push(`/job/${booking.id}`)" class="btn-sm">
                     <span class="material-symbols-rounded text-base">visibility</span>
@@ -104,11 +114,22 @@
                   </button>
                 </td>
               </tr>
-              <tr v-if="deliveredBookings.length === 0">
-                <td colspan="9" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่เสร็จแล้ว</td>
+              <tr v-if="unbilledBookings.length === 0">
+                <td colspan="10" class="px-4 py-8 text-center text-muted">ไม่มีงานที่รอวางบิล</td>
               </tr>
             </tbody>
           </table>
+        </div>
+        <div v-if="unbilledBookings.length" class="flex items-center justify-between mt-4 pt-4 border-t border-border">
+          <div class="text-sm text-muted">
+            เลือกแล้ว {{ unbilledSelectedBookings.length }} รายการ
+            <span v-if="unbilledSelectedBookings.length &amp;&amp; !unbilledSelectionCustomer" class="text-red-600">— ต้องเลือกงานของลูกค้าเดียวกันเท่านั้น</span>
+            <span v-else-if="unbilledSelectionCustomer">(ลูกค้า: {{ unbilledSelectionCustomer }})</span>
+          </div>
+          <button @click="confirmAddToBatch" :disabled="!canAddSelectedToBatch" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+            <span class="material-symbols-rounded text-base">playlist_add</span>
+            รวมเข้ารายการวางบิล
+          </button>
         </div>
       </div>
     </template>
@@ -117,18 +138,25 @@
     <template v-else>
       <button @click="selectedBatchId = null" class="btn-secondary">
         <span class="material-symbols-rounded text-base">arrow_back</span>
-        กลับไปหน้ารายการรอบบิล
+        กลับไปหน้ารายการวางบิล
       </button>
 
       <div class="card-lg">
         <div class="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <div class="font-bold text-text">{{ selectedBatch.label }}</div>
+            <div class="font-bold text-text">{{ selectedBatch.number }}</div>
             <div class="text-xs text-muted">
-              {{ selectedBatch.customer || 'ทุกลูกค้า' }} · {{ formatDate(selectedBatch.dateFrom) }} - {{ formatDate(selectedBatch.dateTo) }}
+              {{ selectedBatch.label }} · {{ selectedBatch.customer || 'ทุกลูกค้า' }} · {{ formatDate(selectedBatch.dateFrom) }} -
+              {{ formatDate(selectedBatch.dateTo) }}
             </div>
           </div>
-          <span :class="['text-xs font-semibold px-2 py-1 rounded-full', batchStatusClass[selectedBatch.status]]">{{ batchStatusLabel[selectedBatch.status] }}</span>
+          <div class="flex items-center gap-2">
+            <span :class="['text-xs font-semibold px-2 py-1 rounded-full', batchStatusClass[selectedBatch.status]]">{{ batchStatusLabel[selectedBatch.status] }}</span>
+            <button v-if="selectedBatch.status === 'PAID'" @click="confirmCloseBatch" class="btn-sm">
+              <span class="material-symbols-rounded text-base">task_alt</span>
+              ปิดรายการ
+            </button>
+          </div>
         </div>
       </div>
 
@@ -230,7 +258,7 @@
                 </td>
               </tr>
               <tr v-if="batchBookings.length === 0">
-                <td colspan="10" class="px-4 py-8 text-center text-muted">ไม่มีงานในรอบบิลนี้</td>
+                <td colspan="10" class="px-4 py-8 text-center text-muted">ไม่มีงานในรายการวางบิลนี้</td>
               </tr>
             </tbody>
           </table>
@@ -248,7 +276,7 @@
       </div>
 
       <div v-if="batchInvoices.length" class="card-lg overflow-hidden">
-        <div class="font-bold text-text mb-3">ใบแจ้งหนี้จากรอบบิลนี้</div>
+        <div class="font-bold text-text mb-3">ใบแจ้งหนี้จากรายการวางบิลนี้</div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-surface-2 border-b border-border">
@@ -297,18 +325,18 @@
       <div @click="showEditBatch = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
         <div @click.stop class="w-full max-w-md bg-surface rounded-2xl shadow-2xl">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="font-bold text-text">แก้ไขรอบบิล</div>
+            <div class="font-bold text-text">แก้ไขรายการวางบิล</div>
             <button @click="showEditBatch = false" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
           </div>
           <div class="px-6 py-5 space-y-3">
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">ชื่อรอบบิล</label>
+              <label class="block text-xs font-semibold text-muted mb-1">ชื่อรายการวางบิล</label>
               <input v-model="editBatchForm.label" class="input-field w-full" />
             </div>
             <div class="text-xs text-muted bg-surface-2 rounded-lg p-3">
-              ลูกค้าและช่วงวันที่ถูกกำหนดอัตโนมัติตามงานที่จัดรถเข้ารอบบิลนี้ แก้ไขได้เฉพาะชื่อรอบบิล
+              ลูกค้าและช่วงวันที่ถูกกำหนดอัตโนมัติตามงานที่จัดรถเข้ารายการวางบิลนี้ แก้ไขได้เฉพาะชื่อรายการวางบิล
             </div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
@@ -327,20 +355,20 @@
       <div @click="deleteBatchTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
         <div @click.stop class="w-full max-w-sm bg-surface rounded-2xl shadow-2xl">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="font-bold text-text">ลบรอบบิล</div>
+            <div class="font-bold text-text">ลบรายการวางบิล</div>
             <button @click="deleteBatchTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
           </div>
           <div class="px-6 py-5 text-sm text-text">
-            ยืนยันลบรอบบิล "<span class="font-bold">{{ deleteBatchTarget.label }}</span>" ใช่หรือไม่?
-            งานทั้งหมดในรอบบิลนี้จะกลับไปเป็นสถานะยังไม่วางบิล
+            ยืนยันลบรายการวางบิล "<span class="font-bold">{{ deleteBatchTarget.number }}</span>" ใช่หรือไม่?
+            งานทั้งหมดในรายการวางบิลนี้จะกลับไปเป็นสถานะยังไม่วางบิล
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="deleteBatchTarget = null" class="btn-secondary">ยกเลิก</button>
             <button @click="confirmDeleteBatch" class="h-10 px-4 rounded-lg border-0 bg-red-600 text-white font-semibold text-sm flex items-center gap-2 hover:opacity-90">
               <span class="material-symbols-rounded text-base">delete</span>
-              ลบรอบบิล
+              ลบรายการวางบิล
             </button>
           </div>
         </div>
@@ -527,23 +555,52 @@ import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import type { SalesDocument } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useBillingRuleStore } from '@/stores/billingRule'
 import { billingStatusLabel, billingStatusClass, bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import type { Booking, BillingBatch } from '@/types'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const billingRuleStore = useBillingRuleStore()
 
 const batches = computed(() => bookingStore.batches)
 const selectedBatchId = ref<string | null>(null)
 const selectedBatch = computed(() => batches.value.find((b) => b.id === selectedBatchId.value) || null)
 
-// งานที่ส่งของสำเร็จแล้วทั้งหมด (ทุก fleet) ย้ายมาแสดงในหน้าวางบิลแทนหน้ารายการงาน เพราะขั้นตอนถัดไปคือวางบิลอยู่แล้ว
-const deliveredBookings = computed(() =>
+// งานที่ยังไม่วางบิล (billingStatus = UNBILLED เท่านั้น ไม่เกี่ยวกับ BookingStatus/การส่งของเลย)
+const unbilledBookings = computed(() =>
   bookingStore.bookings
-    .filter((b) => b.status === 'DELIVERED')
-    .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime())
+    .filter((b) => (b.billingStatus ?? 'UNBILLED') === 'UNBILLED')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 )
+
+const unbilledSelectedIds = ref<Set<string>>(new Set())
+
+const toggleUnbilledSelected = (id: string) => {
+  if (unbilledSelectedIds.value.has(id)) unbilledSelectedIds.value.delete(id)
+  else unbilledSelectedIds.value.add(id)
+}
+
+const unbilledSelectedBookings = computed(() => unbilledBookings.value.filter((b) => unbilledSelectedIds.value.has(b.id)))
+
+/** ต้องเลือกงานของลูกค้าเดียวกันเท่านั้นถึงจะรวมเป็นรายการวางบิลเดียวกันได้ */
+const unbilledSelectionCustomer = computed(() => {
+  if (unbilledSelectedBookings.value.length === 0) return null
+  const customer = unbilledSelectedBookings.value[0].customer
+  return unbilledSelectedBookings.value.every((b) => b.customer === customer) ? customer : null
+})
+
+const canAddSelectedToBatch = computed(() => unbilledSelectedBookings.value.length > 0 && !!unbilledSelectionCustomer.value)
+
+const confirmAddToBatch = () => {
+  if (!canAddSelectedToBatch.value) return
+  const batch = bookingStore.addBookingsToBatch(unbilledSelectedBookings.value.map((b) => b.id))
+  if (batch) {
+    unbilledSelectedIds.value = new Set()
+    selectedBatchId.value = batch.id
+  }
+}
 
 const productLabel = (booking: Booking) => {
   const names = [...new Set(booking.items.map((i) => i.product).filter(Boolean))]
@@ -571,7 +628,7 @@ const readyBookings = computed(() => batchBookings.value.filter((b) => b.billing
 // --- Checkbox selection: เลือกงานที่จะรวมอยู่ในใบแจ้งหนี้ที่กำลังจะออก ---
 const selectedIds = ref<Set<string>>(new Set())
 
-/** เข้ารอบบิลใหม่: เลือกงานที่พร้อมออกใบแจ้งหนี้ทั้งหมดเป็นค่าเริ่มต้น ผู้ใช้ปรับได้ทีหลัง */
+/** เข้ารายการวางบิลใหม่: เลือกงานที่พร้อมออกใบแจ้งหนี้ทั้งหมดเป็นค่าเริ่มต้น ผู้ใช้ปรับได้ทีหลัง */
 watch(selectedBatchId, () => {
   selectedIds.value = new Set(readyBookings.value.map((b) => b.id))
 })
@@ -618,11 +675,19 @@ const releaseBooking = (booking: Booking) => {
   selectedIds.value.add(booking.id)
 }
 
-const batchStatusLabel: Record<string, string> = { draft: 'ร่าง', invoiced: 'ออกใบแจ้งหนี้แล้ว', paid: 'ปิดรอบแล้ว' }
+const batchStatusLabel: Record<string, string> = {
+  BILLING_PENDING: 'รอวางบิล',
+  BILLED: 'วางบิลแล้ว',
+  WAITING_PAYMENT: 'รอรับชำระ',
+  PAID: 'ชำระแล้ว',
+  CLOSED: 'ปิดรายการ',
+}
 const batchStatusClass: Record<string, string> = {
-  draft: 'bg-amber-100 text-amber-700',
-  invoiced: 'bg-blue-100 text-blue-700',
-  paid: 'bg-green-100 text-green-700',
+  BILLING_PENDING: 'bg-amber-100 text-amber-700',
+  BILLED: 'bg-blue-100 text-blue-700',
+  WAITING_PAYMENT: 'bg-purple-100 text-purple-700',
+  PAID: 'bg-green-100 text-green-700',
+  CLOSED: 'bg-gray-100 text-gray-500',
 }
 const invoiceStatusLabel: Record<string, string> = { draft: 'ร่าง', sent: 'ส่งแล้ว', paid: 'ชำระแล้ว' }
 
@@ -673,7 +738,7 @@ const confirmCreateInvoice = () => {
 }
 
 // --- Edit / delete batch ---
-/** แก้ไข/ลบได้เฉพาะรอบบิลที่ยังไม่มีการออกใบแจ้งหนี้ */
+/** แก้ไข/ลบได้เฉพาะรายการวางบิลที่ยังไม่มีการออกใบแจ้งหนี้ */
 const canEditBatch = (batch: BillingBatch) => !bookingStore.documents.some((d) => d.batchId === batch.id)
 
 const showEditBatch = ref(false)
@@ -706,6 +771,11 @@ const confirmDeleteBatch = () => {
   const ok = bookingStore.deleteBatch(deletedId)
   if (ok && selectedBatchId.value === deletedId) selectedBatchId.value = null
   deleteBatchTarget.value = null
+}
+
+const confirmCloseBatch = () => {
+  if (!selectedBatchId.value) return
+  bookingStore.closeBatch(selectedBatchId.value)
 }
 
 // --- Add extra charge ---

@@ -137,17 +137,17 @@
         </button>
       </div>
 
-      <!-- Detail Side Drawer: ข้อมูลปฏิบัติการ/ราคา/ค่าใช้จ่าย ที่ไม่ได้แสดงในใบเสนอราคา/PO -->
+      <!-- Detail Popup: ข้อมูลปฏิบัติการ/ราคา/ค่าใช้จ่าย ที่ไม่ได้แสดงในใบเสนอราคา/PO -->
       <Teleport to="body" v-if="detailDrawerOpen">
         <div
           @click="detailDrawerOpen = false"
-          class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 no-print"
+          class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 no-print flex items-center justify-center p-6"
         >
           <div
             @click.stop
-            class="fixed inset-y-0 right-0 w-full max-w-md bg-surface shadow-2xl overflow-y-auto transform transition-transform duration-300 ease-out translate-x-0"
+            class="w-full max-w-lg max-h-[85vh] bg-surface rounded-2xl shadow-2xl overflow-y-auto"
           >
-            <div class="sticky top-0 bg-surface border-b border-border px-5 py-4 flex items-center justify-between z-10">
+            <div class="sticky top-0 bg-surface border-b border-border px-5 py-4 flex items-center justify-between z-10 rounded-t-2xl">
               <div class="font-bold text-text">รายละเอียดเพิ่มเติม</div>
               <button @click="detailDrawerOpen = false" class="btn-icon">
                 <span class="material-symbols-rounded">close</span>
