@@ -22,12 +22,13 @@
             <th class="px-4 py-3 font-semibold">เลขตัวถัง</th>
             <th class="px-4 py-3 font-semibold">เลขเครื่อง</th>
             <th class="px-4 py-3 font-semibold">หน่วยงาน</th>
+            <th class="px-4 py-3 font-semibold">คนขับประจำ</th>
             <th class="px-4 py-3 font-semibold text-right">เลขไมล์</th>
             <th class="px-4 py-3 font-semibold"></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(vehicle, index) in vehicles" :key="vehicle.plate" class="border-t border-border hover:bg-surface-2 transition-colors">
+          <tr v-for="(vehicle, index) in vehicles" :key="vehicle.id" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 text-muted">{{ index + 1 }}</td>
             <td class="px-4 py-3 font-semibold text-text">{{ vehicle.plate }}</td>
             <td class="px-4 py-3 text-muted">{{ vehicle.plateProvince }}</td>
@@ -40,6 +41,7 @@
             <td class="px-4 py-3">
               <span class="text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">{{ vehicle.department }}</span>
             </td>
+            <td class="px-4 py-3 text-muted">{{ assignedDriverLabel(vehicle) }}</td>
             <td class="px-4 py-3 text-right text-text">{{ vehicle.mileage.toLocaleString('th-TH') }}</td>
             <td class="px-4 py-3 text-right">
               <button @click="openDialog(vehicle)" class="btn-sm">แก้ไข</button>
@@ -109,6 +111,13 @@
               <label class="block text-xs font-semibold text-muted mb-1">เลขไมล์</label>
               <input v-model.number="form.mileage" type="number" class="input-field w-full" />
             </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-muted mb-1">คนขับประจำ</label>
+              <select v-model="selectedDriverCode" class="input-field w-full">
+                <option value="">ไม่ระบุ</option>
+                <option v-for="d in driversStore.drivers" :key="d.code" :value="d.code">{{ driversStore.fullName(d) }}</option>
+              </select>
+            </div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="showDialog = false" class="btn-secondary">ยกเลิก</button>
@@ -123,23 +132,30 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useOnboardingStore } from '@/stores/onboarding'
+import { useVehiclesStore } from '@/stores/vehicles'
+import { useDriversStore } from '@/stores/drivers'
 import type { Vehicle, VehicleType } from '@/types'
 
 const onboardingStore = useOnboardingStore()
+const vehiclesStore = useVehiclesStore()
+const driversStore = useDriversStore()
 
-type VehicleForm = Omit<Vehicle, 'id' | 'repairStatus' | 'repairDays'>
+type VehicleForm = Omit<Vehicle, 'id' | 'repairStatus' | 'repairDays' | 'driverCode'>
 
 const departmentOptions: VehicleType[] = ['รถบริษัท', 'รถร่วม', 'รถหุ้นส่วน']
 
-const vehicles = ref<VehicleForm[]>([
-  { plate: '70-8821', plateProvince: 'สระบุรี', vehicleNo: 'T-001', trailerPlate: '', brand: 'HINO', bodyType: 'รถบรรทุก 10 ล้อ', chassisNo: 'MPBUR2CE0M1012345', engineNo: 'J08E-10234', department: 'รถบริษัท', mileage: 152340 },
-  { plate: '82-4417', plateProvince: 'กรุงเทพมหานคร', vehicleNo: 'T-002', trailerPlate: '', brand: 'ISUZU', bodyType: 'รถบรรทุก 6 ล้อ', chassisNo: 'MPBUR2CE0K1054321', engineNo: '6HK1-55123', department: 'รถบริษัท', mileage: 98210 },
-  { plate: '71-3390', plateProvince: 'ราชบุรี', vehicleNo: 'T-003', trailerPlate: 'ห-1204 ราชบุรี', brand: 'FUSO', bodyType: 'รถหัวลาก', chassisNo: 'MPBUR2CE0L1067788', engineNo: '6M70-67788', department: 'รถหุ้นส่วน', mileage: 210875 },
-  { plate: '72-6628', plateProvince: 'พระนครศรีอยุธยา', vehicleNo: 'T-004', trailerPlate: 'ห-3387 อยุธยา', brand: 'HINO', bodyType: 'รถกึ่งพ่วง', chassisNo: 'MPBUR2CE0J1099001', engineNo: 'J08E-99001', department: 'รถร่วม', mileage: 176420 },
-])
+const vehicles = vehiclesStore.vehicles
+
+/** คนขับประจำรถคันนี้ (ถ้ามี) แสดงในตารางรายการรถ */
+const assignedDriverLabel = (vehicle: Vehicle) => {
+  const driver = driversStore.drivers.find((d) => d.code === vehicle.driverCode)
+  return driver ? driversStore.fullName(driver) : '-'
+}
 
 const showDialog = ref(false)
 const editingIndex = ref<number | null>(null)
+/** คนขับที่เลือกให้ประจำรถคันนี้ในฟอร์ม — ไม่ใช่ field ของ VehicleForm เพราะการแก้ไขความสัมพันธ์ต้องผ่าน vehiclesStore.assignDriver() เท่านั้น */
+const selectedDriverCode = ref('')
 
 const emptyForm = (): VehicleForm => ({
   plate: '',
@@ -156,25 +172,31 @@ const emptyForm = (): VehicleForm => ({
 
 const form = ref<VehicleForm>(emptyForm())
 
-const openDialog = (vehicle?: VehicleForm) => {
+const openDialog = (vehicle?: Vehicle) => {
   if (vehicle) {
-    editingIndex.value = vehicles.value.indexOf(vehicle)
+    editingIndex.value = vehicles.indexOf(vehicle)
     form.value = { ...vehicle }
+    selectedDriverCode.value = vehicle.driverCode ?? ''
   } else {
     editingIndex.value = null
     form.value = emptyForm()
+    selectedDriverCode.value = ''
   }
   showDialog.value = true
 }
 
 const save = () => {
   if (!form.value.plate) return
+  let id: string
   if (editingIndex.value === null) {
-    vehicles.value.unshift({ ...form.value })
+    id = `v${Date.now()}`
+    vehicles.unshift({ id, ...form.value })
     onboardingStore.markDone('addedVehicleOrDriver')
   } else {
-    vehicles.value[editingIndex.value] = { ...form.value }
+    id = vehicles[editingIndex.value].id
+    vehicles[editingIndex.value] = { ...vehicles[editingIndex.value], ...form.value }
   }
+  vehiclesStore.assignDriver(id, selectedDriverCode.value || undefined)
   showDialog.value = false
 }
 </script>

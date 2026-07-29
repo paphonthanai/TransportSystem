@@ -209,7 +209,10 @@
           <div class="px-6 py-5 space-y-3">
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">ทะเบียนรถ *</label>
-              <input v-model="dispatchForm.plate" placeholder="เช่น 82-4417 กรุงเทพ" class="input-field w-full" />
+              <input v-model="dispatchForm.plate" list="dispatchVehicleOptions" placeholder="เช่น 82-4417 กรุงเทพ" class="input-field w-full" />
+              <datalist id="dispatchVehicleOptions">
+                <option v-for="v in vehiclesStore.vehicles" :key="v.id" :value="vehiclesStore.fullPlate(v)" />
+              </datalist>
             </div>
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">คนขับ</label>
@@ -435,10 +438,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useDriversStore } from '@/stores/drivers'
+import { useVehiclesStore } from '@/stores/vehicles'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
@@ -453,10 +457,14 @@ const props = defineProps<{ fleet: BookingCategory }>()
 const router = useRouter()
 const bookingStore = useBookingStore()
 const driversStore = useDriversStore()
+const vehiclesStore = useVehiclesStore()
 const inventoryStore = useInventoryStore()
 const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
 const originsStore = useOriginsStore()
+
+/** หาคนขับจากชื่อเต็ม รองรับทั้งแบบมีคำนำหน้าและไม่มี (เดิมเคยอยู่ใน driversStore.findDriverByVehicle) */
+const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
 
 const searchQuery = ref('')
 
@@ -722,9 +730,13 @@ const removeDispatchItem = (idx: number) => {
   recomputeDispatchTripFee()
 }
 
+/** กันไม่ให้ watcher autofill รถ<->คนขับ ทำงานตอนเปิด dialog ใหม่ (โหลดข้อมูลเดิมของงาน) — ให้ทำงานเฉพาะตอนผู้ใช้แก้ไขฟิลด์เองเท่านั้น */
+const suppressDispatchAutofill = ref(false)
+
 const openDispatchDialog = (booking: Booking) => {
   dispatchTarget.value = booking
   showAddDispatchItem.value = false
+  suppressDispatchAutofill.value = true
   dispatchForm.value = {
     plate: booking.plate || '',
     driverName: booking.driverName || '',
@@ -734,26 +746,34 @@ const openDispatchDialog = (booking: Booking) => {
     const prevOdometer = latestOdometerForPlate(dispatchForm.value.plate, booking.id)
     if (prevOdometer) dispatchForm.value.odometerBefore = prevOdometer.odometerAfter || 0
   }
+  nextTick(() => {
+    suppressDispatchAutofill.value = false
+  })
 }
 
-// กรอกช่องคนขับ หรือทะเบียนรถ แค่ช่องใดช่องหนึ่ง (หรือเปลี่ยนภายหลัง) ให้ดึงข้อมูลคู่กันจากที่ตั้งค่าไว้ในสมุดรายชื่อคนขับอัตโนมัติเสมอ
+// กรอกช่องคนขับ หรือทะเบียนรถ แค่ช่องใดช่องหนึ่ง (หรือเปลี่ยนภายหลัง) ให้ดึงข้อมูลคู่กันจากความสัมพันธ์รถ-คนขับใน vehiclesStore อัตโนมัติเสมอ
 watch(
   () => dispatchForm.value.driverName,
   (name) => {
-    if (!name) return
-    const vehicle = driversStore.findVehicleByDriverName(name)
-    if (vehicle) dispatchForm.value.plate = vehicle
+    if (suppressDispatchAutofill.value || !name) return
+    const driver = findDriverByName(name)
+    if (!driver) return
+    const vehicle = vehiclesStore.vehicleForDriver(driver.code)
+    if (vehicle) dispatchForm.value.plate = vehiclesStore.fullPlate(vehicle)
   }
 )
 watch(
   () => dispatchForm.value.plate,
-  (plate) => {
-    if (!plate) return
-    const driver = driversStore.findDriverByVehicle(plate)
-    if (driver) dispatchForm.value.driverName = `${driver.firstName} ${driver.lastName}`
+  (plateText) => {
+    if (suppressDispatchAutofill.value || !plateText) return
+    const vehicle = vehiclesStore.findByFullPlate(plateText)
+    if (vehicle?.driverCode) {
+      const driver = driversStore.drivers.find((d) => d.code === vehicle.driverCode)
+      if (driver) dispatchForm.value.driverName = `${driver.firstName} ${driver.lastName}`
+    }
     // เลือกรถแล้ว ถ้ายังไม่ได้กรอกเลขไมล์เริ่มต้นเอง ดึงเลขไมล์สิ้นสุดของเที่ยวก่อนหน้าของรถคันนี้มาให้อัตโนมัติ
     if (!dispatchForm.value.odometerBefore && dispatchTarget.value) {
-      const prevOdometer = latestOdometerForPlate(plate, dispatchTarget.value.id)
+      const prevOdometer = latestOdometerForPlate(plateText, dispatchTarget.value.id)
       if (prevOdometer) dispatchForm.value.odometerBefore = prevOdometer.odometerAfter || 0
     }
   }
@@ -765,6 +785,12 @@ const confirmDispatch = () => {
     driverName: dispatchForm.value.driverName || undefined,
     odometerBefore: dispatchForm.value.odometerBefore,
   })
+  // ปรับคนขับประจำของรถให้ตรงกับที่เลือกจ่ายงานจริง เพื่อให้ทุกหน้าที่ใช้รถเห็นคนขับล่าสุด
+  if (dispatchForm.value.driverName) {
+    const vehicle = vehiclesStore.findByFullPlate(dispatchForm.value.plate)
+    const driver = findDriverByName(dispatchForm.value.driverName)
+    if (vehicle && driver) vehiclesStore.assignDriver(vehicle.id, driver.code)
+  }
   dispatchTarget.value = null
 }
 

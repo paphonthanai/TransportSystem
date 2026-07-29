@@ -324,6 +324,8 @@ export interface Vehicle {
   mileage: number
   repairStatus?: string
   repairDays?: number
+  /** รหัสคนขับประจำรถคันนี้ (ผูกกับ DriverRecord.code) ไม่บังคับต้องมี และเปลี่ยนได้ภายหลังเสมอ — แก้ไขผ่าน vehiclesStore.assignDriver() เท่านั้น เพื่อให้ทุกหน้าเห็นข้อมูลตรงกัน */
+  driverCode?: string
 }
 
 export interface Document {

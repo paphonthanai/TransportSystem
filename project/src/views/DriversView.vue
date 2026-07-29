@@ -36,7 +36,7 @@
                 <div class="font-semibold text-text">{{ fullName(driver) }}</div>
               </div>
             </td>
-            <td class="px-4 py-3 text-muted">{{ driver.vehicle || '-' }}</td>
+            <td class="px-4 py-3 text-muted">{{ assignedVehicleLabel(driver) }}</td>
             <td class="px-4 py-3 text-muted">{{ driver.phone || '-' }}</td>
             <td class="px-4 py-3 text-muted">{{ driver.idCard || '-' }}</td>
             <td class="px-4 py-3 text-muted">{{ driver.licenseNo || '-' }}</td>
@@ -131,9 +131,12 @@
                   <input v-model="form.licenseExpiry" type="date" class="input-field w-full" />
                 </div>
                 <div>
-                  <label class="block text-xs font-semibold text-muted mb-1">ทะเบียนรถ</label>
-                  <input v-model="form.vehicle" placeholder="เช่น 82-4417 กรุงเทพ" class="input-field w-full" />
-                  <div class="text-[11px] text-muted mt-1">ผูกคนขับกับรถ เพื่อใช้คำนวณรายได้ต่อไป</div>
+                  <label class="block text-xs font-semibold text-muted mb-1">รถประจำ</label>
+                  <select v-model="assignedVehicleId" class="input-field w-full">
+                    <option value="">ไม่ระบุ</option>
+                    <option v-for="v in vehiclesStore.vehicles" :key="v.id" :value="v.id">{{ vehiclesStore.fullPlate(v) }}</option>
+                  </select>
+                  <div class="text-[11px] text-muted mt-1">ผูกคนขับกับรถ ใช้ดึงอัตโนมัติตอนจัดรถ/สร้างงาน — รถ 1 คันมีคนขับประจำได้ทีละ 1 คน</div>
                 </div>
               </div>
             </div>
@@ -277,10 +280,18 @@
 import { ref, computed } from 'vue'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useDriversStore, type DriverRecord, type LicenseType, type IncomeType } from '@/stores/drivers'
+import { useVehiclesStore } from '@/stores/vehicles'
 
 const onboardingStore = useOnboardingStore()
 const driversStore = useDriversStore()
+const vehiclesStore = useVehiclesStore()
 const fullName = driversStore.fullName
+
+/** รถที่ประจำคนขับคนนี้อยู่ (ถ้ามี) แสดงในตารางรายชื่อ */
+const assignedVehicleLabel = (driver: DriverRecord) => {
+  const vehicle = vehiclesStore.vehicleForDriver(driver.code)
+  return vehicle ? vehiclesStore.fullPlate(vehicle) : '-'
+}
 
 const prefixOptions = ['นาย', 'นาง', 'นางสาว']
 const licenseTypeOptions: LicenseType[] = ['ท.1', 'ท.2']
@@ -299,7 +310,6 @@ const emptyForm = (): DriverRecord => ({
   licenseNo: '',
   licenseType: 'ท.1',
   licenseExpiry: '',
-  vehicle: '',
   address: '',
   subDistrict: '',
   district: '',
@@ -324,6 +334,8 @@ const emptyForm = (): DriverRecord => ({
 const showDialog = ref(false)
 const editingCode = ref<string | null>(null)
 const form = ref<DriverRecord>(emptyForm())
+/** รถที่เลือกให้ประจำคนขับคนนี้ในฟอร์ม — ไม่ใช่ field ของ DriverRecord แต่เป็นความสัมพันธ์ที่เก็บไว้ที่ฝั่งรถ (Vehicle.driverCode) */
+const assignedVehicleId = ref('')
 
 const incomeUnitLabel = computed(
   () => ({ daily: 'บาท/วัน', monthly: 'บาท/เดือน', trip: 'บาท/เที่ยว' })[form.value.incomeType]
@@ -333,9 +345,11 @@ const openDialog = (driver?: DriverRecord) => {
   if (driver) {
     editingCode.value = driver.code
     form.value = { ...driver }
+    assignedVehicleId.value = vehiclesStore.vehicleForDriver(driver.code)?.id ?? ''
   } else {
     editingCode.value = null
     form.value = emptyForm()
+    assignedVehicleId.value = ''
   }
   showDialog.value = true
 }
@@ -353,12 +367,21 @@ const onPhotoSelected = (event: Event) => {
 
 const save = () => {
   if (!form.value.firstName) return
+  const code = form.value.code
   if (editingCode.value === null) {
     driversStore.drivers.unshift({ ...form.value })
     onboardingStore.markDone('addedVehicleOrDriver')
   } else {
     const index = driversStore.drivers.findIndex((d) => d.code === editingCode.value)
     if (index !== -1) driversStore.drivers[index] = { ...form.value }
+  }
+  // ถอดคนขับออกจากรถคันเดิมก่อน เผื่อผู้ใช้เปลี่ยนเป็น "ไม่ระบุ" หรือย้ายไปรถคันอื่น
+  const previousVehicle = vehiclesStore.vehicleForDriver(code)
+  if (previousVehicle && previousVehicle.id !== assignedVehicleId.value) {
+    vehiclesStore.assignDriver(previousVehicle.id, undefined)
+  }
+  if (assignedVehicleId.value) {
+    vehiclesStore.assignDriver(assignedVehicleId.value, code)
   }
   showDialog.value = false
 }

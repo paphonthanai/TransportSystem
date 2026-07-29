@@ -239,6 +239,7 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useDriversStore } from '@/stores/drivers'
+import { useVehiclesStore } from '@/stores/vehicles'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
@@ -251,14 +252,18 @@ const props = defineProps<{ fleet: BookingCategory }>()
 const router = useRouter()
 const bookingStore = useBookingStore()
 const driversStore = useDriversStore()
+const vehiclesStore = useVehiclesStore()
 const inventoryStore = useInventoryStore()
 const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
 const fixedCustomer = bookingStore.fixedCustomer
 
+/** หาคนขับจากชื่อเต็ม รองรับทั้งแบบมีคำนำหน้าและไม่มี (เดิมเคยอยู่ใน driversStore.findDriverByVehicle) */
+const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
+
 const isCements = computed(() => props.fleet === 'cements')
 const productOptionsForFleet = computed(() => inventoryStore.products.filter((p) => p.category === props.fleet))
-const vehicleOptions = computed(() => driversStore.drivers.map((d) => d.vehicle).filter(Boolean))
+const vehicleOptions = computed(() => vehiclesStore.vehicles.map((v) => vehiclesStore.fullPlate(v)))
 const nextReleaseNoPreview = computed(() => bookingStore.nextReleaseNo())
 
 // --- ป้ายกำกับคนขับใน dropdown: บอกว่าว่างหรือกำลังวิ่งเที่ยวที่เท่าไหร่ (ซ้ำกับ BookingView.vue เพราะฟอร์มสร้างงานแยกไฟล์แล้ว) ---
@@ -325,20 +330,24 @@ const destinationSummary = computed(() => {
   return names.length > 1 ? `${names[0]} +${names.length - 1} ที่อื่น` : names[0]
 })
 
-// กรอกช่องคนขับ หรือทะเบียนรถ ให้ดึงข้อมูลคู่กันแบบเดียวกับหน้าส่งงาน
+// กรอกช่องคนขับ หรือทะเบียนรถ ให้ดึงข้อมูลคู่กันแบบเดียวกับหน้าส่งงาน โดยอ้างอิงความสัมพันธ์รถ-คนขับจาก vehiclesStore เสมอ
 watch(
   () => header.value.driverName,
   (name) => {
     if (!name) return
-    const vehicle = driversStore.findVehicleByDriverName(name)
-    if (vehicle) header.value.plate = vehicle
+    const driver = findDriverByName(name)
+    if (!driver) return
+    const vehicle = vehiclesStore.vehicleForDriver(driver.code)
+    if (vehicle) header.value.plate = vehiclesStore.fullPlate(vehicle)
   }
 )
 watch(
   () => header.value.plate,
-  (plate) => {
-    if (!plate) return
-    const driver = driversStore.findDriverByVehicle(plate)
+  (plateText) => {
+    if (!plateText) return
+    const vehicle = vehiclesStore.findByFullPlate(plateText)
+    if (!vehicle?.driverCode) return
+    const driver = driversStore.drivers.find((d) => d.code === vehicle.driverCode)
     if (driver) header.value.driverName = `${driver.firstName} ${driver.lastName}`
   }
 )
@@ -495,6 +504,12 @@ const saveAllItems = () => {
     plate: header.value.plate || '',
     driverName: header.value.driverName || undefined,
   })
+  // ปรับคนขับประจำของรถให้ตรงกับที่เลือกไว้ในงานนี้ เพื่อให้ทุกหน้าที่ใช้รถเห็นคนขับล่าสุด
+  if (header.value.plate && header.value.driverName) {
+    const vehicle = vehiclesStore.findByFullPlate(header.value.plate)
+    const driver = findDriverByName(header.value.driverName)
+    if (vehicle && driver) vehiclesStore.assignDriver(vehicle.id, driver.code)
+  }
   goBack()
 }
 </script>

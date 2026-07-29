@@ -16,8 +16,6 @@ export interface DriverRecord {
   licenseNo: string
   licenseType: LicenseType
   licenseExpiry: string
-  /** ทะเบียนรถประจำ ใช้ผูกคนขับกับรถ เพื่อดึงอัตโนมัติตอนจัดรถ/คำนวณรายได้ */
-  vehicle: string
   address: string
   subDistrict: string
   district: string
@@ -50,7 +48,6 @@ function seedDrivers(): DriverRecord[] {
       licenseNo: '',
       licenseType: 'ท.2',
       licenseExpiry: '',
-      vehicle: '70-8821 สระบุรี',
       address: '12/4',
       subDistrict: 'ปากน้ำ',
       district: 'เมือง',
@@ -80,7 +77,6 @@ function seedDrivers(): DriverRecord[] {
       licenseNo: '',
       licenseType: 'ท.2',
       licenseExpiry: '',
-      vehicle: '82-4417 กรุงเทพ',
       address: '45',
       subDistrict: 'บางพลี',
       district: 'บางพลี',
@@ -110,7 +106,6 @@ function seedDrivers(): DriverRecord[] {
       licenseNo: '',
       licenseType: 'ท.2',
       licenseExpiry: '',
-      vehicle: '71-3390 ราชบุรี',
       address: '78',
       subDistrict: 'หน้าเมือง',
       district: 'เมือง',
@@ -140,7 +135,6 @@ function seedDrivers(): DriverRecord[] {
       licenseNo: '',
       licenseType: 'ท.2',
       licenseExpiry: '',
-      vehicle: '72-6628 อยุธยา',
       address: '90',
       subDistrict: 'หัวรอ',
       province: 'พระนครศรีอยุธยา',
@@ -187,24 +181,8 @@ export const useDriversStore = defineStore('drivers', () => {
 
   const fullName = (driver: DriverRecord) => `${driver.prefix}${driver.firstName} ${driver.lastName}`.trim()
 
-  /** หาทะเบียนรถประจำของคนขับ จากชื่อเต็ม (เช่น 'สมชาย ทองดี' หรือ 'นายสมชาย ทองดี') */
-  const findVehicleByDriverName = (name: string) => {
-    const driver = drivers.value.find((d) => fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
-    return driver?.vehicle || ''
-  }
-
-  /** หาคนขับจากทะเบียนรถ (จับคู่แบบ exact หรือ substring กันกรณีพิมพ์จังหวัดต่อท้ายไม่ตรงเป๊ะ) */
-  const findDriverByVehicle = (plate: string) => {
-    const trimmed = plate.trim()
-    if (!trimmed) return null
-    const driver = drivers.value.find((d) => d.vehicle && (d.vehicle === trimmed || d.vehicle.includes(trimmed) || trimmed.includes(d.vehicle)))
-    return driver || null
-  }
-
   return {
     drivers,
     fullName,
-    findVehicleByDriverName,
-    findDriverByVehicle,
   }
 })
