@@ -1,120 +1,149 @@
 <template>
-  <div class="space-y-6 max-w-5xl mx-auto pb-10">
-    <div class="flex items-center gap-3">
-      <button @click="goBack" class="w-9 h-9 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2">
-        <span class="material-symbols-rounded">arrow_back</span>
-      </button>
-      <div>
-        <div class="font-bold text-text text-lg">สร้างงานขนส่งใหม่ ({{ isCements ? 'Fleet Cements' : 'Fleet Ceramics' }})</div>
-        <div class="text-xs text-muted">เลขที่เอกสารจะออกให้อัตโนมัติ 1 เลขต่องาน (เพิ่มปลายทาง/สินค้าได้หลายรายการในงานเดียวกัน)</div>
+  <div class="space-y-4 pb-10">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div class="flex items-end gap-3">
+        <div>
+          <label class="field-label">เลขที่ใบปล่อยรถ</label>
+          <div class="flex items-center h-9 px-2 rounded-lg bg-surface-2 text-sm text-muted font-mono">{{ nextReleaseNoPreview }}</div>
+        </div>
+        <div>
+          <label class="field-label">วันที่สร้างงาน</label>
+          <input v-model="header.jobDate" type="date" class="input-field h-9 px-2 text-sm" />
+        </div>
+        <div class="text-xs text-muted pb-2">{{ isCements ? 'Fleet Cements' : 'Fleet Ceramics' }}</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button @click="goBack" class="btn-secondary">ยกเลิก</button>
+        <button @click="saveAllItems" :disabled="!canSave" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+          <span class="material-symbols-rounded text-base">save</span>
+          บันทึกงาน ({{ lineItems.length }} รายการ)
+        </button>
       </div>
     </div>
 
     <!-- ข้อมูลทั่วไปของงาน -->
-    <div class="card-lg">
-      <h3 class="font-semibold text-text mb-3">ข้อมูลเอกสาร</h3>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div>
-          <label class="block text-xs font-semibold text-muted mb-1">เลขที่ใบปล่อยรถ</label>
-          <div class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-muted font-medium">{{ nextReleaseNoPreview }} (อัตโนมัติ)</div>
+    <div class="card-lg space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-3">
+          <div>
+            <label class="field-label">ชื่อลูกค้า</label>
+            <input v-model="header.customer" list="customerNameOptions" placeholder="ชื่อลูกค้า (พิมพ์ใหม่ได้ หรือเลือกจากสมุดรายชื่อ)" class="input-field w-full" />
+            <datalist id="customerNameOptions">
+              <option v-for="c in customerStore.customers" :key="c.name" :value="c.name" />
+            </datalist>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="field-label">ใบสั่งงาน (PO)</label>
+              <input v-model="header.po" class="input-field w-full" />
+            </div>
+            <div>
+              <label class="field-label">วันที่ขนส่ง</label>
+              <input v-model="header.shipDate" type="date" class="input-field w-full" />
+            </div>
+            <div>
+              <label class="field-label">ทะเบียนรถ <span class="font-normal text-[10px]">(กรอกทีหลังได้)</span></label>
+              <input v-model="header.plate" list="headerVehicleOptions" placeholder="เช่น 82-4417 กรุงเทพ" class="input-field w-full" />
+              <datalist id="headerVehicleOptions">
+                <option v-for="v in vehicleOptions" :key="v" :value="v" />
+              </datalist>
+            </div>
+            <div>
+              <label class="field-label">คนขับ <span class="font-normal text-[10px]">(กรอกทีหลังได้)</span></label>
+              <select v-model="header.driverName" class="input-field w-full">
+                <option value="">เลือกคนขับ...</option>
+                <option v-for="name in driverOptions" :key="name" :value="name">{{ driverOptionLabel(name) }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">วันที่กลับ <span class="font-normal text-[10px]">(แก้ไขทีหลังได้)</span></label>
+              <input v-model="header.returnDate" type="date" class="input-field w-full" />
+            </div>
+          </div>
         </div>
-        <div>
-          <label class="block text-xs font-semibold text-muted mb-1">วันที่สร้างงาน</label>
-          <input v-model="header.jobDate" type="date" class="input-field w-full" />
+
+        <div class="space-y-3">
+          <div class="flex justify-end">
+            <DocumentActionBar :disabled="!canSave" @print="printAction" @download="toolbarNotReady" @share="toolbarNotReady" @envelope="toolbarNotReady" @history="toolbarNotReady" @settings="toolbarNotReady" />
+          </div>
+          <div>
+            <label class="field-label">
+              รูปแบบคิดราคา
+              <span class="font-normal text-[10px]">(เลือกก่อนเพิ่มรายการสินค้า)</span>
+            </label>
+            <div class="flex gap-2 flex-wrap">
+              <button
+                type="button"
+                @click="header.pricingMode = 'SINGLE_DESTINATION'"
+                :class="[
+                  'px-3 py-2 text-sm font-medium rounded-lg transition-all',
+                  header.pricingMode === 'SINGLE_DESTINATION' ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
+                ]"
+              >
+                รวมทั้งเที่ยว (ปลายทางเดียว)
+              </button>
+              <button
+                type="button"
+                @click="header.pricingMode = 'MULTI_DESTINATION'"
+                :class="[
+                  'px-3 py-2 text-sm font-medium rounded-lg transition-all',
+                  header.pricingMode === 'MULTI_DESTINATION' ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
+                ]"
+              >
+                แยกค่าเที่ยวตามปลายทาง
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">
+              ค่าเที่ยว (บาท)
+              <span class="font-normal text-[10px]">{{ header.pricingMode === 'MULTI_DESTINATION' ? '(รวมจากรายการด้านล่าง)' : '(รวมทั้งเที่ยว)' }}</span>
+            </label>
+            <input v-if="header.pricingMode !== 'MULTI_DESTINATION'" v-model.number="header.tripFee" type="number" placeholder="0" class="input-field w-full" />
+            <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-semibold">{{ formatBaht(multiTripFeeTotal) }} (อัตโนมัติ)</div>
+          </div>
+          <div>
+            <label class="field-label">
+              ราคาที่ตกลงกับลูกค้า (บาท)
+              <span class="text-[10px] font-normal text-muted">(ว่างไว้ = ใช้ค่าเที่ยว)</span>
+            </label>
+            <input v-model.number="header.agreedPrice" type="number" placeholder="auto" class="input-field w-full" />
+          </div>
+          <div>
+            <label class="field-label">เบี้ยเลี้ยงคนขับ</label>
+            <input v-if="isCements" v-model.number="header.allowance" type="number" placeholder="0" class="input-field w-full" />
+            <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-semibold">{{ formatBaht(headerCalculatedAllowance) }} (อัตโนมัติ)</div>
+          </div>
         </div>
-        <div class="md:col-span-2">
-          <label class="block text-xs font-semibold text-muted mb-1">ชื่อลูกค้า</label>
-          <input v-model="header.customer" list="customerNameOptions" placeholder="ชื่อลูกค้า (พิมพ์ใหม่ได้ หรือเลือกจากสมุดรายชื่อ)" class="input-field w-full" />
-          <datalist id="customerNameOptions">
-            <option v-for="c in customerStore.customers" :key="c.name" :value="c.name" />
-          </datalist>
-        </div>
+      </div>
+
+      <!-- เลขชิพเม้น / เส้นทาง / ต้นทาง / เลขที่อ้างอิง / รายละเอียด -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-4 border-t border-border">
         <div>
-          <label class="block text-xs font-semibold text-muted mb-1">ใบสั่งงาน (PO)</label>
-          <input v-model="header.po" placeholder="เลขที่ PO (ระบบแนะนำให้เมื่อเลือกลูกค้า)" class="input-field w-full" />
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-muted mb-1">วันที่ขนส่ง</label>
-          <input v-model="header.shipDate" type="date" class="input-field w-full" />
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-muted mb-1">ทะเบียนรถ <span class="font-normal text-[10px]">(กรอกทีหลังได้)</span></label>
-          <input v-model="header.plate" list="headerVehicleOptions" placeholder="เช่น 82-4417 กรุงเทพ" class="input-field w-full" />
-          <datalist id="headerVehicleOptions">
-            <option v-for="v in vehicleOptions" :key="v" :value="v" />
-          </datalist>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-muted mb-1">คนขับ <span class="font-normal text-[10px]">(กรอกทีหลังได้)</span></label>
-          <select v-model="header.driverName" class="input-field w-full">
-            <option value="">เลือกคนขับ...</option>
-            <option v-for="name in driverOptions" :key="name" :value="name">{{ driverOptionLabel(name) }}</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-muted mb-1">วันที่กลับ <span class="font-normal text-[10px]">(แก้ไขทีหลังได้)</span></label>
-          <input v-model="header.returnDate" type="date" class="input-field w-full" />
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-muted mb-1">เลขชิพเม้น</label>
+          <label class="field-label">เลขชิพเม้น</label>
           <input v-model="header.shipmentNo" placeholder="เลขที่ Shipment" class="input-field w-full" />
         </div>
         <div>
-          <label class="block text-xs font-semibold text-muted mb-1">เส้นทาง</label>
+          <label class="field-label">เส้นทาง</label>
           <input v-model="header.route" placeholder="เช่น กรุงเทพ-นครสวรรค์-เชียงใหม่" class="input-field w-full" />
         </div>
         <div>
-          <label class="block text-xs font-semibold text-muted mb-1">ต้นทาง</label>
+          <label class="field-label">ต้นทาง</label>
           <input v-model="header.origin" placeholder="จุดขึ้นสินค้า" class="input-field w-full" />
         </div>
-        <div class="md:col-span-2">
-          <label class="block text-xs font-semibold text-muted mb-1">
-            รูปแบบคิดราคา
-            <span class="font-normal text-[10px]">(เลือกก่อนเพิ่มรายการสินค้า)</span>
-          </label>
-          <div class="flex gap-2 flex-wrap">
-            <button
-              type="button"
-              @click="header.pricingMode = 'SINGLE_DESTINATION'"
-              :class="[
-                'px-3 py-2 text-sm font-medium rounded-lg transition-all',
-                header.pricingMode === 'SINGLE_DESTINATION' ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
-              ]"
-            >
-              รวมทั้งเที่ยว (ปลายทางเดียว)
-            </button>
-            <button
-              type="button"
-              @click="header.pricingMode = 'MULTI_DESTINATION'"
-              :class="[
-                'px-3 py-2 text-sm font-medium rounded-lg transition-all',
-                header.pricingMode === 'MULTI_DESTINATION' ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
-              ]"
-            >
-              แยกค่าเที่ยวตามปลายทาง
-            </button>
-          </div>
+        <div>
+          <label class="field-label">เลขที่อ้างอิง</label>
+          <input v-model="header.reference" class="input-field w-full" />
         </div>
         <div>
-          <label class="block text-xs font-semibold text-muted mb-1">
-            ค่าเที่ยว (บาท)
-            <span class="font-normal text-[10px]">{{ header.pricingMode === 'MULTI_DESTINATION' ? '(รวมจากรายการด้านล่าง)' : '(รวมทั้งเที่ยว)' }}</span>
-          </label>
-          <input v-if="header.pricingMode !== 'MULTI_DESTINATION'" v-model.number="header.tripFee" type="number" placeholder="0" class="input-field w-full" />
-          <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-semibold">{{ formatBaht(multiTripFeeTotal) }} (อัตโนมัติ)</div>
+          <label class="field-label">รายละเอียด</label>
+          <input v-model="header.description" class="input-field w-full" />
         </div>
-        <div>
-          <label class="block text-xs font-semibold text-muted mb-1">
-            ราคาที่ตกลงกับลูกค้า (บาท)
-            <span class="text-[10px] font-normal text-muted">(ว่างไว้ = ใช้ค่าเที่ยว)</span>
-          </label>
-          <input v-model.number="header.agreedPrice" type="number" placeholder="auto" class="input-field w-full" />
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-muted mb-1">เบี้ยเลี้ยงคนขับ</label>
-          <input v-if="isCements" v-model.number="header.allowance" type="number" placeholder="0" class="input-field w-full" />
-          <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-semibold">{{ formatBaht(headerCalculatedAllowance) }} (อัตโนมัติ)</div>
-        </div>
+      </div>
+
+      <div>
+        <label class="field-label">หมายเหตุ</label>
+        <textarea v-model="header.note" rows="3" class="input-field w-full" />
       </div>
     </div>
 
@@ -220,14 +249,6 @@
       </div>
     </div>
 
-    <div class="flex justify-end gap-3">
-      <button @click="goBack" class="btn-secondary">ยกเลิก</button>
-      <button @click="saveAllItems" :disabled="!canSave" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
-        <span class="material-symbols-rounded">save</span>
-        บันทึกงาน (1 เที่ยว, {{ lineItems.length }} รายการ)
-      </button>
-    </div>
-
     <JobItemEditorModal
       :open="itemEditorOpen"
       :item="editingIndex !== null ? lineItems[editingIndex] : null"
@@ -257,6 +278,7 @@ import { useDocumentPrefillStore } from '@/stores/documentPrefill'
 import type { Booking, BookingCategory, BookingStatus, JobItem, PricingMode } from '@/types'
 import { parseGpsInput } from '@/utils/gps'
 import JobItemEditorModal, { type JobItemDraft } from '@/components/booking/JobItemEditorModal.vue'
+import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 
 const props = defineProps<{ fleet: BookingCategory }>()
 
@@ -318,7 +340,7 @@ const sourceIsSalesOrder = prefill.source === 'sales_order'
 /** ถ้ามาจากใบเสนอราคา (ทั้งทางลัด "สร้างใบสั่งงาน" และ "สร้างใบสั่งสินค้า") ให้ผูกอ้างอิงกลับไปเพื่อดูย้อนหลังได้ */
 const sourceQuotationId = typeof prefill.quotationId === 'string' ? prefill.quotationId : undefined
 const defaultHeader = () => ({
-  po: (prefill.po as string) || '',
+  po: (prefill.po as string) || bookingStore.nextPoNo(),
   shipDate: (prefill.shipDate as string) || new Date().toISOString().slice(0, 10),
   jobDate: new Date().toISOString().slice(0, 10),
   returnDate: '',
@@ -328,6 +350,9 @@ const defaultHeader = () => ({
   shipmentNo: '',
   route: (prefill.route as string) || '',
   origin: (prefill.origin as string) || '',
+  reference: '',
+  description: '',
+  note: '',
   tripFee: prefill.amount ? Number(prefill.amount) : 0,
   agreedPrice: prefill.amount ? Number(prefill.amount) : 0,
   allowance: 0,
@@ -393,22 +418,6 @@ watch(
     if (!vehicle?.driverCode) return
     const driver = driversStore.drivers.find((d) => d.code === vehicle.driverCode)
     if (driver) header.value.driverName = `${driver.firstName} ${driver.lastName}`
-  }
-)
-
-// เลือกลูกค้าที่มีรหัสผู้ติดต่อในสมุดรายชื่อ และยังไม่ได้กรอกเลข PO เอง -> แนะนำเลข PO ให้อัตโนมัติ
-watch(
-  () => header.value.customer,
-  (name) => {
-    if (!name || header.value.po) return
-    const now = new Date()
-    const todaysJobCount = bookingStore.bookings.filter((b) => {
-      if (b.customer !== name) return false
-      const d = new Date(b.createdAt)
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
-    }).length
-    const suggestion = customerStore.suggestPoNumber(name, todaysJobCount)
-    if (suggestion) header.value.po = suggestion
   }
 )
 
@@ -520,6 +529,9 @@ const canSave = computed(() => {
 
 const goBack = () => router.push(`/booking/${props.fleet}`)
 
+const printAction = () => window.print()
+const toolbarNotReady = () => window.alert('ฟีเจอร์นี้ยังไม่พร้อมใช้งาน')
+
 const saveAllItems = () => {
   if (!canSave.value) return
   const shipDate = header.value.shipDate ? new Date(header.value.shipDate) : undefined
@@ -538,6 +550,9 @@ const saveAllItems = () => {
     shipmentNo: header.value.shipmentNo || undefined,
     route: header.value.route || undefined,
     origin: header.value.origin || undefined,
+    reference: header.value.reference || undefined,
+    description: header.value.description || undefined,
+    note: header.value.note || undefined,
     customer: header.value.customer,
     items: lineItems.value,
     allowance: isCements.value ? header.value.allowance || 0 : headerCalculatedAllowance.value,
@@ -577,3 +592,9 @@ const saveAllItems = () => {
   goBack()
 }
 </script>
+
+<style scoped>
+.field-label {
+  @apply block text-xs font-semibold text-muted mb-1;
+}
+</style>
