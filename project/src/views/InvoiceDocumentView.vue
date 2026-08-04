@@ -134,7 +134,7 @@
                 <td class="border border-gray-400 px-2 py-1">{{ row.description }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ row.qty }} {{ row.unit }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.unitPrice) }}</td>
-                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatPercent(row.discountPercent) }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatDiscount(row) }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatPercent(row.vatRate) }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
               </tr>
@@ -390,7 +390,9 @@ interface PrintRow {
   unit: string
   unitPrice: number
   amount: number
+  discountMode?: 'percent' | 'fixed'
   discountPercent?: number
+  discountAmount?: number
   vatRate?: number
   onClick?: () => void
 }
@@ -426,7 +428,9 @@ const docRows = computed<PrintRow[]>(() => {
       unit: item.unit,
       unitPrice: item.unitPrice,
       amount: item.amount,
+      discountMode: item.discountMode,
       discountPercent: item.discountPercent,
+      discountAmount: item.discountAmount,
       vatRate: item.vatRate,
     }))
   }
@@ -485,6 +489,8 @@ const formatBaht = (value: number) =>
   `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-')
 const formatPercent = (value?: number) => (value === undefined ? '-' : `${value}%`)
+const formatDiscount = (row: PrintRow) =>
+  row.discountMode === 'fixed' ? (row.discountAmount ? formatBaht(row.discountAmount) : '-') : formatPercent(row.discountPercent)
 
 /** "ผู้ติดต่อ" บนเอกสาร = ผู้ใช้ที่ล็อกอินอยู่ตอนออกเอกสาร (ระบบยังไม่มีฟิลด์ผู้ติดต่อแยกต่อเอกสาร) */
 const contactPerson = computed(() => authStore.userName)
