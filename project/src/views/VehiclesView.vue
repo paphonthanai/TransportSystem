@@ -130,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useDriversStore } from '@/stores/drivers'
@@ -144,7 +144,10 @@ type VehicleForm = Omit<Vehicle, 'id' | 'repairStatus' | 'repairDays' | 'driverC
 
 const departmentOptions: VehicleType[] = ['รถบริษัท', 'รถร่วม', 'รถหุ้นส่วน']
 
-const vehicles = vehiclesStore.vehicles
+/** ต้องเป็น computed (ไม่ใช่ const เฉยๆ) เพราะตอนนี้ vehiclesStore.vehicles โหลดข้อมูลแบบ async จาก Firestore —
+ *  ค่าตอน setup อาจยังว่างอยู่ ถ้า snapshot เป็น const ธรรมดา ตารางจะไม่อัปเดตตอนโหลดเสร็จ (ใช้ได้เฉยๆ ตอนเป็น
+ *  localStorage แบบเดิมเพราะข้อมูลพร้อมตั้งแต่ก่อน component mount แล้ว ไม่มีช่วง async ให้พลาด) */
+const vehicles = computed(() => vehiclesStore.vehicles)
 
 /** คนขับประจำรถคันนี้ (ถ้ามี) แสดงในตารางรายการรถ */
 const assignedDriverLabel = (vehicle: Vehicle) => {
@@ -154,6 +157,8 @@ const assignedDriverLabel = (vehicle: Vehicle) => {
 
 const showDialog = ref(false)
 const editingIndex = ref<number | null>(null)
+/** id เอกสาร Firestore ของรายการที่กำลังแก้ไข — ใช้เรียก vehiclesStore.updateVehicle() ให้ตรงตัวจริง แทนการอิง index ในอาเรย์ */
+const editingId = ref<string | undefined>(undefined)
 /** คนขับที่เลือกให้ประจำรถคันนี้ในฟอร์ม — ไม่ใช่ field ของ VehicleForm เพราะการแก้ไขความสัมพันธ์ต้องผ่าน vehiclesStore.assignDriver() เท่านั้น */
 const selectedDriverCode = ref('')
 
@@ -174,27 +179,28 @@ const form = ref<VehicleForm>(emptyForm())
 
 const openDialog = (vehicle?: Vehicle) => {
   if (vehicle) {
-    editingIndex.value = vehicles.indexOf(vehicle)
+    editingIndex.value = vehicles.value.indexOf(vehicle)
+    editingId.value = vehicle.id
     form.value = { ...vehicle }
     selectedDriverCode.value = vehicle.driverCode ?? ''
   } else {
     editingIndex.value = null
+    editingId.value = undefined
     form.value = emptyForm()
     selectedDriverCode.value = ''
   }
   showDialog.value = true
 }
 
-const save = () => {
+const save = async () => {
   if (!form.value.plate) return
   let id: string
-  if (editingIndex.value === null) {
-    id = `v${Date.now()}`
-    vehicles.unshift({ id, ...form.value })
+  if (editingId.value === undefined) {
+    id = await vehiclesStore.createVehicle({ ...form.value })
     onboardingStore.markDone('addedVehicleOrDriver')
   } else {
-    id = vehicles[editingIndex.value].id
-    vehicles[editingIndex.value] = { ...vehicles[editingIndex.value], ...form.value }
+    id = editingId.value
+    await vehiclesStore.updateVehicle(id, { ...form.value })
   }
   vehiclesStore.assignDriver(id, selectedDriverCode.value || undefined)
   showDialog.value = false

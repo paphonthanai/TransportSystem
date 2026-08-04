@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import type { Vehicle } from '@/types'
+import { vehicleRepository, sanitizeVehicle } from '@/repositories/vehicleRepository'
 
 const VEHICLES_KEY = 'tms_vehicles_v1'
 
@@ -65,7 +66,9 @@ function seedVehicles(): Vehicle[] {
   ]
 }
 
-function loadVehicles(): Vehicle[] {
+/** ข้อมูล local เดิม (ก่อนย้ายไป Firestore) — ใช้เป็น "แหล่งข้อมูลตั้งต้น" ตอน import ครั้งแรกเข้า Firestore เท่านั้น
+ *  ไม่ใช่แหล่งข้อมูลหลักอีกต่อไปหลังย้าย (ดู importFromLocalStorage ด้านล่าง) */
+function loadLocalVehicles(): Vehicle[] {
   try {
     const raw = localStorage.getItem(VEHICLES_KEY)
     if (raw) return JSON.parse(raw)
@@ -76,15 +79,38 @@ function loadVehicles(): Vehicle[] {
 }
 
 export const useVehiclesStore = defineStore('vehicles', () => {
-  const vehicles = ref<Vehicle[]>(loadVehicles())
+  const vehicles = ref<Vehicle[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
 
-  watch(vehicles, (val) => localStorage.setItem(VEHICLES_KEY, JSON.stringify(val)), { deep: true })
-
-  window.addEventListener('storage', (e) => {
-    if (e.key === VEHICLES_KEY && e.newValue) {
-      vehicles.value = JSON.parse(e.newValue)
+  /** Import ครั้งเดียว: ถ้า Firestore ยังไม่มีข้อมูลเลย ให้ดึงจาก localStorage (หรือ seed ถ้า localStorage ก็ว่าง
+   *  เหมือนกัน) เข้า Firestore ก่อน — id เดิม ('v1'..'v4') จะถูกแทนที่ด้วย document id จริงของ Firestore เหมือนที่
+   *  customers/drivers ทำ (ไม่มีที่ไหนใน business logic อ้างอิง id เดิมแบบ hardcode ตรวจสอบแล้ว) */
+  async function importFromLocalStorage() {
+    const localData = loadLocalVehicles()
+    for (const { id, ...data } of localData) {
+      await vehicleRepository.create(data)
     }
-  })
+  }
+
+  async function fetchVehicles() {
+    loading.value = true
+    error.value = null
+    try {
+      let result = await vehicleRepository.getAll()
+      if (result.length === 0) {
+        await importFromLocalStorage()
+        result = await vehicleRepository.getAll()
+      }
+      vehicles.value = result
+    } catch (err: any) {
+      error.value = err?.message || 'โหลดข้อมูลรถจาก Firestore ไม่สำเร็จ'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  fetchVehicles()
 
   /** ทะเบียนเต็ม (ทะเบียน+จังหวัด) เช่น "70-8821 สระบุรี" — ใช้แสดงผล/จับคู่ตอนกรอกทะเบียนในหน้าสร้างงาน/จัดรถ */
   const fullPlate = (v: Vehicle) => `${v.plate} ${v.plateProvince}`.trim()
@@ -102,22 +128,56 @@ export const useVehiclesStore = defineStore('vehicles', () => {
   /**
    * กำหนด/เปลี่ยนคนขับประจำของรถคันนี้ — จุดเดียวที่แก้ไขความสัมพันธ์รถ-คนขับ เพื่อให้ทุกหน้าเห็นข้อมูลเดียวกันเสมอ
    * คนขับ 1 คนประจำรถได้ทีละ 1 คันเท่านั้น ถ้าคนขับคนนี้ประจำรถคันอื่นอยู่แล้ว จะถอดออกจากคันเดิมให้อัตโนมัติ
+   * เรียกจาก BookingView.vue/BookingCreateView.vue/DriversView.vue/VehiclesView.vue แบบไม่ await (fire-and-forget)
+   * เหมือนเดิมทุกที่ — ฟังก์ชันนี้เปลี่ยนเป็น async ภายในเพื่อ persist ไปที่ Firestore ด้วย แต่ signature การเรียกใช้
+   * จากภายนอกเหมือนเดิมทุกประการ ไม่ต้องแก้ไฟล์อื่นนอกเหนือจาก vehicles.ts
    */
-  function assignDriver(vehicleId: string, driverCode: string | undefined) {
+  async function assignDriver(vehicleId: string, driverCode: string | undefined) {
     const vehicle = vehicles.value.find((v) => v.id === vehicleId)
     if (!vehicle) return
     if (driverCode) {
       const prev = vehicles.value.find((v) => v.driverCode === driverCode && v.id !== vehicleId)
-      if (prev) prev.driverCode = undefined
+      if (prev) {
+        prev.driverCode = undefined
+        await vehicleRepository.update(prev.id, sanitizeVehicle(prev))
+      }
     }
     vehicle.driverCode = driverCode || undefined
+    await vehicleRepository.update(vehicle.id, sanitizeVehicle(vehicle))
+  }
+
+  async function createVehicle(data: Omit<Vehicle, 'id' | 'repairStatus' | 'repairDays' | 'driverCode'>): Promise<string> {
+    const id = await vehicleRepository.create(data)
+    vehicles.value.unshift({ id, ...data })
+    return id
+  }
+
+  /** merge กับ record เดิมก่อน sanitize เสมอ เพราะฟอร์มแก้ไขรถ (VehiclesView.vue) ไม่มีช่อง driverCode/repairStatus/
+   *  repairDays อยู่แล้ว (แก้ผ่าน assignDriver()/ฟีเจอร์ซ่อมบำรุงในอนาคตแยกต่างหาก) ถ้าไม่ merge ค่าที่มีอยู่เดิมจะหาย
+   *  เพราะทุก write ไปที่ Firestore เขียนทับทั้ง document (ไม่ใช่ partial diff) */
+  async function updateVehicle(id: string, data: Omit<Vehicle, 'id' | 'repairStatus' | 'repairDays' | 'driverCode'>) {
+    const existing = vehicles.value.find((v) => v.id === id)
+    const merged: Vehicle = { ...(existing as Vehicle), ...data, id }
+    await vehicleRepository.update(id, sanitizeVehicle(merged))
+    const index = vehicles.value.findIndex((v) => v.id === id)
+    if (index !== -1) vehicles.value[index] = merged
+  }
+
+  async function deleteVehicle(id: string) {
+    await vehicleRepository.delete(id)
+    vehicles.value = vehicles.value.filter((v) => v.id !== id)
   }
 
   return {
     vehicles,
+    loading,
+    error,
     fullPlate,
     findByFullPlate,
     vehicleForDriver,
     assignDriver,
+    createVehicle,
+    updateVehicle,
+    deleteVehicle,
   }
 })
