@@ -254,7 +254,9 @@ const openDialog = (customer?: CustomerRecord) => {
   if (customer) {
     editingCode.value = customer.code || customer.name
     editingId.value = customer.id
-    form.value = { ...customer }
+    // customer อาจมาจาก customerRows (ใน template) ที่ enrich เพิ่ม avatarBg/initial/jobs/total ไว้แสดงผลในตาราง
+    // เท่านั้น — sanitizeCustomer() ตัดฟิลด์เหล่านี้ทิ้งก่อนเอาเข้าฟอร์ม กัน field แปลกปลอมหลุดไปกับตอน save
+    form.value = { ...customerStore.sanitizeCustomer(customer), id: customer.id }
   } else {
     editingCode.value = null
     editingId.value = undefined

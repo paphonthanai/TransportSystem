@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { customerRepository } from '@/repositories/customerRepository'
+import { customerRepository, sanitizeCustomer } from '@/repositories/customerRepository'
 
 const CUSTOMERS_KEY = 'tms_customers_v1'
 
@@ -245,15 +245,17 @@ export const useCustomerStore = defineStore('customers', () => {
   }
 
   async function createCustomer(data: Omit<CustomerRecord, 'id'>) {
-    const id = await customerRepository.create(data)
-    customers.value.unshift({ ...data, id })
+    const clean = sanitizeCustomer(data)
+    const id = await customerRepository.create(clean)
+    customers.value.unshift({ ...clean, id })
   }
 
   async function updateCustomer(id: string, data: Omit<CustomerRecord, 'id'>) {
-    await customerRepository.update(id, data)
+    const clean = sanitizeCustomer(data)
+    await customerRepository.update(id, clean)
     const index = customers.value.findIndex((c) => c.id === id)
-    if (index !== -1) customers.value[index] = { ...data, id }
+    if (index !== -1) customers.value[index] = { ...clean, id }
   }
 
-  return { customers, loading, error, lookupCustomer, suggestPoNumber, createCustomer, updateCustomer }
+  return { customers, loading, error, lookupCustomer, suggestPoNumber, createCustomer, updateCustomer, sanitizeCustomer }
 })
