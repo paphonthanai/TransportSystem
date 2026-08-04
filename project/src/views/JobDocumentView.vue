@@ -130,203 +130,219 @@
         </div>
       </div>
 
-      <div class="flex justify-center no-print">
-        <button @click="detailDrawerOpen = true" class="btn-secondary">
-          <span class="material-symbols-rounded text-base">info</span>
-          ดูรายละเอียดเพิ่มเติม
+      <!-- เอกสารที่เกี่ยวข้อง -->
+      <div v-if="relatedBatchId || relatedInvoice" class="flex flex-wrap gap-2 no-print">
+        <button v-if="relatedBatchId" @click="router.push(`/billing?batch=${relatedBatchId}`)" class="btn-sm">
+          <span class="material-symbols-rounded text-base">receipt_long</span>
+          ดูรายการวางบิล
+        </button>
+        <button v-if="relatedInvoice" @click="router.push(`/documents/${relatedInvoice.id}`)" class="btn-sm">
+          <span class="material-symbols-rounded text-base">description</span>
+          ดูใบแจ้งหนี้
         </button>
       </div>
 
-      <!-- Detail Popup: ข้อมูลปฏิบัติการ/ราคา/ค่าใช้จ่าย ที่ไม่ได้แสดงในใบเสนอราคา/PO -->
-      <Teleport to="body" v-if="detailDrawerOpen">
-        <div
-          @click="detailDrawerOpen = false"
-          class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 no-print flex items-center justify-center p-6"
-        >
-          <div
-            @click.stop
-            class="w-full max-w-lg max-h-[85vh] bg-surface rounded-2xl shadow-2xl overflow-y-auto"
-          >
-            <div class="sticky top-0 bg-surface border-b border-border px-5 py-4 flex items-center justify-between z-10 rounded-t-2xl">
-              <div class="font-bold text-text">รายละเอียดเพิ่มเติม</div>
-              <button @click="detailDrawerOpen = false" class="btn-icon">
-                <span class="material-symbols-rounded">close</span>
-              </button>
-            </div>
+      <!-- ข้อมูลลูกค้า -->
+      <div class="card-lg no-print">
+        <h3 class="font-semibold text-text mb-3">ข้อมูลลูกค้า</h3>
+        <div class="text-sm mb-4">
+          <div class="font-bold text-text">{{ booking.customer }}</div>
+          <div class="text-muted">{{ customer.address }}{{ customer.zipCode ? ' ' + customer.zipCode : '' }}</div>
+          <div class="text-muted">เลขประจำตัวผู้เสียภาษี: {{ customer.taxId || '-' }}</div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+          <div>
+            <div class="text-muted text-xs">เลขที่เอกสาร</div>
+            <div class="font-semibold text-text">{{ booking.docNo }}</div>
+          </div>
+          <div>
+            <div class="text-muted text-xs">ใบสั่งงาน (PO)</div>
+            <div class="font-semibold text-text">{{ booking.po || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-muted text-xs">เลขที่ใบปล่อยรถ</div>
+            <div class="font-semibold text-text">{{ booking.releaseNo || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-muted text-xs">เลขที่อ้างอิง</div>
+            <div class="font-semibold text-text">{{ booking.reference || '-' }}</div>
+          </div>
+          <div>
+            <div class="text-muted text-xs">รายละเอียด</div>
+            <div class="font-semibold text-text">{{ booking.description || '-' }}</div>
+          </div>
+        </div>
+      </div>
 
-            <div class="p-5 space-y-5">
-              <!-- เอกสารที่เกี่ยวข้อง -->
-              <div v-if="relatedBatchId || relatedInvoice" class="flex flex-wrap gap-2">
-                <button v-if="relatedBatchId" @click="router.push(`/billing?batch=${relatedBatchId}`)" class="btn-sm">
-                  <span class="material-symbols-rounded text-base">receipt_long</span>
-                  ดูรายการวางบิล
-                </button>
-                <button v-if="relatedInvoice" @click="router.push(`/documents/${relatedInvoice.id}`)" class="btn-sm">
-                  <span class="material-symbols-rounded text-base">description</span>
-                  ดูใบแจ้งหนี้
-                </button>
-              </div>
+      <!-- ข้อมูลต้นทาง-ปลายทาง -->
+      <div class="card-lg no-print">
+        <h3 class="font-semibold text-text mb-3">ข้อมูลต้นทาง-ปลายทาง</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div><span class="text-muted">ต้นทาง:</span> {{ booking.origin || '-' }}</div>
+          <div><span class="text-muted">เส้นทาง:</span> {{ booking.route || '-' }}</div>
+          <div><span class="text-muted">เลขชิพเม้น:</span> {{ booking.shipmentNo || '-' }}</div>
+        </div>
+      </div>
 
-              <!-- ข้อมูลปฏิบัติการ -->
-              <div>
-                <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">ข้อมูลปฏิบัติการ</div>
-                <div class="grid grid-cols-2 gap-3 text-sm">
-                  <div><span class="text-muted">ทะเบียนรถ:</span> {{ booking.plate || '-' }}</div>
-                  <div><span class="text-muted">คนขับ:</span> {{ booking.driverName || '-' }}</div>
-                  <div><span class="text-muted">ต้นทาง:</span> {{ booking.origin || '-' }}</div>
-                  <div v-if="booking.dispatchedAt"><span class="text-muted">วันที่จ่ายงาน:</span> {{ formatDate(booking.dispatchedAt) }}</div>
-                  <div v-if="booking.transitStartedAt"><span class="text-muted">วันที่เริ่มขนส่ง:</span> {{ formatDate(booking.transitStartedAt) }}</div>
-                  <div v-if="booking.completedAt"><span class="text-muted">วันที่ส่งของสำเร็จ:</span> {{ formatDate(booking.completedAt) }}</div>
-                  <div v-if="booking.odometerBefore !== undefined"><span class="text-muted">เลขไมล์เริ่มต้น:</span> {{ booking.odometerBefore }} กม.</div>
-                  <div v-if="booking.odometerAfter !== undefined"><span class="text-muted">เลขไมล์สิ้นสุด:</span> {{ booking.odometerAfter }} กม.</div>
-                </div>
-              </div>
-
-              <!-- รายละเอียดปลายทาง/สินค้าแต่ละรายการ -->
-              <div v-if="booking.items.length" class="border-t border-border pt-4">
-                <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">รายละเอียดปลายทาง/สินค้าแต่ละรายการ</div>
-                <div class="space-y-2">
-                  <div
-                    v-for="(item, idx) in booking.items"
-                    :key="item.id"
-                    class="text-sm bg-surface-2 rounded-lg p-3 border border-border space-y-1"
-                  >
-                    <div class="font-semibold text-text flex items-center justify-between">
-                      <span>{{ idx + 1 }}. {{ item.siteName }}</span>
-                      <span :class="item.deliveryStatus === 'DELIVERED' ? 'text-green-600' : 'text-amber-600'" class="text-xs font-semibold">
-                        {{ item.deliveryStatus === 'DELIVERED' ? `ส่งแล้ว (ผู้รับ: ${item.deliveredBy})` : 'รอส่ง' }}
-                      </span>
-                    </div>
-                    <div class="text-xs text-muted">{{ item.province }} · {{ item.district }}</div>
-                    <div><span class="text-muted">สินค้า:</span> {{ item.product }} {{ item.qty }} {{ item.unit }}</div>
-                    <div><span class="text-muted">ต้นทาง:</span> {{ item.pickupOriginName || booking.origin || '-' }}</div>
-                    <div><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName || '-' }} {{ item.sitePhone ? '· ' + item.sitePhone : '' }}</div>
-                    <div>
-                      <span class="text-muted">พิกัด:</span>
-                      {{ item.latitude !== undefined && item.longitude !== undefined ? `${item.latitude}, ${item.longitude}` : item.mapUrl || '-' }}
-                    </div>
-                    <div v-if="isMulti" class="font-semibold text-text">
-                      <span class="text-muted font-normal">ค่าเที่ยว:</span>
-                      {{ formatBaht(item.tripFee || 0) }} x {{ item.tripCount || 1 }} = {{ formatBaht((item.tripFee || 0) * (item.tripCount || 1)) }}
-                    </div>
-                    <img v-if="item.podImage" :src="item.podImage" class="w-full max-h-32 object-contain rounded border border-border" />
-                  </div>
-                </div>
-                <div v-if="isMulti" class="text-sm text-text mt-2 text-right font-semibold">
-                  รวมค่าเที่ยวทั้งงาน: {{ formatBaht(booking.tripFee) }}
-                </div>
-              </div>
-
-              <!-- สรุประยะทาง/น้ำมัน -->
-              <div v-if="mileageSummary" class="border-t border-border pt-4">
-                <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">สรุประยะทาง/น้ำมัน</div>
-                <div class="grid grid-cols-2 gap-3 text-sm bg-surface-2 rounded-lg p-3 border border-border">
-                  <div>ระยะทางเที่ยวนี้: <span class="font-semibold text-text">{{ mileageSummary.distanceKm }} กม.</span></div>
-                  <div>สะสม: <span class="font-semibold text-text">{{ mileageSummary.cumulativeKm }} กม.</span></div>
-                  <div>เฉลี่ย: <span class="font-semibold text-text">{{ mileageSummary.avgKmPerLiter ?? '-' }} กม./ลิตร</span></div>
-                  <div>น้ำมันที่กำหนด: <span class="font-semibold text-text">{{ mileageSummary.standardFuelLiters ?? '-' }} ล.</span></div>
-                  <div class="col-span-2">
-                    ชดเชยน้ำมัน:
-                    <span :class="['font-semibold', (mileageSummary.fuelCompensation ?? 0) >= 0 ? 'text-green-700' : 'text-red-700']">
-                      {{ mileageSummary.fuelCompensation !== null ? formatBaht(mileageSummary.fuelCompensation) : '-' }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- ราคา/ค่าใช้จ่าย -->
-              <div class="border-t border-border pt-4 space-y-3">
-                <div class="flex items-center justify-between">
-                  <div class="text-xs font-bold text-muted uppercase tracking-wide">ราคา/ค่าใช้จ่าย</div>
-                  <button
-                    v-if="!isEditing && !isMulti"
-                    @click="startEdit"
-                    :disabled="!canEditPrice"
-                    :title="canEditPrice ? 'แก้ไขราคา' : 'ราคาถูกล็อกหลังจัดรถแล้ว แก้ไขได้เฉพาะ Admin'"
-                    class="btn-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <span class="material-symbols-rounded text-base">edit</span>
-                    แก้ไข
-                  </button>
-                </div>
-                <div v-if="isMulti" class="text-[11px] text-muted -mt-2">
-                  งานนี้แยกค่าเที่ยวตามปลายทาง — แก้ไขราคาแบบแยกปลายทางได้ที่หน้าแก้ไขงาน (ปุ่มแก้ไขงานในรายการงาน)
-                </div>
-                <div v-if="!isEditing" class="grid grid-cols-2 gap-3">
-                  <div class="bg-surface-2 rounded-lg p-3">
-                    <div class="text-xs text-muted mb-1">ค่าเที่ยว</div>
-                    <div class="font-bold text-text">{{ formatBaht(booking.tripFee) }}</div>
-                  </div>
-                  <div class="bg-surface-2 rounded-lg p-3">
-                    <div class="text-xs text-muted mb-1">ราคาที่ตกลง</div>
-                    <div class="font-bold text-text">{{ formatBaht(booking.agreedPrice) }}</div>
-                  </div>
-                </div>
-                <div v-else class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ค่าเที่ยว</label>
-                    <input v-model.number="priceForm.tripFee" type="number" class="input-field w-full" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-semibold text-muted mb-1">ราคาที่ตกลง</label>
-                    <input v-model.number="priceForm.agreedPrice" type="number" class="input-field w-full" />
-                  </div>
-                  <div class="col-span-2 flex justify-end gap-2">
-                    <button @click="isEditing = false" class="btn-secondary">ยกเลิก</button>
-                    <button @click="savePrice" class="btn-sm text-primary">
-                      <span class="material-symbols-rounded text-base">save</span>
-                      บันทึกราคา
-                    </button>
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                  <div class="bg-surface-2 rounded-lg p-3">
-                    <div class="text-xs text-muted mb-1">น้ำมัน</div>
-                    <div class="font-bold text-text">{{ booking.fuelLiters || 0 }} ล. x {{ formatBaht(booking.fuelRate) }}</div>
-                  </div>
-                  <div class="bg-surface-2 rounded-lg p-3">
-                    <div class="text-xs text-muted mb-1">เบี้ยเลี้ยง</div>
-                    <div class="font-bold text-text">{{ formatBaht(booking.allowance) }}</div>
-                  </div>
-                  <div v-if="booking.finalAllowance !== undefined" class="bg-primary text-white rounded-lg p-3 col-span-2">
-                    <div class="text-xs opacity-90 mb-1">เบี้ยเลี้ยงสุทธิ</div>
-                    <div class="font-bold">{{ formatBaht(booking.finalAllowance) }}</div>
-                  </div>
-                </div>
-
-                <div v-if="booking.extraCharges?.length">
-                  <div class="text-xs font-semibold text-muted mb-1">ค่าใช้จ่ายเพิ่มเติม (extra)</div>
-                  <div v-for="extra in booking.extraCharges" :key="extra.id" class="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
-                    <span class="text-text">{{ extra.label }}</span>
-                    <span class="text-text">{{ formatBaht(extra.amount) }}</span>
-                  </div>
-                </div>
-
-                <div v-if="booking.debtAdjustments?.length">
-                  <div class="text-xs font-semibold text-muted mb-1">รายการเพิ่ม/ลดหนี้</div>
-                  <div v-for="adj in booking.debtAdjustments" :key="adj.id" class="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
-                    <span class="text-text">{{ adj.label || '-' }}</span>
-                    <span :class="adj.amount >= 0 ? 'text-red-500' : 'text-green-600'">{{ adj.amount >= 0 ? '-' : '+' }}{{ formatBaht(Math.abs(adj.amount)) }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- POD -->
-              <div v-if="booking.podImage" class="border-t border-border pt-4">
-                <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">รูปหลักฐานการส่งมอบสินค้า (POD)</div>
-                <img :src="booking.podImage" class="w-full max-h-64 object-contain rounded-lg border border-border" />
-              </div>
-
-              <!-- ประวัติ -->
-              <div class="border-t border-border pt-4">
-                <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">ประวัติ</div>
-                <EntityTimeline :booking-id="booking.id" />
-              </div>
+      <!-- ข้อมูลรถ-คนขับ -->
+      <div class="card-lg no-print">
+        <h3 class="font-semibold text-text mb-3">ข้อมูลรถ-คนขับ</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div><span class="text-muted">ทะเบียนรถ:</span> {{ booking.plate || '-' }}</div>
+          <div><span class="text-muted">คนขับ:</span> {{ booking.driverName || '-' }}</div>
+          <div v-if="booking.dispatchedAt"><span class="text-muted">วันที่จ่ายงาน:</span> {{ formatDate(booking.dispatchedAt) }}</div>
+          <div v-if="booking.transitStartedAt"><span class="text-muted">วันที่เริ่มขนส่ง:</span> {{ formatDate(booking.transitStartedAt) }}</div>
+          <div v-if="booking.completedAt"><span class="text-muted">วันที่ส่งของสำเร็จ:</span> {{ formatDate(booking.completedAt) }}</div>
+          <div v-if="booking.odometerBefore !== undefined"><span class="text-muted">เลขไมล์เริ่มต้น:</span> {{ booking.odometerBefore }} กม.</div>
+          <div v-if="booking.odometerAfter !== undefined"><span class="text-muted">เลขไมล์สิ้นสุด:</span> {{ booking.odometerAfter }} กม.</div>
+        </div>
+        <div v-if="mileageSummary" class="border-t border-border mt-3 pt-3">
+          <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">สรุประยะทาง/น้ำมัน</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm bg-surface-2 rounded-lg p-3 border border-border">
+            <div>ระยะทางเที่ยวนี้: <span class="font-semibold text-text">{{ mileageSummary.distanceKm }} กม.</span></div>
+            <div>สะสม: <span class="font-semibold text-text">{{ mileageSummary.cumulativeKm }} กม.</span></div>
+            <div>เฉลี่ย: <span class="font-semibold text-text">{{ mileageSummary.avgKmPerLiter ?? '-' }} กม./ลิตร</span></div>
+            <div>น้ำมันที่กำหนด: <span class="font-semibold text-text">{{ mileageSummary.standardFuelLiters ?? '-' }} ล.</span></div>
+            <div class="sm:col-span-2">
+              ชดเชยน้ำมัน:
+              <span :class="['font-semibold', (mileageSummary.fuelCompensation ?? 0) >= 0 ? 'text-green-700' : 'text-red-700']">
+                {{ mileageSummary.fuelCompensation !== null ? formatBaht(mileageSummary.fuelCompensation) : '-' }}
+              </span>
             </div>
           </div>
         </div>
-      </Teleport>
+      </div>
+
+      <!-- รายการขนส่ง -->
+      <div v-if="booking.items.length" class="card-lg no-print">
+        <h3 class="font-semibold text-text mb-3">รายการขนส่ง</h3>
+        <div class="space-y-2">
+          <div
+            v-for="(item, idx) in booking.items"
+            :key="item.id"
+            class="text-sm bg-surface-2 rounded-lg p-3 border border-border space-y-1"
+          >
+            <div class="font-semibold text-text flex items-center justify-between">
+              <span>{{ idx + 1 }}. {{ item.siteName }}</span>
+              <span :class="item.deliveryStatus === 'DELIVERED' ? 'text-green-600' : 'text-amber-600'" class="text-xs font-semibold">
+                {{ item.deliveryStatus === 'DELIVERED' ? `ส่งแล้ว (ผู้รับ: ${item.deliveredBy})` : 'รอส่ง' }}
+              </span>
+            </div>
+            <div class="text-xs text-muted">{{ item.province }} · {{ item.district }}</div>
+            <div><span class="text-muted">สินค้า:</span> {{ item.product }} {{ item.qty }} {{ item.unit }}</div>
+            <div><span class="text-muted">ต้นทาง:</span> {{ item.pickupOriginName || booking.origin || '-' }}</div>
+            <div><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName || '-' }} {{ item.sitePhone ? '· ' + item.sitePhone : '' }}</div>
+            <div>
+              <span class="text-muted">พิกัด:</span>
+              {{ item.latitude !== undefined && item.longitude !== undefined ? `${item.latitude}, ${item.longitude}` : item.mapUrl || '-' }}
+            </div>
+            <div v-if="isMulti" class="font-semibold text-text">
+              <span class="text-muted font-normal">ค่าเที่ยว:</span>
+              {{ formatBaht(item.tripFee || 0) }} x {{ item.tripCount || 1 }} = {{ formatBaht((item.tripFee || 0) * (item.tripCount || 1)) }}
+            </div>
+            <img v-if="item.podImage" :src="item.podImage" class="w-full max-h-32 object-contain rounded border border-border" />
+          </div>
+        </div>
+        <div v-if="isMulti" class="text-sm text-text mt-2 text-right font-semibold">
+          รวมค่าเที่ยวทั้งงาน: {{ formatBaht(booking.tripFee) }}
+        </div>
+      </div>
+
+      <!-- ราคา/ค่าใช้จ่าย -->
+      <div class="card-lg no-print space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="font-semibold text-text">ราคา/ค่าใช้จ่าย</h3>
+          <button
+            v-if="!isEditing && !isMulti"
+            @click="startEdit"
+            :disabled="!canEditPrice"
+            :title="canEditPrice ? 'แก้ไขราคา' : 'ราคาถูกล็อกหลังจัดรถแล้ว แก้ไขได้เฉพาะ Admin'"
+            class="btn-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <span class="material-symbols-rounded text-base">edit</span>
+            แก้ไข
+          </button>
+        </div>
+        <div v-if="isMulti" class="text-[11px] text-muted -mt-2">
+          งานนี้แยกค่าเที่ยวตามปลายทาง — แก้ไขราคาแบบแยกปลายทางได้ที่หน้าแก้ไขงาน (ปุ่มแก้ไขงานในรายการงาน)
+        </div>
+        <div v-if="!isEditing" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="bg-surface-2 rounded-lg p-3">
+            <div class="text-xs text-muted mb-1">ค่าเที่ยว</div>
+            <div class="font-bold text-text">{{ formatBaht(booking.tripFee) }}</div>
+          </div>
+          <div class="bg-surface-2 rounded-lg p-3">
+            <div class="text-xs text-muted mb-1">ราคาที่ตกลง</div>
+            <div class="font-bold text-text">{{ formatBaht(booking.agreedPrice) }}</div>
+          </div>
+        </div>
+        <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-muted mb-1">ค่าเที่ยว</label>
+            <input v-model.number="priceForm.tripFee" type="number" class="input-field w-full" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-muted mb-1">ราคาที่ตกลง</label>
+            <input v-model.number="priceForm.agreedPrice" type="number" class="input-field w-full" />
+          </div>
+          <div class="sm:col-span-2 flex justify-end gap-2">
+            <button @click="isEditing = false" class="btn-secondary">ยกเลิก</button>
+            <button @click="savePrice" class="btn-sm text-primary">
+              <span class="material-symbols-rounded text-base">save</span>
+              บันทึกราคา
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="bg-surface-2 rounded-lg p-3">
+            <div class="text-xs text-muted mb-1">น้ำมัน</div>
+            <div class="font-bold text-text">{{ booking.fuelLiters || 0 }} ล. x {{ formatBaht(booking.fuelRate) }}</div>
+          </div>
+          <div class="bg-surface-2 rounded-lg p-3">
+            <div class="text-xs text-muted mb-1">เบี้ยเลี้ยง</div>
+            <div class="font-bold text-text">{{ formatBaht(booking.allowance) }}</div>
+          </div>
+          <div v-if="booking.finalAllowance !== undefined" class="bg-primary text-white rounded-lg p-3 sm:col-span-2">
+            <div class="text-xs opacity-90 mb-1">เบี้ยเลี้ยงสุทธิ</div>
+            <div class="font-bold">{{ formatBaht(booking.finalAllowance) }}</div>
+          </div>
+        </div>
+
+        <div v-if="booking.extraCharges?.length">
+          <div class="text-xs font-semibold text-muted mb-1">ค่าใช้จ่ายเพิ่มเติม (extra)</div>
+          <div v-for="extra in booking.extraCharges" :key="extra.id" class="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
+            <span class="text-text">{{ extra.label }}</span>
+            <span class="text-text">{{ formatBaht(extra.amount) }}</span>
+          </div>
+        </div>
+
+        <div v-if="booking.debtAdjustments?.length">
+          <div class="text-xs font-semibold text-muted mb-1">รายการเพิ่ม/ลดหนี้</div>
+          <div v-for="adj in booking.debtAdjustments" :key="adj.id" class="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
+            <span class="text-text">{{ adj.label || '-' }}</span>
+            <span :class="adj.amount >= 0 ? 'text-red-500' : 'text-green-600'">{{ adj.amount >= 0 ? '-' : '+' }}{{ formatBaht(Math.abs(adj.amount)) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- POD -->
+      <div v-if="booking.podImage" class="card-lg no-print">
+        <h3 class="font-semibold text-text mb-3">รูปหลักฐานการส่งมอบสินค้า (POD)</h3>
+        <img :src="booking.podImage" class="w-full max-h-64 object-contain rounded-lg border border-border" />
+      </div>
+
+      <!-- หมายเหตุ -->
+      <div class="card-lg no-print">
+        <h3 class="font-semibold text-text mb-3">หมายเหตุ</h3>
+        <div class="text-sm text-text">{{ booking.note || '-' }}</div>
+      </div>
+
+      <!-- ประวัติ -->
+      <div class="card-lg no-print">
+        <h3 class="font-semibold text-text mb-3">ประวัติ</h3>
+        <EntityTimeline :booking-id="booking.id" />
+      </div>
     </template>
   </div>
 </template>
@@ -360,8 +376,6 @@ const isMulti = computed(() => (booking.value?.pricingMode ?? 'SINGLE_DESTINATIO
 const customer = computed(() => customerStore.lookupCustomer(booking.value?.customer || ''))
 const relatedBatchId = computed(() => booking.value?.batchId)
 const relatedInvoice = computed(() => bookingStore.documents.find((d) => booking.value && d.bookingIds.includes(booking.value.id)))
-
-const detailDrawerOpen = ref(false)
 
 /** ยังไม่จัดคนขับ = ใบสั่งซื้อสินค้า (Purchase Order), จัดคนขับแล้ว = ใบสั่งงานขนส่ง (Work Order) */
 const isDispatched = computed(() => !!booking.value?.driverName)
