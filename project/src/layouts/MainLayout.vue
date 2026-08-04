@@ -3,8 +3,8 @@
     <!-- Sidebar -->
     <aside
       :class="[
-        'w-64 h-full bg-surface border-r border-border flex flex-col overflow-hidden transition-all duration-300',
-        !sidebarOpen && 'hidden md:flex',
+        'w-64 h-full bg-surface border-r border-border flex-col overflow-hidden transition-all duration-300',
+        sidebarOpen ? 'flex fixed inset-y-0 left-0 z-40 md:static md:z-auto' : 'hidden md:flex md:static',
       ]"
     >
       <!-- Logo -->
