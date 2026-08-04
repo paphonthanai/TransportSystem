@@ -23,46 +23,57 @@
     <div v-if="!booking" class="card-lg text-center text-muted py-12">ไม่พบงาน</div>
 
     <template v-else>
-      <!-- Printable PO / Quotation Sheet -->
-      <div id="print-area" class="print-sheet bg-white text-black rounded-xl shadow-default border border-border p-10 max-w-3xl mx-auto">
-        <div class="flex items-start justify-between border-b-2 border-black pb-4 mb-4">
-          <div class="flex items-start gap-3">
-            <img v-if="documentSettingsStore.settings.company.logo" :src="documentSettingsStore.settings.company.logo" class="w-14 h-14 object-contain flex-shrink-0" />
-            <div>
-              <div class="text-lg font-bold">{{ documentSettingsStore.settings.company.name }}</div>
-              <div class="text-xs leading-relaxed max-w-xs">{{ documentSettingsStore.settings.company.address }}</div>
-              <div class="text-xs">เลขประจำตัวผู้เสียภาษี: {{ documentSettingsStore.settings.company.taxId }}</div>
-            </div>
-          </div>
-          <div class="text-right">
-            <div class="text-xl font-bold">{{ docTitleTh }}</div>
-            <div class="text-xs text-gray-600">{{ docTitleEn }}</div>
-          </div>
-        </div>
+      <!-- Printable PO / Work Order Sheet -->
+      <div id="print-area" class="print-sheet bg-white text-black rounded-xl shadow-default border border-border p-10 max-w-3xl mx-auto relative">
+        <div class="corner-flag"></div>
+        <div class="absolute top-2.5 right-3 text-white text-xs font-bold z-10">1</div>
 
-        <div class="grid grid-cols-2 gap-4 text-sm mb-4">
-          <div>
-            <div class="font-semibold mb-1">ลูกค้า</div>
-            <div class="font-bold">{{ booking.customer }}</div>
-            <div class="text-xs leading-relaxed">{{ customer.address }}{{ customer.zipCode ? ' ' + customer.zipCode : '' }}</div>
-            <div class="text-xs">เลขประจำตัวผู้เสียภาษี: {{ customer.taxId }}</div>
+        <div class="flex items-start justify-between mb-6">
+          <div class="max-w-[55%] space-y-4">
+            <div class="flex items-start gap-3">
+              <img v-if="documentSettingsStore.settings.company.logo" :src="documentSettingsStore.settings.company.logo" class="w-12 h-12 object-contain flex-shrink-0" />
+              <div>
+                <div class="text-base font-bold">{{ documentSettingsStore.settings.company.name }}</div>
+                <div class="text-xs leading-relaxed text-gray-600 max-w-xs">{{ documentSettingsStore.settings.company.address }}</div>
+                <div class="text-xs text-gray-600">เลขประจำตัวผู้เสียภาษี: {{ documentSettingsStore.settings.company.taxId }}</div>
+              </div>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-primary mb-0.5">ลูกค้า</div>
+              <div class="font-bold text-sm">{{ booking.customer }}</div>
+              <div class="text-xs leading-relaxed text-gray-700">{{ customer.address }}{{ customer.zipCode ? ' ' + customer.zipCode : '' }}</div>
+              <div class="text-xs text-gray-700">เลขประจำตัวผู้เสียภาษี {{ customer.taxId || '-' }}</div>
+            </div>
           </div>
-          <div class="text-sm">
-            <div class="flex justify-between">
-              <span class="text-gray-600">เลขที่เอกสาร</span>
-              <span class="font-bold">{{ booking.docNo }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-600">ใบสั่งงาน (PO)</span>
-              <span>{{ booking.po || '-' }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-600">วันที่ออกเอกสาร</span>
-              <span>{{ formatDate(booking.createdAt) }}</span>
-            </div>
-            <div v-if="booking.shipDate" class="flex justify-between">
-              <span class="text-gray-600">วันที่ขนส่ง</span>
-              <span>{{ formatDate(booking.shipDate) }}</span>
+
+          <div class="text-right flex-shrink-0">
+            <div class="text-2xl font-bold text-primary">{{ docTitleTh }}</div>
+            <div class="text-xs text-gray-500 mb-3">{{ docTitleEn }}</div>
+            <div class="doc-meta-box text-left text-xs w-64">
+              <div class="flex justify-between gap-4">
+                <span class="text-gray-500">เลขที่เอกสาร</span>
+                <span class="font-semibold">{{ booking.docNo }}</span>
+              </div>
+              <div class="flex justify-between gap-4">
+                <span class="text-gray-500">ใบสั่งงาน (PO)</span>
+                <span class="font-semibold">{{ booking.po || '-' }}</span>
+              </div>
+              <div class="flex justify-between gap-4">
+                <span class="text-gray-500">เลขที่ใบปล่อยรถ</span>
+                <span class="font-semibold">{{ booking.releaseNo || '-' }}</span>
+              </div>
+              <div class="flex justify-between gap-4">
+                <span class="text-gray-500">วันที่ออกเอกสาร</span>
+                <span class="font-semibold">{{ formatDate(booking.createdAt) }}</span>
+              </div>
+              <div v-if="booking.shipDate" class="flex justify-between gap-4">
+                <span class="text-gray-500">วันที่ขนส่ง</span>
+                <span class="font-semibold">{{ formatDate(booking.shipDate) }}</span>
+              </div>
+              <div v-if="booking.reference" class="flex justify-between gap-4">
+                <span class="text-gray-500">เลขที่อ้างอิง</span>
+                <span class="font-semibold text-right max-w-[60%] truncate">{{ booking.reference }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -70,7 +81,7 @@
         <table class="w-full text-sm border border-gray-400 mb-4">
           <thead class="bg-gray-100">
             <tr>
-              <th class="border border-gray-400 px-2 py-1 text-left w-10">ลำดับ</th>
+              <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
               <th class="border border-gray-400 px-2 py-1 text-left">รายละเอียด (ปลายทาง / สินค้า)</th>
               <th class="border border-gray-400 px-2 py-1 text-right w-20">ปริมาณ</th>
               <th class="border border-gray-400 px-2 py-1 text-left w-16">หน่วย</th>
@@ -109,8 +120,12 @@
               <span class="text-gray-600">ราคาที่ตกลงกับลูกค้า</span>
               <span>{{ formatBaht(booking.agreedPrice) }}</span>
             </div>
+            <div v-if="discountTotal > 0" class="flex justify-between">
+              <span class="text-gray-600">ส่วนลดรวม</span>
+              <span>-{{ formatBaht(discountTotal) }}</span>
+            </div>
             <div v-if="showVatRow" class="flex justify-between">
-              <span class="text-gray-600">ภาษีมูลค่าเพิ่ม {{ documentSettingsStore.settings.vatRate }}%</span>
+              <span class="text-gray-600">ภาษีมูลค่าเพิ่ม{{ booking.vatRate ? ` ${booking.vatRate}%` : '' }}</span>
               <span>{{ formatBaht(vatAmount) }}</span>
             </div>
             <div class="flex justify-between font-bold border-t border-black pt-1">
@@ -120,12 +135,25 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-6 text-sm text-center mt-16">
+        <div class="grid grid-cols-2 gap-8 text-sm mt-16">
           <div>
-            <div class="border-t border-gray-500 pt-2 mx-8">ผู้เสนอราคา</div>
+            <div class="font-semibold mb-8">ในนาม {{ booking.customer }}</div>
+            <div class="grid grid-cols-2 gap-4 text-center">
+              <div class="border-t border-gray-500 pt-2">ผู้สั่งซื้อ / ผู้อนุมัติ</div>
+              <div class="border-t border-gray-500 pt-2">วันที่</div>
+            </div>
           </div>
-          <div>
-            <div class="border-t border-gray-500 pt-2 mx-8">ผู้สั่งซื้อ / ผู้อนุมัติ</div>
+          <div class="relative">
+            <img
+              v-if="documentSettingsStore.settings.company.stamp"
+              :src="documentSettingsStore.settings.company.stamp"
+              class="w-14 h-14 object-contain absolute right-6 -top-12 opacity-90"
+            />
+            <div class="font-semibold mb-8">ในนาม {{ documentSettingsStore.settings.company.name }}</div>
+            <div class="grid grid-cols-2 gap-4 text-center">
+              <div class="border-t border-gray-500 pt-2">ผู้เสนอราคา</div>
+              <div class="border-t border-gray-500 pt-2">วันที่</div>
+            </div>
           </div>
         </div>
       </div>
@@ -357,6 +385,7 @@ import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { bahtText } from '@/utils/companyInfo'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
+import { computeRowDiscountBaht, computeRowAmount, computeRowVat } from '@/utils/documentTotals'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import type { Booking } from '@/types'
 
@@ -421,10 +450,21 @@ const mileageSummary = computed(() => {
 
 const subtotalAmount = computed(() => booking.value?.agreedPrice || booking.value?.tripFee || 0)
 const showVatRow = computed(() => documentSettingsStore.settings.calcMode.purchase.vat !== 'included')
-const vatAmount = computed(() =>
-  showVatRow.value ? Math.round((subtotalAmount.value * documentSettingsStore.settings.vatRate) / 100) : 0
-)
-const grandTotal = computed(() => subtotalAmount.value + vatAmount.value)
+
+/** แถวสังเคราะห์ 1 แถวป้อนเข้า documentTotals.ts engine เดียวกับที่ BookingCreateView.vue ใช้ — ไม่เขียนสูตรคำนวณใหม่
+ *  ใช้ discountMode/discountPercent/discountAmount/vatRate ของงานนี้เอง แทนค่าคงที่ระดับระบบเหมือนเดิม */
+const pricingRow = computed(() => ({
+  qty: 1,
+  unitPrice: subtotalAmount.value,
+  discountMode: booking.value?.discountMode,
+  discountPercent: booking.value?.discountPercent,
+  discountAmount: booking.value?.discountAmount,
+  vatRate: booking.value?.vatRate,
+}))
+const discountTotal = computed(() => computeRowDiscountBaht(pricingRow.value))
+const afterDiscount = computed(() => computeRowAmount(pricingRow.value))
+const vatAmount = computed(() => (showVatRow.value ? computeRowVat(pricingRow.value) : 0))
+const grandTotal = computed(() => afterDiscount.value + vatAmount.value)
 
 const formatBaht = (value: number) =>
   `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
@@ -451,3 +491,20 @@ const savePrice = () => {
   isEditing.value = false
 }
 </script>
+
+<style scoped>
+.corner-flag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 56px 56px 0;
+  border-color: transparent var(--primary) transparent transparent;
+}
+
+.doc-meta-box {
+  @apply border border-gray-300 rounded-lg p-3 space-y-1;
+}
+</style>
