@@ -447,6 +447,7 @@ import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { useOriginsStore } from '@/stores/origins'
+import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import type { Booking, BookingCategory, BookingJobType, BookingStatus, DebtAdjustment, JobItem } from '@/types'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
 import { parseGpsInput } from '@/utils/gps'
@@ -462,6 +463,7 @@ const inventoryStore = useInventoryStore()
 const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
 const originsStore = useOriginsStore()
+const salesDocumentsStore = useSalesDocumentsStore()
 
 /** หาคนขับจากชื่อเต็ม รองรับทั้งแบบมีคำนำหน้าและไม่มี (เดิมเคยอยู่ใน driversStore.findDriverByVehicle) */
 const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
@@ -833,11 +835,15 @@ const completeMileageSummary = computed(() => {
 
 const confirmComplete = () => {
   if (!completeTarget.value) return
+  const bookingId = completeTarget.value.id
   bookingStore.completeJob(
-    completeTarget.value.id,
+    bookingId,
     debtAdjustments.value.filter((d) => d.label || d.amount),
     completeOdometerAfter.value || undefined
   )
+  /** ส่งของสำเร็จแล้ว -> สร้างใบวางบิลอัตโนมัติทันที ไม่ต้องรอผู้ใช้กด "สร้างใบวางบิล" เอง
+   *  เรียก createBillingFromBookings ตัวเดียวกับที่ปุ่มสร้างใบวางบิลด้วยมือใช้อยู่แล้ว ไม่มี logic คำนวณใหม่ */
+  salesDocumentsStore.createBillingFromBookings([bookingId])
   completeTarget.value = null
 }
 

@@ -285,12 +285,14 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
+import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import type { Booking, JobItem } from '@/types'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
 const authStore = useAuthStore()
+const salesDocumentsStore = useSalesDocumentsStore()
 
 const driverOptions = ['สมชาย ทองดี', 'ประเสริฐ มั่นคง', 'วิรัตน์ ใจกล้า', 'สมหมาย เพียรงาน', 'ธีรพงษ์ ขยันยิ่ง']
 
@@ -426,7 +428,10 @@ const closeFinishJob = () => {
 
 const confirmFinishJob = () => {
   if (!finishTarget.value) return
-  bookingStore.finishDriverJob(finishTarget.value.id, finishOdometerAfter.value || undefined)
+  const bookingId = finishTarget.value.id
+  bookingStore.finishDriverJob(bookingId, finishOdometerAfter.value || undefined)
+  /** ส่งของสำเร็จแล้ว -> สร้างใบวางบิลอัตโนมัติทันที เหมือนฝั่งออฟฟิศใน BookingView.vue */
+  salesDocumentsStore.createBillingFromBookings([bookingId])
   closeFinishJob()
 }
 </script>
