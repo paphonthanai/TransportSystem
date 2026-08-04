@@ -304,6 +304,7 @@ import { useAuthStore } from '@/stores/auth'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
+import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
 
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
@@ -414,12 +415,12 @@ const onProductSelected = (idx: number, productId: string) => {
   row.vatRate = product.vatRate ?? row.vatRate
 }
 
-const rowAmount = (row: Row) => row.qty * row.unitPrice * (1 - (row.discountPercent || 0) / 100)
-const rowVat = (row: Row) => (rowAmount(row) * (row.vatRate || 0)) / 100
-const rowWht = (row: Row) => (rowAmount(row) * (row.whtRate || 0)) / 100
+const rowAmount = (row: Row) => computeRowAmount(row)
+const rowVat = (row: Row) => computeRowVat(row)
+const rowWht = (row: Row) => computeRowWht(row)
 
 const subtotal = computed(() => rows.value.reduce((sum, r) => sum + r.qty * r.unitPrice, 0))
-const discountTotal = computed(() => rows.value.reduce((sum, r) => sum + r.qty * r.unitPrice * ((r.discountPercent || 0) / 100), 0))
+const discountTotal = computed(() => rows.value.reduce((sum, r) => sum + computeRowDiscountBaht(r), 0))
 const afterDiscount = computed(() => subtotal.value - discountTotal.value)
 const exemptAmount = computed(() => rows.value.filter((r) => !r.vatRate).reduce((sum, r) => sum + rowAmount(r), 0))
 const taxableAmount = computed(() => rows.value.filter((r) => r.vatRate > 0).reduce((sum, r) => sum + rowAmount(r), 0))

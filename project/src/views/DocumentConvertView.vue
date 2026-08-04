@@ -103,6 +103,7 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentType, type QuotationConvertOverrides } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { computeRowAmount } from '@/utils/documentTotals'
 
 type SourceType = 'quotation' | 'billing'
 type TargetType = 'billing' | 'invoice' | 'cash_sale' | 'purchase_order'
@@ -157,7 +158,7 @@ const addRow = () => {
   rows.value.push({ description: '', qty: 1, unit: '', unitPrice: 0, discountPercent: 0 })
 }
 
-const rowAmount = (row: Row) => row.qty * row.unitPrice * (1 - (row.discountPercent || 0) / 100)
+const rowAmount = (row: Row) => computeRowAmount(row)
 const grandTotal = computed(() => rows.value.reduce((sum, r) => sum + rowAmount(r), 0))
 
 const canSubmit = computed(() => customer.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0))
