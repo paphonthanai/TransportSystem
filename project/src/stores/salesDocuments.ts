@@ -116,6 +116,10 @@ export interface SalesDocumentItem {
   unitPrice: number
   /** ส่วนลดรายการ (%) */
   discountPercent?: number
+  /** โหมดส่วนลดรายการนี้ — ไม่มีค่า/'percent' = ใช้ discountPercent, 'fixed' = ใช้ discountAmount (บาท) */
+  discountMode?: 'percent' | 'fixed'
+  /** ส่วนลดรายการแบบตายตัว (บาท) ใช้เมื่อ discountMode === 'fixed' */
+  discountAmount?: number
   /** ยอดที่คำนวณ ณ ตอนบันทึก = qty * unitPrice หักส่วนลดแล้ว ไม่คำนวณสดใหม่ทุกครั้ง */
   amount: number
   vatRate?: number

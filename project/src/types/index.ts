@@ -144,6 +144,12 @@ export interface Booking {
   route?: string
   /** ต้นทาง (จุดขึ้นสินค้า) ระดับงาน */
   origin?: string
+  /** เลขที่อ้างอิงเอกสาร (ถ้ามี) */
+  reference?: string
+  /** รายละเอียดงาน */
+  description?: string
+  /** หมายเหตุ */
+  note?: string
   customer: string
   /** รายการสินค้า/ปลายทางภายในงานนี้ (1 งานมีได้หลายรายการ) */
   items: JobItem[]
