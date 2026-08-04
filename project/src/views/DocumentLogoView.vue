@@ -19,8 +19,16 @@
         <input v-model="documentSettingsStore.settings.company.address" class="input-field w-full" />
       </div>
       <div>
+        <label class="block text-xs font-semibold text-muted mb-1">รหัสไปรษณีย์</label>
+        <input v-model="documentSettingsStore.settings.company.zipCode" class="input-field w-full max-w-xs" />
+      </div>
+      <div>
         <label class="block text-xs font-semibold text-muted mb-1">เลขประจำตัวผู้เสียภาษี</label>
         <input v-model="documentSettingsStore.settings.company.taxId" class="input-field w-full max-w-xs" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทร</label>
+        <input v-model="documentSettingsStore.settings.company.phone" class="input-field w-full max-w-xs" />
       </div>
     </div>
 

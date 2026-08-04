@@ -10,7 +10,9 @@ export interface DocumentSettings {
   company: {
     name: string
     address: string
+    zipCode: string
     taxId: string
+    phone: string
     logo: string | null
     stamp: string | null
   }
@@ -26,6 +28,10 @@ export interface DocumentSettings {
     receipt: { prefix: string; padding: number }
     wht: { prefix: string; padding: number }
     billingList: { prefix: string; padding: number }
+    quotation: { prefix: string; padding: number }
+    cashSale: { prefix: string; padding: number }
+    purchaseOrder: { prefix: string; padding: number }
+    salesOrder: { prefix: string; padding: number }
   }
   payment: {
     bankName: string
@@ -47,8 +53,10 @@ function defaultSettings(): DocumentSettings {
   return {
     company: {
       name: 'บริษัท ธัญธารา จำกัด (สำนักงานใหญ่)',
-      address: '99 หมู่ 4 ถ.มิตรภาพ ต.ปากช่อง อ.ปากช่อง จ.นครราชสีมา 30130',
+      address: '99 หมู่ 4 ถ.มิตรภาพ ต.ปากช่อง อ.ปากช่อง จ.นครราชสีมา',
+      zipCode: '30130',
       taxId: '0305566001234',
+      phone: '',
       logo: null,
       stamp: null,
     },
@@ -64,6 +72,10 @@ function defaultSettings(): DocumentSettings {
       receipt: { prefix: 'RE', padding: 4 },
       wht: { prefix: 'WHT', padding: 4 },
       billingList: { prefix: 'VB', padding: 4 },
+      quotation: { prefix: 'QT', padding: 4 },
+      cashSale: { prefix: 'CS', padding: 4 },
+      purchaseOrder: { prefix: 'PO', padding: 4 },
+      salesOrder: { prefix: 'SO', padding: 4 },
     },
     payment: {
       bankName: '',
@@ -99,6 +111,10 @@ function mergeWithDefaults(raw: any): DocumentSettings {
       receipt: { ...def.numbering.receipt, ...raw?.numbering?.receipt },
       wht: { ...def.numbering.wht, ...raw?.numbering?.wht },
       billingList: { ...def.numbering.billingList, ...raw?.numbering?.billingList },
+      quotation: { ...def.numbering.quotation, ...raw?.numbering?.quotation },
+      cashSale: { ...def.numbering.cashSale, ...raw?.numbering?.cashSale },
+      purchaseOrder: { ...def.numbering.purchaseOrder, ...raw?.numbering?.purchaseOrder },
+      salesOrder: { ...def.numbering.salesOrder, ...raw?.numbering?.salesOrder },
     },
     payment: { ...def.payment, ...raw?.payment },
     currency: { ...def.currency, ...raw?.currency },

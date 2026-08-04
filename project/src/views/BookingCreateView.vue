@@ -130,54 +130,63 @@
       <div v-if="lineItems.length === 0" class="border border-border rounded-lg px-4 py-6 text-center text-muted text-sm">
         ยังไม่มีรายการ กด "เพิ่มรายการ" เพื่อเริ่มกรอกสินค้า/ปลายทาง
       </div>
-      <div v-else class="overflow-x-auto border border-border rounded-lg">
-        <table class="w-full text-sm">
-          <thead class="bg-surface-2 border-b border-border">
-            <tr>
-              <th class="text-left px-3 py-2 font-semibold text-muted">สินค้า</th>
-              <th class="text-right px-3 py-2 font-semibold text-muted">จำนวน</th>
-              <th class="text-left px-3 py-2 font-semibold text-muted">ปลายทาง</th>
-              <th class="text-left px-3 py-2 font-semibold text-muted">ข้อมูลติดต่อ</th>
-              <th class="text-right px-3 py-2 font-semibold text-muted">น้ำมันมาตรฐาน</th>
-              <template v-if="header.pricingMode === 'MULTI_DESTINATION'">
-                <th class="text-right px-3 py-2 font-semibold text-muted">ค่าเที่ยว/เที่ยว</th>
-                <th class="text-right px-3 py-2 font-semibold text-muted">รวม</th>
-              </template>
-              <th class="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(li, idx) in lineItems" :key="li.id" class="border-b border-border last:border-0">
-              <td class="px-3 py-2 text-text">{{ li.product }} <span v-if="li.jobType" class="text-muted">({{ li.jobType }})</span></td>
-              <td class="px-3 py-2 text-right text-text">{{ li.qty }} {{ li.unit }}</td>
-              <td class="px-3 py-2 text-text">
-                {{ li.siteName }} <span class="text-muted">({{ li.province }} / {{ li.district }})</span>
-                <span v-if="idx === 0 && header.pricingMode === 'SINGLE_DESTINATION'" class="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary-soft text-primary">รายการหลัก</span>
-              </td>
-              <td class="px-3 py-2 text-muted">{{ li.siteContactName || '-' }} {{ li.sitePhone ? `(${li.sitePhone})` : '' }}</td>
-              <td class="px-3 py-2 text-right text-muted">{{ fuelRateStore.findRate(li.province, li.district)?.liters ?? '-' }}</td>
-              <template v-if="header.pricingMode === 'MULTI_DESTINATION'">
-                <td class="px-3 py-2 text-right text-text">{{ formatBaht(li.tripFee || 0) }} x {{ li.tripCount || 1 }}</td>
-                <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht((li.tripFee || 0) * (li.tripCount || 1)) }}</td>
-              </template>
-              <td class="px-3 py-2 text-right whitespace-nowrap">
-                <button @click="openEditItem(idx)" class="text-muted hover:text-text mr-2">
-                  <span class="material-symbols-rounded text-base">edit</span>
-                </button>
-                <button @click="removeLineItem(idx)" class="text-red-500 hover:text-red-700">
-                  <span class="material-symbols-rounded text-base">delete</span>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-          <tfoot v-if="header.pricingMode === 'MULTI_DESTINATION' && lineItems.length">
-            <tr class="bg-surface-2 font-semibold text-text">
-              <td colspan="6" class="px-3 py-2 text-right">รวมค่าเที่ยวทั้งงาน</td>
-              <td class="px-3 py-2 text-right">{{ formatBaht(multiTripFeeTotal) }}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+      <template v-else>
+        <div v-if="hasIncompleteDestination" class="text-xs text-amber-600 flex items-center gap-1 mb-2">
+          <span class="material-symbols-rounded text-sm">info</span>
+          เติมสินค้า/จำนวนจากใบเสนอราคาให้แล้ว แต่ยังไม่มีปลายทาง — กด "แก้ไข" ที่แต่ละรายการเพื่อกรอกสถานที่ส่งสินค้า/จังหวัด/อำเภอก่อนบันทึกงาน
+        </div>
+        <div class="overflow-x-auto border border-border rounded-lg">
+          <table class="w-full text-sm">
+            <thead class="bg-surface-2 border-b border-border">
+              <tr>
+                <th class="text-left px-3 py-2 font-semibold text-muted">สินค้า</th>
+                <th class="text-right px-3 py-2 font-semibold text-muted">จำนวน</th>
+                <th class="text-left px-3 py-2 font-semibold text-muted">ปลายทาง</th>
+                <th class="text-left px-3 py-2 font-semibold text-muted">ข้อมูลติดต่อ</th>
+                <th class="text-right px-3 py-2 font-semibold text-muted">น้ำมันมาตรฐาน</th>
+                <template v-if="header.pricingMode === 'MULTI_DESTINATION'">
+                  <th class="text-right px-3 py-2 font-semibold text-muted">ค่าเที่ยว/เที่ยว</th>
+                  <th class="text-right px-3 py-2 font-semibold text-muted">รวม</th>
+                </template>
+                <th class="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(li, idx) in lineItems" :key="li.id" class="border-b border-border last:border-0">
+                <td class="px-3 py-2 text-text">{{ li.product }} <span v-if="li.jobType" class="text-muted">({{ li.jobType }})</span></td>
+                <td class="px-3 py-2 text-right text-text">{{ li.qty }} {{ li.unit }}</td>
+                <td class="px-3 py-2 text-text">
+                  <span v-if="li.siteName">
+                    {{ li.siteName }} <span class="text-muted">({{ li.province }} / {{ li.district }})</span>
+                  </span>
+                  <span v-else class="text-amber-600 text-xs">ยังไม่ได้กรอกปลายทาง</span>
+                  <span v-if="idx === 0 && header.pricingMode === 'SINGLE_DESTINATION'" class="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary-soft text-primary">รายการหลัก</span>
+                </td>
+                <td class="px-3 py-2 text-muted">{{ li.siteContactName || '-' }} {{ li.sitePhone ? `(${li.sitePhone})` : '' }}</td>
+                <td class="px-3 py-2 text-right text-muted">{{ fuelRateStore.findRate(li.province, li.district)?.liters ?? '-' }}</td>
+                <template v-if="header.pricingMode === 'MULTI_DESTINATION'">
+                  <td class="px-3 py-2 text-right text-text">{{ formatBaht(li.tripFee || 0) }} x {{ li.tripCount || 1 }}</td>
+                  <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht((li.tripFee || 0) * (li.tripCount || 1)) }}</td>
+                </template>
+                <td class="px-3 py-2 text-right whitespace-nowrap">
+                  <button @click="openEditItem(idx)" class="text-muted hover:text-text mr-2">
+                    <span class="material-symbols-rounded text-base">edit</span>
+                  </button>
+                  <button @click="removeLineItem(idx)" class="text-red-500 hover:text-red-700">
+                    <span class="material-symbols-rounded text-base">delete</span>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot v-if="header.pricingMode === 'MULTI_DESTINATION' && lineItems.length">
+              <tr class="bg-surface-2 font-semibold text-text">
+                <td colspan="6" class="px-3 py-2 text-right">รวมค่าเที่ยวทั้งงาน</td>
+                <td class="px-3 py-2 text-right">{{ formatBaht(multiTripFeeTotal) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </template>
     </div>
 
     <!-- สรุปงาน -->
@@ -236,19 +245,22 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useDriversStore } from '@/stores/drivers'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
+import { useSalesDocumentsStore } from '@/stores/salesDocuments'
+import { useDocumentPrefillStore } from '@/stores/documentPrefill'
 import type { Booking, BookingCategory, BookingStatus, JobItem, PricingMode } from '@/types'
 import { parseGpsInput } from '@/utils/gps'
 import JobItemEditorModal, { type JobItemDraft } from '@/components/booking/JobItemEditorModal.vue'
 
 const props = defineProps<{ fleet: BookingCategory }>()
 
+const route = useRoute()
 const router = useRouter()
 const bookingStore = useBookingStore()
 const driversStore = useDriversStore()
@@ -256,6 +268,8 @@ const vehiclesStore = useVehiclesStore()
 const inventoryStore = useInventoryStore()
 const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
+const salesDocumentsStore = useSalesDocumentsStore()
+const documentPrefillStore = useDocumentPrefillStore()
 const fixedCustomer = bookingStore.fixedCustomer
 
 /** หาคนขับจากชื่อเต็ม รองรับทั้งแบบมีคำนำหน้าและไม่มี (เดิมเคยอยู่ใน driversStore.findDriverByVehicle) */
@@ -292,25 +306,55 @@ const driverOptionLabel = (name: string) => {
   return `${name} — กำลังวิ่งเที่ยวที่ ${tripNo} (${activeBooking.docNo})`
 }
 
+/**
+ * รับ query params จากปุ่ม "สร้างใบสั่งงาน" (ทางลัดจากใบเสนอราคา) หรือ "สร้างใบสั่งสินค้า"/"สร้างใหม่"
+ * (สะพานข้าม Sales → Operations) — ใบเสนอราคาไม่มีโครงสร้างข้อมูลตรงกับ JobItem (ไม่มีปลายทาง/จังหวัด/อำเภอ)
+ * จึง sync ได้แค่ระดับหัวเอกสาร ส่วนรายการขนส่งจริงยังต้องให้ผู้ใช้กรอกเองผ่าน "เพิ่มรายการ" ตามปกติ
+ */
+const prefill = route.query
+/** มาจาก "สร้างใบสั่งสินค้า" (ใบเสนอราคา) หรือ "สร้างใหม่" (หน้ารายการใบสั่งสินค้า) — บันทึกงานสำเร็จแล้วต้องสร้าง
+ * ระเบียนใบสั่งสินค้าที่ผูกกับงานนี้อัตโนมัติ ดูฟังก์ชัน createSalesOrderForBooking ใน salesDocuments.ts */
+const sourceIsSalesOrder = prefill.source === 'sales_order'
+/** ถ้ามาจากใบเสนอราคา (ทั้งทางลัด "สร้างใบสั่งงาน" และ "สร้างใบสั่งสินค้า") ให้ผูกอ้างอิงกลับไปเพื่อดูย้อนหลังได้ */
+const sourceQuotationId = typeof prefill.quotationId === 'string' ? prefill.quotationId : undefined
 const defaultHeader = () => ({
-  po: '',
-  shipDate: new Date().toISOString().slice(0, 10),
+  po: (prefill.po as string) || '',
+  shipDate: (prefill.shipDate as string) || new Date().toISOString().slice(0, 10),
   jobDate: new Date().toISOString().slice(0, 10),
   returnDate: '',
-  customer: isCements.value ? '' : fixedCustomer,
+  customer: (prefill.customer as string) || (isCements.value ? '' : fixedCustomer),
   plate: '',
   driverName: '',
   shipmentNo: '',
-  route: '',
-  origin: '',
-  tripFee: 0,
-  agreedPrice: 0,
+  route: (prefill.route as string) || '',
+  origin: (prefill.origin as string) || '',
+  tripFee: prefill.amount ? Number(prefill.amount) : 0,
+  agreedPrice: prefill.amount ? Number(prefill.amount) : 0,
   allowance: 0,
   pricingMode: 'SINGLE_DESTINATION' as PricingMode,
 })
 const header = ref(defaultHeader())
 
-const lineItems = ref<JobItem[]>([])
+/**
+ * รายการในใบเสนอราคามีแค่ชื่อสินค้า+จำนวน ไม่มีปลายทาง/จังหวัด/อำเภอที่ JobItem ต้องใช้ จึงเติมให้ได้แค่บางส่วน
+ * (สินค้า+จำนวน+หน่วย) ส่วนปลายทางเว้นว่างไว้ให้ผู้ใช้กดแก้ไขรายการเพื่อกรอกเองก่อนบันทึกงานจริง
+ */
+const quotationItemsPrefill = documentPrefillStore.consumePrefill(['QUOTATION'])
+const lineItems = ref<JobItem[]>(
+  quotationItemsPrefill && quotationItemsPrefill.sourceId === sourceQuotationId
+    ? quotationItemsPrefill.items.map((item, idx) => ({
+        id: `item${Date.now()}${idx}${Math.random().toString(36).slice(2, 4)}`,
+        product: item.description,
+        qty: item.qty,
+        unit: item.unit,
+        siteName: '',
+        province: '',
+        district: '',
+      }))
+    : []
+)
+
+const hasIncompleteDestination = computed(() => lineItems.value.some((i) => !i.siteName))
 
 /** รวมลิตรน้ำมันมาตรฐานของงานนี้ ตาม pricingMode (SINGLE_DESTINATION คิดจากรายการหลักเพียงครั้งเดียว, MULTI_DESTINATION รวมทุกรายการ) */
 const computedFuel = computed(() => fuelRateStore.standardFuelLiters(lineItems.value, header.value.pricingMode))
@@ -482,11 +526,12 @@ const saveAllItems = () => {
   const returnDate = header.value.returnDate ? new Date(header.value.returnDate) : undefined
   const createdAt = header.value.jobDate ? new Date(header.value.jobDate) : undefined
   const resolvedTripFee = header.value.pricingMode === 'MULTI_DESTINATION' ? multiTripFeeTotal.value : header.value.tripFee
-  bookingStore.addBooking({
+  const newBooking = bookingStore.addBooking({
     category: props.fleet,
     docNo: bookingStore.nextDocNo(props.fleet),
     releaseNo: bookingStore.nextReleaseNo(),
     po: header.value.po || undefined,
+    sourceDocumentId: !sourceIsSalesOrder ? sourceQuotationId : undefined,
     shipDate,
     returnDate,
     createdAt,
@@ -504,6 +549,25 @@ const saveAllItems = () => {
     plate: header.value.plate || '',
     driverName: header.value.driverName || undefined,
   })
+  if (sourceIsSalesOrder) {
+    const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
+      bookingId: newBooking.id,
+      customer: newBooking.customer,
+      amount: resolvedTripFee,
+      reference: newBooking.po,
+      quotationId: sourceQuotationId,
+      items: [
+        {
+          description: `${newBooking.docNo} · ${destinationSummary.value}`,
+          qty: 1,
+          unit: 'เที่ยว',
+          unitPrice: resolvedTripFee,
+          amount: resolvedTripFee,
+        },
+      ],
+    })
+    newBooking.sourceDocumentId = salesOrderDoc.id
+  }
   // ปรับคนขับประจำของรถให้ตรงกับที่เลือกไว้ในงานนี้ เพื่อให้ทุกหน้าที่ใช้รถเห็นคนขับล่าสุด
   if (header.value.plate && header.value.driverName) {
     const vehicle = vehiclesStore.findByFullPlate(header.value.plate)

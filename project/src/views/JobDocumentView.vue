@@ -44,7 +44,7 @@
           <div>
             <div class="font-semibold mb-1">ลูกค้า</div>
             <div class="font-bold">{{ booking.customer }}</div>
-            <div class="text-xs leading-relaxed">{{ customer.address }}</div>
+            <div class="text-xs leading-relaxed">{{ customer.address }}{{ customer.zipCode ? ' ' + customer.zipCode : '' }}</div>
             <div class="text-xs">เลขประจำตัวผู้เสียภาษี: {{ customer.taxId }}</div>
           </div>
           <div class="text-sm">
@@ -155,6 +155,18 @@
             </div>
 
             <div class="p-5 space-y-5">
+              <!-- เอกสารที่เกี่ยวข้อง -->
+              <div v-if="relatedBatchId || relatedInvoice" class="flex flex-wrap gap-2">
+                <button v-if="relatedBatchId" @click="router.push(`/billing?batch=${relatedBatchId}`)" class="btn-sm">
+                  <span class="material-symbols-rounded text-base">receipt_long</span>
+                  ดูรายการวางบิล
+                </button>
+                <button v-if="relatedInvoice" @click="router.push(`/documents/${relatedInvoice.id}`)" class="btn-sm">
+                  <span class="material-symbols-rounded text-base">description</span>
+                  ดูใบแจ้งหนี้
+                </button>
+              </div>
+
               <!-- ข้อมูลปฏิบัติการ -->
               <div>
                 <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">ข้อมูลปฏิบัติการ</div>
@@ -305,6 +317,12 @@
                 <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">รูปหลักฐานการส่งมอบสินค้า (POD)</div>
                 <img :src="booking.podImage" class="w-full max-h-64 object-contain rounded-lg border border-border" />
               </div>
+
+              <!-- ประวัติ -->
+              <div class="border-t border-border pt-4">
+                <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">ประวัติ</div>
+                <EntityTimeline :booking-id="booking.id" />
+              </div>
             </div>
           </div>
         </div>
@@ -323,6 +341,7 @@ import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { bahtText } from '@/utils/companyInfo'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
+import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import type { Booking } from '@/types'
 
 const route = useRoute()
@@ -339,6 +358,8 @@ const booking = computed(() => bookingStore.bookings.find((b) => b.id === route.
 /** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง — แก้ไขราคาต้องทำผ่านหน้าแก้ไขงานเท่านั้น ไม่ใช่หน้านี้ */
 const isMulti = computed(() => (booking.value?.pricingMode ?? 'SINGLE_DESTINATION') === 'MULTI_DESTINATION')
 const customer = computed(() => customerStore.lookupCustomer(booking.value?.customer || ''))
+const relatedBatchId = computed(() => booking.value?.batchId)
+const relatedInvoice = computed(() => bookingStore.documents.find((d) => booking.value && d.bookingIds.includes(booking.value.id)))
 
 const detailDrawerOpen = ref(false)
 

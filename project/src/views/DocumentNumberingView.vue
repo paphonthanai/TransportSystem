@@ -38,17 +38,30 @@ import { useOnboardingStore } from '@/stores/onboarding'
 const documentSettingsStore = useDocumentSettingsStore()
 const onboardingStore = useOnboardingStore()
 
-const docTypes: { key: 'invoice' | 'receipt' | 'wht' | 'billingList'; label: string }[] = [
+const docTypes: { key: 'invoice' | 'receipt' | 'wht' | 'billingList' | 'quotation' | 'cashSale' | 'purchaseOrder' | 'salesOrder'; label: string }[] = [
+  { key: 'quotation', label: 'ใบเสนอราคา' },
+  { key: 'salesOrder', label: 'ใบสั่งสินค้า' },
+  { key: 'billingList', label: 'รายการวางบิล' },
   { key: 'invoice', label: 'ใบแจ้งหนี้' },
   { key: 'receipt', label: 'ใบเสร็จรับเงิน' },
+  { key: 'cashSale', label: 'ขายเงินสด' },
+  { key: 'purchaseOrder', label: 'ใบสั่งซื้อ' },
   { key: 'wht', label: 'หนังสือรับรองหัก ณ ที่จ่าย' },
-  { key: 'billingList', label: 'รายการวางบิล' },
 ]
 
-const preview = (key: 'invoice' | 'receipt' | 'wht' | 'billingList') => {
+const preview = (key: 'invoice' | 'receipt' | 'wht' | 'billingList' | 'quotation' | 'cashSale' | 'purchaseOrder' | 'salesOrder') => {
   const cfg = documentSettingsStore.settings.numbering[key]
-  const year = new Date().getFullYear() + 543
-  return `${cfg.prefix}${year}-${String(1).padStart(cfg.padding || 1, '0')}`
+  // เอกสารฝั่ง Sales Document ใหม่ทั้งหมดใช้เลขที่แบบ {คำนำหน้า}{ปีเดือนวัน ค.ศ.}{เลขรัน} เช่น BL202608040001 —
+  // ยกเว้นหนังสือรับรองหัก ณ ที่จ่าย (wht) ที่ยังเป็นระบบเดิม (ปี พ.ศ. + เลขรัน)
+  if (key === 'wht') {
+    const year = new Date().getFullYear() + 543
+    return `${cfg.prefix}${year}-${String(1).padStart(cfg.padding || 1, '0')}`
+  }
+  const now = new Date()
+  const yyyy = now.getFullYear()
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  return `${cfg.prefix}${yyyy}${mm}${dd}${String(1).padStart(cfg.padding || 1, '0')}`
 }
 
 const saved = ref(false)

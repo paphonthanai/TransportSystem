@@ -75,6 +75,20 @@
                 </select>
               </div>
             </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">ราคาต่อหน่วย (ถ้ามี)</label>
+                <input v-model.number="form.price" type="number" min="0" placeholder="0.00" class="input-field w-full" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">อัตรา VAT % (ถ้ามี)</label>
+                <input v-model.number="form.vatRate" type="number" min="0" max="100" placeholder="7" class="input-field w-full" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">คำอธิบายเพิ่มเติม (ถ้ามี)</label>
+              <input v-model="form.description" placeholder="รายละเอียดสินค้าสำหรับใช้ในเอกสาร" class="input-field w-full" />
+            </div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="showDialog = false" class="btn-secondary">ยกเลิก</button>
@@ -100,15 +114,23 @@ const categoryLabel: Record<Product['category'], string> = {
 
 const showDialog = ref(false)
 const editingId = ref<string | null>(null)
-const form = ref<Omit<Product, 'id'>>({ code: '', name: '', unit: '', category: 'other' })
+const form = ref<Omit<Product, 'id'>>({ code: '', name: '', unit: '', category: 'other', price: undefined, vatRate: undefined, description: '' })
 
 const openDialog = (product?: Product) => {
   if (product) {
     editingId.value = product.id
-    form.value = { code: product.code, name: product.name, unit: product.unit, category: product.category }
+    form.value = {
+      code: product.code,
+      name: product.name,
+      unit: product.unit,
+      category: product.category,
+      price: product.price,
+      vatRate: product.vatRate,
+      description: product.description ?? '',
+    }
   } else {
     editingId.value = null
-    form.value = { code: '', name: '', unit: '', category: 'other' }
+    form.value = { code: '', name: '', unit: '', category: 'other', price: undefined, vatRate: undefined, description: '' }
   }
   showDialog.value = true
 }

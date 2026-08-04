@@ -11,6 +11,9 @@ export interface Product {
   name: string
   unit: string
   category: 'cements' | 'ceramics' | 'other'
+  price?: number
+  vatRate?: number
+  description?: string
 }
 
 export interface StockMovement {

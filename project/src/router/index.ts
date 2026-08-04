@@ -48,15 +48,121 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/BillingView.vue'),
       },
       {
+        path: 'quotation',
+        name: 'Quotation',
+        component: () => import('@/views/QuotationListView.vue'),
+      },
+      {
+        path: 'quotation/new',
+        name: 'QuotationCreate',
+        component: () => import('@/views/QuotationFormView.vue'),
+      },
+      {
+        path: 'quotation/:id/edit',
+        name: 'QuotationEdit',
+        component: () => import('@/views/QuotationFormView.vue'),
+        props: true,
+      },
+      {
+        path: 'documents/:sourceType/:id/convert/:targetType',
+        name: 'DocumentConvert',
+        component: () => import('@/views/DocumentConvertView.vue'),
+        props: true,
+      },
+      {
+        path: 'sales-order',
+        name: 'SalesOrder',
+        component: () => import('@/views/SalesOrderListView.vue'),
+      },
+      {
+        path: 'billing-notes',
+        name: 'BillingNotes',
+        component: () => import('@/views/BillingListView.vue'),
+      },
+      {
+        path: 'billing-notes/manual',
+        name: 'BillingNoteManualCreate',
+        component: () => import('@/views/BillingFormView.vue'),
+      },
+      {
+        path: 'billing-notes/new',
+        name: 'BillingNoteCreate',
+        component: () => import('@/views/BillingCreateFromBookingsView.vue'),
+      },
+      {
+        path: 'tax-invoices',
+        name: 'TaxInvoices',
+        component: () => import('@/views/TaxInvoiceListView.vue'),
+      },
+      {
+        path: 'tax-invoices/new',
+        name: 'TaxInvoiceCreate',
+        component: () => import('@/views/TaxInvoiceFormView.vue'),
+      },
+      {
+        path: 'receipts',
+        name: 'Receipts',
+        component: () => import('@/views/ReceiptListView.vue'),
+      },
+      {
+        path: 'receipts/new',
+        name: 'ReceiptTypeSelect',
+        component: () => import('@/views/ReceiptTypeSelectView.vue'),
+      },
+      {
+        path: 'receipts/new-manual',
+        name: 'ReceiptManualCreate',
+        component: () => import('@/views/ReceiptFormView.vue'),
+      },
+      {
+        path: 'receipts/select',
+        name: 'ReceiptSelectInvoices',
+        component: () => import('@/views/ReceiptSelectInvoicesView.vue'),
+      },
+      {
+        path: 'receipts/create',
+        name: 'ReceiptCreate',
+        component: () => import('@/views/ReceiptCreateView.vue'),
+      },
+      {
+        path: 'cash-sale',
+        name: 'CashSale',
+        component: () => import('@/views/CashSaleListView.vue'),
+      },
+      {
+        path: 'credit-note',
+        name: 'CreditNote',
+        component: () => import('@/views/ComingSoonView.vue'),
+        meta: { title: 'ใบลดหนี้' },
+      },
+      {
+        path: 'debit-note',
+        name: 'DebitNote',
+        component: () => import('@/views/ComingSoonView.vue'),
+        meta: { title: 'ใบเพิ่มหนี้' },
+      },
+      {
         path: 'documents/:docId',
         name: 'InvoiceDocument',
         component: () => import('@/views/InvoiceDocumentView.vue'),
         props: true,
       },
       {
+        path: 'documents/:docId/envelope',
+        name: 'EnvelopePrint',
+        component: () => import('@/views/EnvelopePrintView.vue'),
+        props: true,
+      },
+      {
         path: 'job/:bookingId',
         name: 'JobDocument',
         component: () => import('@/views/JobDocumentView.vue'),
+        props: true,
+      },
+      {
+        path: 'billing-note/:batchId',
+        name: 'BillingNote',
+        component: () => import('@/views/BillingNoteView.vue'),
         props: true,
       },
       {

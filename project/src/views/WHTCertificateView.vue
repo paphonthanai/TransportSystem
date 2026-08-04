@@ -161,7 +161,7 @@
             <div class="border border-black p-3 mb-3 text-sm">
               <div class="font-semibold mb-1">ผู้มีหน้าที่หักภาษี ณ ที่จ่าย</div>
               <div>{{ documentSettingsStore.settings.company.name }}</div>
-              <div class="text-xs">{{ documentSettingsStore.settings.company.address }}</div>
+              <div class="text-xs">{{ documentSettingsStore.settings.company.address }} {{ documentSettingsStore.settings.company.zipCode }}</div>
               <div class="text-xs">เลขประจำตัวผู้เสียภาษีอากร {{ documentSettingsStore.settings.company.taxId }}</div>
             </div>
 

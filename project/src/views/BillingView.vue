@@ -3,8 +3,8 @@
     <!-- ================= Batch List ================= -->
     <template v-if="!selectedBatch">
       <div class="card-lg bg-primary-soft border-primary text-sm text-text">
-        เลือกงานที่ "ยังไม่วางบิล" ของลูกค้าเดียวกันด้านล่าง แล้วกด "รวมเข้ารายการวางบิล" เพื่อรวมเป็นรายการวางบิลเดียวกัน (ไม่ต้องรอส่งของสำเร็จ)
-        จากนั้นเปิดรายการวางบิลเพื่อตรวจสอบความถูกต้อง (POD, ราคา, ค่า extra) แล้วเลือกงานที่พร้อม กด "สร้างใบแจ้งหนี้"
+        เลือกงานที่ "ยังไม่วางบิล" ของลูกค้าเดียวกันด้านล่าง แล้วกด "ออกใบวางบิล" เพื่อรวมเป็นรายการวางบิลเดียวกัน (ไม่ต้องรอส่งของสำเร็จ)
+        จากนั้นเปิดรายการวางบิลเพื่อตรวจสอบความถูกต้อง (POD, ราคา, ค่า extra) แล้วเลือกงานที่พร้อม กด "ออกใบแจ้งหนี้"
       </div>
 
       <div class="card-lg overflow-hidden">
@@ -127,8 +127,8 @@
             <span v-else-if="unbilledSelectionCustomer">(ลูกค้า: {{ unbilledSelectionCustomer }})</span>
           </div>
           <button @click="confirmAddToBatch" :disabled="!canAddSelectedToBatch" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
-            <span class="material-symbols-rounded text-base">playlist_add</span>
-            รวมเข้ารายการวางบิล
+            <span class="material-symbols-rounded text-base">note_add</span>
+            ออกใบวางบิล
           </button>
         </div>
       </div>
@@ -136,7 +136,7 @@
 
     <!-- ================= Batch Detail ================= -->
     <template v-else>
-      <button @click="selectedBatchId = null" class="btn-secondary">
+      <button @click="backToBatchList" class="btn-secondary">
         <span class="material-symbols-rounded text-base">arrow_back</span>
         กลับไปหน้ารายการวางบิล
       </button>
@@ -152,9 +152,13 @@
           </div>
           <div class="flex items-center gap-2">
             <span :class="['text-xs font-semibold px-2 py-1 rounded-full', batchStatusClass[selectedBatch.status]]">{{ batchStatusLabel[selectedBatch.status] }}</span>
+            <button @click="router.push(`/billing-note/${selectedBatch.id}`)" class="btn-sm">
+              <span class="material-symbols-rounded text-base">print</span>
+              พิมพ์ใบวางบิล
+            </button>
             <button v-if="selectedBatch.status === 'PAID'" @click="confirmCloseBatch" class="btn-sm">
               <span class="material-symbols-rounded text-base">task_alt</span>
-              ปิดรายการ
+              ปิดรายการวางบิล
             </button>
           </div>
         </div>
@@ -270,7 +274,7 @@
           </div>
           <button @click="openCreateInvoice" :disabled="selectedBookings.length === 0" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
             <span class="material-symbols-rounded text-base">receipt_long</span>
-            สร้างใบแจ้งหนี้
+            ออกใบแจ้งหนี้
           </button>
         </div>
       </div>
@@ -304,11 +308,11 @@
                       <span class="material-symbols-rounded text-base">visibility</span>
                       ดูรายละเอียด
                     </button>
-                    <button v-if="doc.status === 'draft'" @click="bookingStore.markInvoiceSent(doc.id)" class="btn-sm text-primary">ส่งให้ลูกค้า</button>
+                    <button v-if="doc.status === 'draft'" @click="bookingStore.markInvoiceSent(doc.id)" class="btn-sm text-primary">ส่งใบแจ้งหนี้</button>
                     <button v-else-if="doc.status === 'sent'" @click="openRecordPayment(doc)" class="btn-sm text-green-700">บันทึกรับชำระ</button>
                     <button v-else-if="doc.status === 'paid' && !doc.receiptNumber" @click="bookingStore.issueReceipt(doc.id)" class="btn-sm text-purple-700">
                       <span class="material-symbols-rounded text-base">receipt_long</span>
-                      ออกใบเสร็จ
+                      ออกใบเสร็จรับเงิน
                     </button>
                     <span v-else-if="doc.receiptNumber" class="text-xs text-muted">ใบเสร็จ {{ doc.receiptNumber }}</span>
                   </div>
@@ -317,6 +321,11 @@
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div class="card-lg">
+        <div class="font-bold text-text mb-3">ประวัติรายการวางบิล</div>
+        <EntityTimeline :batch-id="selectedBatch.id" />
       </div>
     </template>
 
@@ -410,7 +419,7 @@
       <div @click="showCreateInvoice = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
         <div @click.stop class="w-full max-w-3xl bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
-            <div class="font-bold text-text">สร้างใบแจ้งหนี้</div>
+            <div class="font-bold text-text">ออกใบแจ้งหนี้</div>
             <button @click="showCreateInvoice = false" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
@@ -498,14 +507,14 @@
             <button @click="showCreateInvoice = false" class="btn-secondary">ยกเลิก</button>
             <button @click="confirmCreateInvoice" :disabled="!invoiceForm.customer || selectedBookings.length === 0" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
               <span class="material-symbols-rounded text-base">receipt_long</span>
-              สร้างใบแจ้งหนี้
+              ออกใบแจ้งหนี้
             </button>
           </div>
         </div>
       </div>
     </Teleport>
 
-    <!-- Record Payment Modal (บังคับแนบ POD ก่อนบันทึกรับชำระ) -->
+    <!-- Record Payment Modal (บังคับแนบหลักฐานการชำระเงินก่อนบันทึกรับชำระ) -->
     <Teleport to="body" v-if="paymentTarget">
       <div @click="closeRecordPayment" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
         <div @click.stop class="w-full max-w-sm bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -517,26 +526,26 @@
           </div>
           <div class="px-6 py-5 space-y-3">
             <div class="text-xs text-muted">
-              ต้องแนบเอกสาร POD ประกอบก่อนจึงจะบันทึกรับชำระได้ (ยอด {{ formatBaht(paymentTarget.amount) }})
+              ต้องแนบหลักฐานการชำระเงินก่อนจึงจะบันทึกรับชำระได้ (ยอด {{ formatBaht(paymentTarget.amount) }})
             </div>
             <label class="block border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary transition-all">
-              <input type="file" accept="image/*" class="hidden" @change="onPaymentPodSelected" />
-              <img v-if="paymentPodPreview" :src="paymentPodPreview" class="max-h-48 mx-auto rounded-lg object-contain" />
+              <input type="file" accept="image/*" class="hidden" @change="onPaymentProofSelected" />
+              <img v-if="paymentProofPreview" :src="paymentProofPreview" class="max-h-48 mx-auto rounded-lg object-contain" />
               <template v-else>
                 <span class="material-symbols-rounded text-3xl text-muted block mb-1">upload_file</span>
-                <div class="text-sm text-muted">แตะเพื่อแนบเอกสาร POD</div>
+                <div class="text-sm text-muted">แตะเพื่อแนบหลักฐานการชำระเงิน</div>
               </template>
             </label>
-            <div v-if="paymentPodError" class="text-xs text-red-600 flex items-center gap-1">
+            <div v-if="paymentProofError" class="text-xs text-red-600 flex items-center gap-1">
               <span class="material-symbols-rounded text-sm">error</span>
-              {{ paymentPodError }}
+              {{ paymentProofError }}
             </div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="closeRecordPayment" class="btn-secondary">ยกเลิก</button>
             <button
               @click="confirmRecordPayment"
-              :disabled="!paymentPodPreview"
+              :disabled="!paymentProofPreview"
               class="h-10 px-4 rounded-lg border-0 bg-green-600 text-white font-semibold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-base">paid</span>
@@ -551,21 +560,25 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
-import type { SalesDocument } from '@/stores/booking'
+import type { LegacySalesDocument } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBillingRuleStore } from '@/stores/billingRule'
 import { billingStatusLabel, billingStatusClass, bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import type { Booking, BillingBatch } from '@/types'
+import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 
+const route = useRoute()
 const router = useRouter()
 const bookingStore = useBookingStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const billingRuleStore = useBillingRuleStore()
 
 const batches = computed(() => bookingStore.batches)
-const selectedBatchId = ref<string | null>(null)
+/** เปิดรายการวางบิลที่ระบุไว้ใน query (?batch=) ทันทีถ้าลิงก์มาจากหน้าอื่น (ใบแจ้งหนี้/งาน/เอกสารขาย) */
+const initialBatchId = typeof route.query.batch === 'string' && bookingStore.batches.some((b) => b.id === route.query.batch) ? route.query.batch : null
+const selectedBatchId = ref<string | null>(initialBatchId)
 const selectedBatch = computed(() => batches.value.find((b) => b.id === selectedBatchId.value) || null)
 
 // งานที่ยังไม่วางบิล (billingStatus = UNBILLED เท่านั้น ไม่เกี่ยวกับ BookingStatus/การส่งของเลย)
@@ -778,6 +791,12 @@ const confirmCloseBatch = () => {
   bookingStore.closeBatch(selectedBatchId.value)
 }
 
+/** ปิดรายการวางบิลที่เปิดอยู่ และล้าง query (?batch=) เผื่อลิงก์มาจากหน้าอื่น ไม่ให้รีเฟรชแล้วเด้งกลับมาที่เดิม */
+const backToBatchList = () => {
+  selectedBatchId.value = null
+  if (route.query.batch) router.replace({ query: {} })
+}
+
 // --- Add extra charge ---
 const extraTarget = ref<Booking | null>(null)
 const extraForm = ref({ label: '', amount: 0 })
@@ -793,45 +812,45 @@ const confirmAddExtra = () => {
   extraTarget.value = null
 }
 
-// --- Record payment (บังคับแนบ POD ก่อนบันทึกรับชำระ) ---
-const paymentTarget = ref<SalesDocument | null>(null)
-const paymentPodPreview = ref<string | null>(null)
-const paymentPodError = ref('')
+// --- Record payment (บังคับแนบหลักฐานการชำระเงินก่อนบันทึกรับชำระ) ---
+const paymentTarget = ref<LegacySalesDocument | null>(null)
+const paymentProofPreview = ref<string | null>(null)
+const paymentProofError = ref('')
 
-const openRecordPayment = (doc: SalesDocument) => {
+const openRecordPayment = (doc: LegacySalesDocument) => {
   paymentTarget.value = doc
-  paymentPodPreview.value = null
-  paymentPodError.value = ''
+  paymentProofPreview.value = null
+  paymentProofError.value = ''
 }
 
 const closeRecordPayment = () => {
   paymentTarget.value = null
 }
 
-const onPaymentPodSelected = (event: Event) => {
+const onPaymentProofSelected = (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  paymentPodError.value = ''
-  paymentPodPreview.value = null
+  paymentProofError.value = ''
+  paymentProofPreview.value = null
   if (!file) return
   if (!file.type.startsWith('image/')) {
-    paymentPodError.value = 'ไฟล์ที่แนบไม่ใช่รูปภาพ กรุณาแนบเอกสาร POD ที่ถูกต้อง'
+    paymentProofError.value = 'ไฟล์ที่แนบไม่ใช่รูปภาพ กรุณาแนบหลักฐานการชำระเงินที่ถูกต้อง'
     input.value = ''
     return
   }
   const reader = new FileReader()
   reader.onload = () => {
-    paymentPodPreview.value = reader.result as string
+    paymentProofPreview.value = reader.result as string
   }
   reader.onerror = () => {
-    paymentPodError.value = 'ไม่สามารถอ่านไฟล์ได้ กรุณาลองใหม่'
+    paymentProofError.value = 'ไม่สามารถอ่านไฟล์ได้ กรุณาลองใหม่'
   }
   reader.readAsDataURL(file)
 }
 
 const confirmRecordPayment = () => {
-  if (!paymentTarget.value || !paymentPodPreview.value) return
-  bookingStore.markInvoicePaid(paymentTarget.value.id, paymentPodPreview.value)
+  if (!paymentTarget.value || !paymentProofPreview.value) return
+  bookingStore.markInvoicePaid(paymentTarget.value.id, paymentProofPreview.value)
   closeRecordPayment()
 }
 </script>

@@ -12,7 +12,7 @@ export function isMultiPricing(booking: Booking) {
   return (booking.pricingMode ?? 'SINGLE_DESTINATION') === 'MULTI_DESTINATION'
 }
 
-export interface SalesDocument {
+export interface LegacySalesDocument {
   id: string
   number: string
   customer: string
@@ -31,8 +31,8 @@ export interface SalesDocument {
   receiptNumber?: string
   /** เลขที่อ้างอิง (เช่น เลขที่เอกสารงานที่รวมอยู่ในบิลนี้) */
   reference?: string
-  /** เอกสาร POD ที่แนบตอนบันทึกรับชำระ (บังคับแนบ เพราะใบแจ้งหนี้ออกได้ก่อนงานส่งของสำเร็จ) */
-  podImage?: string
+  /** หลักฐานการชำระเงินที่แนบตอนบันทึกรับชำระ (บังคับแนบ) — คนละอย่างกับ POD ส่งของ (ดู Booking.podImage) */
+  paymentProofImage?: string
   /** อัตรา/จำนวนภาษีมูลค่าเพิ่ม คำนวณจากตั้งค่าเอกสาร ณ วันที่ออกใบแจ้งหนี้ */
   vatRate?: number
   vatAmount?: number
@@ -80,7 +80,7 @@ function reviveBooking(raw: any): Booking {
   return booking as Booking
 }
 
-function reviveDocument(raw: any): SalesDocument {
+function reviveDocument(raw: any): LegacySalesDocument {
   return {
     ...raw,
     date: new Date(raw.date),
@@ -107,7 +107,7 @@ function loadBookings(): Booking[] {
   return seedBookings()
 }
 
-function loadDocuments(): SalesDocument[] {
+function loadDocuments(): LegacySalesDocument[] {
   try {
     const raw = localStorage.getItem(DOCUMENTS_KEY)
     if (raw) return JSON.parse(raw).map(reviveDocument)
@@ -330,7 +330,7 @@ export const useBookingStore = defineStore('booking', () => {
   const billingRuleStore = useBillingRuleStore()
 
   const bookings = ref<Booking[]>(loadBookings())
-  const documents = ref<SalesDocument[]>(loadDocuments())
+  const documents = ref<LegacySalesDocument[]>(loadDocuments())
   const batches = ref<BillingBatch[]>(loadBatches())
   const logs = ref<LogEntry[]>(loadLogs())
 
@@ -355,13 +355,14 @@ export const useBookingStore = defineStore('booking', () => {
     }
   })
 
-  /** บันทึกประวัติการทำรายการ ใช้ผู้ใช้ที่ล็อกอินอยู่เป็นผู้ทำรายการ */
-  function addLog(action: string) {
+  /** บันทึกประวัติการทำรายการ ใช้ผู้ใช้ที่ล็อกอินอยู่เป็นผู้ทำรายการ — refs ไม่บังคับ ใช้กรองดูประวัติเฉพาะงาน/รายการวางบิล/เอกสารนั้นๆ ได้ */
+  function addLog(action: string, refs?: { bookingId?: string; batchId?: string; docId?: string }) {
     logs.value.unshift({
       id: `log${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
       timestamp: new Date(),
       actor: authStore.userName || 'ระบบ',
       action,
+      ...refs,
     })
   }
 
@@ -404,7 +405,7 @@ export const useBookingStore = defineStore('booking', () => {
       billingStatus: 'UNBILLED',
     }
     bookings.value.unshift(booking)
-    addLog(`ลงงานใหม่ ${booking.docNo} (${booking.customer})`)
+    addLog(`ลงงานใหม่ ${booking.docNo} (${booking.customer})`, { bookingId: booking.id })
     onboardingStore.markDone('createdFirstBooking')
     return booking
   }
@@ -418,7 +419,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (!booking) return
     if (data.tripFee !== undefined) booking.tripFee = data.tripFee
     if (data.agreedPrice !== undefined) booking.agreedPrice = data.agreedPrice
-    addLog(`แก้ไขราคา ${booking.docNo}: ค่าเที่ยว ${booking.tripFee} บาท, ราคาที่ตกลง ${booking.agreedPrice} บาท`)
+    addLog(`แก้ไขราคา ${booking.docNo}: ค่าเที่ยว ${booking.tripFee} บาท, ราคาที่ตกลง ${booking.agreedPrice} บาท`, { bookingId: booking.id })
   }
 
   /**
@@ -438,7 +439,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.fuelLiters !== undefined) booking.fuelLiters = data.fuelLiters
     if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
     if (data.returnDate !== undefined) booking.returnDate = data.returnDate
-    addLog(`แก้ไขข้อมูลปฏิบัติงาน ${booking.docNo} (น้ำมัน/วันที่กลับ)`)
+    addLog(`แก้ไขข้อมูลปฏิบัติงาน ${booking.docNo} (น้ำมัน/วันที่กลับ)`, { bookingId: booking.id })
   }
 
   /**
@@ -479,7 +480,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.fuelLiters !== undefined) booking.fuelLiters = data.fuelLiters
     if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
     if (data.pricingMode !== undefined) booking.pricingMode = data.pricingMode
-    addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`)
+    addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`, { bookingId: booking.id })
   }
 
   /**
@@ -498,7 +499,8 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(
       `เปลี่ยนโหมดคิดราคา ${booking.docNo}: ${oldMode === 'SINGLE_DESTINATION' ? 'รวมทั้งเที่ยว' : 'แยกตามปลายทาง'} → ${
         newMode === 'SINGLE_DESTINATION' ? 'รวมทั้งเที่ยว' : 'แยกตามปลายทาง'
-      } (ค่าเที่ยวรวมใหม่: ${resolvedTripFee} บาท)`
+      } (ค่าเที่ยวรวมใหม่: ${resolvedTripFee} บาท)`,
+      { bookingId: booking.id }
     )
   }
 
@@ -508,7 +510,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (!booking) return
     const newItem: JobItem = { ...item, id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}` }
     booking.items.push(newItem)
-    addLog(`เพิ่มรายการ ${booking.docNo}: ${newItem.siteName} - ${newItem.product} ${newItem.qty} ${newItem.unit}`)
+    addLog(`เพิ่มรายการ ${booking.docNo}: ${newItem.siteName} - ${newItem.product} ${newItem.qty} ${newItem.unit}`, { bookingId: booking.id })
     return newItem
   }
 
@@ -534,12 +536,12 @@ export const useBookingStore = defineStore('booking', () => {
     // การวางบิลแยกอิสระจากการจัดรถโดยเจตนา — booking.billingStatus ยังคง UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล (ดู addBookingsToBatch)
     const alreadyAccepted = booking.status !== 'WAITING_DISPATCH' && booking.status !== 'ASSIGNED'
     if (alreadyAccepted) {
-      addLog(`เปลี่ยนรถ/คนขับ ${booking.docNo} เป็นทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''}`)
+      addLog(`เปลี่ยนรถ/คนขับ ${booking.docNo} เป็นทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''}`, { bookingId: booking.id })
       return
     }
     booking.status = 'ASSIGNED'
     booking.dispatchedAt = new Date()
-    addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''} (รอคนขับตอบรับ)`)
+    addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''} (รอคนขับตอบรับ)`, { bookingId: booking.id })
   }
 
   /**
@@ -582,7 +584,7 @@ export const useBookingStore = defineStore('booking', () => {
       if (d < batch!.dateFrom) batch!.dateFrom = d
       if (d > batch!.dateTo) batch!.dateTo = d
     })
-    addLog(`เพิ่ม ${targets.length} งานเข้ารายการวางบิล "${batch.number}"`)
+    addLog(`เพิ่ม ${targets.length} งานเข้ารายการวางบิล "${batch.number}"`, { batchId: batch.id })
     return batch
   }
 
@@ -600,7 +602,7 @@ export const useBookingStore = defineStore('booking', () => {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking || booking.status !== 'ASSIGNED') return
     booking.status = 'ACCEPTED'
-    addLog(`คนขับตอบรับงาน ${booking.docNo}`)
+    addLog(`คนขับตอบรับงาน ${booking.docNo}`, { bookingId: booking.id })
   }
 
   /** คนขับกดไม่รับงานใน Driver App: ยกเลิกการจ่ายงาน กลับไปรอจัดคนขับใหม่ทันที (เหมือน checkExpiredDispatches แต่ตั้งใจกดเอง) */
@@ -612,7 +614,7 @@ export const useBookingStore = defineStore('booking', () => {
     booking.plate = ''
     booking.driverName = undefined
     booking.dispatchedAt = undefined
-    addLog(`คนขับไม่รับงาน ${booking.docNo} รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`)
+    addLog(`คนขับไม่รับงาน ${booking.docNo} รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`, { bookingId: booking.id })
   }
 
   /** คนขับกดรับน้ำมันใน Driver App ระหว่างสถานะ ACCEPTED: ACCEPTED -> FUEL_RECEIVED */
@@ -621,7 +623,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (!booking || booking.status !== 'ACCEPTED') return
     booking.status = 'FUEL_RECEIVED'
     booking.fuelReceivedAt = new Date()
-    addLog(`คนขับรับน้ำมัน ${booking.docNo}`)
+    addLog(`คนขับรับน้ำมัน ${booking.docNo}`, { bookingId: booking.id })
   }
 
   /** คนขับกดเริ่มรับสินค้าที่ต้นทาง: FUEL_RECEIVED -> LOADING */
@@ -629,7 +631,7 @@ export const useBookingStore = defineStore('booking', () => {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking || booking.status !== 'FUEL_RECEIVED') return
     booking.status = 'LOADING'
-    addLog(`เริ่มรับสินค้าที่ต้นทาง ${booking.docNo}`)
+    addLog(`เริ่มรับสินค้าที่ต้นทาง ${booking.docNo}`, { bookingId: booking.id })
   }
 
   /**
@@ -646,11 +648,11 @@ export const useBookingStore = defineStore('booking', () => {
     item.pickupSequence = pickedCount
     item.pickedUpAt = new Date()
     item.pickupStatus = 'PICKED_UP'
-    addLog(`รับสินค้า ${booking.docNo}: ${item.product} (${item.siteName}) ลำดับที่ ${pickedCount + 1}`)
+    addLog(`รับสินค้า ${booking.docNo}: ${item.product} (${item.siteName}) ลำดับที่ ${pickedCount + 1}`, { bookingId: booking.id })
 
     const stock = inventoryStore.recordDeliveryMovement(booking, [item])
-    stock.matched.forEach((m) => addLog(`ตัดสต๊อก ${m} จากงาน ${booking.docNo}`))
-    stock.unmatched.forEach((name) => addLog(`ไม่พบสินค้า "${name}" ในตั้งค่าสินค้า ข้ามการตัดสต๊อกสำหรับ ${booking.docNo}`))
+    stock.matched.forEach((m) => addLog(`ตัดสต๊อก ${m} จากงาน ${booking.docNo}`, { bookingId: booking.id }))
+    stock.unmatched.forEach((name) => addLog(`ไม่พบสินค้า "${name}" ในตั้งค่าสินค้า ข้ามการตัดสต๊อกสำหรับ ${booking.docNo}`, { bookingId: booking.id }))
 
     const allPickedUp = booking.items.every((i) => i.pickupStatus === 'PICKED_UP')
     if (allPickedUp) {
@@ -661,7 +663,7 @@ export const useBookingStore = defineStore('booking', () => {
       booking.status = 'LOADED'
       booking.goodsReceivedAt = new Date()
       booking.goodsReceivedBy = receivedBy || authStore.userName || booking.driverName
-      addLog(`รับสินค้าครบที่ต้นทาง ${booking.docNo} (โดย ${booking.goodsReceivedBy})`)
+      addLog(`รับสินค้าครบที่ต้นทาง ${booking.docNo} (โดย ${booking.goodsReceivedBy})`, { bookingId: booking.id })
     }
   }
 
@@ -676,7 +678,7 @@ export const useBookingStore = defineStore('booking', () => {
       booking.plate = ''
       booking.driverName = undefined
       booking.dispatchedAt = undefined
-      addLog(`ยกเลิกการจ่ายงาน ${booking.docNo} (คนขับไม่ตอบรับภายใน 15 นาที) รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`)
+      addLog(`ยกเลิกการจ่ายงาน ${booking.docNo} (คนขับไม่ตอบรับภายใน 15 นาที) รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`, { bookingId: booking.id })
     })
   }
 
@@ -689,7 +691,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (!booking || booking.status !== 'LOADED') return
     booking.status = 'IN_TRANSIT'
     booking.transitStartedAt = new Date()
-    addLog(`เริ่มขนส่ง ${booking.docNo}`)
+    addLog(`เริ่มขนส่ง ${booking.docNo}`, { bookingId: booking.id })
   }
 
   /**
@@ -712,7 +714,7 @@ export const useBookingStore = defineStore('booking', () => {
     booking.status = 'DELIVERED'
     // billingStatus ไม่เกี่ยวกับสถานะงานเลย ปล่อยไว้ตามเดิม (UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล)
     booking.completedAt = new Date()
-    addLog(`จบงาน ${booking.docNo}${booking.podImage ? ' (แนบ POD จากคนขับ)' : ' (ปิดงานโดยออฟฟิศ)'}`)
+    addLog(`จบงาน ${booking.docNo}${booking.podImage ? ' (แนบ POD จากคนขับ)' : ' (ปิดงานโดยออฟฟิศ)'}`, { bookingId: booking.id })
   }
 
   /**
@@ -728,7 +730,7 @@ export const useBookingStore = defineStore('booking', () => {
     item.podImage = podImage
     item.deliveredBy = deliveredBy
     item.deliveredAt = new Date()
-    addLog(`ส่งของสำเร็จ ${booking.docNo}: ${item.siteName} - ${item.product} (ผู้รับ: ${deliveredBy})`)
+    addLog(`ส่งของสำเร็จ ${booking.docNo}: ${item.siteName} - ${item.product} (ผู้รับ: ${deliveredBy})`, { bookingId: booking.id })
 
     if (booking.status === 'IN_TRANSIT') booking.status = 'DELIVERING'
   }
@@ -750,7 +752,7 @@ export const useBookingStore = defineStore('booking', () => {
     booking.finalAllowance = booking.finalAllowance ?? booking.allowance
     booking.status = 'DELIVERED'
     booking.completedAt = new Date()
-    addLog(`จบงาน ${booking.docNo} (คนขับยืนยันดำเนินการเสร็จสิ้น)`)
+    addLog(`จบงาน ${booking.docNo} (คนขับยืนยันดำเนินการเสร็จสิ้น)`, { bookingId: booking.id })
   }
 
   // --- Billing batch flow ---
@@ -766,7 +768,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.customer !== undefined) batch.customer = data.customer || undefined
     if (data.dateFrom !== undefined) batch.dateFrom = data.dateFrom
     if (data.dateTo !== undefined) batch.dateTo = data.dateTo
-    addLog(`แก้ไขรายการวางบิล "${batch.number}"`)
+    addLog(`แก้ไขรายการวางบิล "${batch.number}"`, { batchId: batch.id })
   }
 
   /** ลบรายการวางบิล ได้เฉพาะรายการที่ยังไม่มีการออกใบแจ้งหนี้ (ปลดงานทั้งหมดกลับไปเป็นยังไม่วางบิล) */
@@ -782,7 +784,7 @@ export const useBookingStore = defineStore('booking', () => {
       }
     })
     batches.value = batches.value.filter((b) => b.id !== batchId)
-    addLog(`ลบรายการวางบิล "${batch.number}"`)
+    addLog(`ลบรายการวางบิล "${batch.number}"`, { batchId: batch.id })
     return true
   }
 
@@ -791,7 +793,7 @@ export const useBookingStore = defineStore('booking', () => {
     const booking = bookings.value.find((b) => b.id === bookingId)
     if (!booking) return
     booking.billingStatus = hold ? 'HOLD' : 'IN_BATCH'
-    addLog(`${hold ? 'พักบิล' : 'ปลดพักบิล'} ${booking.docNo}`)
+    addLog(`${hold ? 'พักบิล' : 'ปลดพักบิล'} ${booking.docNo}`, { bookingId: booking.id, batchId: booking.batchId })
   }
 
   function addExtraCharge(bookingId: string, charge: { label: string; amount: number }) {
@@ -799,7 +801,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (!booking) return
     if (!booking.extraCharges) booking.extraCharges = []
     booking.extraCharges.push({ id: `extra${Date.now()}`, ...charge })
-    addLog(`เพิ่มค่า extra ${booking.docNo}: ${charge.label} ${charge.amount} บาท`)
+    addLog(`เพิ่มค่า extra ${booking.docNo}: ${charge.label} ${charge.amount} บาท`, { bookingId: booking.id })
   }
 
   function removeExtraCharge(bookingId: string, chargeId: string) {
@@ -835,7 +837,7 @@ export const useBookingStore = defineStore('booking', () => {
     const vatAmount = Math.round((amount * vatRate) / 100)
     const whtRate = salesCalcMode.wht === 'included' ? 0 : documentSettingsStore.settings.whtRate
     const whtAmount = Math.round((amount * whtRate) / 100)
-    const doc: SalesDocument = {
+    const doc: LegacySalesDocument = {
       id: `doc${Date.now()}`,
       number: `${invoiceNumbering.prefix}${new Date().getFullYear() + 543}-${documentSettingsStore.padNumber(documents.value.length + 1, invoiceNumbering.padding)}`,
       customer,
@@ -858,7 +860,7 @@ export const useBookingStore = defineStore('booking', () => {
     })
     const stillPending = bookings.value.some((b) => b.batchId === batchId && b.billingStatus === 'IN_BATCH')
     if (!stillPending) batch.status = 'BILLED'
-    addLog(`ออกใบแจ้งหนี้ ${doc.number} (${readyBookings.length} งาน, ${amount} บาท)`)
+    addLog(`ออกใบแจ้งหนี้ ${doc.number} (${readyBookings.length} งาน, ${amount} บาท)`, { docId: doc.id, batchId })
     onboardingStore.markDone('issuedFirstInvoice')
     return doc
   }
@@ -867,7 +869,7 @@ export const useBookingStore = defineStore('booking', () => {
     const doc = documents.value.find((d) => d.id === docId)
     if (!doc) return
     doc.status = 'sent'
-    addLog(`ส่งใบแจ้งหนี้ ${doc.number} ให้ลูกค้า`)
+    addLog(`ส่งใบแจ้งหนี้ ${doc.number} ให้ลูกค้า`, { docId: doc.id, batchId: doc.batchId })
     if (doc.batchId) {
       const batch = batches.value.find((b) => b.id === doc.batchId)
       if (batch && batch.status === 'BILLED') {
@@ -878,14 +880,14 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
-   * บันทึกรับชำระ ต้องแนบเอกสาร POD ประกอบเสมอ เพราะใบแจ้งหนี้ออกได้ก่อนงานส่งของสำเร็จ
+   * บันทึกรับชำระ ต้องแนบหลักฐานการชำระเงินประกอบเสมอ
    * ไม่ออกใบเสร็จอัตโนมัติที่นี่ — การชำระเงินกับการออกใบเสร็จเป็นคนละขั้นตอน คนละสถานะ (ดู issueReceipt)
    */
-  function markInvoicePaid(docId: string, podImage: string) {
+  function markInvoicePaid(docId: string, paymentProofImage: string) {
     const doc = documents.value.find((d) => d.id === docId)
-    if (!doc || !podImage) return
+    if (!doc || !paymentProofImage) return
     doc.status = 'paid'
-    doc.podImage = podImage
+    doc.paymentProofImage = paymentProofImage
     doc.paidDate = new Date()
     bookings.value.forEach((b) => {
       if (doc.bookingIds.includes(b.id)) b.billingStatus = 'PAID'
@@ -899,7 +901,7 @@ export const useBookingStore = defineStore('booking', () => {
         if (settled) batch.status = 'PAID'
       }
     }
-    addLog(`บันทึกรับชำระใบแจ้งหนี้ ${doc.number} (${doc.amount} บาท)`)
+    addLog(`บันทึกรับชำระใบแจ้งหนี้ ${doc.number} (${doc.amount} บาท)`, { docId: doc.id, batchId: doc.batchId })
   }
 
   /** ปิดรายการวางบิลด้วยตนเอง หลังชำระครบแล้ว (ขั้นตอนสุดท้ายของ workflow) */
@@ -907,7 +909,7 @@ export const useBookingStore = defineStore('booking', () => {
     const batch = batches.value.find((b) => b.id === batchId)
     if (!batch || batch.status !== 'PAID') return
     batch.status = 'CLOSED'
-    addLog(`ปิดรายการวางบิล "${batch.number}"`)
+    addLog(`ปิดรายการวางบิล "${batch.number}"`, { batchId: batch.id })
   }
 
   /** ออกใบเสร็จรับเงิน เป็นการกระทำแยกต่างหากจากการบันทึกรับชำระ ต้องชำระแล้วเท่านั้นจึงออกใบเสร็จได้ */
@@ -919,7 +921,7 @@ export const useBookingStore = defineStore('booking', () => {
       documents.value.filter((d) => d.receiptNumber).length + 1,
       receiptNumbering.padding
     )}`
-    addLog(`ออกใบเสร็จรับเงิน ${doc.receiptNumber} สำหรับใบแจ้งหนี้ ${doc.number}`)
+    addLog(`ออกใบเสร็จรับเงิน ${doc.receiptNumber} สำหรับใบแจ้งหนี้ ${doc.number}`, { docId: doc.id, batchId: doc.batchId })
     return doc.receiptNumber
   }
 

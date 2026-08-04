@@ -132,6 +132,8 @@ export interface Booking {
   releaseNo?: string
   /** เลขที่ใบสั่งงาน (PO) จากลูกค้า ถ้ามี */
   po?: string
+  /** id ของ SalesDocument ต้นทางที่สร้างงานนี้มา (ใบสั่งสินค้าที่อนุมัติแล้ว หรือใบเสนอราคา ถ้ามาจากทางลัด "สร้างใบสั่งงาน") ใช้ย้อนดูเอกสารต้นทาง */
+  sourceDocumentId?: string
   /** วันที่ขนส่ง (แยกจากวันที่ลงข้อมูล/createdAt) */
   shipDate?: Date
   /** วันที่คาดว่ารถจะกลับ แก้ไขภายหลังได้ */
@@ -214,6 +216,10 @@ export interface LogEntry {
   actor: string
   /** คำอธิบายรายการที่ทำ */
   action: string
+  /** อ้างอิงงาน/รายการวางบิล/เอกสาร ที่เกี่ยวข้องกับรายการนี้ (ไม่บังคับ) ใช้กรองประวัติเฉพาะรายการนั้นๆ */
+  bookingId?: string
+  batchId?: string
+  docId?: string
 }
 
 export interface BillingBatch {

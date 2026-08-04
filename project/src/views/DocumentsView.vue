@@ -30,9 +30,13 @@
                     <span class="material-symbols-rounded text-base">visibility</span>
                     ดูรายละเอียด
                   </button>
+                  <button v-if="doc.batchId" @click="router.push(`/billing?batch=${doc.batchId}`)" class="btn-sm">
+                    <span class="material-symbols-rounded text-base">folder_open</span>
+                    ดูรายการวางบิล
+                  </button>
                   <button v-if="doc.status === 'draft'" @click="bookingStore.markInvoiceSent(doc.id)" class="btn-sm text-primary">
                     <span class="material-symbols-rounded text-base">send</span>
-                    ส่งให้ลูกค้า
+                    ส่งใบแจ้งหนี้
                   </button>
                   <button v-else-if="doc.status === 'sent'" @click="openRecordPayment(doc)" class="btn-sm text-green-700">
                     <span class="material-symbols-rounded text-base">paid</span>
@@ -40,7 +44,7 @@
                   </button>
                   <button v-else-if="doc.status === 'paid' && !doc.receiptNumber" @click="bookingStore.issueReceipt(doc.id)" class="btn-sm text-purple-700">
                     <span class="material-symbols-rounded text-base">receipt_long</span>
-                    ออกใบเสร็จ
+                    ออกใบเสร็จรับเงิน
                   </button>
                   <button
                     v-else
@@ -65,7 +69,7 @@
       หมายเหตุ: เอกสารขายสามารถแก้ไขได้ แต่จำกัดสิทธิ์การแก้ไขเฉพาะผู้ดูแลระบบ (Admin) เท่านั้น
     </div>
 
-    <!-- Record Payment Modal (บังคับแนบ POD ก่อนบันทึกรับชำระ) -->
+    <!-- Record Payment Modal (บังคับแนบหลักฐานการชำระเงินก่อนบันทึกรับชำระ) -->
     <Teleport to="body" v-if="paymentTarget">
       <div @click="closeRecordPayment" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
         <div @click.stop class="w-full max-w-sm bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -77,26 +81,26 @@
           </div>
           <div class="px-6 py-5 space-y-3">
             <div class="text-xs text-muted">
-              ต้องแนบเอกสาร POD ประกอบก่อนจึงจะบันทึกรับชำระได้ (ยอด {{ formatBaht(paymentTarget.amount) }})
+              ต้องแนบหลักฐานการชำระเงินก่อนจึงจะบันทึกรับชำระได้ (ยอด {{ formatBaht(paymentTarget.amount) }})
             </div>
             <label class="block border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary transition-all">
-              <input type="file" accept="image/*" class="hidden" @change="onPaymentPodSelected" />
-              <img v-if="paymentPodPreview" :src="paymentPodPreview" class="max-h-48 mx-auto rounded-lg object-contain" />
+              <input type="file" accept="image/*" class="hidden" @change="onPaymentProofSelected" />
+              <img v-if="paymentProofPreview" :src="paymentProofPreview" class="max-h-48 mx-auto rounded-lg object-contain" />
               <template v-else>
                 <span class="material-symbols-rounded text-3xl text-muted block mb-1">upload_file</span>
-                <div class="text-sm text-muted">แตะเพื่อแนบเอกสาร POD</div>
+                <div class="text-sm text-muted">แตะเพื่อแนบหลักฐานการชำระเงิน</div>
               </template>
             </label>
-            <div v-if="paymentPodError" class="text-xs text-red-600 flex items-center gap-1">
+            <div v-if="paymentProofError" class="text-xs text-red-600 flex items-center gap-1">
               <span class="material-symbols-rounded text-sm">error</span>
-              {{ paymentPodError }}
+              {{ paymentProofError }}
             </div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="closeRecordPayment" class="btn-secondary">ยกเลิก</button>
             <button
               @click="confirmRecordPayment"
-              :disabled="!paymentPodPreview"
+              :disabled="!paymentProofPreview"
               class="h-10 px-4 rounded-lg border-0 bg-green-600 text-white font-semibold text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-base">paid</span>
@@ -113,7 +117,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
-import type { SalesDocument } from '@/stores/booking'
+import type { LegacySalesDocument } from '@/stores/booking'
 import { useAppStore } from '@/stores/app'
 
 const router = useRouter()
@@ -128,45 +132,45 @@ const statusLabel = (status: string) => ({ draft: 'ร่าง', sent: 'ส่�
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
-// --- Record payment (บังคับแนบ POD ก่อนบันทึกรับชำระ) ---
-const paymentTarget = ref<SalesDocument | null>(null)
-const paymentPodPreview = ref<string | null>(null)
-const paymentPodError = ref('')
+// --- Record payment (บังคับแนบหลักฐานการชำระเงินก่อนบันทึกรับชำระ) ---
+const paymentTarget = ref<LegacySalesDocument | null>(null)
+const paymentProofPreview = ref<string | null>(null)
+const paymentProofError = ref('')
 
-const openRecordPayment = (doc: SalesDocument) => {
+const openRecordPayment = (doc: LegacySalesDocument) => {
   paymentTarget.value = doc
-  paymentPodPreview.value = null
-  paymentPodError.value = ''
+  paymentProofPreview.value = null
+  paymentProofError.value = ''
 }
 
 const closeRecordPayment = () => {
   paymentTarget.value = null
 }
 
-const onPaymentPodSelected = (event: Event) => {
+const onPaymentProofSelected = (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  paymentPodError.value = ''
-  paymentPodPreview.value = null
+  paymentProofError.value = ''
+  paymentProofPreview.value = null
   if (!file) return
   if (!file.type.startsWith('image/')) {
-    paymentPodError.value = 'ไฟล์ที่แนบไม่ใช่รูปภาพ กรุณาแนบเอกสาร POD ที่ถูกต้อง'
+    paymentProofError.value = 'ไฟล์ที่แนบไม่ใช่รูปภาพ กรุณาแนบหลักฐานการชำระเงินที่ถูกต้อง'
     input.value = ''
     return
   }
   const reader = new FileReader()
   reader.onload = () => {
-    paymentPodPreview.value = reader.result as string
+    paymentProofPreview.value = reader.result as string
   }
   reader.onerror = () => {
-    paymentPodError.value = 'ไม่สามารถอ่านไฟล์ได้ กรุณาลองใหม่'
+    paymentProofError.value = 'ไม่สามารถอ่านไฟล์ได้ กรุณาลองใหม่'
   }
   reader.readAsDataURL(file)
 }
 
 const confirmRecordPayment = () => {
-  if (!paymentTarget.value || !paymentPodPreview.value) return
-  bookingStore.markInvoicePaid(paymentTarget.value.id, paymentPodPreview.value)
+  if (!paymentTarget.value || !paymentProofPreview.value) return
+  bookingStore.markInvoicePaid(paymentTarget.value.id, paymentProofPreview.value)
   closeRecordPayment()
 }
 </script>
