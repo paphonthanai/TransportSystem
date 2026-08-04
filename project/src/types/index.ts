@@ -160,6 +160,14 @@ export interface Booking {
   pricingMode?: PricingMode
   /** ราคาที่ตกลงกับลูกค้าไว้ ใช้เทียบตอนตรวจสอบก่อนวางบิล แก้ไขได้อิสระตอน WAITING_DISPATCH เท่านั้น (หลังจากนั้นแก้ได้เฉพาะ admin) */
   agreedPrice: number
+  /** โหมดส่วนลดของงานนี้ทั้งก้อน (คิดจากค่าเที่ยวรวม) — ไม่มีค่า = ไม่มีส่วนลด, ใช้ engine เดียวกับเอกสารขาย (documentTotals.ts) */
+  discountMode?: 'percent' | 'fixed'
+  /** ส่วนลดงานนี้เป็นเปอร์เซ็นต์ ใช้เมื่อ discountMode !== 'fixed' */
+  discountPercent?: number
+  /** ส่วนลดงานนี้เป็นจำนวนเงินตายตัว (บาท) ใช้เมื่อ discountMode === 'fixed' */
+  discountAmount?: number
+  /** อัตราภาษีมูลค่าเพิ่ม (%) ของงานนี้ — ไม่มีค่า/0 = ไม่มี VAT, ค่าเริ่มต้นดึงจาก documentSettingsStore.settings.vatRate ตอนสร้างงานใหม่ */
+  vatRate?: number
   fuelLiters: number
   fuelRate: number
   plate?: string
