@@ -384,15 +384,29 @@ export const useBookingStore = defineStore('booking', () => {
     return `${prefix}2569-${String(maxSeq + 1).padStart(4, '0')}`
   }
 
+  /** เลขรันรายวัน รูปแบบ {prefix}{YYYYMMDD}{เลข 5 หลัก} — ใช้ร่วมกันโดย nextReleaseNo/nextPoNo
+   *  ค่าเก่าที่ไม่ตรงรูปแบบใหม่ (เช่น RL2569-XXXX) จะไม่ถูกนับ เพราะ regex ไม่แมตช์ — เริ่มนับใหม่จาก 00001
+   *  ในแต่ละวันแทน ปลอดภัยเพราะความไม่ซ้ำมาจากส่วนวันที่ ไม่ใช่ตัวนับต่อเนื่อง */
+  function nextDailyRunningNo(prefix: string, existingValues: (string | undefined)[]) {
+    const now = new Date()
+    const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    const re = new RegExp(`^${prefix}${datePart}(\\d{5})$`)
+    const maxSeq = existingValues.reduce((max, v) => {
+      const m = v?.match(re)
+      const seq = m ? Number(m[1]) : 0
+      return seq > max ? seq : max
+    }, 0)
+    return `${prefix}${datePart}${String(maxSeq + 1).padStart(5, '0')}`
+  }
+
   /** เลขที่ใบปล่อยรถ ออกทีละงานเหมือน docNo แต่ใช้เลขรันร่วมกันทั้ง 2 fleet (ใบปล่อยรถออกจากอู่เดียวกัน) */
   function nextReleaseNo() {
-    const prefix = 'RL'
-    const maxSeq = bookings.value.reduce((max, b) => {
-      if (!b.releaseNo) return max
-      const seq = Number(b.releaseNo.replace(prefix, '').replace('2569-', ''))
-      return Number.isFinite(seq) && seq > max ? seq : max
-    }, 0)
-    return `${prefix}2569-${String(maxSeq + 1).padStart(4, '0')}`
+    return nextDailyRunningNo('RL', bookings.value.map((b) => b.releaseNo))
+  }
+
+  /** เลขที่ใบสั่งงาน (PO) ที่ระบบออกให้อัตโนมัติ — ผู้ใช้ยังแก้ไขเองได้หลังจากนี้ */
+  function nextPoNo() {
+    return nextDailyRunningNo('PO', bookings.value.map((b) => b.po))
   }
 
   function addBooking(data: Omit<Booking, 'id' | 'status' | 'createdAt'> & { createdAt?: Date }) {
@@ -936,6 +950,7 @@ export const useBookingStore = defineStore('booking', () => {
     pendingBookings,
     nextDocNo,
     nextReleaseNo,
+    nextPoNo,
     addBooking,
     updateBookingPrice,
     updateBookingOps,
