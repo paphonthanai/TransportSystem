@@ -159,6 +159,8 @@ const getScreenTitle = () => {
     '/': 'Dashboard',
     '/booking/cements': 'รายการงาน · Fleet Cements',
     '/booking/ceramics': 'รายการงาน · Fleet Ceramics',
+    '/booking/cements/completed': 'งานเสร็จสิ้น · Fleet Cements',
+    '/booking/ceramics/completed': 'งานเสร็จสิ้น · Fleet Ceramics',
     '/documents': 'เอกสารขาย',
     '/billing': 'ใบวางบิล',
     '/quotation': 'ใบเสนอราคา',

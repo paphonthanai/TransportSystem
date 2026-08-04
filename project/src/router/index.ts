@@ -38,6 +38,12 @@ const routes: RouteRecordRaw[] = [
         props: true,
       },
       {
+        path: 'booking/:fleet/completed',
+        name: 'BookingCompleted',
+        component: () => import('@/views/BookingCompletedView.vue'),
+        props: true,
+      },
+      {
         path: 'documents',
         name: 'Documents',
         component: () => import('@/views/DocumentsView.vue'),
