@@ -367,7 +367,8 @@ const salesperson = ref(prefill?.salesperson || authStore.userName)
 const currencyCode = ref(prefill?.currencyCode || 'THB')
 
 const project = ref(prefill?.project || '')
-const reference = ref(prefill?.reference || '')
+/** ค่าเริ่มต้น = เลขที่เอกสารต้นทาง (sourceNumber) ก่อนเสมอ ไม่ใช่ reference เดิมที่อาจสืบทอดมาจากรุ่นก่อนหน้า */
+const reference = ref(prefill?.sourceNumber || prefill?.reference || '')
 const priceMode = ref<PriceDisplay>(prefill?.priceMode || documentSettingsStore.settings.priceDisplay)
 const description = ref(prefill?.description || '')
 const warehouse = ref(prefill?.warehouse || 'คลังสินค้า')

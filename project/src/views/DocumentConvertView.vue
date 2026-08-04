@@ -135,7 +135,8 @@ const targetTitleMap: Record<TargetType, string> = {
 const targetTitle = computed(() => targetTitleMap[targetType] || 'สร้างเอกสาร')
 
 const customer = ref(sourceDoc?.customer || '')
-const reference = ref(sourceDoc?.reference || '')
+/** ค่าเริ่มต้น = เลขที่เอกสารต้นทาง (sourceDoc.number) ไม่ใช่ reference เดิมที่อาจสืบทอดมาจากรุ่นก่อนหน้า */
+const reference = ref(sourceDoc?.number || '')
 const creditDays = ref(sourceDoc?.creditDays ?? 30)
 
 type Row = {

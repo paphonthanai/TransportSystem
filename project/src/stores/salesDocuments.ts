@@ -239,7 +239,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   /** รวมค่า override (จากหน้า QuotationConvertView.vue) เข้ากับข้อมูลต้นทางของใบเสนอราคา ก่อนสร้างเอกสารใหม่ */
   function resolveConvertInputs(doc: SalesDocument, overrides?: QuotationConvertOverrides) {
     const customer = overrides?.customer?.trim() || doc.customer
-    const reference = overrides?.reference !== undefined ? overrides.reference : doc.reference
+    /** ค่าเริ่มต้นของเลขที่อ้างอิงเอกสารใหม่ = เลขที่เอกสารต้นทาง (doc.number) ไม่ใช่ reference เดิมของเอกสารต้นทาง
+     *  (ซึ่งอาจเป็นค่าที่สืบทอดมาจากเอกสารรุ่นก่อนหน้าอีกที) เพื่อให้ตามสายเอกสารย้อนกลับได้ถูกต้องเสมอ */
+    const reference = overrides?.reference !== undefined ? overrides.reference : doc.number
     const itemRows = overrides?.items ?? itemsForDocument(doc.id).map(({ id, documentId, sortOrder, ...rest }) => rest)
     const amount = overrides?.items ? overrides.items.reduce((sum, i) => sum + i.amount, 0) : doc.amount
     return { customer, reference, itemRows, amount }
