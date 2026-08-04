@@ -19,6 +19,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Phase 2: drivers
+    match /drivers/{driverId} {
+      allow read, write: if true;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

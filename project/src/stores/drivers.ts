@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
+import { driverRepository, sanitizeDriver } from '@/repositories/driverRepository'
 
 const DRIVERS_KEY = 'tms_drivers_v1'
 
@@ -8,6 +9,9 @@ export type IncomeType = 'daily' | 'monthly' | 'trip'
 export type LicenseType = 'ท.1' | 'ท.2'
 
 export interface DriverRecord {
+  /** id เอกสารใน Firestore — เพิ่มเข้ามาเป็น Phase 2 ของการย้ายจาก localStorage ไป Firestore (ดู repositories/driverRepository.ts)
+   *  ไม่มีค่าตอนที่ยังไม่ได้บันทึกจริง (เช่น record ว่างจาก emptyForm ใน DriversView.vue) */
+  id?: string
   code: string
   prefix: string
   firstName: string
@@ -158,7 +162,9 @@ function seedDrivers(): DriverRecord[] {
   ]
 }
 
-function loadDrivers(): DriverRecord[] {
+/** ข้อมูล local เดิม (ก่อนย้ายไป Firestore) — ใช้เป็น "แหล่งข้อมูลตั้งต้น" ตอน import ครั้งแรกเข้า Firestore เท่านั้น
+ *  ไม่ใช่แหล่งข้อมูลหลักอีกต่อไปหลังย้าย (ดู importFromLocalStorage ด้านล่าง) */
+function loadLocalDrivers(): DriverRecord[] {
   try {
     const raw = localStorage.getItem(DRIVERS_KEY)
     if (raw) return JSON.parse(raw)
@@ -169,20 +175,53 @@ function loadDrivers(): DriverRecord[] {
 }
 
 export const useDriversStore = defineStore('drivers', () => {
-  const drivers = ref<DriverRecord[]>(loadDrivers())
+  const drivers = ref<DriverRecord[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
 
-  watch(drivers, (val) => localStorage.setItem(DRIVERS_KEY, JSON.stringify(val)), { deep: true })
-
-  window.addEventListener('storage', (e) => {
-    if (e.key === DRIVERS_KEY && e.newValue) {
-      drivers.value = JSON.parse(e.newValue)
+  /** Import ครั้งเดียว: ถ้า Firestore ยังไม่มีข้อมูลเลย ให้ดึงจาก localStorage (หรือ seed ถ้า localStorage ก็ว่าง
+   *  เหมือนกัน) เข้า Firestore ก่อน — เพื่อให้พฤติกรรมตอนเปิดแอปครั้งแรกเหมือนของเดิม หลังจากนี้ Firestore คือแหล่ง
+   *  ข้อมูลจริงเพียงที่เดียว ไม่อ่าน/เขียน localStorage อีก (เหมือน stores/customers.ts) */
+  async function importFromLocalStorage() {
+    const localData = loadLocalDrivers()
+    for (const { id, ...data } of localData) {
+      await driverRepository.create(data)
     }
-  })
+  }
+
+  async function fetchDrivers() {
+    loading.value = true
+    error.value = null
+    try {
+      let result = await driverRepository.getAll()
+      if (result.length === 0) {
+        await importFromLocalStorage()
+        result = await driverRepository.getAll()
+      }
+      drivers.value = result
+    } catch (err: any) {
+      error.value = err?.message || 'โหลดข้อมูลคนขับจาก Firestore ไม่สำเร็จ'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  fetchDrivers()
 
   const fullName = (driver: DriverRecord) => `${driver.prefix}${driver.firstName} ${driver.lastName}`.trim()
 
-  return {
-    drivers,
-    fullName,
+  async function createDriver(data: Omit<DriverRecord, 'id'>) {
+    const clean = sanitizeDriver(data)
+    const id = await driverRepository.create(clean)
+    drivers.value.unshift({ ...clean, id })
   }
+
+  async function updateDriver(id: string, data: Omit<DriverRecord, 'id'>) {
+    const clean = sanitizeDriver(data)
+    await driverRepository.update(id, clean)
+    const index = drivers.value.findIndex((d) => d.id === id)
+    if (index !== -1) drivers.value[index] = { ...clean, id }
+  }
+
+  return { drivers, loading, error, fullName, createDriver, updateDriver, sanitizeDriver }
 })

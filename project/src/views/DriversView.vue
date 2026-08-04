@@ -333,6 +333,8 @@ const emptyForm = (): DriverRecord => ({
 
 const showDialog = ref(false)
 const editingCode = ref<string | null>(null)
+/** id เอกสาร Firestore ของรายการที่กำลังแก้ไข — แยกจาก editingCode (ใช้แค่โชว์หัวข้อ dialog เดิม) เพราะ update ต้องใช้ id จริง */
+const editingId = ref<string | undefined>(undefined)
 const form = ref<DriverRecord>(emptyForm())
 /** รถที่เลือกให้ประจำคนขับคนนี้ในฟอร์ม — ไม่ใช่ field ของ DriverRecord แต่เป็นความสัมพันธ์ที่เก็บไว้ที่ฝั่งรถ (Vehicle.driverCode) */
 const assignedVehicleId = ref('')
@@ -344,10 +346,14 @@ const incomeUnitLabel = computed(
 const openDialog = (driver?: DriverRecord) => {
   if (driver) {
     editingCode.value = driver.code
-    form.value = { ...driver }
+    editingId.value = driver.id
+    // sanitizeDriver() ตัด field ที่ไม่ได้เป็นส่วนหนึ่งของ DriverRecord ทิ้งก่อนเอาเข้าฟอร์ม (เผื่อ driver ที่ส่งมา
+    // ถูก enrich เพิ่มจากที่อื่นในอนาคต) — ปัจจุบัน DriversView.vue วนลูป driversStore.drivers ตรงๆ ไม่มี enrich อยู่แล้ว
+    form.value = { ...driversStore.sanitizeDriver(driver), id: driver.id }
     assignedVehicleId.value = vehiclesStore.vehicleForDriver(driver.code)?.id ?? ''
   } else {
     editingCode.value = null
+    editingId.value = undefined
     form.value = emptyForm()
     assignedVehicleId.value = ''
   }
@@ -365,15 +371,15 @@ const onPhotoSelected = (event: Event) => {
   reader.readAsDataURL(file)
 }
 
-const save = () => {
+const save = async () => {
   if (!form.value.firstName) return
   const code = form.value.code
-  if (editingCode.value === null) {
-    driversStore.drivers.unshift({ ...form.value })
-    onboardingStore.markDone('addedVehicleOrDriver')
+  const { id, ...data } = form.value
+  if (editingId.value) {
+    await driversStore.updateDriver(editingId.value, data)
   } else {
-    const index = driversStore.drivers.findIndex((d) => d.code === editingCode.value)
-    if (index !== -1) driversStore.drivers[index] = { ...form.value }
+    await driversStore.createDriver(data)
+    onboardingStore.markDone('addedVehicleOrDriver')
   }
   // ถอดคนขับออกจากรถคันเดิมก่อน เผื่อผู้ใช้เปลี่ยนเป็น "ไม่ระบุ" หรือย้ายไปรถคันอื่น
   const previousVehicle = vehiclesStore.vehicleForDriver(code)
