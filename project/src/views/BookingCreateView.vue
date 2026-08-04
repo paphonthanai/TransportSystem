@@ -110,6 +110,18 @@
             <input v-model.number="header.agreedPrice" type="number" placeholder="auto" class="input-field w-full" />
           </div>
           <div>
+            <label class="field-label">ส่วนลด</label>
+            <select v-model="header.discountMode" class="input-field w-full mb-1 text-xs">
+              <option v-for="opt in discountModeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            </select>
+            <input v-if="header.discountMode !== 'fixed'" v-model.number="header.discountPercent" type="number" min="0" max="100" class="input-field w-full" />
+            <input v-else v-model.number="header.discountAmount" type="number" min="0" class="input-field w-full" />
+          </div>
+          <div>
+            <label class="field-label">อัตราภาษีมูลค่าเพิ่ม (%)</label>
+            <input v-model.number="header.vatRate" type="number" min="0" max="100" class="input-field w-full" />
+          </div>
+          <div>
             <label class="field-label">เบี้ยเลี้ยงคนขับ</label>
             <input v-if="isCements" v-model.number="header.allowance" type="number" placeholder="0" class="input-field w-full" />
             <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-semibold">{{ formatBaht(headerCalculatedAllowance) }} (อัตโนมัติ)</div>
@@ -249,6 +261,33 @@
       </div>
     </div>
 
+    <!-- สรุปยอดเอกสาร -->
+    <div class="card-lg">
+      <h3 class="font-semibold text-text mb-3">สรุปยอดเอกสาร</h3>
+      <div class="bg-surface-2 rounded-xl p-4 space-y-1.5 text-sm max-w-sm ml-auto">
+        <div class="flex justify-between">
+          <span class="text-muted">รวมเป็นเงิน</span>
+          <span>{{ formatBaht(docSubtotal) }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-muted">ส่วนลดรวม</span>
+          <span>{{ formatBaht(docDiscountTotal) }}</span>
+        </div>
+        <div class="flex justify-between font-semibold border-t border-border pt-1.5">
+          <span>ราคาหลังหักส่วนลด</span>
+          <span>{{ formatBaht(docAfterDiscount) }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-muted">ภาษีมูลค่าเพิ่ม</span>
+          <span>{{ formatBaht(docVatTotal) }}</span>
+        </div>
+        <div class="flex justify-between font-bold text-primary border-t border-border pt-1.5">
+          <span>จำนวนเงินรวมทั้งสิ้น</span>
+          <span>{{ formatBaht(docGrandTotal) }}</span>
+        </div>
+      </div>
+    </div>
+
     <JobItemEditorModal
       :open="itemEditorOpen"
       :item="editingIndex !== null ? lineItems[editingIndex] : null"
@@ -275,10 +314,12 @@ import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useDocumentPrefillStore } from '@/stores/documentPrefill'
+import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import type { Booking, BookingCategory, BookingStatus, JobItem, PricingMode } from '@/types'
 import { parseGpsInput } from '@/utils/gps'
 import JobItemEditorModal, { type JobItemDraft } from '@/components/booking/JobItemEditorModal.vue'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
+import { computeRowAmount, computeRowVat, computeRowDiscountBaht } from '@/utils/documentTotals'
 
 const props = defineProps<{ fleet: BookingCategory }>()
 
@@ -292,7 +333,13 @@ const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentPrefillStore = useDocumentPrefillStore()
+const documentSettingsStore = useDocumentSettingsStore()
 const fixedCustomer = bookingStore.fixedCustomer
+
+const discountModeOptions = [
+  { value: 'percent', label: '%' },
+  { value: 'fixed', label: 'บาท' },
+]
 
 /** หาคนขับจากชื่อเต็ม รองรับทั้งแบบมีคำนำหน้าและไม่มี (เดิมเคยอยู่ใน driversStore.findDriverByVehicle) */
 const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
@@ -355,6 +402,10 @@ const defaultHeader = () => ({
   note: '',
   tripFee: prefill.amount ? Number(prefill.amount) : 0,
   agreedPrice: prefill.amount ? Number(prefill.amount) : 0,
+  discountMode: 'percent' as 'percent' | 'fixed',
+  discountPercent: 0,
+  discountAmount: 0,
+  vatRate: documentSettingsStore.settings.vatRate,
   allowance: 0,
   pricingMode: 'SINGLE_DESTINATION' as PricingMode,
 })
@@ -391,6 +442,24 @@ const headerCalculatedAllowance = computed(() => {
 
 /** รวมค่าเที่ยวจากทุกรายการ (tripFee * tripCount) — ใช้เฉพาะงาน MULTI_DESTINATION เป็น booking.tripFee โดยอัตโนมัติ */
 const multiTripFeeTotal = computed(() => lineItems.value.reduce((sum, i) => sum + (i.tripFee || 0) * (i.tripCount || 1), 0))
+
+/** ค่าเที่ยวที่ใช้จริงตาม pricingMode — ใช้ทั้งเป็น input ให้ documentTotals engine และตอนบันทึกงาน (แทนที่จะคำนวณซ้ำใน saveAllItems) */
+const resolvedTripFee = computed(() => (header.value.pricingMode === 'MULTI_DESTINATION' ? multiTripFeeTotal.value : header.value.tripFee))
+
+/** แถวสังเคราะห์ 1 แถวสำหรับงานนี้ทั้งก้อน (qty=1) ป้อนเข้า documentTotals.ts engine เดียวกับเอกสารขาย — ไม่เขียนสูตรคำนวณใหม่ */
+const pricingRow = computed(() => ({
+  qty: 1,
+  unitPrice: resolvedTripFee.value,
+  discountMode: header.value.discountMode,
+  discountPercent: header.value.discountPercent,
+  discountAmount: header.value.discountAmount,
+  vatRate: header.value.vatRate,
+}))
+const docSubtotal = computed(() => pricingRow.value.unitPrice)
+const docDiscountTotal = computed(() => computeRowDiscountBaht(pricingRow.value))
+const docAfterDiscount = computed(() => computeRowAmount(pricingRow.value))
+const docVatTotal = computed(() => computeRowVat(pricingRow.value))
+const docGrandTotal = computed(() => docAfterDiscount.value + docVatTotal.value)
 
 const destinationSummary = computed(() => {
   if (!lineItems.value.length) return '-'
@@ -537,7 +606,6 @@ const saveAllItems = () => {
   const shipDate = header.value.shipDate ? new Date(header.value.shipDate) : undefined
   const returnDate = header.value.returnDate ? new Date(header.value.returnDate) : undefined
   const createdAt = header.value.jobDate ? new Date(header.value.jobDate) : undefined
-  const resolvedTripFee = header.value.pricingMode === 'MULTI_DESTINATION' ? multiTripFeeTotal.value : header.value.tripFee
   const newBooking = bookingStore.addBooking({
     category: props.fleet,
     docNo: bookingStore.nextDocNo(props.fleet),
@@ -556,8 +624,12 @@ const saveAllItems = () => {
     customer: header.value.customer,
     items: lineItems.value,
     allowance: isCements.value ? header.value.allowance || 0 : headerCalculatedAllowance.value,
-    tripFee: resolvedTripFee,
-    agreedPrice: header.value.agreedPrice || resolvedTripFee,
+    tripFee: resolvedTripFee.value,
+    agreedPrice: header.value.agreedPrice || resolvedTripFee.value,
+    discountMode: header.value.discountMode,
+    discountPercent: header.value.discountPercent || undefined,
+    discountAmount: header.value.discountAmount || undefined,
+    vatRate: header.value.vatRate || undefined,
     pricingMode: header.value.pricingMode,
     fuelLiters: computedFuel.value,
     fuelRate: fuelRateStore.settings.todayPricePerLiter,
@@ -568,7 +640,7 @@ const saveAllItems = () => {
     const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
       bookingId: newBooking.id,
       customer: newBooking.customer,
-      amount: resolvedTripFee,
+      amount: resolvedTripFee.value,
       reference: newBooking.po,
       quotationId: sourceQuotationId,
       items: [
@@ -576,8 +648,12 @@ const saveAllItems = () => {
           description: `${newBooking.docNo} · ${destinationSummary.value}`,
           qty: 1,
           unit: 'เที่ยว',
-          unitPrice: resolvedTripFee,
-          amount: resolvedTripFee,
+          unitPrice: resolvedTripFee.value,
+          amount: resolvedTripFee.value,
+          discountMode: header.value.discountMode,
+          discountPercent: header.value.discountPercent || undefined,
+          discountAmount: header.value.discountAmount || undefined,
+          vatRate: header.value.vatRate || undefined,
         },
       ],
     })
