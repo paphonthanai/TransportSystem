@@ -157,7 +157,7 @@
                 <th class="text-right px-3 py-2 font-semibold w-20">จำนวน</th>
                 <th class="text-left px-3 py-2 font-semibold w-20">หน่วย</th>
                 <th class="text-right px-3 py-2 font-semibold w-24">ราคาต่อหน่วย</th>
-                <th class="text-right px-3 py-2 font-semibold w-20">ส่วนลด (%)</th>
+                <th class="text-right px-3 py-2 font-semibold w-24">ส่วนลด</th>
                 <th class="text-right px-3 py-2 font-semibold w-20">ภาษี (%)</th>
                 <th class="text-left px-3 py-2 font-semibold w-24">หัก ณ ที่จ่าย</th>
                 <th class="text-right px-3 py-2 font-semibold w-28">ราคารวม</th>
@@ -184,7 +184,11 @@
                   <input v-model.number="row.unitPrice" type="number" min="0" class="input-field w-full text-right" />
                 </td>
                 <td class="px-3 py-2">
-                  <input v-model.number="row.discountPercent" type="number" min="0" max="100" class="input-field w-full text-right" />
+                  <select v-model="row.discountMode" class="input-field w-full mb-1 text-xs">
+                    <option v-for="opt in discountModeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                  </select>
+                  <input v-if="row.discountMode !== 'fixed'" v-model.number="row.discountPercent" type="number" min="0" max="100" class="input-field w-full text-right" />
+                  <input v-else v-model.number="row.discountAmount" type="number" min="0" class="input-field w-full text-right" />
                 </td>
                 <td class="px-3 py-2">
                   <input v-model.number="row.vatRate" type="number" min="0" max="100" class="input-field w-full text-right" />
@@ -410,7 +414,9 @@ type Row = {
   qty: number
   unit: string
   unitPrice: number
+  discountMode: 'percent' | 'fixed'
   discountPercent: number
+  discountAmount: number
   vatRate: number
   whtRate: number
 }
@@ -424,6 +430,11 @@ const whtOptions = [
   { value: 5, label: '5%' },
 ]
 
+const discountModeOptions = [
+  { value: 'percent', label: '%' },
+  { value: 'fixed', label: 'บาท' },
+]
+
 const rows = ref<Row[]>(
   prefill
     ? prefill.items.map((i) => ({
@@ -432,7 +443,9 @@ const rows = ref<Row[]>(
         qty: i.qty,
         unit: i.unit,
         unitPrice: i.unitPrice,
+        discountMode: i.discountMode || 'percent',
         discountPercent: i.discountPercent || 0,
+        discountAmount: i.discountAmount || 0,
         vatRate: i.vatRate ?? documentSettingsStore.settings.vatRate,
         whtRate: i.whtRate || 0,
       }))
@@ -440,7 +453,7 @@ const rows = ref<Row[]>(
 )
 
 const addRow = () => {
-  rows.value.push({ description: '', qty: 1, unit: '', unitPrice: 0, discountPercent: 0, vatRate: documentSettingsStore.settings.vatRate, whtRate: 0 })
+  rows.value.push({ description: '', qty: 1, unit: '', unitPrice: 0, discountMode: 'percent', discountPercent: 0, discountAmount: 0, vatRate: documentSettingsStore.settings.vatRate, whtRate: 0 })
 }
 
 if (!prefill) addRow()
@@ -525,7 +538,9 @@ const saveAndGetDoc = () => {
     qty: r.qty,
     unit: r.unit,
     unitPrice: r.unitPrice,
+    discountMode: r.discountMode,
     discountPercent: r.discountPercent,
+    discountAmount: r.discountAmount,
     vatRate: r.vatRate,
     whtRate: r.whtRate,
     amount: rowAmount(r),
