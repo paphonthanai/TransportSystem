@@ -224,6 +224,8 @@ const customerRows = computed(() =>
 
 const showDialog = ref(false)
 const editingCode = ref<string | null>(null)
+/** id เอกสาร Firestore ของรายการที่กำลังแก้ไข — แยกจาก editingCode (ใช้แค่โชว์หัวข้อ dialog เดิม) เพราะ update ต้องใช้ id จริง */
+const editingId = ref<string | undefined>(undefined)
 
 const emptyForm = (): CustomerRecord => ({
   code: '',
@@ -251,21 +253,23 @@ const form = ref<CustomerRecord>(emptyForm())
 const openDialog = (customer?: CustomerRecord) => {
   if (customer) {
     editingCode.value = customer.code || customer.name
+    editingId.value = customer.id
     form.value = { ...customer }
   } else {
     editingCode.value = null
+    editingId.value = undefined
     form.value = emptyForm()
   }
   showDialog.value = true
 }
 
-const save = () => {
+const save = async () => {
   if (!form.value.name) return
-  if (editingCode.value === null) {
-    customerStore.customers.unshift({ ...form.value })
+  const { id, ...data } = form.value
+  if (editingId.value) {
+    await customerStore.updateCustomer(editingId.value, data)
   } else {
-    const index = customerStore.customers.findIndex((c) => (c.code || c.name) === editingCode.value)
-    if (index !== -1) customerStore.customers[index] = { ...form.value }
+    await customerStore.createCustomer(data)
   }
   showDialog.value = false
 }

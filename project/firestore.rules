@@ -2,8 +2,23 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // The app currently stores its business data in browser localStorage, not
-    // Firestore. Deny by default until real collections/rules are designed.
+    // Incremental localStorage -> Firestore migration (see stores/*.ts + repositories/*.ts).
+    // Only collections that have actually been migrated get a rule below; everything else
+    // still lives in browser localStorage and stays denied by the catch-all at the bottom.
+    //
+    // NOTE: the demo accounts in stores/auth.ts (admin@/manager@/dispatcher@/driver@thanthara.co.th)
+    // never call Firebase's signInWithEmailAndPassword — they fake a local User object instead — so
+    // request.auth is always null for them even though the UI shows a signed-in user. Rules that
+    // required request.auth != null would silently reject every read/write from this app today.
+    // Opened without an auth check as an explicit, temporary trade-off for this phase; MUST be
+    // tightened (e.g. request.auth != null, or role-based checks) once real Firebase Auth login
+    // replaces the demo-credentials bypass.
+
+    // Phase 1: customers
+    match /customers/{customerId} {
+      allow read, write: if true;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

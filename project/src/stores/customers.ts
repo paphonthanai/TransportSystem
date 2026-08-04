@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
+import { customerRepository } from '@/repositories/customerRepository'
 
 const CUSTOMERS_KEY = 'tms_customers_v1'
 
@@ -8,6 +9,9 @@ export type ContactOffice = 'hq' | 'branch'
 export type BankAccountType = 'savings' | 'current'
 
 export interface CustomerRecord {
+  /** id เอกสารใน Firestore — เพิ่มเข้ามาเป็น Phase 1 ของการย้ายจาก localStorage ไป Firestore (ดู repositories/customerRepository.ts)
+   *  ไม่มีค่าตอนที่ยังไม่ได้บันทึกจริง (เช่น record ว่างจาก emptyCustomer) */
+  id?: string
   /** รหัสผู้ติดต่อ ใช้แสดงในสมุดรายชื่อ และใช้เป็นส่วนหนึ่งของเลข PO ที่ระบบแนะนำอัตโนมัติตอนสร้างงาน */
   code: string
   entityType: ContactEntityType
@@ -155,7 +159,9 @@ function seedCustomers(): CustomerRecord[] {
   ]
 }
 
-function loadCustomers(): CustomerRecord[] {
+/** ข้อมูล local เดิม (ก่อนย้ายไป Firestore) — ใช้เป็น "แหล่งข้อมูลตั้งต้น" ตอน import ครั้งแรกเข้า Firestore เท่านั้น
+ *  ไม่ใช่แหล่งข้อมูลหลักอีกต่อไปหลังย้าย (ดู importFromLocalStorage ด้านล่าง) */
+function loadLocalCustomers(): CustomerRecord[] {
   try {
     const raw = localStorage.getItem(CUSTOMERS_KEY)
     if (raw) return JSON.parse(raw)
@@ -166,15 +172,38 @@ function loadCustomers(): CustomerRecord[] {
 }
 
 export const useCustomerStore = defineStore('customers', () => {
-  const customers = ref<CustomerRecord[]>(loadCustomers())
+  const customers = ref<CustomerRecord[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
 
-  watch(customers, (val) => localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(val)), { deep: true })
-
-  window.addEventListener('storage', (e) => {
-    if (e.key === CUSTOMERS_KEY && e.newValue) {
-      customers.value = JSON.parse(e.newValue)
+  /** Import ครั้งเดียว: ถ้า Firestore ยังไม่มีข้อมูลเลย (โปรเจกต์ใหม่/ยังไม่เคย migrate) ให้ดึงจาก localStorage
+   *  (หรือ seed ถ้า localStorage ก็ว่างเหมือนกัน) เข้า Firestore ก่อน — เพื่อให้พฤติกรรมตอนเปิดแอปครั้งแรกเหมือนของเดิม
+   *  หลังจากนี้ Firestore คือแหล่งข้อมูลจริงเพียงที่เดียว ไม่อ่าน/เขียน localStorage อีก */
+  async function importFromLocalStorage() {
+    const localData = loadLocalCustomers()
+    for (const { id, ...data } of localData) {
+      await customerRepository.create(data)
     }
-  })
+  }
+
+  async function fetchCustomers() {
+    loading.value = true
+    error.value = null
+    try {
+      let result = await customerRepository.getAll()
+      if (result.length === 0) {
+        await importFromLocalStorage()
+        result = await customerRepository.getAll()
+      }
+      customers.value = result
+    } catch (err: any) {
+      error.value = err?.message || 'โหลดข้อมูลลูกค้าจาก Firestore ไม่สำเร็จ'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  fetchCustomers()
 
   const emptyCustomer = (name: string): CustomerRecord => ({
     code: '',
@@ -215,5 +244,16 @@ export const useCustomerStore = defineStore('customers', () => {
     return `PO-${customer.code}-${dateStr}-${seq}`
   }
 
-  return { customers, lookupCustomer, suggestPoNumber }
+  async function createCustomer(data: Omit<CustomerRecord, 'id'>) {
+    const id = await customerRepository.create(data)
+    customers.value.unshift({ ...data, id })
+  }
+
+  async function updateCustomer(id: string, data: Omit<CustomerRecord, 'id'>) {
+    await customerRepository.update(id, data)
+    const index = customers.value.findIndex((c) => c.id === id)
+    if (index !== -1) customers.value[index] = { ...data, id }
+  }
+
+  return { customers, loading, error, lookupCustomer, suggestPoNumber, createCustomer, updateCustomer }
 })
