@@ -100,7 +100,7 @@ export const useAuthStore = defineStore('auth', () => {
    * backend) — สร้างเสร็จ sign out ออกจาก instance ที่สองแล้วทิ้งทันที ไม่กระทบ session ของ Admin เลย
    */
   async function createStaffAccount(email: string, password: string, name: string, staffRole: UserRole) {
-    const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}`)
+    const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}-${Math.random().toString(36).slice(2)}`)
     const secondaryAuth = getAuth(secondaryApp)
     if (useEmulator) {
       const { connectAuthEmulator } = await import('firebase/auth')
