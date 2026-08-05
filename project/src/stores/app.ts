@@ -106,7 +106,7 @@ export const useAppStore = defineStore('app', () => {
           children: [
             { id: '5-3-1', icon: 'tune', label: 'ฟังก์ชั่นเอกสาร', route: '/settings/documents/function' },
             { id: '5-3-2', icon: 'tag', label: 'เลขรันเอกสาร', route: '/settings/documents/numbering' },
-            { id: '5-3-3', icon: 'workspace_premium', label: 'โลโก้และตรายาง', route: '/settings/documents/logo' },
+            { id: '5-3-3', icon: 'workspace_premium', label: 'ข้อมูลบริษัท / โลโก้และตรายาง', route: '/settings/documents/logo' },
             { id: '5-3-4', icon: 'account_balance_wallet', label: 'ข้อมูลการรับชำระ', route: '/settings/documents/payment' },
             { id: '5-3-5', icon: 'currency_exchange', label: 'สกุลเงิน', route: '/settings/documents/currency' },
             { id: '5-3-6', icon: 'sticky_note_2', label: 'หมายเหตุเอกสาร', route: '/settings/documents/notes' },

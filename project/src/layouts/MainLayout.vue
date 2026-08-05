@@ -188,7 +188,7 @@ const getScreenTitle = () => {
     '/settings/logs': 'ตั้งค่า · Log',
     '/settings/documents/function': 'ตั้งค่าเอกสาร · ฟังก์ชั่นเอกสาร',
     '/settings/documents/numbering': 'ตั้งค่าเอกสาร · เลขรันเอกสาร',
-    '/settings/documents/logo': 'ตั้งค่าเอกสาร · โลโก้และตรายาง',
+    '/settings/documents/logo': 'ตั้งค่าเอกสาร · ข้อมูลบริษัท / โลโก้และตรายาง',
     '/settings/documents/payment': 'ตั้งค่าเอกสาร · ข้อมูลการรับชำระ',
     '/settings/documents/currency': 'ตั้งค่าเอกสาร · สกุลเงิน',
     '/settings/documents/notes': 'ตั้งค่าเอกสาร · หมายเหตุเอกสาร',

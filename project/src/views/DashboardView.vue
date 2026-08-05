@@ -220,28 +220,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import DashboardLineChart from '@/components/DashboardLineChart.vue'
 import Pager from '@/components/Pager.vue'
+import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useBookingStore } from '@/stores/booking'
 
+const salesDocumentsStore = useSalesDocumentsStore()
 const bookingStore = useBookingStore()
 
-const totalPaidRevenue = computed(() =>
-  bookingStore.documents.filter((d) => d.status === 'paid').reduce((sum, d) => sum + d.amount, 0)
-)
-const totalPendingReceivable = computed(() =>
-  bookingStore.documents.filter((d) => d.status === 'sent').reduce((sum, d) => sum + d.amount, 0)
-)
+const taxInvoices = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE'))
+const receipts = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'RECEIPT'))
+const billingNotes = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'BILLING'))
+
+/** หา fleet ของเอกสารจาก booking แรกที่ผูกอยู่ — เอกสารที่กรอกเองไม่ผ่าน booking (ไม่มี bookingIds) จะผ่านทุกตัวกรอง fleet เสมอ */
+const fleetOfDoc = (bookingIds: string[]) => {
+  for (const id of bookingIds) {
+    const b = bookingStore.bookings.find((bk) => bk.id === id)
+    if (b) return b.category
+  }
+  return undefined
+}
+const matchesFleet = (bookingIds: string[], filter: string) => filter === 'all' || !fleetOfDoc(bookingIds) || fleetOfDoc(bookingIds) === filter
+
+const totalPaidRevenue = computed(() => receipts.value.filter((d) => d.status === 'PAID').reduce((sum, d) => sum + d.amount, 0))
+const totalPendingReceivable = computed(() => taxInvoices.value.filter((d) => d.status === 'SENT').reduce((sum, d) => sum + d.amount, 0))
 const totalOverdue = computed(() => {
   const today = new Date()
-  return bookingStore.documents
-    .filter((d) => d.status === 'sent' && new Date(d.dueDate) < today)
+  return taxInvoices.value
+    .filter((d) => d.status === 'SENT' && d.dueDate && new Date(d.dueDate) < today)
     .reduce((sum, d) => sum + d.amount, 0)
 })
 const invoicesThisMonth = computed(() => {
   const now = new Date()
-  return bookingStore.documents.filter((d) => {
+  return taxInvoices.value.filter((d) => {
     const docDate = new Date(d.date)
     return docDate.getFullYear() === now.getFullYear() && docDate.getMonth() === now.getMonth()
   }).length
@@ -257,40 +269,119 @@ const repairUnitFilter = ref('all')
 const showReceivable = ref(true)
 const showPayable = ref(true)
 
-const monthLabels = ['ม.ค.26', 'ก.พ.26', 'มี.ค.26', 'เม.ย.26', 'พ.ค.26', 'มิ.ย.26', 'ก.ค.26', 'ส.ค.25', 'ก.ย.25', 'ต.ค.25', 'พ.ย.25', 'ธ.ค.25']
+const thaiMonthShort = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+const buddhistYY = (year: number) => String((year + 543) % 100).padStart(2, '0')
+
+const monthLabels = computed(() => {
+  const now = new Date()
+  return Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)
+    return `${thaiMonthShort[d.getMonth()]}${buddhistYY(d.getFullYear())}`
+  })
+})
+
+/** รายรับรายเดือน 12 เดือนล่าสุด = ยอดใบเสร็จที่ชำระแล้วจริง ตามวันที่ชำระจริง (paidDate)
+ *  รายจ่าย/กำไร ยังไม่มีข้อมูลจริงในระบบ (ไม่มีฟีเจอร์บันทึกค่าใช้จ่าย) จึงเป็น 0 จนกว่าจะมีฟีเจอร์นั้น */
+const monthlyRevenue = computed(() => {
+  const now = new Date()
+  return Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)
+    return receipts.value
+      .filter((doc) => doc.status === 'PAID' && doc.paidDate)
+      .filter((doc) => {
+        const paid = new Date(doc.paidDate!)
+        return paid.getFullYear() === d.getFullYear() && paid.getMonth() === d.getMonth()
+      })
+      .reduce((sum, doc) => sum + doc.amount, 0)
+  })
+})
 
 const revenueSeries = ref([
-  { key: 'income', label: 'รายรับ', color: '#2563eb', visible: true, data: [0.42, 0.5, 0.55, 0.6, 0.58, 0.66, 0.7, 0.68, 0.74, 0.8, 0.86, 0.92] },
-  { key: 'expense', label: 'รายจ่าย', color: '#f97316', visible: true, data: [0.3, 0.34, 0.36, 0.38, 0.4, 0.42, 0.44, 0.43, 0.46, 0.5, 0.52, 0.55] },
-  { key: 'profit', label: 'กำไร', color: '#16a34a', visible: true, data: [0.12, 0.16, 0.19, 0.22, 0.18, 0.24, 0.26, 0.25, 0.28, 0.3, 0.34, 0.37] },
+  { key: 'income', label: 'รายรับ', color: '#2563eb', visible: true, data: [] as number[] },
+  { key: 'expense', label: 'รายจ่าย', color: '#f97316', visible: true, data: [] as number[] },
+  { key: 'profit', label: 'กำไร', color: '#16a34a', visible: true, data: [] as number[] },
 ])
+watch(
+  monthlyRevenue,
+  (val) => {
+    revenueSeries.value[0].data = val
+    revenueSeries.value[1].data = val.map(() => 0)
+    revenueSeries.value[2].data = val
+  },
+  { immediate: true }
+)
 
-const nextMonthLabels = ['เดือนนี้', 'เดือนหน้า', 'ส.ค.26', 'ก.ย.26', 'ต.ค.26', 'พ.ย.26']
+const nextMonthLabels = computed(() => {
+  const now = new Date()
+  return Array.from({ length: 6 }, (_, i) => {
+    if (i === 0) return 'เดือนนี้'
+    if (i === 1) return 'เดือนหน้า'
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
+    return `${thaiMonthShort[d.getMonth()]}${buddhistYY(d.getFullYear())}`
+  })
+})
+
+/** ยอดลูกหนี้ (ใบแจ้งหนี้ที่ส่งแล้วแต่ยังไม่ชำระ) แยกตามเดือนครบกำหนด 6 เดือนข้างหน้า — ฝั่งเจ้าหนี้ยังไม่มีข้อมูลจริง (ไม่มีระบบติดตามใบสั่งซื้อ/ค่าใช้จ่าย) จึงเป็น 0 */
+const monthlyReceivable = computed(() => {
+  const now = new Date()
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
+    return taxInvoices.value
+      .filter((doc) => doc.status === 'SENT' && doc.dueDate)
+      .filter((doc) => {
+        const due = new Date(doc.dueDate!)
+        return due.getFullYear() === d.getFullYear() && due.getMonth() === d.getMonth()
+      })
+      .reduce((sum, doc) => sum + doc.amount, 0)
+  })
+})
 
 const arApSeries = computed(() => [
-  { key: 'ar', color: '#2563eb', visible: showReceivable.value, data: [0.4, 0.5, 0.45, 0.6, 0.55, 0.65] },
-  { key: 'ap', color: '#f97316', visible: showPayable.value, data: [0.3, 0.35, 0.32, 0.4, 0.38, 0.44] },
+  { key: 'ar', color: '#2563eb', visible: showReceivable.value, data: monthlyReceivable.value },
+  { key: 'ap', color: '#f97316', visible: showPayable.value, data: monthlyReceivable.value.map(() => 0) },
 ])
 
-const overdueReceivable = 186500
-const overduePayable = 92300
-const pendingReceivable = 452800
-const pendingPayable = 214600
+const overdueReceivable = computed(() => totalOverdue.value)
+const overduePayable = 0
+const pendingReceivable = computed(() => totalPendingReceivable.value)
+const pendingPayable = 0
 
-const dueInvoices = [
-  { id: 1, customer: 'บจก. ศรีไทยคอนกรีต', dueDate: '10/07/2569', amount: 128500 },
-  { id: 2, customer: 'บริษัท ABC จำกัด', dueDate: '12/07/2569', amount: 96200 },
-  { id: 3, customer: 'บมจ. พฤกษา', dueDate: '15/07/2569', amount: 74300 },
-]
+const formatDateThai = (date: Date) => {
+  const d = new Date(date)
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear() + 543}`
+}
 
-const billingRequests = [
-  { id: 1, docNo: 'CM2569-0001', customer: 'ABC', amount: 45000 },
-  { id: 2, docNo: 'CR2569-0002', customer: 'บจก. ศรีไทยคอนกรีต', amount: 38200 },
-]
+/** ถึงกำหนดชำระ: ใบแจ้งหนี้ที่ส่งแล้วยังไม่ชำระ ไม่รวมที่ครบกำหนดภายใน 3 วันข้างหน้า (งานเร่งด่วนดูที่อื่น) เรียงใกล้ครบกำหนดสุดก่อน */
+const dueInvoices = computed(() => {
+  const now = new Date()
+  const soonThreshold = new Date(now)
+  soonThreshold.setDate(soonThreshold.getDate() + 3)
+  return taxInvoices.value
+    .filter((d) => d.status === 'SENT' && d.dueDate && matchesFleet(d.bookingIds, dueUnitFilter.value))
+    .filter((d) => new Date(d.dueDate!) < now || new Date(d.dueDate!) > soonThreshold)
+    .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
+    .map((d) => ({ id: d.id, customer: d.customer, dueDate: formatDateThai(d.dueDate!), amount: d.amount }))
+})
 
-const repairVehicles: { plate: string; status: string; days: number }[] = [
-  { plate: '82-4417 กรุงเทพ', status: 'เปลี่ยนยาง', days: 2 },
-]
+/** ขอวางบิล: ใบวางบิลที่รอออกใบแจ้งหนี้ (ยังไม่ถูกแปลง) */
+const billingRequests = computed(() => {
+  const now = new Date()
+  let from: Date | null = null
+  if (billingDateFilter.value === 'week') {
+    from = new Date(now)
+    from.setDate(from.getDate() - 7)
+  } else if (billingDateFilter.value === 'month') {
+    from = new Date(now)
+    from.setMonth(from.getMonth() - 1)
+  }
+  return billingNotes.value
+    .filter((d) => d.status === 'BILLING_PENDING' && matchesFleet(d.bookingIds, billingUnitFilter.value))
+    .filter((d) => !from || new Date(d.date) >= from)
+    .map((d) => ({ id: d.id, docNo: d.number, customer: d.customer, amount: d.amount }))
+})
+
+/** ระบบยังไม่มีฟีเจอร์ติดตามสถานะซ่อมรถ (Vehicle ไม่มีฟิลด์นี้) จึงว่างเสมอจนกว่าจะมีฟีเจอร์นั้นจริง แทนที่จะโชว์ข้อมูลตัวอย่าง */
+const repairVehicles: { plate: string; status: string; days: number }[] = []
 
 const pageSize = 2
 const duePage = ref(1)
@@ -298,12 +389,12 @@ const billingPage = ref(1)
 
 const pagedDueInvoices = computed(() => {
   const start = (duePage.value - 1) * pageSize
-  return dueInvoices.slice(start, start + pageSize)
+  return dueInvoices.value.slice(start, start + pageSize)
 })
 
 const pagedBillingRequests = computed(() => {
   const start = (billingPage.value - 1) * pageSize
-  return billingRequests.slice(start, start + pageSize)
+  return billingRequests.value.slice(start, start + pageSize)
 })
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`

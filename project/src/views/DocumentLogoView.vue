@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
     <div class="flex items-center justify-between flex-wrap gap-3">
-      <h2 class="text-lg font-bold text-text">โลโก้และตรายาง</h2>
+      <h2 class="text-lg font-bold text-text">ข้อมูลบริษัท / โลโก้และตรายาง</h2>
       <button @click="save" class="btn-primary">
         <span class="material-symbols-rounded text-base">save</span>
         {{ saved ? 'บันทึกแล้ว' : 'บันทึกข้อมูล' }}
@@ -10,6 +10,7 @@
 
     <div class="card-lg space-y-3">
       <div class="font-bold text-text mb-1">ข้อมูลบริษัท</div>
+      <div class="text-xs text-muted -mt-2 mb-2">ข้อมูลนี้จะถูกดึงไปแสดงในเอกสารพิมพ์/PDF ทุกประเภทโดยอัตโนมัติ (ใบเสนอราคา, ใบวางบิล, ใบแจ้งหนี้, ใบเสร็จ ฯลฯ) กรอกให้ครบก่อนเริ่มออกเอกสารจริง</div>
       <div>
         <label class="block text-xs font-semibold text-muted mb-1">ชื่อบริษัท</label>
         <input v-model="documentSettingsStore.settings.company.name" class="input-field w-full" />
