@@ -48,11 +48,7 @@ import { ref } from 'vue'
 
 const period = ref('2569-07')
 
-const staffPayroll = [
-  { name: 'สุนิสา แจ้งใจ', position: 'เสมียนบัญชี', base: 18000, bonus: 1500, deduction: 750, paid: true },
-  { name: 'อรุณี ทองพูล', position: 'เสมียนเอกสาร', base: 16000, bonus: 800, deduction: 640, paid: true },
-  { name: 'กิตติ วงศ์ษา', position: 'ธุรการ', base: 15500, bonus: 0, deduction: 620, paid: false },
-]
+const staffPayroll: { name: string; position: string; base: number; bonus: number; deduction: number; paid: boolean }[] = []
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
 </script>

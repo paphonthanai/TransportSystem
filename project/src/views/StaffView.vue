@@ -71,11 +71,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-const staffList = ref([
-  { name: 'สุนิสา แจ้งใจ', position: 'เสมียนบัญชี', phone: '02-555-0111' },
-  { name: 'อรุณี ทองพูล', position: 'เสมียนเอกสาร', phone: '02-555-0122' },
-  { name: 'กิตติ วงศ์ษา', position: 'ธุรการ', phone: '02-555-0133' },
-])
+const staffList = ref<{ name: string; position: string; phone: string }[]>([])
 
 const showDialog = ref(false)
 const editingIndex = ref<number | null>(null)

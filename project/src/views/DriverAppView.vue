@@ -281,11 +281,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
+import { useDriversStore } from '@/stores/drivers'
 import type { Booking, JobItem } from '@/types'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 
@@ -293,13 +294,22 @@ const router = useRouter()
 const bookingStore = useBookingStore()
 const authStore = useAuthStore()
 const salesDocumentsStore = useSalesDocumentsStore()
+const driversStore = useDriversStore()
 
-const driverOptions = ['สมชาย ทองดี', 'ประเสริฐ มั่นคง', 'วิรัตน์ ใจกล้า', 'สมหมาย เพียรงาน', 'ธีรพงษ์ ขยันยิ่ง']
+/** รายชื่อคนขับ ดึงจากสมุดรายชื่อจริง (Settings > พนักงานขับรถ) แทนรายชื่อตัวอย่างเดิม */
+const driverOptions = computed(() => driversStore.drivers.map((d) => driversStore.fullName(d)))
 
 // เข้าสู่ระบบด้วยบัญชีคนขับ (role: driver) ให้ล็อกชื่อตามผู้ใช้ที่ล็อกอิน แยกจากมุมมองแอดมิน
 const isDriverRole = computed(() => authStore.role === 'DRIVER')
-const selectedDriver = ref(
-  isDriverRole.value && driverOptions.includes(authStore.userName) ? authStore.userName : driverOptions[0]
+const selectedDriver = ref(authStore.userName)
+watch(
+  driverOptions,
+  (opts) => {
+    if (opts.length && !opts.includes(selectedDriver.value)) {
+      selectedDriver.value = isDriverRole.value && opts.includes(authStore.userName) ? authStore.userName : opts[0]
+    }
+  },
+  { immediate: true }
 )
 
 const logout = async () => {

@@ -305,6 +305,7 @@ import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSe
 import { useCustomerStore } from '@/stores/customers'
 import { useInventoryStore } from '@/stores/inventory'
 import { useAuthStore } from '@/stores/auth'
+import { useLocalUserStore } from '@/stores/localUsers'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
@@ -317,6 +318,7 @@ const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const inventoryStore = useInventoryStore()
 const authStore = useAuthStore()
+const localUserStore = useLocalUserStore()
 
 const editingId = typeof route.params.id === 'string' ? route.params.id : undefined
 const isEditMode = !!editingId
@@ -334,7 +336,10 @@ const dateStr = ref(todayStr())
 
 /** ใบเสร็จรับเงินถือว่าเก็บเงินแล้วทันทีตอนบันทึก จึงใช้วิธีการรับชำระแทนเงื่อนไขเครดิตแบบเอกสารอื่น */
 const paymentMethod = ref('เงินสด')
-const salespersonOptions = [authStore.userName, 'สุนิสา แจ้งใจ', 'อรุณี ทองพูล', 'กิตติ วงศ์ษา'].filter((v, i, arr) => arr.indexOf(v) === i)
+/** รายชื่อพนักงานขาย ดึงจากผู้ใช้งานจริงในระบบ (Settings > จัดการผู้ใช้งาน) แทนรายชื่อตัวอย่างเดิม */
+const salespersonOptions = computed(() =>
+  [authStore.userName, ...localUserStore.users.filter((u) => u.active).map((u) => u.name)].filter((v, i, arr) => arr.indexOf(v) === i)
+)
 const salesperson = ref(authStore.userName)
 const currencyCode = ref('THB')
 

@@ -35,11 +35,7 @@
 </template>
 
 <script setup lang="ts">
-const vendorFleetPayouts = [
-  { plate: '72-6628 อยุธยา', owner: 'สมหมาย เพียรงาน', trips: 14, amount: 24500, paid: true },
-  { plate: '70-9954 สระบุรี', owner: 'ธีรพงษ์ ขยันยิ่ง', trips: 11, amount: 19200, paid: false },
-  { plate: '83-1102 นครปฐม', owner: 'อภิชาติ แสนดี', trips: 9, amount: 15800, paid: false },
-]
+const vendorFleetPayouts: { plate: string; owner: string; trips: number; amount: number; paid: boolean }[] = []
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
 </script>
