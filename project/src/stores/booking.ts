@@ -5,6 +5,7 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useInventoryStore } from '@/stores/inventory'
 import { useBillingRuleStore } from '@/stores/billingRule'
+import { bookingRepository } from '@/repositories/bookingRepository'
 import type { Booking, BookingCategory, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
 
 /** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง, ไม่มีค่า pricingMode (ข้อมูลเก่า) ถือเป็น SINGLE_DESTINATION เสมอ */
@@ -97,7 +98,8 @@ function reviveLog(raw: any): LogEntry {
   return { ...raw, timestamp: new Date(raw.timestamp) }
 }
 
-function loadBookings(): Booking[] {
+/** ใช้ครั้งเดียวตอน import ข้อมูลเก่าเข้า Firestore (ดู importFromLocalStorage) — ไม่ใช่แหล่งข้อมูลหลักของ booking อีกต่อไป */
+function loadLocalBookingsForSeed(): Booking[] {
   try {
     const raw = localStorage.getItem(BOOKINGS_KEY)
     if (raw) return JSON.parse(raw).map(reviveBooking)
@@ -329,21 +331,20 @@ export const useBookingStore = defineStore('booking', () => {
   const inventoryStore = useInventoryStore()
   const billingRuleStore = useBillingRuleStore()
 
-  const bookings = ref<Booking[]>(loadBookings())
+  const bookings = ref<Booking[]>([])
+  const bookingsLoading = ref(false)
+  const bookingsError = ref<string | null>(null)
   const documents = ref<LegacySalesDocument[]>(loadDocuments())
   const batches = ref<BillingBatch[]>(loadBatches())
   const logs = ref<LogEntry[]>(loadLogs())
 
-  watch(bookings, (val) => localStorage.setItem(BOOKINGS_KEY, JSON.stringify(val)), { deep: true })
   watch(documents, (val) => localStorage.setItem(DOCUMENTS_KEY, JSON.stringify(val)), { deep: true })
   watch(batches, (val) => localStorage.setItem(BATCHES_KEY, JSON.stringify(val)), { deep: true })
   watch(logs, (val) => localStorage.setItem(LOGS_KEY, JSON.stringify(val)), { deep: true })
 
   // sync changes made by other browser tabs (e.g. admin dispatches a job while Driver App is open elsewhere)
+  // bookings ไม่ต้องพึ่ง storage event อีกต่อไป เพราะ Firestore onSnapshot ให้ realtime sync ข้ามเบราว์เซอร์/อุปกรณ์ได้จริงอยู่แล้ว (ดู bookingRepository.subscribe ด้านล่าง)
   window.addEventListener('storage', (e) => {
-    if (e.key === BOOKINGS_KEY && e.newValue) {
-      bookings.value = JSON.parse(e.newValue).map(reviveBooking)
-    }
     if (e.key === DOCUMENTS_KEY && e.newValue) {
       documents.value = JSON.parse(e.newValue).map(reviveDocument)
     }
@@ -354,6 +355,69 @@ export const useBookingStore = defineStore('booking', () => {
       logs.value = JSON.parse(e.newValue).map(reviveLog)
     }
   })
+
+  /**
+   * Booking data source: Firestore (แทน localStorage เดิม) — โครง CRUD/repository pattern เดียวกับ customers/drivers/vehicles
+   * ต่างตรงที่ booking.ts มีฟังก์ชันแก้ไขข้อมูลกระจายอยู่เกือบ 20 จุด (ในไฟล์นี้ + salesDocuments.ts ที่ mutate
+   * `booking` object ตรงๆ ผ่าน reference ที่ได้จาก bookings.value) จึงไม่คุ้มและเสี่ยงเกินไปที่จะรื้อทุกจุดให้เรียก
+   * repository เอง — ใช้ deep watcher เปรียบเทียบเนื้อหาต่อ booking (เหมือน watch(bookings,...,{deep:true}) ที่เคย
+   * เขียนทั้งก้อนลง localStorage ทุกครั้งที่มีการแก้ไข) แล้ว persist เฉพาะรายการที่เนื้อหาเปลี่ยนจริงไปที่ Firestore แทน
+   * วิธีนี้ทำให้ฟังก์ชัน mutate เดิมทั้งหมดไม่ต้องแก้โค้ดแม้แต่บรรทัดเดียว
+   */
+  const lastKnownBookingJson = new Map<string, string>()
+
+  function applyRemoteBookings(remote: Booking[]) {
+    bookings.value = remote
+    lastKnownBookingJson.clear()
+    remote.forEach((b) => lastKnownBookingJson.set(b.id, JSON.stringify(b)))
+  }
+
+  watch(
+    bookings,
+    (val) => {
+      val.forEach((b) => {
+        const json = JSON.stringify(b)
+        if (lastKnownBookingJson.get(b.id) === json) return
+        lastKnownBookingJson.set(b.id, json)
+        const { id, ...rest } = b
+        bookingRepository.update(id, rest).catch((err) => {
+          bookingsError.value = err?.message || 'บันทึกข้อมูลงานขนส่งไป Firestore ไม่สำเร็จ'
+        })
+      })
+    },
+    { deep: true }
+  )
+
+  /** Import ครั้งเดียว: ถ้า Firestore ยังไม่มีข้อมูล booking เลย ให้ดึงจาก localStorage เดิม (หรือ seed ถ้าว่างด้วย) เข้า Firestore ก่อน
+   *  ใช้ id เดิมทุกใบ (ผ่าน bookingRepository.update ซึ่งเป็น setDoc+merge ที่สร้างเอกสารใหม่ตาม id ที่ระบุได้) เพื่อรักษาเลขที่เอกสาร/id อ้างอิงเดิมไว้ครบ */
+  async function importFromLocalStorage() {
+    const localData = loadLocalBookingsForSeed()
+    for (const { id, ...data } of localData) {
+      await bookingRepository.update(id, data)
+    }
+  }
+
+  async function fetchBookings() {
+    bookingsLoading.value = true
+    bookingsError.value = null
+    try {
+      let result = await bookingRepository.getAll()
+      if (result.length === 0) {
+        await importFromLocalStorage()
+        result = await bookingRepository.getAll()
+      }
+      applyRemoteBookings(result)
+    } catch (err: any) {
+      bookingsError.value = err?.message || 'โหลดข้อมูลงานขนส่งจาก Firestore ไม่สำเร็จ'
+    } finally {
+      bookingsLoading.value = false
+    }
+    bookingRepository.subscribe(applyRemoteBookings, (err) => {
+      bookingsError.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ'
+    })
+  }
+
+  fetchBookings()
 
   /** บันทึกประวัติการทำรายการ ใช้ผู้ใช้ที่ล็อกอินอยู่เป็นผู้ทำรายการ — refs ไม่บังคับ ใช้กรองดูประวัติเฉพาะงาน/รายการวางบิล/เอกสารนั้นๆ ได้ */
   function addLog(action: string, refs?: { bookingId?: string; batchId?: string; docId?: string }) {
@@ -413,7 +477,7 @@ export const useBookingStore = defineStore('booking', () => {
     const { createdAt, ...rest } = data
     const booking: Booking = {
       ...rest,
-      id: `b${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
+      id: bookingRepository.newId(),
       status: 'WAITING_DISPATCH',
       createdAt: createdAt || new Date(),
       billingStatus: 'UNBILLED',
@@ -516,6 +580,18 @@ export const useBookingStore = defineStore('booking', () => {
       } (ค่าเที่ยวรวมใหม่: ${resolvedTripFee} บาท)`,
       { bookingId: booking.id }
     )
+  }
+
+  /** ลบงานขนส่งทิ้งถาวร (CRUD ครบตาม repository pattern) — ปัจจุบันยังไม่มีปุ่มเรียกใช้จาก UI เพราะ workflow ปัจจุบันใช้การยกเลิก/ถอนออกจากรอบบิลแทน */
+  function deleteBooking(id: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return
+    bookings.value = bookings.value.filter((b) => b.id !== id)
+    lastKnownBookingJson.delete(id)
+    bookingRepository.delete(id).catch((err) => {
+      bookingsError.value = err?.message || 'ลบงานขนส่งจาก Firestore ไม่สำเร็จ'
+    })
+    addLog(`ลบงาน ${booking.docNo}`, { bookingId: id })
   }
 
   /** เพิ่มรายการสินค้า/ปลายทางใหม่เข้าไปในงานที่มีอยู่แล้ว (ใช้ตอนจัดรถแล้วมีรายการเพิ่มทีหลัง) ไม่สร้างงาน/เลขที่เอกสารใหม่ */
@@ -941,6 +1017,8 @@ export const useBookingStore = defineStore('booking', () => {
 
   return {
     bookings,
+    bookingsLoading,
+    bookingsError,
     documents,
     batches,
     logs,
@@ -952,6 +1030,7 @@ export const useBookingStore = defineStore('booking', () => {
     nextReleaseNo,
     nextPoNo,
     addBooking,
+    deleteBooking,
     updateBookingPrice,
     updateBookingOps,
     updateBookingFull,

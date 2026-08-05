@@ -29,6 +29,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Phase 4: bookings
+    match /bookings/{bookingId} {
+      allow read, write: if true;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
