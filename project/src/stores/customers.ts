@@ -2,8 +2,6 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { customerRepository, sanitizeCustomer } from '@/repositories/customerRepository'
 
-const CUSTOMERS_KEY = 'tms_customers_v1'
-
 export type ContactEntityType = 'corporate' | 'individual'
 export type ContactOffice = 'hq' | 'branch'
 export type BankAccountType = 'savings' | 'current'
@@ -34,168 +32,18 @@ export interface CustomerRecord {
   note: string
 }
 
-function seedCustomers(): CustomerRecord[] {
-  return [
-    {
-      code: 'SCC',
-      entityType: 'corporate',
-      isCustomer: true,
-      isVendor: false,
-      creditDays: 30,
-      name: 'บจก. ศรีไทยคอนกรีต',
-      taxId: '0105536001221',
-      office: 'hq',
-      branchName: '',
-      address: '145 ถ.สุขุมวิท ต.บางปูใหม่ อ.เมือง จ.สมุทรปราการ',
-      zipCode: '10280',
-      contact: 'คุณวิชัย',
-      email: '',
-      phone: '02-555-0100',
-      bankName: '',
-      bankAccountName: '',
-      bankAccountNumber: '',
-      note: '',
-    },
-    {
-      code: 'PSA',
-      entityType: 'corporate',
-      isCustomer: true,
-      isVendor: false,
-      creditDays: 30,
-      name: 'บมจ. พฤกษา',
-      taxId: '0107536000451',
-      office: 'hq',
-      branchName: '',
-      address: '1177 อาคารเพิร์ล แบงก์ค็อก ถ.พหลโยธิน แขวงพญาไท เขตพญาไท กรุงเทพฯ',
-      zipCode: '10400',
-      contact: 'คุณนภา',
-      email: '',
-      phone: '02-555-0200',
-      bankName: '',
-      bankAccountName: '',
-      bankAccountNumber: '',
-      note: '',
-    },
-    {
-      code: 'RRW',
-      entityType: 'corporate',
-      isCustomer: true,
-      isVendor: false,
-      creditDays: 15,
-      name: 'หจก. รุ่งเรืองวัสดุ',
-      taxId: '0303536002233',
-      office: 'hq',
-      branchName: '',
-      address: '88/2 ถ.มิตรภาพ ต.ปากช่อง อ.ปากช่อง จ.นครราชสีมา',
-      zipCode: '30130',
-      contact: 'คุณสมพร',
-      email: '',
-      phone: '035-221-330',
-      bankName: '',
-      bankAccountName: '',
-      bankAccountNumber: '',
-      note: '',
-    },
-    {
-      code: 'LDD',
-      entityType: 'corporate',
-      isCustomer: true,
-      isVendor: false,
-      creditDays: 30,
-      name: 'บจก. แลนด์ดีเวลลอป',
-      taxId: '0105536003344',
-      office: 'hq',
-      branchName: '',
-      address: '55 ถ.รัชดาภิเษก แขวงห้วยขวาง เขตห้วยขวาง กรุงเทพฯ',
-      zipCode: '10310',
-      contact: 'คุณกานต์',
-      email: '',
-      phone: '02-555-0400',
-      bankName: '',
-      bankAccountName: '',
-      bankAccountNumber: '',
-      note: '',
-    },
-    {
-      code: 'MGH',
-      entityType: 'corporate',
-      isCustomer: true,
-      isVendor: false,
-      creditDays: 30,
-      name: 'บจก. เมกาโฮม',
-      taxId: '0105536004455',
-      office: 'hq',
-      branchName: '',
-      address: '333 ถ.บางนา-ตราด ต.บางแก้ว อ.บางพลี จ.สมุทรปราการ',
-      zipCode: '10540',
-      contact: 'คุณปิติ',
-      email: '',
-      phone: '02-555-0500',
-      bankName: '',
-      bankAccountName: '',
-      bankAccountNumber: '',
-      note: '',
-    },
-    {
-      code: 'TWS',
-      entityType: 'corporate',
-      isCustomer: true,
-      isVendor: false,
-      creditDays: 15,
-      name: 'หจก. ทวีทรัพย์',
-      taxId: '0303536005566',
-      office: 'hq',
-      branchName: '',
-      address: '21 ถ.เพชรมาตุคลา ต.ในเมือง อ.เมือง จ.นครราชสีมา',
-      zipCode: '30000',
-      contact: 'คุณมานะ',
-      email: '',
-      phone: '035-441-220',
-      bankName: '',
-      bankAccountName: '',
-      bankAccountNumber: '',
-      note: '',
-    },
-  ]
-}
-
-/** ข้อมูล local เดิม (ก่อนย้ายไป Firestore) — ใช้เป็น "แหล่งข้อมูลตั้งต้น" ตอน import ครั้งแรกเข้า Firestore เท่านั้น
- *  ไม่ใช่แหล่งข้อมูลหลักอีกต่อไปหลังย้าย (ดู importFromLocalStorage ด้านล่าง) */
-function loadLocalCustomers(): CustomerRecord[] {
-  try {
-    const raw = localStorage.getItem(CUSTOMERS_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {
-    // corrupt/inaccessible storage, fall back to seed data
-  }
-  return seedCustomers()
-}
-
 export const useCustomerStore = defineStore('customers', () => {
   const customers = ref<CustomerRecord[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  /** Import ครั้งเดียว: ถ้า Firestore ยังไม่มีข้อมูลเลย (โปรเจกต์ใหม่/ยังไม่เคย migrate) ให้ดึงจาก localStorage
-   *  (หรือ seed ถ้า localStorage ก็ว่างเหมือนกัน) เข้า Firestore ก่อน — เพื่อให้พฤติกรรมตอนเปิดแอปครั้งแรกเหมือนของเดิม
-   *  หลังจากนี้ Firestore คือแหล่งข้อมูลจริงเพียงที่เดียว ไม่อ่าน/เขียน localStorage อีก */
-  async function importFromLocalStorage() {
-    const localData = loadLocalCustomers()
-    for (const { id, ...data } of localData) {
-      await customerRepository.create(data)
-    }
-  }
-
+  /** ไม่ auto-reseed ข้อมูลตัวอย่าง (mock) เข้า Firestore อีกต่อไป — ถ้า collection ว่าง แปลว่าว่างจริง (ล้าง mock
+   *  data ทิ้งโดยตั้งใจ) ไม่ใช่ "ยังไม่เคย migrate" ต้องให้ผู้ใช้กรอกลูกค้าจริงเองผ่านหน้า สมุดรายชื่อ > ลูกค้า/คู่ค้า */
   async function fetchCustomers() {
     loading.value = true
     error.value = null
     try {
-      let result = await customerRepository.getAll()
-      if (result.length === 0) {
-        await importFromLocalStorage()
-        result = await customerRepository.getAll()
-      }
-      customers.value = result
+      customers.value = await customerRepository.getAll()
     } catch (err: any) {
       error.value = err?.message || 'โหลดข้อมูลลูกค้าจาก Firestore ไม่สำเร็จ'
     } finally {
@@ -257,5 +105,10 @@ export const useCustomerStore = defineStore('customers', () => {
     if (index !== -1) customers.value[index] = { ...clean, id }
   }
 
-  return { customers, loading, error, lookupCustomer, suggestPoNumber, createCustomer, updateCustomer, sanitizeCustomer }
+  async function deleteCustomer(id: string) {
+    await customerRepository.delete(id)
+    customers.value = customers.value.filter((c) => c.id !== id)
+  }
+
+  return { customers, loading, error, lookupCustomer, suggestPoNumber, createCustomer, updateCustomer, deleteCustomer, sanitizeCustomer }
 })

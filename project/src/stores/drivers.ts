@@ -2,8 +2,6 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { driverRepository, sanitizeDriver } from '@/repositories/driverRepository'
 
-const DRIVERS_KEY = 'tms_drivers_v1'
-
 export type EmploymentStatus = 'active' | 'resigned'
 export type IncomeType = 'daily' | 'monthly' | 'trip'
 export type LicenseType = 'ท.1' | 'ท.2'
@@ -41,164 +39,18 @@ export interface DriverRecord {
   avatarBg: string
 }
 
-function seedDrivers(): DriverRecord[] {
-  return [
-    {
-      code: '0001',
-      prefix: 'นาย',
-      firstName: 'สมชาย',
-      lastName: 'ทองดี',
-      idCard: '1-2345-67890-12-3',
-      licenseNo: '',
-      licenseType: 'ท.2',
-      licenseExpiry: '',
-      address: '12/4',
-      subDistrict: 'ปากน้ำ',
-      district: 'เมือง',
-      province: 'สระบุรี',
-      zipCode: '',
-      phone: '081-234-5678',
-      lineId: 'somchai_td',
-      emergencyContact: '',
-      emergencyRelation: '',
-      startDate: '',
-      employmentStatus: 'active',
-      resignDate: '',
-      incomeType: 'trip',
-      incomeAmount: 0,
-      commission: 0,
-      phoneAllowance: 0,
-      bankAccount: '123-4-56789-0',
-      photo: null,
-      avatarBg: '#3b82f6',
-    },
-    {
-      code: '0002',
-      prefix: 'นาย',
-      firstName: 'ประเสริฐ',
-      lastName: 'มั่นคง',
-      idCard: '1-2345-67891-23-4',
-      licenseNo: '',
-      licenseType: 'ท.2',
-      licenseExpiry: '',
-      address: '45',
-      subDistrict: 'บางพลี',
-      district: 'บางพลี',
-      province: 'สมุทรปราการ',
-      zipCode: '',
-      phone: '089-555-1212',
-      lineId: 'prasert_mk',
-      emergencyContact: '',
-      emergencyRelation: '',
-      startDate: '',
-      employmentStatus: 'active',
-      resignDate: '',
-      incomeType: 'trip',
-      incomeAmount: 0,
-      commission: 0,
-      phoneAllowance: 0,
-      bankAccount: '234-5-67890-1',
-      photo: null,
-      avatarBg: '#10b981',
-    },
-    {
-      code: '0003',
-      prefix: 'นาย',
-      firstName: 'วิรัตน์',
-      lastName: 'ใจกล้า',
-      idCard: '1-2345-67892-34-5',
-      licenseNo: '',
-      licenseType: 'ท.2',
-      licenseExpiry: '',
-      address: '78',
-      subDistrict: 'หน้าเมือง',
-      district: 'เมือง',
-      province: 'ราชบุรี',
-      zipCode: '',
-      phone: '086-777-9090',
-      lineId: 'wirat_jk',
-      emergencyContact: '',
-      emergencyRelation: '',
-      startDate: '',
-      employmentStatus: 'active',
-      resignDate: '',
-      incomeType: 'trip',
-      incomeAmount: 0,
-      commission: 0,
-      phoneAllowance: 0,
-      bankAccount: '345-6-78901-2',
-      photo: null,
-      avatarBg: '#2563eb',
-    },
-    {
-      code: '0004',
-      prefix: 'นาย',
-      firstName: 'สมหมาย',
-      lastName: 'เพียรงาน',
-      idCard: '1-2345-67893-45-6',
-      licenseNo: '',
-      licenseType: 'ท.2',
-      licenseExpiry: '',
-      address: '90',
-      subDistrict: 'หัวรอ',
-      province: 'พระนครศรีอยุธยา',
-      district: 'พระนครศรีอยุธยา',
-      zipCode: '',
-      phone: '087-345-6767',
-      lineId: 'sommai_pn',
-      emergencyContact: '',
-      emergencyRelation: '',
-      startDate: '',
-      employmentStatus: 'active',
-      resignDate: '',
-      incomeType: 'trip',
-      incomeAmount: 0,
-      commission: 0,
-      phoneAllowance: 0,
-      bankAccount: '456-7-89012-3',
-      photo: null,
-      avatarBg: '#ec4899',
-    },
-  ]
-}
-
-/** ข้อมูล local เดิม (ก่อนย้ายไป Firestore) — ใช้เป็น "แหล่งข้อมูลตั้งต้น" ตอน import ครั้งแรกเข้า Firestore เท่านั้น
- *  ไม่ใช่แหล่งข้อมูลหลักอีกต่อไปหลังย้าย (ดู importFromLocalStorage ด้านล่าง) */
-function loadLocalDrivers(): DriverRecord[] {
-  try {
-    const raw = localStorage.getItem(DRIVERS_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {
-    // corrupt/inaccessible storage, fall back to seed data
-  }
-  return seedDrivers()
-}
-
 export const useDriversStore = defineStore('drivers', () => {
   const drivers = ref<DriverRecord[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  /** Import ครั้งเดียว: ถ้า Firestore ยังไม่มีข้อมูลเลย ให้ดึงจาก localStorage (หรือ seed ถ้า localStorage ก็ว่าง
-   *  เหมือนกัน) เข้า Firestore ก่อน — เพื่อให้พฤติกรรมตอนเปิดแอปครั้งแรกเหมือนของเดิม หลังจากนี้ Firestore คือแหล่ง
-   *  ข้อมูลจริงเพียงที่เดียว ไม่อ่าน/เขียน localStorage อีก (เหมือน stores/customers.ts) */
-  async function importFromLocalStorage() {
-    const localData = loadLocalDrivers()
-    for (const { id, ...data } of localData) {
-      await driverRepository.create(data)
-    }
-  }
-
+  /** ไม่ auto-reseed ข้อมูลตัวอย่าง (mock) เข้า Firestore อีกต่อไป — ถ้า collection ว่าง แปลว่าว่างจริง (ล้าง mock
+   *  data ทิ้งโดยตั้งใจ) ไม่ใช่ "ยังไม่เคย migrate" ต้องให้ผู้ใช้กรอกคนขับจริงเองผ่านหน้า สมุดรายชื่อ > พนักงานขับรถ */
   async function fetchDrivers() {
     loading.value = true
     error.value = null
     try {
-      let result = await driverRepository.getAll()
-      if (result.length === 0) {
-        await importFromLocalStorage()
-        result = await driverRepository.getAll()
-      }
-      drivers.value = result
+      drivers.value = await driverRepository.getAll()
     } catch (err: any) {
       error.value = err?.message || 'โหลดข้อมูลคนขับจาก Firestore ไม่สำเร็จ'
     } finally {
@@ -223,5 +75,10 @@ export const useDriversStore = defineStore('drivers', () => {
     if (index !== -1) drivers.value[index] = { ...clean, id }
   }
 
-  return { drivers, loading, error, fullName, createDriver, updateDriver, sanitizeDriver }
+  async function deleteDriver(id: string) {
+    await driverRepository.delete(id)
+    drivers.value = drivers.value.filter((d) => d.id !== id)
+  }
+
+  return { drivers, loading, error, fullName, createDriver, updateDriver, deleteDriver, sanitizeDriver }
 })

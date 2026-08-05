@@ -60,26 +60,9 @@ const ACCEPT_TIMEOUT_MS = 15 * 60 * 1000
  *      ตัดสต๊อกทันทีตอนรับแต่ละรายการ ลำดับส่งของ (deliverySequence) คำนวณอัตโนมัติเป็นลำดับย้อนกลับของลำดับรับสินค้า)
  * (batches v3: เปลี่ยน BillingBatch.status จาก 'draft'/'invoiced'/'paid' เป็น 5 สถานะใหม่ + เพิ่ม number จึงขึ้น key ใหม่)
  */
-const BOOKINGS_KEY = 'tms_bookings_v5'
 const DOCUMENTS_KEY = 'tms_documents_v2'
 const BATCHES_KEY = 'tms_batches_v3'
 const LOGS_KEY = 'tms_logs_v1'
-
-const BOOKING_DATE_FIELDS = ['createdAt', 'shipDate', 'dispatchedAt', 'transitStartedAt', 'completedAt', 'billedAt'] as const
-
-function reviveBooking(raw: any): Booking {
-  const booking = { ...raw }
-  for (const field of BOOKING_DATE_FIELDS) {
-    if (booking[field]) booking[field] = new Date(booking[field])
-  }
-  if (booking.goodsReceivedAt) booking.goodsReceivedAt = new Date(booking.goodsReceivedAt)
-  booking.items = (booking.items || []).map((item: any) => ({
-    ...item,
-    pickedUpAt: item.pickedUpAt ? new Date(item.pickedUpAt) : undefined,
-    deliveredAt: item.deliveredAt ? new Date(item.deliveredAt) : undefined,
-  }))
-  return booking as Booking
-}
 
 function reviveDocument(raw: any): LegacySalesDocument {
   return {
@@ -96,17 +79,6 @@ function reviveBatch(raw: any): BillingBatch {
 
 function reviveLog(raw: any): LogEntry {
   return { ...raw, timestamp: new Date(raw.timestamp) }
-}
-
-/** ใช้ครั้งเดียวตอน import ข้อมูลเก่าเข้า Firestore (ดู importFromLocalStorage) — ไม่ใช่แหล่งข้อมูลหลักของ booking อีกต่อไป */
-function loadLocalBookingsForSeed(): Booking[] {
-  try {
-    const raw = localStorage.getItem(BOOKINGS_KEY)
-    if (raw) return JSON.parse(raw).map(reviveBooking)
-  } catch {
-    // corrupt/inaccessible storage, fall back to seed data
-  }
-  return seedBookings()
 }
 
 function loadDocuments(): LegacySalesDocument[] {
@@ -137,191 +109,6 @@ function loadLogs(): LogEntry[] {
     // corrupt/inaccessible storage, fall back to empty list
   }
   return []
-}
-
-function seedBookings(): Booking[] {
-  const now = new Date()
-  return [
-    {
-      id: 'b1',
-      category: 'cements',
-      docNo: 'CM2569-0001',
-      customer: 'ABC',
-      items: [
-        {
-          id: 'b1-i1',
-          product: 'ปูนซีเมนต์ M402',
-          qty: 10,
-          unit: 'ตัน',
-          jobType: 'ลงมือ',
-          siteName: 'ไซต์งาน นครสวรรค์',
-          province: 'นครสวรรค์',
-          district: 'เมืองนครสวรรค์',
-          siteContactName: 'คุณสมชาย',
-          sitePhone: '081-234-5678',
-        },
-      ],
-      allowance: 350,
-      tripFee: 4500,
-      agreedPrice: 4500,
-      fuelLiters: 40,
-      fuelRate: 32,
-      plate: '',
-      status: 'WAITING_DISPATCH',
-      billingStatus: 'UNBILLED',
-      createdAt: now,
-    },
-    {
-      id: 'b2',
-      category: 'ceramics',
-      docNo: 'CR2569-0002',
-      customer: fixedCeramicsCustomer,
-      items: [
-        {
-          id: 'b2-i1',
-          product: 'ปูนซีเมนต์',
-          qty: 1,
-          unit: 'เที่ยว',
-          siteName: 'ไซต์งาน ชลบุรี',
-          province: 'ชลบุรี',
-          district: 'ศรีราชา',
-        },
-      ],
-      allowance: 0,
-      tripFee: 3800,
-      agreedPrice: 3800,
-      fuelLiters: 35,
-      fuelRate: 32,
-      plate: '',
-      status: 'WAITING_DISPATCH',
-      billingStatus: 'UNBILLED',
-      createdAt: now,
-    },
-    {
-      id: 'b3',
-      category: 'cements',
-      docNo: 'CM2569-0002',
-      customer: 'XYZ',
-      // ตัวอย่างงานเดียวมีหลายรายการ/ปลายทางคนละที่ — ยังเป็น 1 งาน/1 ค่าเที่ยว/1 รถ/1 คนขับเหมือนเดิม
-      items: [
-        {
-          id: 'b3-i1',
-          product: 'ปูนซีเมนต์ M401',
-          qty: 10,
-          unit: 'ตัน',
-          jobType: 'พาเลทโรงงาน',
-          siteName: 'ไซต์งาน ราชบุรี',
-          province: 'ราชบุรี',
-          district: 'เมืองราชบุรี',
-          siteContactName: 'คุณวิชัย',
-          sitePhone: '089-111-2233',
-        },
-        {
-          id: 'b3-i2',
-          product: 'ปูนซีเมนต์ M402',
-          qty: 5,
-          unit: 'ตัน',
-          jobType: 'พาเลทโรงงาน',
-          siteName: 'ไซต์งาน เชียงใหม่',
-          province: 'เชียงใหม่',
-          district: 'เมืองเชียงใหม่',
-          siteContactName: 'คุณประยูร',
-          sitePhone: '086-222-9911',
-        },
-      ],
-      allowance: 320,
-      tripFee: 4200,
-      agreedPrice: 4200,
-      fuelLiters: 38,
-      fuelRate: 32,
-      plate: '71-3390 ราชบุรี',
-      driverName: 'วิรัตน์ ใจกล้า',
-      status: 'ACCEPTED',
-      billingStatus: 'UNBILLED',
-      createdAt: now,
-      dispatchedAt: now,
-    },
-    {
-      id: 'b3b',
-      category: 'ceramics',
-      docNo: 'CR2569-0003',
-      customer: fixedCeramicsCustomer,
-      items: [
-        {
-          id: 'b3b-i1',
-          product: 'ปูนซีเมนต์',
-          qty: 1,
-          unit: 'เที่ยว',
-          siteName: 'ไซต์งาน อยุธยา',
-          province: 'พระนครศรีอยุธยา',
-          district: 'บางปะอิน',
-          siteContactName: 'คุณอนุชา',
-          sitePhone: '082-555-1122',
-          pickupStatus: 'PICKED_UP',
-          pickupSequence: 0,
-          pickedUpAt: now,
-          deliverySequence: 0,
-        },
-      ],
-      allowance: 0,
-      tripFee: 4100,
-      agreedPrice: 4100,
-      fuelLiters: 33,
-      fuelRate: 32,
-      plate: '72-6628 อยุธยา',
-      driverName: 'สมหมาย เพียรงาน',
-      status: 'IN_TRANSIT',
-      billingStatus: 'UNBILLED',
-      createdAt: now,
-      dispatchedAt: now,
-      goodsReceivedAt: now,
-      goodsReceivedBy: 'สมหมาย เพียรงาน',
-      transitStartedAt: now,
-    },
-    {
-      id: 'b4',
-      category: 'ceramics',
-      docNo: 'CR2569-0001',
-      customer: fixedCeramicsCustomer,
-      items: [
-        {
-          id: 'b4-i1',
-          product: 'ปูนซีเมนต์',
-          qty: 1,
-          unit: 'เที่ยว',
-          siteName: 'ไซต์งาน นครสวรรค์',
-          province: 'นครสวรรค์',
-          district: 'เมืองนครสวรรค์',
-          siteContactName: 'คุณสมชาย',
-          sitePhone: '081-234-5678',
-          pickupStatus: 'PICKED_UP',
-          pickupSequence: 0,
-          pickedUpAt: now,
-          deliverySequence: 0,
-          deliveryStatus: 'DELIVERED',
-          deliveredAt: now,
-          deliveredBy: 'คุณสมชาย',
-        },
-      ],
-      allowance: 1549,
-      finalAllowance: 1449,
-      debtAdjustments: [{ id: 'seed-adj-1', label: 'ค่าปรับความล่าช้า', amount: 100 }],
-      tripFee: 4400,
-      agreedPrice: 4400,
-      fuelLiters: 36,
-      fuelRate: 32,
-      plate: '70-8821 สระบุรี',
-      driverName: 'สมชาย ทองดี',
-      status: 'DELIVERED',
-      billingStatus: 'UNBILLED',
-      createdAt: now,
-      dispatchedAt: now,
-      goodsReceivedAt: now,
-      goodsReceivedBy: 'สมชาย ทองดี',
-      transitStartedAt: now,
-      completedAt: now,
-    },
-  ]
 }
 
 export const useBookingStore = defineStore('booking', () => {
@@ -388,25 +175,13 @@ export const useBookingStore = defineStore('booking', () => {
     { deep: true }
   )
 
-  /** Import ครั้งเดียว: ถ้า Firestore ยังไม่มีข้อมูล booking เลย ให้ดึงจาก localStorage เดิม (หรือ seed ถ้าว่างด้วย) เข้า Firestore ก่อน
-   *  ใช้ id เดิมทุกใบ (ผ่าน bookingRepository.update ซึ่งเป็น setDoc+merge ที่สร้างเอกสารใหม่ตาม id ที่ระบุได้) เพื่อรักษาเลขที่เอกสาร/id อ้างอิงเดิมไว้ครบ */
-  async function importFromLocalStorage() {
-    const localData = loadLocalBookingsForSeed()
-    for (const { id, ...data } of localData) {
-      await bookingRepository.update(id, data)
-    }
-  }
-
+  /** ไม่ auto-reseed ข้อมูลตัวอย่าง (mock) เข้า Firestore อีกต่อไป — ถ้า collection ว่าง แปลว่าว่างจริง (ล้าง mock
+   *  data ทิ้งโดยตั้งใจ) ไม่ใช่ "ยังไม่เคย migrate" ต้องให้ผู้ใช้ลงงานขนส่งจริงเองผ่านหน้าสร้างงาน */
   async function fetchBookings() {
     bookingsLoading.value = true
     bookingsError.value = null
     try {
-      let result = await bookingRepository.getAll()
-      if (result.length === 0) {
-        await importFromLocalStorage()
-        result = await bookingRepository.getAll()
-      }
-      applyRemoteBookings(result)
+      applyRemoteBookings(await bookingRepository.getAll())
     } catch (err: any) {
       bookingsError.value = err?.message || 'โหลดข้อมูลงานขนส่งจาก Firestore ไม่สำเร็จ'
     } finally {
