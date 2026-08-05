@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
-const SETTINGS_KEY = 'tms_document_settings_v1'
+/** v2: เปลี่ยนชื่อ/ที่อยู่บริษัทตั้งต้นจาก THANTHARA เป็นมิตรกาญจน์ — ขึ้น key ใหม่เพื่อไม่ให้ localStorage เดิม (ที่มีชื่อบริษัทเก่าค้างอยู่) บังค่า default ใหม่ */
+const SETTINGS_KEY = 'tms_document_settings_v2'
 
 export type PriceDisplay = 'exclusive' | 'inclusive'
 export type CalcMode = 'separate' | 'included'
@@ -52,10 +53,10 @@ export interface DocumentSettings {
 function defaultSettings(): DocumentSettings {
   return {
     company: {
-      name: 'บริษัท ธัญธารา จำกัด (สำนักงานใหญ่)',
-      address: '99 หมู่ 4 ถ.มิตรภาพ ต.ปากช่อง อ.ปากช่อง จ.นครราชสีมา',
-      zipCode: '30130',
-      taxId: '0305566001234',
+      name: 'บริษัท มิตรกาญจน์ จำกัด',
+      address: '42 หมู่ที่ 8 ตำบลทับกวาง อำเภอแก่งคอย จ.สระบุรี',
+      zipCode: '18260',
+      taxId: '',
       phone: '',
       logo: null,
       stamp: null,

@@ -13,7 +13,7 @@
           <span class="material-symbols-rounded text-white text-5xl">local_shipping</span>
         </div>
         <div class="leading-tight">
-          <div class="text-sm font-bold text-text">THANTHARA</div>
+          <div class="text-sm font-bold text-text">มิตรกาญจน์</div>
           <div class="text-xs text-muted tracking-wide">ระบบบริหารงานขนส่ง</div>
         </div>
       </div>

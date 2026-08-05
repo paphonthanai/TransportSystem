@@ -12,7 +12,7 @@
             <span class="material-symbols-rounded text-lg">logout</span>
           </button>
         </div>
-        <div class="text-xs opacity-90 mb-3">ระบบสำหรับพนักงานขับรถ · THANTHARA</div>
+        <div class="text-xs opacity-90 mb-3">ระบบสำหรับพนักงานขับรถ · มิตรกาญจน์</div>
         <select
           v-model="selectedDriver"
           :disabled="isDriverRole"

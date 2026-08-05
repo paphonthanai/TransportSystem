@@ -6,7 +6,7 @@
         <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white bg-opacity-20 backdrop-blur-md mb-4">
           <span class="material-symbols-rounded text-white text-6xl">local_shipping</span>
         </div>
-        <h1 class="text-4xl font-bold text-white mb-2">THANTHARA</h1>
+        <h1 class="text-4xl font-bold text-white mb-2">มิตรกาญจน์</h1>
         <p class="text-white text-opacity-90 text-sm">ระบบบริหารงานขนส่ง</p>
       </div>
 
@@ -92,7 +92,7 @@
       <!-- Footer -->
       <div class="text-center mt-6">
         <p class="text-white text-opacity-80 text-xs">
-          © 2569 THANTHARA Co., Ltd. All rights reserved.
+          © 2569 บริษัท มิตรกาญจน์ จำกัด สงวนลิขสิทธิ์
         </p>
       </div>
     </div>

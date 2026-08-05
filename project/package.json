@@ -1,7 +1,7 @@
 {
-  "name": "thanthara-tms",
+  "name": "mitkarn-tms",
   "version": "1.0.0",
-  "description": "Transportation Management System - THANTHARA",
+  "description": "Transportation Management System - Mitkarn",
   "type": "module",
   "scripts": {
     "dev": "vite",
