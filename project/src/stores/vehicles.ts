@@ -3,106 +3,18 @@ import { ref } from 'vue'
 import type { Vehicle } from '@/types'
 import { vehicleRepository, sanitizeVehicle } from '@/repositories/vehicleRepository'
 
-const VEHICLES_KEY = 'tms_vehicles_v1'
-
-function seedVehicles(): Vehicle[] {
-  return [
-    {
-      id: 'v1',
-      plate: '70-8821',
-      plateProvince: 'สระบุรี',
-      vehicleNo: 'T-001',
-      trailerPlate: '',
-      brand: 'HINO',
-      bodyType: 'รถบรรทุก 10 ล้อ',
-      chassisNo: 'MPBUR2CE0M1012345',
-      engineNo: 'J08E-10234',
-      department: 'รถบริษัท',
-      mileage: 152340,
-      driverCode: '0001',
-    },
-    {
-      id: 'v2',
-      plate: '82-4417',
-      plateProvince: 'กรุงเทพมหานคร',
-      vehicleNo: 'T-002',
-      trailerPlate: '',
-      brand: 'ISUZU',
-      bodyType: 'รถบรรทุก 6 ล้อ',
-      chassisNo: 'MPBUR2CE0K1054321',
-      engineNo: '6HK1-55123',
-      department: 'รถบริษัท',
-      mileage: 98210,
-      driverCode: '0002',
-    },
-    {
-      id: 'v3',
-      plate: '71-3390',
-      plateProvince: 'ราชบุรี',
-      vehicleNo: 'T-003',
-      trailerPlate: 'ห-1204 ราชบุรี',
-      brand: 'FUSO',
-      bodyType: 'รถหัวลาก',
-      chassisNo: 'MPBUR2CE0L1067788',
-      engineNo: '6M70-67788',
-      department: 'รถหุ้นส่วน',
-      mileage: 210875,
-      driverCode: '0003',
-    },
-    {
-      id: 'v4',
-      plate: '72-6628',
-      plateProvince: 'พระนครศรีอยุธยา',
-      vehicleNo: 'T-004',
-      trailerPlate: 'ห-3387 อยุธยา',
-      brand: 'HINO',
-      bodyType: 'รถกึ่งพ่วง',
-      chassisNo: 'MPBUR2CE0J1099001',
-      engineNo: 'J08E-99001',
-      department: 'รถร่วม',
-      mileage: 176420,
-      driverCode: '0004',
-    },
-  ]
-}
-
-/** ข้อมูล local เดิม (ก่อนย้ายไป Firestore) — ใช้เป็น "แหล่งข้อมูลตั้งต้น" ตอน import ครั้งแรกเข้า Firestore เท่านั้น
- *  ไม่ใช่แหล่งข้อมูลหลักอีกต่อไปหลังย้าย (ดู importFromLocalStorage ด้านล่าง) */
-function loadLocalVehicles(): Vehicle[] {
-  try {
-    const raw = localStorage.getItem(VEHICLES_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {
-    // corrupt/inaccessible storage, fall back to seed data
-  }
-  return seedVehicles()
-}
-
 export const useVehiclesStore = defineStore('vehicles', () => {
   const vehicles = ref<Vehicle[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  /** Import ครั้งเดียว: ถ้า Firestore ยังไม่มีข้อมูลเลย ให้ดึงจาก localStorage (หรือ seed ถ้า localStorage ก็ว่าง
-   *  เหมือนกัน) เข้า Firestore ก่อน — id เดิม ('v1'..'v4') จะถูกแทนที่ด้วย document id จริงของ Firestore เหมือนที่
-   *  customers/drivers ทำ (ไม่มีที่ไหนใน business logic อ้างอิง id เดิมแบบ hardcode ตรวจสอบแล้ว) */
-  async function importFromLocalStorage() {
-    const localData = loadLocalVehicles()
-    for (const { id, ...data } of localData) {
-      await vehicleRepository.create(data)
-    }
-  }
-
+  /** ไม่ auto-reseed ข้อมูลตัวอย่าง (mock) เข้า Firestore อีกต่อไป — ถ้า collection ว่าง แปลว่าว่างจริง (เช่น เพิ่งลบ
+   *  mock data ทิ้งโดยตั้งใจ) ไม่ใช่ "ยังไม่เคย migrate" ต้องให้ผู้ใช้กรอกรถจริงเองผ่านหน้า ตั้งค่า > รถบรรทุก */
   async function fetchVehicles() {
     loading.value = true
     error.value = null
     try {
-      let result = await vehicleRepository.getAll()
-      if (result.length === 0) {
-        await importFromLocalStorage()
-        result = await vehicleRepository.getAll()
-      }
-      vehicles.value = result
+      vehicles.value = await vehicleRepository.getAll()
     } catch (err: any) {
       error.value = err?.message || 'โหลดข้อมูลรถจาก Firestore ไม่สำเร็จ'
     } finally {

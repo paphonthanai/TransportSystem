@@ -14,6 +14,7 @@
           <tr>
             <th class="px-4 py-3 font-semibold">ชื่อ</th>
             <th class="px-4 py-3 font-semibold">Username</th>
+            <th class="px-4 py-3 font-semibold">Password</th>
             <th class="px-4 py-3 font-semibold">Role</th>
             <th class="px-4 py-3 font-semibold">สถานะ</th>
             <th class="px-4 py-3 font-semibold"></th>
@@ -23,6 +24,7 @@
           <tr v-for="user in localUserStore.users" :key="user.id" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 font-semibold text-text">{{ user.name }}</td>
             <td class="px-4 py-3 text-muted font-mono">{{ user.username }}</td>
+            <td class="px-4 py-3 text-muted">••••••••</td>
             <td class="px-4 py-3 text-muted">{{ roleLabels[user.role] }}</td>
             <td class="px-4 py-3">
               <span :class="['text-xs font-semibold px-2 py-1 rounded-full', user.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
@@ -31,6 +33,7 @@
             </td>
             <td class="px-4 py-3 text-right whitespace-nowrap">
               <button @click="openEditDialog(user)" class="btn-sm">แก้ไข</button>
+              <button @click="openPasswordDialog(user)" class="btn-sm ml-1.5">ตั้งรหัสผ่านชั่วคราว</button>
               <button
                 @click="toggleActive(user)"
                 :disabled="user.id === authStore.currentUser?.id"
@@ -42,7 +45,7 @@
             </td>
           </tr>
           <tr v-if="localUserStore.users.length === 0">
-            <td colspan="5" class="px-4 py-8 text-center text-muted">ยังไม่มีผู้ใช้งาน</td>
+            <td colspan="6" class="px-4 py-8 text-center text-muted">ยังไม่มีผู้ใช้งาน</td>
           </tr>
         </tbody>
       </table>
@@ -87,6 +90,33 @@
         </div>
       </div>
     </Teleport>
+    <Teleport to="body" v-if="showPasswordDialog">
+      <div @click="showPasswordDialog = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
+        <div @click.stop class="w-full max-w-md bg-surface rounded-2xl shadow-2xl">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+            <div class="font-bold text-text">ตั้งรหัสผ่านชั่วคราว</div>
+            <button @click="showPasswordDialog = false" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+          <div class="px-6 py-5 space-y-3">
+            <div class="text-sm text-muted">ไม่สามารถดูรหัสผ่านเดิมได้ (ถูกเก็บเป็น hash) — คุณสามารถตั้งรหัสผ่านชั่วคราวใหม่ให้ผู้ใช้นี้ได้</div>
+            <div class="mt-3">
+              <label class="block text-xs font-semibold text-muted mb-1">รหัสผ่านชั่วคราว</label>
+              <div class="input-field font-mono">{{ tempPassword }}</div>
+            </div>
+            <div v-if="passwordApplied" class="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+              ตั้งรหัสผ่านให้ {{ passwordTarget?.name }} เรียบร้อยแล้ว — คัดลอกรหัสด้านบนไปแจ้งผู้ใช้ได้เลย
+            </div>
+            <div v-if="passwordError" class="text-xs text-red-600">{{ passwordError }}</div>
+          </div>
+          <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
+            <button @click="generateTempPassword" class="btn-secondary">สร้างใหม่</button>
+            <button @click="applyTempPassword" class="btn-primary">ตั้งรหัสผ่านและแสดง</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -111,6 +141,42 @@ const showDialog = ref(false)
 const editingUser = ref<LocalUser | null>(null)
 const form = ref({ name: '', username: '', password: '', role: 'STAFF' as UserRole })
 const formError = ref('')
+const showPasswordDialog = ref(false)
+const passwordTarget = ref<LocalUser | null>(null)
+const tempPassword = ref('')
+const passwordError = ref('')
+const passwordApplied = ref(false)
+
+const generateTempPassword = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+  let out = ''
+  for (let i = 0; i < 10; i++) out += chars[Math.floor(Math.random() * chars.length)]
+  tempPassword.value = out
+  passwordApplied.value = false
+}
+
+const openPasswordDialog = (user: LocalUser) => {
+  if (authStore.currentUser?.role !== 'ADMIN') return
+  passwordTarget.value = user
+  generateTempPassword()
+  passwordError.value = ''
+  showPasswordDialog.value = true
+}
+
+const applyTempPassword = async () => {
+  passwordError.value = ''
+  if (!passwordTarget.value) return
+  if (!tempPassword.value) {
+    passwordError.value = 'รหัสผ่านไม่ถูกต้อง'
+    return
+  }
+  try {
+    await localUserStore.updateUser(passwordTarget.value.id, { password: tempPassword.value })
+    passwordApplied.value = true
+  } catch (err: any) {
+    passwordError.value = err?.message || 'ไม่สามารถตั้งรหัสผ่านได้'
+  }
+}
 
 const openCreateDialog = () => {
   editingUser.value = null
