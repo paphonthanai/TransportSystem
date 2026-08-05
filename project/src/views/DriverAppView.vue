@@ -297,7 +297,7 @@ const salesDocumentsStore = useSalesDocumentsStore()
 const driverOptions = ['สมชาย ทองดี', 'ประเสริฐ มั่นคง', 'วิรัตน์ ใจกล้า', 'สมหมาย เพียรงาน', 'ธีรพงษ์ ขยันยิ่ง']
 
 // เข้าสู่ระบบด้วยบัญชีคนขับ (role: driver) ให้ล็อกชื่อตามผู้ใช้ที่ล็อกอิน แยกจากมุมมองแอดมิน
-const isDriverRole = computed(() => authStore.role === 'driver')
+const isDriverRole = computed(() => authStore.role === 'DRIVER')
 const selectedDriver = ref(
   isDriverRole.value && driverOptions.includes(authStore.userName) ? authStore.userName : driverOptions[0]
 )

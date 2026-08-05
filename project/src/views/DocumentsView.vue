@@ -118,14 +118,14 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import type { LegacySalesDocument } from '@/stores/booking'
-import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
-const appStore = useAppStore()
+const authStore = useAuthStore()
 
 const documents = computed(() => bookingStore.documents)
-const canEdit = computed(() => appStore.currentRole === 'admin')
+const canEdit = computed(() => authStore.role === 'ADMIN')
 
 const statusLabel = (status: string) => ({ draft: 'ร่าง', sent: 'ส่งแล้ว', paid: 'ชำระแล้ว' })[status] || status
 

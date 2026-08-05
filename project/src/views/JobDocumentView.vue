@@ -379,7 +379,7 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
-import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
@@ -392,12 +392,12 @@ import type { Booking } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const bookingStore = useBookingStore()
-const appStore = useAppStore()
+const authStore = useAuthStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
 
-const isAdmin = computed(() => appStore.currentRole === 'admin')
+const isAdmin = computed(() => authStore.role === 'ADMIN')
 
 const booking = computed(() => bookingStore.bookings.find((b) => b.id === route.params.bookingId))
 /** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง — แก้ไขราคาต้องทำผ่านหน้าแก้ไขงานเท่านั้น ไม่ใช่หน้านี้ */

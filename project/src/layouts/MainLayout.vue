@@ -37,7 +37,7 @@
           </div>
           <div class="flex-1 min-w-0 text-xs leading-tight">
             <div class="font-semibold text-text truncate">{{ authStore.userName }}</div>
-            <div class="text-muted">{{ appStore.roleLabel }}</div>
+            <div class="text-muted">{{ roleLabel }}</div>
           </div>
           <button @click="logout" class="p-1 hover:bg-border rounded-lg transition-all" title="Logout">
             <span class="material-symbols-rounded text-lg text-muted">logout</span>
@@ -79,17 +79,6 @@
             class="border-0 outline-0 bg-transparent font-medium text-sm text-text w-full placeholder:text-muted"
           />
         </div>
-
-        <!-- Role Selector -->
-        <select
-          v-model="appStore.currentRole"
-          @change="appStore.setRole(appStore.currentRole)"
-          class="h-10 px-3 rounded-lg border border-border bg-surface-2 text-text text-sm font-semibold cursor-pointer"
-        >
-          <option v-for="role in appStore.roles" :key="role.id" :value="role.id">
-            {{ role.label }}
-          </option>
-        </select>
 
         <!-- Theme Toggle -->
         <button
@@ -140,6 +129,15 @@ const isSmallScreen = ref(false)
 
 const sidebarOpen = computed(() => appStore.sidebarOpen)
 
+const roleLabels: Record<string, string> = {
+  ADMIN: 'ผู้ดูแลระบบ',
+  STAFF: 'เสมียน',
+  DISPATCHER: 'ผู้จัดรถ',
+  DRIVER: 'คนขับ',
+  ACCOUNTING: 'บัญชี',
+}
+const roleLabel = computed(() => (authStore.role ? roleLabels[authStore.role] || authStore.role : ''))
+
 onMounted(() => {
   const handleResize = () => {
     isSmallScreen.value = window.innerWidth < 768
@@ -186,6 +184,7 @@ const getScreenTitle = () => {
     '/settings/drivers': 'สมุดรายชื่อ · พนักงานขับรถ',
     '/settings/customers': 'สมุดรายชื่อ · ลูกค้า/คู่ค้า',
     /* '/settings/vendors': 'สมุดรายชื่อ · ผู้จำหน่าย', */
+    '/settings/users': 'ตั้งค่า · จัดการผู้ใช้งาน',
     '/settings/logs': 'ตั้งค่า · Log',
     '/settings/documents/function': 'ตั้งค่าเอกสาร · ฟังก์ชั่นเอกสาร',
     '/settings/documents/numbering': 'ตั้งค่าเอกสาร · เลขรันเอกสาร',
