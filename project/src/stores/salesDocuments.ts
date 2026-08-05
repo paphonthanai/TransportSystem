@@ -1115,6 +1115,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const customer = overrides?.customer?.trim() || targetInvoices[0].customer
     const reference = overrides?.reference ?? targetInvoices.map((d) => d.number).join(', ')
     const amount = targetInvoices.reduce((sum, d) => sum + d.amount, 0)
+    /** รวม bookingIds จากทุกใบแจ้งหนี้ต้นทาง (ไม่ใช่ปล่อยว่าง) เพื่อให้ Completed Jobs cross-link มาที่ใบเสร็จนี้ได้เหมือน Billing Note/Tax Invoice */
+    const bookingIds = [...new Set(targetInvoices.flatMap((d) => d.bookingIds))]
     const now = new Date()
     const receipt: SalesDocument = {
       id: genId('sdoc'),
@@ -1124,7 +1126,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       status: 'DRAFT',
       date: now,
       amount,
-      bookingIds: [],
+      bookingIds,
       sourceDocumentIds: targetInvoices.map((d) => d.id),
       reference,
       createdAt: now,
