@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { canAccess } from '@/services/permission'
-import type { UserRole } from '@/stores/localUsers'
+import type { UserRole } from '@/stores/users'
 
 export type MenuItem = {
   id: string

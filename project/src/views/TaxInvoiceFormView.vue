@@ -322,7 +322,7 @@ import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSe
 import { useCustomerStore } from '@/stores/customers'
 import { useInventoryStore } from '@/stores/inventory'
 import { useAuthStore } from '@/stores/auth'
-import { useLocalUserStore } from '@/stores/localUsers'
+import { useUserStore } from '@/stores/users'
 import { useDocumentPrefillStore } from '@/stores/documentPrefill'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
@@ -336,7 +336,7 @@ const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const inventoryStore = useInventoryStore()
 const authStore = useAuthStore()
-const localUserStore = useLocalUserStore()
+const userStore = useUserStore()
 const documentPrefillStore = useDocumentPrefillStore()
 
 const editingId = typeof route.params.id === 'string' ? route.params.id : undefined
@@ -371,7 +371,7 @@ const paymentTermLabel = computed(() => paymentTermModeLabel[paymentTermMode.val
 const creditDays = ref(prefill?.creditDays ?? 30)
 /** รายชื่อพนักงานขาย ดึงจากผู้ใช้งานจริงในระบบ (Settings > จัดการผู้ใช้งาน) แทนรายชื่อตัวอย่างเดิม */
 const salespersonOptions = computed(() =>
-  [authStore.userName, ...localUserStore.users.filter((u) => u.active).map((u) => u.name)].filter((v, i, arr) => arr.indexOf(v) === i)
+  [authStore.userName, ...userStore.users.filter((u) => u.active).map((u) => u.name)].filter((v, i, arr) => arr.indexOf(v) === i)
 )
 const salesperson = ref(prefill?.salesperson || authStore.userName)
 const currencyCode = ref(prefill?.currencyCode || 'THB')

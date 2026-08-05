@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { canAccess } from '@/services/permission'
-import type { UserRole } from '@/stores/localUsers'
+import type { UserRole } from '@/stores/users'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -380,8 +380,14 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+
+  // Firebase Auth คืนสถานะ login แบบ async (onAuthStateChanged) — รอให้ resolve ก่อนตัดสินใจ กันไม่ให้คนที่
+  // ล็อกอินค้างอยู่จริงถูกเด้งไปหน้า Login เพราะเช็คเร็วเกินไปตอนโหลดหน้าครั้งแรก/กด reload
+  for (let i = 0; i < 150 && !authStore.authReady; i++) {
+    await new Promise((r) => setTimeout(r, 20))
+  }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'Login', query: { redirect: to.fullPath } })

@@ -13,18 +13,16 @@
         <thead class="bg-surface-2 text-left text-xs text-muted">
           <tr>
             <th class="px-4 py-3 font-semibold">ชื่อ</th>
-            <th class="px-4 py-3 font-semibold">Username</th>
-            <th class="px-4 py-3 font-semibold">Password</th>
+            <th class="px-4 py-3 font-semibold">Email</th>
             <th class="px-4 py-3 font-semibold">Role</th>
             <th class="px-4 py-3 font-semibold">สถานะ</th>
             <th class="px-4 py-3 font-semibold"></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="user in localUserStore.users" :key="user.id" class="border-t border-border hover:bg-surface-2 transition-colors">
+          <tr v-for="user in userStore.users" :key="user.id" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 font-semibold text-text">{{ user.name }}</td>
-            <td class="px-4 py-3 text-muted font-mono">{{ user.username }}</td>
-            <td class="px-4 py-3 text-muted">••••••••</td>
+            <td class="px-4 py-3 text-muted font-mono">{{ user.email }}</td>
             <td class="px-4 py-3 text-muted">{{ roleLabels[user.role] }}</td>
             <td class="px-4 py-3">
               <span :class="['text-xs font-semibold px-2 py-1 rounded-full', user.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
@@ -33,7 +31,7 @@
             </td>
             <td class="px-4 py-3 text-right whitespace-nowrap">
               <button @click="openEditDialog(user)" class="btn-sm">แก้ไข</button>
-              <button @click="openPasswordDialog(user)" class="btn-sm ml-1.5">ตั้งรหัสผ่านชั่วคราว</button>
+              <button @click="openPasswordDialog(user)" class="btn-sm ml-1.5">ส่งลิงก์ตั้งรหัสผ่านใหม่</button>
               <button
                 @click="toggleActive(user)"
                 :disabled="user.id === authStore.currentUser?.id"
@@ -44,8 +42,8 @@
               </button>
             </td>
           </tr>
-          <tr v-if="localUserStore.users.length === 0">
-            <td colspan="6" class="px-4 py-8 text-center text-muted">ยังไม่มีผู้ใช้งาน</td>
+          <tr v-if="userStore.users.length === 0">
+            <td colspan="5" class="px-4 py-8 text-center text-muted">ยังไม่มีผู้ใช้งาน</td>
           </tr>
         </tbody>
       </table>
@@ -66,14 +64,12 @@
               <input v-model="form.name" class="input-field w-full" />
             </div>
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">Username</label>
-              <input v-model="form.username" class="input-field w-full" :disabled="!!editingUser" />
+              <label class="block text-xs font-semibold text-muted mb-1">Email</label>
+              <input v-model="form.email" type="email" class="input-field w-full" :disabled="!!editingUser" />
             </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">
-                Password {{ editingUser ? '(เว้นว่างถ้าไม่เปลี่ยน)' : '' }}
-              </label>
-              <input v-model="form.password" type="password" class="input-field w-full" />
+            <div v-if="!editingUser">
+              <label class="block text-xs font-semibold text-muted mb-1">Password เริ่มต้น</label>
+              <input v-model="form.password" type="password" class="input-field w-full" placeholder="อย่างน้อย 6 ตัวอักษร" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">Role</label>
@@ -85,7 +81,7 @@
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="showDialog = false" class="btn-secondary">ยกเลิก</button>
-            <button @click="save" class="btn-primary">บันทึก</button>
+            <button @click="save" :disabled="saving" class="btn-primary disabled:opacity-50">{{ saving ? 'กำลังบันทึก...' : 'บันทึก' }}</button>
           </div>
         </div>
       </div>
@@ -94,25 +90,24 @@
       <div @click="showPasswordDialog = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
         <div @click.stop class="w-full max-w-md bg-surface rounded-2xl shadow-2xl">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="font-bold text-text">ตั้งรหัสผ่านชั่วคราว</div>
+            <div class="font-bold text-text">ส่งลิงก์ตั้งรหัสผ่านใหม่</div>
             <button @click="showPasswordDialog = false" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
           </div>
           <div class="px-6 py-5 space-y-3">
-            <div class="text-sm text-muted">ไม่สามารถดูรหัสผ่านเดิมได้ (ถูกเก็บเป็น hash) — คุณสามารถตั้งรหัสผ่านชั่วคราวใหม่ให้ผู้ใช้นี้ได้</div>
-            <div class="mt-3">
-              <label class="block text-xs font-semibold text-muted mb-1">รหัสผ่านชั่วคราว</label>
-              <div class="input-field font-mono">{{ tempPassword }}</div>
+            <div class="text-sm text-muted">
+              ระบบจะส่งอีเมลลิงก์ตั้งรหัสผ่านใหม่ไปที่ <span class="font-mono font-semibold text-text">{{ passwordTarget?.email }}</span> —
+              ต้องเป็นอีเมลที่รับได้จริงจึงจะใช้งานได้ (ไม่สามารถตั้งรหัสผ่านแทนผู้ใช้จาก client ได้โดยตรง)
             </div>
             <div v-if="passwordApplied" class="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-              ตั้งรหัสผ่านให้ {{ passwordTarget?.name }} เรียบร้อยแล้ว — คัดลอกรหัสด้านบนไปแจ้งผู้ใช้ได้เลย
+              ส่งอีเมลแล้ว
             </div>
             <div v-if="passwordError" class="text-xs text-red-600">{{ passwordError }}</div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
-            <button @click="generateTempPassword" class="btn-secondary">สร้างใหม่</button>
-            <button @click="applyTempPassword" class="btn-primary">ตั้งรหัสผ่านและแสดง</button>
+            <button @click="showPasswordDialog = false" class="btn-secondary">ปิด</button>
+            <button @click="sendReset" class="btn-primary">ส่งอีเมล</button>
           </div>
         </div>
       </div>
@@ -122,10 +117,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useLocalUserStore, type LocalUser, type UserRole } from '@/stores/localUsers'
+import { useUserStore, type UserProfile, type UserRole } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 
-const localUserStore = useLocalUserStore()
+const userStore = useUserStore()
 const authStore = useAuthStore()
 
 const roleOptions: UserRole[] = ['ADMIN', 'STAFF', 'DISPATCHER', 'DRIVER', 'ACCOUNTING']
@@ -138,94 +133,86 @@ const roleLabels: Record<UserRole, string> = {
 }
 
 const showDialog = ref(false)
-const editingUser = ref<LocalUser | null>(null)
-const form = ref({ name: '', username: '', password: '', role: 'STAFF' as UserRole })
+const editingUser = ref<UserProfile | null>(null)
+const form = ref({ name: '', email: '', password: '', role: 'STAFF' as UserRole })
 const formError = ref('')
+const saving = ref(false)
+
 const showPasswordDialog = ref(false)
-const passwordTarget = ref<LocalUser | null>(null)
-const tempPassword = ref('')
+const passwordTarget = ref<UserProfile | null>(null)
 const passwordError = ref('')
 const passwordApplied = ref(false)
 
-const generateTempPassword = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
-  let out = ''
-  for (let i = 0; i < 10; i++) out += chars[Math.floor(Math.random() * chars.length)]
-  tempPassword.value = out
-  passwordApplied.value = false
-}
-
-const openPasswordDialog = (user: LocalUser) => {
-  if (authStore.currentUser?.role !== 'ADMIN') return
+const openPasswordDialog = (user: UserProfile) => {
   passwordTarget.value = user
-  generateTempPassword()
   passwordError.value = ''
+  passwordApplied.value = false
   showPasswordDialog.value = true
 }
 
-const applyTempPassword = async () => {
+const sendReset = async () => {
   passwordError.value = ''
   if (!passwordTarget.value) return
-  if (!tempPassword.value) {
-    passwordError.value = 'รหัสผ่านไม่ถูกต้อง'
-    return
-  }
   try {
-    await localUserStore.updateUser(passwordTarget.value.id, { password: tempPassword.value })
+    await authStore.sendPasswordReset(passwordTarget.value.email)
     passwordApplied.value = true
   } catch (err: any) {
-    passwordError.value = err?.message || 'ไม่สามารถตั้งรหัสผ่านได้'
+    passwordError.value = err?.message || 'ส่งอีเมลไม่สำเร็จ'
   }
 }
 
 const openCreateDialog = () => {
   editingUser.value = null
-  form.value = { name: '', username: '', password: '', role: 'STAFF' }
+  form.value = { name: '', email: '', password: '', role: 'STAFF' }
   formError.value = ''
   showDialog.value = true
 }
 
-const openEditDialog = (user: LocalUser) => {
+const openEditDialog = (user: UserProfile) => {
   editingUser.value = user
-  form.value = { name: user.name, username: user.username, password: '', role: user.role }
+  form.value = { name: user.name, email: user.email, password: '', role: user.role }
   formError.value = ''
   showDialog.value = true
 }
 
 const save = async () => {
   formError.value = ''
-  if (!form.value.name.trim() || !form.value.username.trim()) {
-    formError.value = 'กรุณากรอกชื่อและ Username'
+  if (!form.value.name.trim() || !form.value.email.trim()) {
+    formError.value = 'กรุณากรอกชื่อและ Email'
     return
   }
-  if (!editingUser.value && !form.value.password.trim()) {
-    formError.value = 'กรุณากรอก Password'
+  if (!editingUser.value && form.value.password.trim().length < 6) {
+    formError.value = 'กรุณากรอก Password อย่างน้อย 6 ตัวอักษร'
     return
   }
+  saving.value = true
   try {
     if (editingUser.value) {
-      await localUserStore.updateUser(editingUser.value.id, {
-        name: form.value.name,
-        role: form.value.role,
-        password: form.value.password || undefined,
-      })
+      await userStore.updateProfile(editingUser.value.id, { name: form.value.name, role: form.value.role })
     } else {
-      await localUserStore.createUser({
-        username: form.value.username,
-        password: form.value.password,
+      const uid = await authStore.createStaffAccount(form.value.email, form.value.password, form.value.name, form.value.role)
+      userStore.addLocalCopy({
+        id: uid,
+        email: form.value.email.trim(),
         name: form.value.name,
         role: form.value.role,
+        active: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       })
     }
     showDialog.value = false
   } catch (err: any) {
-    formError.value = err.message || 'บันทึกไม่สำเร็จ'
+    const code = err?.code as string | undefined
+    formError.value = code === 'auth/email-already-in-use' ? 'มี Email นี้อยู่ในระบบแล้ว' : err.message || 'บันทึกไม่สำเร็จ'
+  } finally {
+    saving.value = false
   }
 }
 
-const toggleActive = (user: LocalUser) => {
+const toggleActive = (user: UserProfile) => {
   if (user.id === authStore.currentUser?.id) return
-  localUserStore.setActive(user.id, !user.active)
+  userStore.setActive(user.id, !user.active)
 }
 </script>
 

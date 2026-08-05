@@ -15,13 +15,13 @@
         <h2 class="text-2xl font-bold text-text mb-6">เข้าสู่ระบบ</h2>
 
         <form @submit.prevent="handleLogin" class="space-y-4">
-          <!-- Username Input -->
+          <!-- Email Input -->
           <div>
-            <label class="block text-sm font-semibold text-text mb-2">Username</label>
+            <label class="block text-sm font-semibold text-text mb-2">Email</label>
             <input
-              v-model="username"
-              type="text"
-              placeholder="username"
+              v-model="email"
+              type="email"
+              placeholder="you@company.com"
               class="input-field w-full"
               required
             />
@@ -61,32 +61,6 @@
           </button>
         </form>
 
-        <!-- Default Accounts (Phase 0 local user seed) -->
-        <div class="mt-6 pt-6 border-t border-border">
-          <p class="text-xs text-muted text-center mb-3">บัญชีทดสอบเริ่มต้น (password: password123):</p>
-          <div class="space-y-2 text-xs">
-            <div class="flex justify-between text-muted">
-              <span>Admin:</span>
-              <span class="font-mono">admin</span>
-            </div>
-            <div class="flex justify-between text-muted">
-              <span>Staff:</span>
-              <span class="font-mono">staff</span>
-            </div>
-            <div class="flex justify-between text-muted">
-              <span>Dispatcher:</span>
-              <span class="font-mono">dispatcher</span>
-            </div>
-            <div class="flex justify-between text-muted">
-              <span>Driver:</span>
-              <span class="font-mono">driver</span>
-            </div>
-            <div class="flex justify-between text-muted">
-              <span>Accounting:</span>
-              <span class="font-mono">accounting</span>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Footer -->
@@ -108,14 +82,14 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
-const username = ref('admin')
-const password = ref('password123')
+const email = ref('')
+const password = ref('')
 const error = ref('')
 
 const handleLogin = async () => {
   error.value = ''
   try {
-    await authStore.login(username.value, password.value)
+    await authStore.login(email.value, password.value)
     const redirect = (route.query.redirect as string) || (authStore.role === 'DRIVER' ? '/driver-app' : '/')
     router.push(redirect)
   } catch (err: any) {

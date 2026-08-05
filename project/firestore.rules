@@ -2,36 +2,55 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Incremental localStorage -> Firestore migration (see stores/*.ts + repositories/*.ts).
-    // Only collections that have actually been migrated get a rule below; everything else
-    // still lives in browser localStorage and stays denied by the catch-all at the bottom.
+    // Real security (replaces the earlier "allow read, write: if true" placeholder used while login was
+    // a local-user system, not Firebase Auth). Every collection now requires request.auth != null and
+    // checks the caller's role against /users/{uid}.role — matches src/services/permission.ts's
+    // ROLE_PERMISSIONS map so app-level menu/route guards and Firestore-level enforcement agree.
     //
-    // NOTE: login (Phase 0, src/stores/localUsers.ts + src/stores/auth.ts) is a local-user system
-    // backed by localStorage, not Firebase Auth — it never calls signInWithEmailAndPassword, so
-    // request.auth is always null even though the UI shows a signed-in user. Rules that required
-    // request.auth != null would silently reject every read/write from this app today.
-    // Opened without an auth check as an explicit, temporary trade-off for this phase; MUST be
-    // tightened (e.g. request.auth != null, or role-based checks) once real Firebase Auth login
-    // replaces the local-user system.
+    // The /users/{uid}.role lookup itself needs read access to work — but Firestore rules can't grant
+    // a user read on their own profile via a rule that reads that same profile without risking a
+    // circular/expensive re-evaluation loop for other collections' checks, so isSignedIn() alone (no
+    // role lookup) gates the /users read rule, and every other collection's role lookup reads that
+    // already-open path.
 
-    // Phase 1: customers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isActive() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+    }
+
+    function hasRole(roles) {
+      return isSignedIn() && isActive() && userRole() in roles;
+    }
+
+    // User profiles (role/name/active) — id เอกสาร = Firebase Auth uid เสมอ
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if hasRole(['ADMIN']);
+      allow delete: if false; // ลบบัญชีจริงต้องผ่าน Firebase Auth (Admin SDK) — ที่นี่ปิดใช้งานผ่าน active:false แทน
+    }
+
     match /customers/{customerId} {
-      allow read, write: if true;
+      allow read, write: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING']);
     }
 
-    // Phase 2: drivers
     match /drivers/{driverId} {
-      allow read, write: if true;
+      allow read, write: if hasRole(['ADMIN', 'DISPATCHER']);
     }
 
-    // Phase 3: vehicles
     match /vehicles/{vehicleId} {
-      allow read, write: if true;
+      allow read, write: if hasRole(['ADMIN', 'DISPATCHER']);
     }
 
-    // Phase 4: bookings
+    // DRIVER รวมอยู่ด้วยเพราะ Driver App เขียน booking ตรงๆ (รับสินค้า/ส่งของ/จบงาน) ผ่าน uid ของคนขับเอง
     match /bookings/{bookingId} {
-      allow read, write: if true;
+      allow read, write: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING', 'DRIVER']);
     }
 
     match /{document=**} {

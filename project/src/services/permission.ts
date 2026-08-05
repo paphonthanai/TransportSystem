@@ -1,4 +1,4 @@
-import type { UserRole } from '@/stores/localUsers'
+import type { UserRole } from '@/stores/users'
 
 /**
  * ชั้นสิทธิ์กลาง (Permission Layer) — ทุกที่ในแอปที่ต้องเช็คสิทธิ์ (route guard, sidebar menu, ปุ่มในหน้าต่างๆ)
