@@ -66,7 +66,7 @@ const tasks: { key: TaskKey; icon: string; label: string; route: string }[] = [
   { key: 'configuredDocumentSettings', icon: 'tune', label: 'ตั้งค่ารูปแบบเอกสารเบื้องต้น', route: '/settings/documents/function' },
   { key: 'addedVehicleOrDriver', icon: 'local_shipping', label: 'เพิ่มรถหรือคนขับของคุณ', route: '/settings/drivers' },
   { key: 'createdFirstBooking', icon: 'assignment_add', label: 'ลงงานขนส่งแรกของคุณ', route: '/booking/cements' },
-  { key: 'issuedFirstInvoice', icon: 'receipt_long', label: 'ออกใบแจ้งหนี้แรกของคุณ', route: '/billing' },
+  { key: 'issuedFirstInvoice', icon: 'receipt_long', label: 'ออกใบแจ้งหนี้แรกของคุณ', route: '/billing-notes' },
 ]
 
 const go = (task: (typeof tasks)[number]) => {

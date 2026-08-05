@@ -69,10 +69,19 @@
                   <option v-for="opt in statusOptionsFor(doc)" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                 </select>
               </td>
-              <td class="px-3 py-3 text-right">
-                <button @click="router.push(`/documents/${doc.id}`)" class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2 ml-auto">
-                  <span class="material-symbols-rounded text-base">print</span>
-                </button>
+              <td class="px-3 py-3">
+                <div class="flex items-center justify-end gap-1.5">
+                  <button
+                    v-if="doc.status === 'BILLING_PENDING'"
+                    @click="router.push(`/billing-notes/manual/${doc.id}/edit`)"
+                    class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2"
+                  >
+                    <span class="material-symbols-rounded text-base">edit</span>
+                  </button>
+                  <button @click="router.push(`/documents/${doc.id}`)" class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2">
+                    <span class="material-symbols-rounded text-base">print</span>
+                  </button>
+                </div>
               </td>
             </tr>
             <tr v-if="pagedDocs.length === 0">

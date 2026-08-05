@@ -5,7 +5,7 @@
       <div class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface border border-border flex-1 max-w-sm">
         <span class="material-symbols-rounded text-muted">search</span>
         <input
-          v-model="searchQuery"
+          v-model="filters.search"
           type="text"
           placeholder="ค้นหาเลขที่เอกสาร, PO, ลูกค้า, ทะเบียนรถ..."
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
@@ -55,7 +55,18 @@
                   </span>
                 </td>
                 <td class="px-4 py-3">
-                  <BookingActionMenu :booking="booking" @view="router.push(`/job/${booking.id}`)" />
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <BookingActionMenu :booking="booking" @view="router.push(`/job/${booking.id}`)" />
+                    <button v-if="documentsForBooking(booking).billing" @click="router.push(`/documents/${documentsForBooking(booking).billing!.id}`)" class="btn-sm" title="ใบวางบิล">
+                      <span class="material-symbols-rounded text-base">receipt_long</span>
+                    </button>
+                    <button v-if="documentsForBooking(booking).taxInvoice" @click="router.push(`/documents/${documentsForBooking(booking).taxInvoice!.id}`)" class="btn-sm" title="ใบแจ้งหนี้/ใบกำกับภาษี">
+                      <span class="material-symbols-rounded text-base">description</span>
+                    </button>
+                    <button v-if="documentsForBooking(booking).receipt" @click="router.push(`/documents/${documentsForBooking(booking).receipt!.id}`)" class="btn-sm" title="ใบเสร็จรับเงิน">
+                      <span class="material-symbols-rounded text-base">receipt</span>
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="completedBookings.length === 0">
@@ -70,49 +81,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useBookingStore } from '@/stores/booking'
-import type { Booking, BookingCategory } from '@/types'
+import type { BookingCategory } from '@/types'
 import { billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
+import { useCompletedJobs, useCompletedJobsFilters } from '@/composables/useCompletedJobs'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 
 const props = defineProps<{ fleet: BookingCategory }>()
 
 const router = useRouter()
-const bookingStore = useBookingStore()
 
 const isCements = computed(() => props.fleet === 'cements')
-const searchQuery = ref('')
+const filters = useCompletedJobsFilters(props.fleet)
 
-const fleetBookings = computed(() => bookingStore.bookings.filter((b) => b.category === props.fleet && b.status === 'DELIVERED'))
-
-const matchesSearch = (b: Booking, q: string) =>
-  b.docNo.toLowerCase().includes(q) ||
-  (b.po || '').toLowerCase().includes(q) ||
-  b.customer.toLowerCase().includes(q) ||
-  (b.plate || '').toLowerCase().includes(q)
-
-const completedBookings = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  return fleetBookings.value
-    .filter((b) => !q || matchesSearch(b, q))
-    .sort((a, b) => new Date(b.completedAt || b.createdAt).getTime() - new Date(a.completedAt || a.createdAt).getTime())
-})
-
-const productLabel = (booking: Booking) => {
-  const names = [...new Set(booking.items.map((i) => i.product).filter(Boolean))]
-  return names.length ? names.join(', ') : '-'
-}
-
-const destinationLabel = (booking: Booking) => {
-  if (!booking.items.length) return '-'
-  const first = booking.items[0].siteName
-  return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
-}
-
-const weightQtyLabel = (booking: Booking) => booking.items.map((i) => `${i.qty} ${i.unit}`).join(', ') || '-'
-
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
-const formatShortDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-')
+const { completedBookings, productLabel, destinationLabel, weightQtyLabel, documentsForBooking, formatBaht, formatShortDate } = useCompletedJobs(filters)
 </script>
+
+<style scoped>
+.btn-sm {
+  @apply h-8 px-2.5 rounded-lg border border-border bg-surface font-medium text-xs inline-flex items-center gap-1 cursor-pointer hover:bg-surface-2;
+}
+</style>

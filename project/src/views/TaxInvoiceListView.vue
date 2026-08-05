@@ -57,10 +57,19 @@
                   <option v-for="opt in statusOptionsFor(doc)" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                 </select>
               </td>
-              <td class="px-3 py-3 text-right">
-                <button @click="router.push(`/documents/${doc.id}`)" class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2 ml-auto">
-                  <span class="material-symbols-rounded text-base">print</span>
-                </button>
+              <td class="px-3 py-3">
+                <div class="flex items-center justify-end gap-1.5">
+                  <button
+                    v-if="doc.status === 'DRAFT'"
+                    @click="router.push(`/tax-invoices/${doc.id}/edit`)"
+                    class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2"
+                  >
+                    <span class="material-symbols-rounded text-base">edit</span>
+                  </button>
+                  <button @click="router.push(`/documents/${doc.id}`)" class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2">
+                    <span class="material-symbols-rounded text-base">print</span>
+                  </button>
+                </div>
               </td>
             </tr>
             <tr v-if="pagedDocs.length === 0">
@@ -83,6 +92,16 @@
         </div>
       </div>
     </div>
+
+    <ShareDocumentModal
+      v-if="shareTarget"
+      :open="!!shareTarget"
+      :doc-id="shareTarget.id"
+      :number="shareTarget.number"
+      :customer="shareTarget.customer"
+      doc-type-label="ใบแจ้งหนี้/ใบกำกับภาษี"
+      @close="shareTarget = null"
+    />
   </div>
 </template>
 
@@ -92,6 +111,7 @@ import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
+import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
@@ -134,6 +154,7 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
       { value: 'DRAFT', label: statusLabel.DRAFT! },
       { value: 'SEND', label: 'ส่งใบแจ้งหนี้' },
       { value: 'CREATE_RECEIPT', label: 'สร้างใบเสร็จรับเงิน' },
+      { value: 'CANCEL', label: 'ยกเลิก' },
     ]
   }
   if (s === 'SENT') {
@@ -149,13 +170,20 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
 const statusDotClass = (status: SalesDocumentStatus) =>
   ({ DRAFT: 'bg-gray-400', SENT: 'bg-amber-500', PAID: 'bg-green-500' })[status as 'DRAFT' | 'SENT' | 'PAID'] || 'bg-gray-400'
 
+const shareTarget = ref<SalesDocument | null>(null)
+
 const onStatusSelect = (doc: SalesDocument, action: string) => {
   switch (action) {
     case 'SEND':
+      // ปุ่ม "ส่งใบแจ้งหนี้" เปิด Share Document เดิม (ไม่สร้าง logic ส่งใหม่) แล้วค่อยปรับสถานะเป็นส่งแล้วเหมือนเดิม
       salesDocumentsStore.sendInvoice(doc.id)
+      shareTarget.value = doc
       break
     case 'CREATE_RECEIPT':
       router.push(`/receipts/select?customer=${encodeURIComponent(doc.customer)}&invoiceId=${doc.id}`)
+      break
+    case 'CANCEL':
+      if (confirm(`ยืนยันยกเลิกใบแจ้งหนี้ ${doc.number}? งานขนส่ง/ใบวางบิลที่ผูกไว้จะกลับไปสถานะก่อนหน้า`)) salesDocumentsStore.cancelTaxInvoice(doc.id)
       break
     default:
       break

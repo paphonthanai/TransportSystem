@@ -728,6 +728,41 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return billing
   }
 
+  /** แก้ไขใบวางบิล (เฉพาะตอนยังไม่ออกใบแจ้งหนี้ — สถานะ BILLING_PENDING) แทนที่ field เอกสาร + รายการทั้งหมด ไม่เปลี่ยนเลขที่/สถานะ/bookingIds */
+  function updateBillingManual(id: string, data: ManualDocumentFormData): SalesDocument | null {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'BILLING')
+    if (!doc || doc.status !== 'BILLING_PENDING') return null
+    const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
+    doc.customer = data.customer
+    doc.amount = amount
+    if (data.number?.trim()) doc.number = data.number.trim()
+    if (data.date) doc.date = data.date
+    doc.creditDays = data.creditDays
+    doc.reference = data.reference
+    doc.customerAddress = data.customerAddress
+    doc.customerZipCode = data.customerZipCode
+    doc.customerTaxId = data.customerTaxId
+    doc.customerBranchName = data.customerBranchName
+    doc.project = data.project
+    doc.salesperson = data.salesperson
+    doc.currencyCode = data.currencyCode
+    doc.warehouse = data.warehouse
+    doc.priceMode = data.priceMode
+    doc.description = data.description
+    doc.note = data.note
+    doc.internalNote = data.internalNote
+    doc.attachmentImage = data.attachmentImage
+    doc.useESignature = data.useESignature
+    doc.discountTotal = data.discountTotal
+    doc.vatAmount = data.vatAmount
+    doc.whtAmount = data.whtAmount
+    doc.paymentTermMode = data.paymentTermMode
+    items.value = items.value.filter((i) => i.documentId !== id)
+    addItemsToDocument(id, data.items)
+    useBookingStore().addLog('แก้ไขเอกสาร ' + doc.number, { docId: doc.id })
+    return doc
+  }
+
   /** สร้างใบแจ้งหนี้/ใบกำกับภาษีแบบกรอกเอง (ไม่ผูกกับใบวางบิล) — ใช้หน้าฟอร์มแบบเดียวกับ QuotationFormView.vue (ดู TaxInvoiceFormView.vue) */
   function createTaxInvoiceManual(data: ManualDocumentFormData): SalesDocument {
     const documentSettingsStore = useDocumentSettingsStore()
@@ -780,6 +815,48 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return invoice
   }
 
+  /** แก้ไขใบแจ้งหนี้/ใบกำกับภาษี (เฉพาะตอนยังไม่ส่ง — สถานะ DRAFT) แทนที่ field เอกสาร + รายการทั้งหมด ไม่เปลี่ยนเลขที่/สถานะ/bookingIds */
+  function updateTaxInvoiceManual(id: string, data: ManualDocumentFormData): SalesDocument | null {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
+    if (!doc || doc.status !== 'DRAFT') return null
+    const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
+    const issueDate = data.date || doc.date
+    const creditDays = data.creditDays ?? 30
+    const dueDate = new Date(issueDate)
+    dueDate.setDate(dueDate.getDate() + creditDays)
+    doc.customer = data.customer
+    doc.amount = amount
+    if (data.number?.trim()) doc.number = data.number.trim()
+    doc.date = issueDate
+    doc.creditDays = creditDays
+    doc.dueDate = dueDate
+    doc.reference = data.reference
+    doc.vatRate = data.vatRate
+    doc.vatAmount = data.vatAmount
+    doc.whtRate = data.whtRate
+    doc.whtAmount = data.whtAmount
+    doc.customerAddress = data.customerAddress
+    doc.customerZipCode = data.customerZipCode
+    doc.customerTaxId = data.customerTaxId
+    doc.customerBranchName = data.customerBranchName
+    doc.project = data.project
+    doc.salesperson = data.salesperson
+    doc.currencyCode = data.currencyCode
+    doc.warehouse = data.warehouse
+    doc.priceMode = data.priceMode
+    doc.description = data.description
+    doc.note = data.note
+    doc.internalNote = data.internalNote
+    doc.attachmentImage = data.attachmentImage
+    doc.useESignature = data.useESignature
+    doc.discountTotal = data.discountTotal
+    doc.paymentTermMode = data.paymentTermMode
+    items.value = items.value.filter((i) => i.documentId !== id)
+    addItemsToDocument(id, data.items)
+    useBookingStore().addLog('แก้ไขเอกสาร ' + doc.number, { docId: doc.id })
+    return doc
+  }
+
   /** สร้างใบเสร็จรับเงินแบบกรอกเอง — ใช้หน้าฟอร์มแบบเดียวกับ QuotationFormView.vue (ดู ReceiptFormView.vue) ถือว่าเก็บเงินแล้วทันทีตอนบันทึก */
   function createReceiptManual(data: ManualDocumentFormData): SalesDocument {
     const documentSettingsStore = useDocumentSettingsStore()
@@ -825,6 +902,42 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     addItemsToDocument(receipt.id, data.items)
     useBookingStore().addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
     return receipt
+  }
+
+  /** แก้ไขใบเสร็จรับเงินที่กรอกเอง (เฉพาะตอนยังไม่เก็บเงินจริง — สถานะ DRAFT) แทนที่ field เอกสาร + รายการทั้งหมด ไม่เปลี่ยนเลขที่/สถานะ/bookingIds */
+  function updateReceiptManual(id: string, data: ManualDocumentFormData): SalesDocument | null {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
+    if (!doc || doc.status !== 'DRAFT') return null
+    const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
+    doc.customer = data.customer
+    doc.amount = amount
+    if (data.number?.trim()) doc.number = data.number.trim()
+    if (data.date) doc.date = data.date
+    doc.reference = data.reference
+    doc.vatRate = data.vatRate
+    doc.vatAmount = data.vatAmount
+    doc.whtRate = data.whtRate
+    doc.whtAmount = data.whtAmount
+    doc.paymentMethod = data.paymentMethod
+    doc.customerAddress = data.customerAddress
+    doc.customerZipCode = data.customerZipCode
+    doc.customerTaxId = data.customerTaxId
+    doc.customerBranchName = data.customerBranchName
+    doc.project = data.project
+    doc.salesperson = data.salesperson
+    doc.currencyCode = data.currencyCode
+    doc.warehouse = data.warehouse
+    doc.priceMode = data.priceMode
+    doc.description = data.description
+    doc.note = data.note
+    doc.internalNote = data.internalNote
+    doc.attachmentImage = data.attachmentImage
+    doc.useESignature = data.useESignature
+    doc.discountTotal = data.discountTotal
+    items.value = items.value.filter((i) => i.documentId !== id)
+    addItemsToDocument(id, data.items)
+    useBookingStore().addLog('แก้ไขเอกสาร ' + doc.number, { docId: doc.id })
+    return doc
   }
 
   /**
@@ -962,6 +1075,29 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.status = 'SENT'
   }
 
+  /** ยกเลิกใบแจ้งหนี้/ใบกำกับภาษีที่ยังไม่ส่ง (DRAFT) — คืนสถานะการเงินของงานขนส่งที่ผูกอยู่กลับเป็น UNBILLED, คืนสถานะใบวางบิลต้นทาง (ถ้ามี) กลับเป็นรอออกใบแจ้งหนี้ แล้วลบเอกสารทิ้ง */
+  function cancelTaxInvoice(id: string) {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
+    if (!doc || doc.status !== 'DRAFT') return false
+    if (doc.bookingIds.length) {
+      const bookingStore = useBookingStore()
+      doc.bookingIds.forEach((bid) => {
+        const b = bookingStore.bookings.find((bk) => bk.id === bid)
+        if (b && b.billingStatus === 'INVOICED') b.billingStatus = 'UNBILLED'
+      })
+    }
+    if (doc.parentDocumentId) {
+      const parent = documents.value.find((d) => d.id === doc.parentDocumentId && d.type === 'BILLING')
+      if (parent) {
+        parent.convertedToDocumentIds = (parent.convertedToDocumentIds || []).filter((cid) => cid !== doc.id)
+        if (parent.status === 'BILLED' && parent.convertedToDocumentIds.length === 0) parent.status = 'BILLING_PENDING'
+      }
+    }
+    documents.value = documents.value.filter((d) => d.id !== id)
+    items.value = items.value.filter((i) => i.documentId !== id)
+    return true
+  }
+
   /**
    * สร้างใบเสร็จรับเงิน (เดี่ยวหรือรวม) จากใบแจ้งหนี้ที่ยังไม่ชำระของลูกค้ารายเดียวกัน — รายการต่อบรรทัด = 1 ใบแจ้งหนี้
    * ต่อ 1 บรรทัด สถานะเริ่มต้นเป็น DRAFT (แสดงผลเป็น "รอดำเนินการ") จนกว่าจะกด "เก็บเงิน" ผ่าน recordReceiptPayment
@@ -1082,12 +1218,16 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     deleteSalesOrder,
     createBillingFromBookings,
     createBillingManual,
+    updateBillingManual,
     createInvoiceFromBilling,
     createTaxInvoiceManual,
+    updateTaxInvoiceManual,
     cancelBillingNote,
+    cancelTaxInvoice,
     sendInvoice,
     createReceiptFromInvoices,
     createReceiptManual,
+    updateReceiptManual,
     recordReceiptPayment,
     cancelReceipt,
     createCashSale,

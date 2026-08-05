@@ -44,6 +44,11 @@ const routes: RouteRecordRaw[] = [
         props: true,
       },
       {
+        path: 'completed-jobs',
+        name: 'CompletedJobs',
+        component: () => import('@/views/CompletedJobsView.vue'),
+      },
+      {
         path: 'documents',
         name: 'Documents',
         component: () => import('@/views/DocumentsView.vue'),
@@ -91,6 +96,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/BillingFormView.vue'),
       },
       {
+        path: 'billing-notes/manual/:id/edit',
+        name: 'BillingNoteEdit',
+        component: () => import('@/views/BillingFormView.vue'),
+        props: true,
+      },
+      {
         path: 'billing-notes/new',
         name: 'BillingNoteCreate',
         component: () => import('@/views/BillingCreateFromBookingsView.vue'),
@@ -106,6 +117,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/TaxInvoiceFormView.vue'),
       },
       {
+        path: 'tax-invoices/:id/edit',
+        name: 'TaxInvoiceEdit',
+        component: () => import('@/views/TaxInvoiceFormView.vue'),
+        props: true,
+      },
+      {
         path: 'receipts',
         name: 'Receipts',
         component: () => import('@/views/ReceiptListView.vue'),
@@ -119,6 +136,12 @@ const routes: RouteRecordRaw[] = [
         path: 'receipts/new-manual',
         name: 'ReceiptManualCreate',
         component: () => import('@/views/ReceiptFormView.vue'),
+      },
+      {
+        path: 'receipts/new-manual/:id/edit',
+        name: 'ReceiptEdit',
+        component: () => import('@/views/ReceiptFormView.vue'),
+        props: true,
       },
       {
         path: 'receipts/select',

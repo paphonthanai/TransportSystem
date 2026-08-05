@@ -304,19 +304,19 @@
 
     <ShareDocumentModal
       :open="shareModalOpen"
-      :doc-id="lastSavedId || ''"
+      :doc-id="currentId || ''"
       :number="documentNumber"
       :customer="customerName"
       doc-type-label="ใบกำกับภาษี/ใบแจ้งหนี้"
       @close="shareModalOpen = false"
     />
-    <DocumentHistoryModal :open="historyModalOpen" :doc-id="lastSavedId || ''" :number="documentNumber" @close="historyModalOpen = false" />
+    <DocumentHistoryModal :open="historyModalOpen" :doc-id="currentId || ''" :number="documentNumber" @close="historyModalOpen = false" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentItem } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
@@ -328,6 +328,7 @@ import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
 import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
 
+const route = useRoute()
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
@@ -336,8 +337,12 @@ const inventoryStore = useInventoryStore()
 const authStore = useAuthStore()
 const documentPrefillStore = useDocumentPrefillStore()
 
-/** เปิดหน้านี้มาจากดรอปดาวน์สถานะของใบเสนอราคา (สร้างใบแจ้งหนี้) หรือใบวางบิล (ออกใบแจ้งหนี้ต่อ) — มี payload รอเติมข้อมูลอยู่ */
-const prefill = documentPrefillStore.consumePrefill(['QUOTATION', 'BILLING'])
+const editingId = typeof route.params.id === 'string' ? route.params.id : undefined
+const isEditMode = !!editingId
+const editingDoc = editingId ? salesDocumentsStore.documents.find((d) => d.id === editingId && d.type === 'TAX_INVOICE') : undefined
+
+/** เปิดหน้านี้มาจากดรอปดาวน์สถานะของใบเสนอราคา (สร้างใบแจ้งหนี้) หรือใบวางบิล (ออกใบแจ้งหนี้ต่อ) — มี payload รอเติมข้อมูลอยู่ (ไม่เกิดพร้อมกับโหมดแก้ไข) */
+const prefill = isEditMode ? undefined : documentPrefillStore.consumePrefill(['QUOTATION', 'BILLING'])
 const sourceQuotationId = ref(prefill?.sourceType === 'QUOTATION' ? prefill.sourceId : undefined)
 const sourceBillingId = ref(prefill?.sourceType === 'BILLING' ? prefill.sourceId : undefined)
 const sourceType = ref(prefill?.sourceType)
@@ -459,7 +464,7 @@ const addRow = () => {
   rows.value.push({ description: '', qty: 1, unit: '', unitPrice: 0, discountMode: 'percent', discountPercent: 0, discountAmount: 0, vatRate: documentSettingsStore.settings.vatRate, whtRate: 0 })
 }
 
-if (!prefill) addRow()
+if (!prefill && !editingDoc) addRow()
 
 const onProductSelected = (idx: number, productId: string) => {
   const row = rows.value[idx]
@@ -498,6 +503,41 @@ const startEditWht = () => {
   whtOverrideEditing.value = true
 }
 
+if (editingDoc) {
+  customerName.value = editingDoc.customer
+  customerAddress.value = editingDoc.customerAddress || ''
+  customerZipCode.value = editingDoc.customerZipCode || ''
+  customerTaxId.value = editingDoc.customerTaxId || ''
+  customerBranchName.value = editingDoc.customerBranchName || ''
+  dateStr.value = new Date(editingDoc.date).toISOString().slice(0, 10)
+  paymentTermMode.value = editingDoc.paymentTermMode || 'CREDIT_DAYS'
+  creditDays.value = editingDoc.creditDays ?? 30
+  salesperson.value = editingDoc.salesperson || authStore.userName
+  currencyCode.value = editingDoc.currencyCode || 'THB'
+  project.value = editingDoc.project || ''
+  reference.value = editingDoc.reference || ''
+  priceMode.value = editingDoc.priceMode || documentSettingsStore.settings.priceDisplay
+  description.value = editingDoc.description || ''
+  warehouse.value = editingDoc.warehouse || 'คลังสินค้า'
+  useESignature.value = editingDoc.useESignature ?? true
+  note.value = editingDoc.note || ''
+  internalNote.value = editingDoc.internalNote || ''
+  attachmentPreview.value = editingDoc.attachmentImage || null
+  if (editingDoc.whtAmount) whtOverride.value = editingDoc.whtAmount
+  rows.value = salesDocumentsStore.itemsForDocument(editingDoc.id).map((i) => ({
+    productId: i.productId,
+    description: i.description,
+    qty: i.qty,
+    unit: i.unit,
+    unitPrice: i.unitPrice,
+    discountMode: i.discountMode || 'percent',
+    discountPercent: i.discountPercent || 0,
+    discountAmount: i.discountAmount || 0,
+    vatRate: i.vatRate ?? documentSettingsStore.settings.vatRate,
+    whtRate: i.whtRate || 0,
+  }))
+}
+
 const dueDate = computed(() => {
   const d = new Date(dateStr.value)
   d.setDate(d.getDate() + creditDays.value)
@@ -505,6 +545,7 @@ const dueDate = computed(() => {
 })
 
 const previewNumber = computed(() => {
+  if (editingDoc) return editingDoc.number
   const numbering = documentSettingsStore.settings.numbering.invoice
   const seq = salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE').length + 1
   const now = new Date()
@@ -529,10 +570,12 @@ const resolvedCreditDays = computed<number | undefined>(() => {
 const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
 const formatDateDisplay = (date: Date) => date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
 
-/** id ของเอกสารที่บันทึกล่าสุด (ฟอร์มนี้ไม่มีโหมดแก้ไข ทุกครั้งที่บันทึกคือสร้างใหม่) — ใช้ให้ปุ่มประวัติ/แชร์อ้างอิงได้หลังบันทึกแล้ว */
-const lastSavedId = ref<string | undefined>()
+/** id ของเอกสารที่ "บันทึกแล้ว" ล่าสุด — เริ่มจาก editingId (ถ้าแก้ไขเอกสารเดิม) แล้วอัปเดตเป็น id ใหม่ทันทีที่มีการสร้างเอกสารครั้งแรก
+ *  (เช่น กดปุ่มพิมพ์/แชร์/ดาวน์โหลดก่อนกด "บันทึกเอกสาร") เพื่อให้การกดซ้ำครั้งต่อไปเป็นการอัปเดต ไม่ใช่สร้างซ้ำ */
+const currentId = ref<string | undefined>(editingId)
 
-/** สร้างเอกสารแล้วคืนกลับมา ใช้ร่วมกันทั้งปุ่ม "บันทึกเอกสาร" และปุ่มลัดในแถบเครื่องมือ (พิมพ์/แชร์/ดาวน์โหลด) */
+/** บันทึกเอกสาร (สร้างใหม่ หรืออัปเดตถ้าบันทึกไปแล้วอย่างน้อยหนึ่งครั้ง) แล้วคืนเอกสารกลับมา ใช้ร่วมกันทั้งปุ่ม
+ *  "บันทึกเอกสาร" และปุ่มลัดในแถบเครื่องมือ (พิมพ์/แชร์/ดาวน์โหลด) ที่ต้องมีเอกสารจริงก่อนถึงจะทำงานได้ */
 const saveAndGetDoc = () => {
   if (!canSubmit.value) return null
   const items: Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>> = rows.value.map((r) => ({
@@ -548,7 +591,7 @@ const saveAndGetDoc = () => {
     whtRate: r.whtRate,
     amount: rowAmount(r),
   }))
-  const doc = salesDocumentsStore.createTaxInvoiceManual({
+  const payload = {
     customer: customerName.value.trim(),
     items,
     number: documentNumber.value.trim() || undefined,
@@ -576,9 +619,11 @@ const saveAndGetDoc = () => {
     whtAmount: whtTotal.value,
     sourceQuotationId: sourceQuotationId.value,
     sourceBillingId: sourceBillingId.value,
-  })
-  lastSavedId.value = doc.id
-  return doc
+  }
+  if (currentId.value) return salesDocumentsStore.updateTaxInvoiceManual(currentId.value, payload)
+  const created = salesDocumentsStore.createTaxInvoiceManual(payload)
+  currentId.value = created.id
+  return created
 }
 
 const submit = () => {
@@ -610,7 +655,7 @@ const envelopeAction = () => {
 
 const historyModalOpen = ref(false)
 const historyAction = () => {
-  if (!lastSavedId.value) {
+  if (!currentId.value) {
     alert('กรุณาบันทึกเอกสารก่อน ถึงจะดูประวัติได้')
     return
   }

@@ -161,6 +161,7 @@ const getScreenTitle = () => {
     '/booking/ceramics': 'รายการงาน · Fleet Ceramics',
     '/booking/cements/completed': 'งานเสร็จสิ้น · Fleet Cements',
     '/booking/ceramics/completed': 'งานเสร็จสิ้น · Fleet Ceramics',
+    '/completed-jobs': 'งานเสร็จสิ้นทั้งหมด',
     '/documents': 'เอกสารขาย',
     '/billing': 'ใบวางบิล',
     '/quotation': 'ใบเสนอราคา',
@@ -200,6 +201,9 @@ const getScreenTitle = () => {
   if (currentRoute.path.startsWith('/job/')) return 'รายละเอียดงาน'
   if (currentRoute.path === '/quotation/new') return 'สร้างใบเสนอราคา'
   if (currentRoute.path.startsWith('/quotation/') && currentRoute.path.endsWith('/edit')) return 'แก้ไขใบเสนอราคา'
+  if (currentRoute.path.startsWith('/billing-notes/manual/') && currentRoute.path.endsWith('/edit')) return 'แก้ไขใบวางบิล'
+  if (currentRoute.path.startsWith('/tax-invoices/') && currentRoute.path.endsWith('/edit')) return 'แก้ไขใบแจ้งหนี้/ใบกำกับภาษี'
+  if (currentRoute.path.startsWith('/receipts/new-manual/') && currentRoute.path.endsWith('/edit')) return 'แก้ไขใบเสร็จรับเงิน'
   if (currentRoute.path.includes('/convert/')) return 'สร้างเอกสารจากใบเสนอราคา'
   if (currentRoute.path.endsWith('/new')) return 'สร้างงานขนส่งใหม่'
   if (currentRoute.path.endsWith('/edit')) return 'แก้ไขงานขนส่ง'

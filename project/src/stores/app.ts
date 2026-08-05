@@ -27,6 +27,7 @@ export const useAppStore = defineStore('app', () => {
         { id: '2-2', icon: 'category', label: 'Fleet Ceramics', route: '/booking/ceramics' },
         { id: '2-3', icon: 'task_alt', label: 'งานเสร็จสิ้น (Cements)', route: '/booking/cements/completed' },
         { id: '2-4', icon: 'task_alt', label: 'งานเสร็จสิ้น (Ceramics)', route: '/booking/ceramics/completed' },
+        { id: '2-5', icon: 'fact_check', label: 'งานเสร็จสิ้นทั้งหมด', route: '/completed-jobs' },
       ],
     },
     {

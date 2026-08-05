@@ -75,6 +75,10 @@
               <label class="field-label">ข้อความ</label>
               <textarea v-model="emailBody" rows="6" class="input-field w-full leading-relaxed" />
             </div>
+            <div v-if="emailNotConfigured" class="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <span class="material-symbols-rounded text-sm">info</span>
+              ระบบส่งอีเมลยังไม่ได้เปิดใช้งาน — ใช้ลิงก์แชร์ด้านบนแทนได้ในระหว่างนี้
+            </div>
           </template>
         </div>
 
@@ -121,6 +125,7 @@ const emailCc = ref('')
 const emailBcc = ref('')
 const emailSubject = ref('')
 const emailBody = ref('')
+const emailNotConfigured = ref(false)
 
 const url = computed(() => `${window.location.origin}/documents/${props.docId}`)
 
@@ -130,6 +135,7 @@ watch(
     if (!isOpen) return
     tab.value = 'share'
     copied.value = false
+    emailNotConfigured.value = false
     const companyName = documentSettingsStore.settings.company.name
     emailSubject.value = `เอกสารเลขที่ ${props.number} จาก ${companyName}`
     emailBody.value = `เรียนคุณ ${props.customer}\n\nทางบริษัทขอส่ง${props.docTypeLabel}เลขที่ ${props.number} มาให้ตามเอกสารแนบ\n\nสามารถดูเอกสารได้ที่ลิงก์นี้: ${url.value}\n\nขอบคุณครับ/ค่ะ\n${companyName}`
@@ -154,14 +160,13 @@ const goToPaymentSettings = () => {
   router.push('/settings/documents/payment')
 }
 
-/** ระบบยังไม่มี backend ส่งอีเมลจริง — จำลองการส่งไว้ก่อน */
+// TODO(phase-2): เชื่อมต่อ email provider จริง (เช่น Firebase Trigger Email, SendGrid, Resend) — ตอนนี้ยังไม่มี backend ส่งอีเมลจริง
 const sendEmail = () => {
   if (!emailTo.value.trim()) {
     alert('กรุณากรอกอีเมลผู้รับ')
     return
   }
-  alert(`ส่งอีเมลถึง ${emailTo.value} เรียบร้อยแล้ว (จำลอง)`)
-  emit('close')
+  emailNotConfigured.value = true
 }
 </script>
 
