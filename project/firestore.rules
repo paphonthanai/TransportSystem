@@ -88,6 +88,20 @@ service cloud.firestore {
       allow write: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'DRIVER']);
     }
 
+    // เอกสารขาย (ใบเสนอราคา/ใบสั่งขาย/ใบวางบิล/ใบกำกับภาษี/ใบเสร็จ) — ตรงกับ meta.roles ของ route กลุ่มเอกสารขาย
+    match /salesDocuments/{docId} {
+      allow read, write: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING', 'DISPATCHER']);
+    }
+
+    match /salesDocumentItems/{itemId} {
+      allow read, write: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING', 'DISPATCHER']);
+    }
+
+    // หนังสือรับรองหัก ณ ที่จ่าย — route wht-certificates
+    match /whtCertificates/{certId} {
+      allow read, write: if hasRole(['ADMIN', 'ACCOUNTING']);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

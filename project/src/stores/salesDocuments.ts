@@ -2,9 +2,8 @@
 import { ref, watch } from 'vue'
 import { useDocumentSettingsStore, type PriceDisplay } from './documentSettings'
 import { useBookingStore } from './booking'
-
-const SALES_DOCUMENTS_KEY = 'tms_sales_documents_v1'
-const SALES_DOCUMENT_ITEMS_KEY = 'tms_sales_document_items_v1'
+import { salesDocumentRepository } from '@/repositories/salesDocumentRepository'
+import { salesDocumentItemRepository } from '@/repositories/salesDocumentItemRepository'
 
 export type SalesDocumentType = 'QUOTATION' | 'SALES_ORDER' | 'BILLING' | 'TAX_INVOICE' | 'RECEIPT' | 'CASH_SALE' | 'PURCHASE_ORDER'
 // Future: 'CREDIT_NOTE' | 'DEBIT_NOTE' (Round 3) — leave the union open via this comment, don't build now.
@@ -176,53 +175,104 @@ export interface ManualDocumentFormData {
   sourceBillingId?: string
 }
 
-function reviveDocument(raw: any): SalesDocument {
-  return {
-    ...raw,
-    date: new Date(raw.date),
-    dueDate: raw.dueDate ? new Date(raw.dueDate) : undefined,
-    paidDate: raw.paidDate ? new Date(raw.paidDate) : undefined,
-    dateFrom: raw.dateFrom ? new Date(raw.dateFrom) : undefined,
-    dateTo: raw.dateTo ? new Date(raw.dateTo) : undefined,
-    createdAt: new Date(raw.createdAt),
-  }
-}
-
-function loadDocuments(): SalesDocument[] {
-  try {
-    const raw = localStorage.getItem(SALES_DOCUMENTS_KEY)
-    if (raw) return JSON.parse(raw).map(reviveDocument)
-  } catch {
-    // corrupt/inaccessible storage, fall back to empty list
-  }
-  return []
-}
-
-function loadItems(): SalesDocumentItem[] {
-  try {
-    const raw = localStorage.getItem(SALES_DOCUMENT_ITEMS_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {
-    // corrupt/inaccessible storage, fall back to empty list
-  }
-  return []
-}
-
 export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
-  const documents = ref<SalesDocument[]>(loadDocuments())
-  const items = ref<SalesDocumentItem[]>(loadItems())
+  const documents = ref<SalesDocument[]>([])
+  const items = ref<SalesDocumentItem[]>([])
+  const loading = ref(true)
+  const error = ref<string | null>(null)
 
-  watch(documents, (val) => localStorage.setItem(SALES_DOCUMENTS_KEY, JSON.stringify(val)), { deep: true })
-  watch(items, (val) => localStorage.setItem(SALES_DOCUMENT_ITEMS_KEY, JSON.stringify(val)), { deep: true })
+  /**
+   * Sales document data source: Firestore (แทน localStorage เดิม) เหมือน booking.ts แต่ฟังก์ชันสร้าง/แก้ไข/ลบ
+   * เอกสารกระจายอยู่เกือบ 20 จุดในไฟล์นี้ (mutate documents.value/items.value ตรงๆ ทั้ง unshift/find+assign/filter)
+   * จึงไม่คุ้มและเสี่ยงเกินไปที่จะรื้อทุกจุดให้เรียก repository เอง — ใช้ deep watcher เปรียบเทียบเนื้อหาต่อ
+   * document/item (เหมือน lastKnownBookingJson ใน booking.ts) แล้ว upsert เฉพาะรายการที่เปลี่ยนจริงไป Firestore
+   * และลบรายการที่หายไปจาก array (ครอบคลุมทั้งกรณีสร้างใหม่ แก้ไข และลบ โดยไม่ต้องแก้ฟังก์ชันเดิมแม้แต่บรรทัดเดียว)
+   */
+  const lastKnownDocJson = new Map<string, string>()
+  const lastKnownItemJson = new Map<string, string>()
 
-  window.addEventListener('storage', (e) => {
-    if (e.key === SALES_DOCUMENTS_KEY && e.newValue) {
-      documents.value = JSON.parse(e.newValue).map(reviveDocument)
+  function applyRemoteDocuments(remote: SalesDocument[]) {
+    documents.value = remote
+    lastKnownDocJson.clear()
+    remote.forEach((d) => lastKnownDocJson.set(d.id, JSON.stringify(d)))
+  }
+
+  function applyRemoteItems(remote: SalesDocumentItem[]) {
+    items.value = remote
+    lastKnownItemJson.clear()
+    remote.forEach((i) => lastKnownItemJson.set(i.id, JSON.stringify(i)))
+  }
+
+  watch(
+    documents,
+    (val) => {
+      const currentIds = new Set(val.map((d) => d.id))
+      val.forEach((d) => {
+        const json = JSON.stringify(d)
+        if (lastKnownDocJson.get(d.id) === json) return
+        lastKnownDocJson.set(d.id, json)
+        const { id, ...rest } = d
+        salesDocumentRepository.set(id, rest).catch((err: any) => {
+          error.value = err?.message || 'บันทึกเอกสารไป Firestore ไม่สำเร็จ'
+        })
+      })
+      lastKnownDocJson.forEach((_json, id) => {
+        if (currentIds.has(id)) return
+        lastKnownDocJson.delete(id)
+        salesDocumentRepository.delete(id).catch((err: any) => {
+          error.value = err?.message || 'ลบเอกสารจาก Firestore ไม่สำเร็จ'
+        })
+      })
+    },
+    { deep: true }
+  )
+
+  watch(
+    items,
+    (val) => {
+      const currentIds = new Set(val.map((i) => i.id))
+      val.forEach((i) => {
+        const json = JSON.stringify(i)
+        if (lastKnownItemJson.get(i.id) === json) return
+        lastKnownItemJson.set(i.id, json)
+        const { id, ...rest } = i
+        salesDocumentItemRepository.set(id, rest).catch((err: any) => {
+          error.value = err?.message || 'บันทึกรายการเอกสารไป Firestore ไม่สำเร็จ'
+        })
+      })
+      lastKnownItemJson.forEach((_json, id) => {
+        if (currentIds.has(id)) return
+        lastKnownItemJson.delete(id)
+        salesDocumentItemRepository.delete(id).catch((err: any) => {
+          error.value = err?.message || 'ลบรายการเอกสารจาก Firestore ไม่สำเร็จ'
+        })
+      })
+    },
+    { deep: true }
+  )
+
+  /** ไม่ auto-reseed ข้อมูลตัวอย่าง — collection ว่าง แปลว่ายังไม่มีเอกสารจริง ไม่ใช่ "ยังไม่ได้ migrate" */
+  async function fetchAll() {
+    loading.value = true
+    error.value = null
+    try {
+      const [docs, docItems] = await Promise.all([salesDocumentRepository.getAll(), salesDocumentItemRepository.getAll()])
+      applyRemoteDocuments(docs)
+      applyRemoteItems(docItems)
+    } catch (err: any) {
+      error.value = err?.message || 'โหลดเอกสารจาก Firestore ไม่สำเร็จ'
+    } finally {
+      loading.value = false
     }
-    if (e.key === SALES_DOCUMENT_ITEMS_KEY && e.newValue) {
-      items.value = JSON.parse(e.newValue)
-    }
-  })
+    salesDocumentRepository.subscribe(applyRemoteDocuments, (err) => {
+      error.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ (เอกสาร)'
+    })
+    salesDocumentItemRepository.subscribe(applyRemoteItems, (err) => {
+      error.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ (รายการเอกสาร)'
+    })
+  }
+
+  fetchAll()
 
   const itemsForDocument = (documentId: string) => items.value.filter((i) => i.documentId === documentId).sort((a, b) => a.sortOrder - b.sortOrder)
 
@@ -1202,6 +1252,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   return {
     documents,
     items,
+    loading,
+    error,
     itemsForDocument,
     createQuotation,
     sendQuotationForApproval,
