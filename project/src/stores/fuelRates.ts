@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { computed } from 'vue'
+import { useFirestoreSettings } from '@/composables/useFirestoreSettings'
 import type { JobItem, PricingMode } from '@/types'
-
-const FUEL_KEY = 'tms_fuel_settings_v2'
 
 export interface FuelRate {
   province: string
@@ -31,26 +30,8 @@ function defaultSettings(): FuelSettings {
   }
 }
 
-function loadSettings(): FuelSettings {
-  try {
-    const raw = localStorage.getItem(FUEL_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {
-    // corrupt/inaccessible storage, fall back to defaults
-  }
-  return defaultSettings()
-}
-
 export const useFuelRateStore = defineStore('fuelRates', () => {
-  const settings = ref<FuelSettings>(loadSettings())
-
-  watch(settings, (val) => localStorage.setItem(FUEL_KEY, JSON.stringify(val)), { deep: true })
-
-  window.addEventListener('storage', (e) => {
-    if (e.key === FUEL_KEY && e.newValue) {
-      settings.value = JSON.parse(e.newValue)
-    }
-  })
+  const { data: settings, loading, error } = useFirestoreSettings<FuelSettings>('fuelRates', defaultSettings)
 
   const matchText = (a: string, b: string) => a === b || a.includes(b) || b.includes(a)
 
@@ -104,5 +85,5 @@ export const useFuelRateStore = defineStore('fuelRates', () => {
     })
   }
 
-  return { settings, findRate, provincesList, districtsForProvince, standardFuelLiters, isDifferentCorridor }
+  return { settings, loading, error, findRate, provincesList, districtsForProvince, standardFuelLiters, isDifferentCorridor }
 })

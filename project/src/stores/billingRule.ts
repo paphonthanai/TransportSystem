@@ -1,8 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { useFirestoreSettings } from '@/composables/useFirestoreSettings'
 import type { Booking, BookingStatus } from '@/types'
-
-const BILLING_RULE_KEY = 'tms_billing_rule_v1'
 
 export interface BillingRule {
   /** สถานะงานที่ถือว่าพร้อมนำไปวางบิลได้ ค่าเริ่มต้น = ต้องส่งของสำเร็จ (DELIVERED) เท่านั้น ปรับเพิ่มสถานะอื่นได้ในอนาคตโดยไม่ต้องแก้โค้ด */
@@ -24,26 +22,8 @@ function defaultRule(): BillingRule {
   }
 }
 
-function loadRule(): BillingRule {
-  try {
-    const raw = localStorage.getItem(BILLING_RULE_KEY)
-    if (raw) return { ...defaultRule(), ...JSON.parse(raw) }
-  } catch {
-    // corrupt/inaccessible storage, fall back to defaults
-  }
-  return defaultRule()
-}
-
 export const useBillingRuleStore = defineStore('billingRule', () => {
-  const rule = ref<BillingRule>(loadRule())
-
-  watch(rule, (val) => localStorage.setItem(BILLING_RULE_KEY, JSON.stringify(val)), { deep: true })
-
-  window.addEventListener('storage', (e) => {
-    if (e.key === BILLING_RULE_KEY && e.newValue) {
-      rule.value = { ...defaultRule(), ...JSON.parse(e.newValue) }
-    }
-  })
+  const { data: rule, loading, error } = useFirestoreSettings<BillingRule>('billingRule', defaultRule)
 
   const hasAllPods = (booking: Booking) =>
     booking.items.length > 0 && booking.items.every((i) => i.deliveryStatus === 'DELIVERED' && !!i.podImage)
@@ -72,5 +52,5 @@ export const useBillingRuleStore = defineStore('billingRule', () => {
 
   const isEligible = (booking: Booking): boolean => eligibilityReason(booking) === null
 
-  return { rule, isEligible, eligibilityReason }
+  return { rule, loading, error, isEligible, eligibilityReason }
 })

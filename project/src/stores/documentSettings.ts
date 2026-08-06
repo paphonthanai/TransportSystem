@@ -1,8 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
-
-/** v2: เปลี่ยนชื่อ/ที่อยู่บริษัทตั้งต้นจาก THANTHARA เป็นมิตรกาญจน์ — ขึ้น key ใหม่เพื่อไม่ให้ localStorage เดิม (ที่มีชื่อบริษัทเก่าค้างอยู่) บังค่า default ใหม่ */
-const SETTINGS_KEY = 'tms_document_settings_v2'
+import { useFirestoreSettings } from '@/composables/useFirestoreSettings'
 
 export type PriceDisplay = 'exclusive' | 'inclusive'
 export type CalcMode = 'separate' | 'included'
@@ -124,26 +121,8 @@ function mergeWithDefaults(raw: any): DocumentSettings {
   }
 }
 
-function loadSettings(): DocumentSettings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY)
-    if (raw) return mergeWithDefaults(JSON.parse(raw))
-  } catch {
-    // corrupt/inaccessible storage, fall back to defaults
-  }
-  return defaultSettings()
-}
-
 export const useDocumentSettingsStore = defineStore('documentSettings', () => {
-  const settings = ref<DocumentSettings>(loadSettings())
-
-  watch(settings, (val) => localStorage.setItem(SETTINGS_KEY, JSON.stringify(val)), { deep: true })
-
-  window.addEventListener('storage', (e) => {
-    if (e.key === SETTINGS_KEY && e.newValue) {
-      settings.value = mergeWithDefaults(JSON.parse(e.newValue))
-    }
-  })
+  const { data: settings, loading, error } = useFirestoreSettings<DocumentSettings>('documentSettings', defaultSettings, mergeWithDefaults)
 
   function padNumber(seq: number, padding: number) {
     return String(seq).padStart(padding, '0')
@@ -151,6 +130,8 @@ export const useDocumentSettingsStore = defineStore('documentSettings', () => {
 
   return {
     settings,
+    loading,
+    error,
     padNumber,
   }
 })

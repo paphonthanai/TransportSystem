@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
+import { productRepository } from '@/repositories/productRepository'
+import { stockMovementRepository } from '@/repositories/stockMovementRepository'
 import type { Booking, JobItem } from '@/types'
-
-const PRODUCTS_KEY = 'tms_products_v1'
-const MOVEMENTS_KEY = 'tms_stock_movements_v1'
 
 export interface Product {
   id: string
@@ -26,53 +25,43 @@ export interface StockMovement {
   note?: string
 }
 
-function reviveMovement(raw: any): StockMovement {
-  return { ...raw, date: new Date(raw.date) }
-}
-
-function loadProducts(): Product[] {
-  try {
-    const raw = localStorage.getItem(PRODUCTS_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {
-    // corrupt/inaccessible storage, fall back to seed data
-  }
-  return [
-    { id: 'p1', code: 'CM-M401', name: 'ปูนซีเมนต์ M401', unit: 'ตัน', category: 'cements' },
-    { id: 'p2', code: 'CM-M402', name: 'ปูนซีเมนต์ M402', unit: 'ตัน', category: 'cements' },
-    { id: 'p3', code: 'PL-WOOD', name: 'พาเลทไม้', unit: 'แผ่น', category: 'other' },
-  ]
-}
-
-function loadMovements(): StockMovement[] {
-  try {
-    const raw = localStorage.getItem(MOVEMENTS_KEY)
-    if (raw) return JSON.parse(raw).map(reviveMovement)
-  } catch {
-    // corrupt/inaccessible storage, fall back to empty list
-  }
-  return []
-}
-
 export const useInventoryStore = defineStore('inventory', () => {
-  const products = ref<Product[]>(loadProducts())
-  const movements = ref<StockMovement[]>(loadMovements())
+  const products = ref<Product[]>([])
+  const movements = ref<StockMovement[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
 
-  watch(products, (val) => localStorage.setItem(PRODUCTS_KEY, JSON.stringify(val)), { deep: true })
-  watch(movements, (val) => localStorage.setItem(MOVEMENTS_KEY, JSON.stringify(val)), { deep: true })
+  async function fetchAll() {
+    loading.value = true
+    error.value = null
+    try {
+      const [productList, movementList] = await Promise.all([
+        productRepository.getAll(),
+        stockMovementRepository.getAll(),
+      ])
+      products.value = productList
+      movements.value = movementList
+    } catch (err: any) {
+      error.value = err?.message || 'โหลดข้อมูลสินค้า/สต๊อกจาก Firestore ไม่สำเร็จ'
+    } finally {
+      loading.value = false
+    }
+  }
 
-  window.addEventListener('storage', (e) => {
-    if (e.key === PRODUCTS_KEY && e.newValue) {
-      products.value = JSON.parse(e.newValue)
-    }
-    if (e.key === MOVEMENTS_KEY && e.newValue) {
-      movements.value = JSON.parse(e.newValue).map(reviveMovement)
-    }
-  })
+  fetchAll()
 
   function addProduct(data: Omit<Product, 'id'>) {
-    const product: Product = { ...data, id: `prod${Date.now()}` }
+    const tempId = `prod${Date.now()}`
+    const product: Product = { ...data, id: tempId }
     products.value.unshift(product)
+    productRepository
+      .create(data)
+      .then((id) => {
+        product.id = id
+      })
+      .catch((err: any) => {
+        error.value = err?.message || 'บันทึกสินค้าไป Firestore ไม่สำเร็จ'
+      })
     return product
   }
 
@@ -80,11 +69,23 @@ export const useInventoryStore = defineStore('inventory', () => {
     const product = products.value.find((p) => p.id === id)
     if (!product) return
     Object.assign(product, data)
+    productRepository.update(id, data).catch((err: any) => {
+      error.value = err?.message || 'บันทึกสินค้าไป Firestore ไม่สำเร็จ'
+    })
   }
 
   function addMovement(data: Omit<StockMovement, 'id' | 'date'> & { date?: Date }) {
     const movement: StockMovement = { ...data, id: `mv${Date.now()}${Math.random().toString(36).slice(2, 6)}`, date: data.date || new Date() }
     movements.value.unshift(movement)
+    const { id: _id, ...payload } = movement
+    stockMovementRepository
+      .create(payload)
+      .then((id) => {
+        movement.id = id
+      })
+      .catch((err: any) => {
+        error.value = err?.message || 'บันทึกรายการตัดสต๊อกไป Firestore ไม่สำเร็จ'
+      })
     return movement
   }
 
@@ -116,6 +117,8 @@ export const useInventoryStore = defineStore('inventory', () => {
   return {
     products,
     movements,
+    loading,
+    error,
     addProduct,
     updateProduct,
     addMovement,

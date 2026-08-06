@@ -64,6 +64,30 @@ service cloud.firestore {
       allow read, write: if hasRole(['ADMIN']);
     }
 
+    // ค่าตั้งค่าระบบแบบเอกสารเดียว (ค่าน้ำมัน/เงื่อนไขวางบิล/เลขรันเอกสาร ฯลฯ) — sync ข้ามเครื่องผ่าน useFirestoreSettings
+    // อ่านได้ทุก role ที่ล็อกอินอยู่ (ใช้แสดงผลในหลายหน้า) แต่แก้ไขได้เฉพาะ ADMIN
+    match /settings/{settingKey} {
+      allow read: if hasRole(['ADMIN', 'STAFF', 'DISPATCHER', 'ACCOUNTING', 'DRIVER']);
+      allow write: if hasRole(['ADMIN']);
+    }
+
+    // ต้นทาง/จุดรับสินค้า
+    match /origins/{originId} {
+      allow read: if hasRole(['ADMIN', 'STAFF', 'DISPATCHER', 'ACCOUNTING', 'DRIVER']);
+      allow write: if hasRole(['ADMIN']);
+    }
+
+    // สินค้า/สต๊อก — DISPATCHER และ DRIVER เขียนได้เพราะ Driver App ตัดสต๊อกอัตโนมัติตอนรับสินค้า (pickupJobItem)
+    match /products/{productId} {
+      allow read: if hasRole(['ADMIN', 'STAFF', 'DISPATCHER', 'ACCOUNTING', 'DRIVER']);
+      allow write: if hasRole(['ADMIN', 'DISPATCHER', 'DRIVER']);
+    }
+
+    match /stockMovements/{movementId} {
+      allow read: if hasRole(['ADMIN', 'DISPATCHER']);
+      allow write: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'DRIVER']);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
