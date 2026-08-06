@@ -53,6 +53,17 @@ service cloud.firestore {
       allow read, write: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING', 'DRIVER']);
     }
 
+    // สมุดรายชื่อเสมียน (StaffView.vue) — ตรงกับ meta.roles ของ route settings/staff
+    match /staff/{staffId} {
+      allow read, write: if hasRole(['ADMIN']);
+    }
+
+    // สมุดรายชื่อผู้จำหน่าย (VendorsView.vue) — route settings/vendors ยังปิดใช้งานอยู่ (comment out ใน router/app.ts)
+    // เตรียม Rules ไว้ล่วงหน้าเผื่อเปิดใช้งานทีหลัง ไม่ให้ลืมแล้วเผลอปล่อย if true
+    match /vendors/{vendorId} {
+      allow read, write: if hasRole(['ADMIN']);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

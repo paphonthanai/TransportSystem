@@ -20,7 +20,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="vendor in vendors" :key="vendor.name" class="border-t border-border hover:bg-surface-2 transition-colors">
+          <tr v-for="vendor in vendorStore.vendors" :key="vendor.id" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 font-semibold text-text">{{ vendor.name }}</td>
             <td class="px-4 py-3 text-muted">{{ vendor.category }}</td>
             <td class="px-4 py-3 text-text">{{ vendor.contact }}</td>
@@ -28,6 +28,9 @@
             <td class="px-4 py-3">
               <span class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">ใช้งาน</span>
             </td>
+          </tr>
+          <tr v-if="vendorStore.vendors.length === 0">
+            <td colspan="5" class="px-4 py-8 text-center text-muted">ยังไม่มีข้อมูลผู้จำหน่าย</td>
           </tr>
         </tbody>
       </table>
@@ -62,7 +65,7 @@
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="showDialog = false" class="btn-secondary">ยกเลิก</button>
-            <button @click="save" class="btn-primary">บันทึก</button>
+            <button @click="save" :disabled="saving" class="btn-primary disabled:opacity-50">{{ saving ? 'กำลังบันทึก...' : 'บันทึก' }}</button>
           </div>
         </div>
       </div>
@@ -72,25 +75,28 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useVendorStore } from '@/stores/vendors'
 
-const vendors = ref([
-  { name: 'หจก. น้ำมันไทยรุ่งเรือง', category: 'น้ำมันเชื้อเพลิง', contact: 'คุณประยูร', phone: '035-611-220' },
-  { name: 'บจก. ยางไทยเซอร์วิส', category: 'ยางรถบรรทุก', contact: 'คุณสมบัติ', phone: '02-444-8899' },
-  { name: 'ร้านอะไหล่รุ่งโรจน์', category: 'อะไหล่รถบรรทุก', contact: 'คุณโรจน์', phone: '086-234-5566' },
-])
+const vendorStore = useVendorStore()
 
 const showDialog = ref(false)
 const form = ref({ name: '', category: '', contact: '', phone: '' })
+const saving = ref(false)
 
 const openDialog = () => {
   form.value = { name: '', category: '', contact: '', phone: '' }
   showDialog.value = true
 }
 
-const save = () => {
+const save = async () => {
   if (!form.value.name) return
-  vendors.value.unshift({ ...form.value })
-  showDialog.value = false
+  saving.value = true
+  try {
+    await vendorStore.createVendor(form.value)
+    showDialog.value = false
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 

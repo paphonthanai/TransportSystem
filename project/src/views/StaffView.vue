@@ -20,7 +20,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="staff in staffList" :key="staff.name" class="border-t border-border hover:bg-surface-2 transition-colors">
+          <tr v-for="staff in staffStore.staffList" :key="staff.id" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 font-semibold text-text">{{ staff.name }}</td>
             <td class="px-4 py-3 text-muted">{{ staff.position }}</td>
             <td class="px-4 py-3 text-muted">{{ staff.phone }}</td>
@@ -31,6 +31,9 @@
               <button @click="openDialog(staff)" class="btn-sm">แก้ไข</button>
             </td>
           </tr>
+          <tr v-if="staffStore.staffList.length === 0">
+            <td colspan="5" class="px-4 py-8 text-center text-muted">ยังไม่มีข้อมูลเสมียน</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -39,7 +42,7 @@
       <div @click="showDialog = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
         <div @click.stop class="w-full max-w-md bg-surface rounded-2xl shadow-2xl">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="font-bold text-text">{{ editingIndex === null ? 'เพิ่มพนักงาน' : 'แก้ไขพนักงาน' }}</div>
+            <div class="font-bold text-text">{{ editingId === null ? 'เพิ่มพนักงาน' : 'แก้ไขพนักงาน' }}</div>
             <button @click="showDialog = false" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
@@ -60,7 +63,7 @@
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="showDialog = false" class="btn-secondary">ยกเลิก</button>
-            <button @click="save" class="btn-primary">บันทึก</button>
+            <button @click="save" :disabled="saving" class="btn-primary disabled:opacity-50">{{ saving ? 'กำลังบันทึก...' : 'บันทึก' }}</button>
           </div>
         </div>
       </div>
@@ -70,32 +73,39 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useStaffStore, type StaffRecord } from '@/stores/staff'
 
-const staffList = ref<{ name: string; position: string; phone: string }[]>([])
+const staffStore = useStaffStore()
 
 const showDialog = ref(false)
-const editingIndex = ref<number | null>(null)
+const editingId = ref<string | null>(null)
 const form = ref({ name: '', position: '', phone: '' })
+const saving = ref(false)
 
-const openDialog = (staff?: (typeof staffList.value)[number]) => {
+const openDialog = (staff?: StaffRecord) => {
   if (staff) {
-    editingIndex.value = staffList.value.indexOf(staff)
-    form.value = { ...staff }
+    editingId.value = staff.id ?? null
+    form.value = { name: staff.name, position: staff.position, phone: staff.phone }
   } else {
-    editingIndex.value = null
+    editingId.value = null
     form.value = { name: '', position: '', phone: '' }
   }
   showDialog.value = true
 }
 
-const save = () => {
+const save = async () => {
   if (!form.value.name) return
-  if (editingIndex.value === null) {
-    staffList.value.unshift({ ...form.value })
-  } else {
-    staffList.value[editingIndex.value] = { ...form.value }
+  saving.value = true
+  try {
+    if (editingId.value) {
+      await staffStore.updateStaff(editingId.value, form.value)
+    } else {
+      await staffStore.createStaff(form.value)
+    }
+    showDialog.value = false
+  } finally {
+    saving.value = false
   }
-  showDialog.value = false
 }
 </script>
 
