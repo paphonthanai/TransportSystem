@@ -196,8 +196,8 @@
               <tr v-for="(li, idx) in lineItems" :key="li.id" class="border-b border-border last:border-0">
                 <td class="px-3 py-2 text-text">
                   {{ li.product }} <span v-if="li.jobType" class="text-muted">({{ li.jobType }})</span>
-                  <div v-if="li.extraProducts && li.extraProducts.length" class="text-[11px] text-muted">
-                    + สินค้าอื่น: {{ li.extraProducts.map((ep) => `${ep.product} ${ep.qty} ${ep.unit}`).join(', ') }}
+                  <div v-for="(ep, epIdx) in li.extraProducts || []" :key="epIdx" class="text-[11px] text-muted">
+                    + สินค้าอื่น: {{ ep.product }} {{ ep.qty }} {{ ep.unit }}
                   </div>
                 </td>
                 <td class="px-3 py-2 text-right text-text">{{ li.qty }} {{ li.unit }}</td>

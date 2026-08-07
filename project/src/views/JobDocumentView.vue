@@ -258,9 +258,8 @@
             </div>
             <div class="text-xs text-muted">{{ item.province }} · {{ item.district }}</div>
             <div><span class="text-muted">สินค้า:</span> {{ item.product }} {{ item.qty }} {{ item.unit }}</div>
-            <div v-if="item.extraProducts && item.extraProducts.length">
-              <span class="text-muted">สินค้าอื่น:</span>
-              {{ item.extraProducts.map((ep) => `${ep.product} ${ep.qty} ${ep.unit}`).join(', ') }}
+            <div v-for="(ep, epIdx) in item.extraProducts || []" :key="epIdx">
+              <span class="text-muted">สินค้าอื่น:</span> {{ ep.product }} {{ ep.qty }} {{ ep.unit }}
             </div>
             <div><span class="text-muted">ต้นทาง:</span> {{ item.pickupOriginName || booking.origin || '-' }}</div>
             <div><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName || '-' }} {{ item.sitePhone ? '· ' + item.sitePhone : '' }}</div>
