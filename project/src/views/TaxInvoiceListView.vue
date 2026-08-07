@@ -161,6 +161,7 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
     return [
       { value: 'SENT', label: statusLabel.SENT! },
       { value: 'CREATE_RECEIPT', label: 'สร้างใบเสร็จรับเงิน' },
+      { value: 'RESET', label: 'รีเซ็ต' },
     ]
   }
   if (s === 'PAID') return [{ value: 'PAID', label: statusLabel.PAID! }]
@@ -185,6 +186,12 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
     case 'CANCEL':
       if (confirm(`ยืนยันยกเลิกใบแจ้งหนี้ ${doc.number}? งานขนส่ง/ใบวางบิลที่ผูกไว้จะกลับไปสถานะก่อนหน้า`)) salesDocumentsStore.cancelTaxInvoice(doc.id)
       break
+    case 'RESET': {
+      if (!confirm(`ยืนยัน Reset ใบแจ้งหนี้ ${doc.number} กลับเป็นร่าง?`)) break
+      const result = salesDocumentsStore.resetTaxInvoice(doc.id)
+      if (!result.ok && result.message) alert(result.message)
+      break
+    }
     default:
       break
   }

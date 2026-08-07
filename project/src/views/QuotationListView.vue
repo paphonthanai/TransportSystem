@@ -455,7 +455,7 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
       salesDocumentsStore.rejectQuotation(doc.id)
       break
     case 'RESET':
-      salesDocumentsStore.resetQuotation(doc.id)
+      if (confirm(`ยืนยัน Reset ใบเสนอราคา ${doc.number} กลับเป็นร่าง?`)) salesDocumentsStore.resetQuotation(doc.id)
       break
     case 'CREATE_JOB_ORDER':
       createJobOrder(doc)

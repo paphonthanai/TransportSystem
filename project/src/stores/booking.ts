@@ -6,7 +6,7 @@ import { useOnboardingStore } from '@/stores/onboarding'
 import { useInventoryStore } from '@/stores/inventory'
 import { useBillingRuleStore } from '@/stores/billingRule'
 import { bookingRepository } from '@/repositories/bookingRepository'
-import type { Booking, BookingCategory, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
+import type { Booking, BookingCategory, BookingStatus, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
 
 /** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง, ไม่มีค่า pricingMode (ข้อมูลเก่า) ถือเป็น SINGLE_DESTINATION เสมอ */
 export function isMultiPricing(booking: Booking) {
@@ -482,6 +482,50 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`คนขับไม่รับงาน ${booking.docNo} รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`, { bookingId: booking.id })
   }
 
+  const BOOKING_STATUS_SEQUENCE: BookingStatus[] = [
+    'WAITING_DISPATCH',
+    'ASSIGNED',
+    'ACCEPTED',
+    'FUEL_RECEIVED',
+    'LOADING',
+    'LOADED',
+    'IN_TRANSIT',
+    'DELIVERING',
+    'DELIVERED',
+  ]
+
+  /**
+   * Reset สถานะงานกลับไปขั้นก่อนหน้า 1 ขั้น — จัดการเฉพาะข้อมูลฝั่งงานขนส่งเท่านั้น ไม่แตะเอกสารขาย (booking.ts
+   * ห้าม import salesDocuments.ts เพราะจะเกิด circular import — เหมือน createBillingFromBookings ที่ต้องเรียกจาก
+   * view แทน) ฝั่งที่เรียกใช้ต้องตรวจสอบ/จัดการความสัมพันธ์กับใบวางบิลเองก่อนเรียกฟังก์ชันนี้เมื่อ Reset จาก DELIVERED
+   */
+  function resetBookingStatus(id: string): { ok: boolean; message?: string } {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return { ok: false, message: 'ไม่พบงาน' }
+    const idx = BOOKING_STATUS_SEQUENCE.indexOf(booking.status)
+    if (idx <= 0) return { ok: false, message: 'งานนี้อยู่สถานะแรกแล้ว ไม่สามารถ Reset ย้อนกลับได้อีก' }
+
+    if (booking.status === 'ASSIGNED') {
+      declineDispatch(id)
+      return { ok: true }
+    }
+
+    if (booking.status === 'DELIVERED') {
+      booking.items.forEach((item) => {
+        item.deliveryStatus = 'PENDING'
+        item.deliveredAt = undefined
+        item.podImage = undefined
+        item.deliveredBy = undefined
+      })
+      booking.completedAt = undefined
+    }
+
+    const prevStatus = BOOKING_STATUS_SEQUENCE[idx - 1]
+    addLog(`Reset สถานะงาน ${booking.docNo} กลับไปขั้นก่อนหน้า`, { bookingId: booking.id })
+    booking.status = prevStatus
+    return { ok: true }
+  }
+
   /** คนขับกดรับน้ำมันใน Driver App ระหว่างสถานะ ACCEPTED: ACCEPTED -> FUEL_RECEIVED */
   function markFuelReceived(id: string) {
     const booking = bookings.value.find((b) => b.id === id)
@@ -814,6 +858,7 @@ export const useBookingStore = defineStore('booking', () => {
     dispatchBooking,
     acceptDispatch,
     declineDispatch,
+    resetBookingStatus,
     markFuelReceived,
     startLoading,
     pickupJobItem,

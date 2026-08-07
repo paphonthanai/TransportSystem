@@ -1164,6 +1164,40 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.status = 'SENT'
   }
 
+  /** Reset ใบแจ้งหนี้/ใบกำกับภาษีที่ส่งแล้วกลับเป็นร่าง — บล็อกถ้ามีใบเสร็จรับเงินออกจากใบนี้แล้ว (จะทำให้ใบเสร็จลอยไม่มีต้นทาง) */
+  function resetTaxInvoice(id: string): { ok: boolean; message?: string } {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (doc.status === 'DRAFT') return { ok: false, message: 'เอกสารนี้อยู่สถานะร่างอยู่แล้ว' }
+    const hasReceipt = documents.value.some((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).includes(id))
+    if (hasReceipt) return { ok: false, message: `ไม่สามารถ Reset ได้ เนื่องจากมีใบเสร็จรับเงินที่ออกจากใบแจ้งหนี้ ${doc.number} แล้ว` }
+    doc.status = 'DRAFT'
+    useBookingStore().addLog(`Reset สถานะ ${doc.number} กลับเป็นร่าง`, { docId: doc.id })
+    return { ok: true }
+  }
+
+  /**
+   * Reset ใบวางบิลที่ออกใบแจ้งหนี้ไปแล้วกลับเป็น "รอวางบิล" — ทำได้เฉพาะกรณีใบแจ้งหนี้ลูกยังเป็นร่าง (ยังไม่ส่ง/ยังไม่มีใบเสร็จ)
+   * ใช้ cancelTaxInvoice ตัวเดียวกับปุ่มยกเลิกใบแจ้งหนี้ ซึ่งลบใบแจ้งหนี้ทิ้งและคืนสถานะใบวางบิลต้นทางเป็น BILLING_PENDING ให้อัตโนมัติอยู่แล้ว
+   */
+  function resetBillingNote(id: string): { ok: boolean; message?: string } {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'BILLING')
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (doc.status !== 'BILLED') return { ok: false, message: 'เอกสารนี้อยู่สถานะรอวางบิลอยู่แล้ว' }
+    const childId = (doc.convertedToDocumentIds || [])[0]
+    const child = childId ? documents.value.find((d) => d.id === childId && d.type === 'TAX_INVOICE') : undefined
+    if (!child) return { ok: false, message: 'ไม่พบใบแจ้งหนี้ที่ผูกอยู่ ไม่สามารถ Reset ได้' }
+    if (child.status !== 'DRAFT') {
+      return { ok: false, message: `ไม่สามารถ Reset ได้ เนื่องจากใบแจ้งหนี้ ${child.number} ถูกส่งให้ลูกค้าแล้วหรือชำระเงินแล้ว` }
+    }
+    const hasReceipt = documents.value.some((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).includes(child.id))
+    if (hasReceipt) {
+      return { ok: false, message: `ไม่สามารถ Reset ได้ เนื่องจากมีใบเสร็จรับเงินที่ออกจากใบแจ้งหนี้ ${child.number} แล้ว` }
+    }
+    cancelTaxInvoice(child.id)
+    return { ok: true }
+  }
+
   /** ยกเลิกใบแจ้งหนี้/ใบกำกับภาษีที่ยังไม่ส่ง (DRAFT) — คืนสถานะการเงินของงานขนส่งที่ผูกอยู่กลับเป็น UNBILLED, คืนสถานะใบวางบิลต้นทาง (ถ้ามี) กลับเป็นรอออกใบแจ้งหนี้ แล้วลบเอกสารทิ้ง */
   function cancelTaxInvoice(id: string) {
     const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
@@ -1317,7 +1351,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     createTaxInvoiceManual,
     updateTaxInvoiceManual,
     cancelBillingNote,
+    resetBillingNote,
     cancelTaxInvoice,
+    resetTaxInvoice,
     sendInvoice,
     createReceiptFromInvoices,
     createReceiptManual,

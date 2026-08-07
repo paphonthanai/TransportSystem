@@ -79,6 +79,7 @@
                 >
                   <option :value="row.booking.status">{{ bookingStatusLabel[row.booking.status] }}</option>
                   <option v-if="row.booking.status !== 'DELIVERED'" value="COMPLETE">✓ จบงาน (ออกใบวางบิล)</option>
+                  <option v-if="row.booking.status !== 'WAITING_DISPATCH'" value="RESET">↺ Reset สถานะ</option>
                 </select>
                 <span v-else class="status-pill bg-gray-100 text-gray-700">ไม่พบงานขนส่ง</span>
               </td>
@@ -202,10 +203,27 @@ const syncMissingSalesOrders = () => {
 /** Dropdown สถานะงานขนส่งในตารางนี้ — ปัจจุบันมีแค่ทางลัดเดียวคือ "จบงาน" ข้ามทุกขั้นตอนไปเลย (ใช้ completeJob
  * ตัวเดียวกับปุ่ม "จบงาน (ข้ามขั้นตอน)" ในหน้ารายการงานขนส่ง) แล้วสร้างใบวางบิลอัตโนมัติทันที เหมือนปุ่มสร้างใบวางบิลด้วยมือ */
 const onStatusSelect = (booking: Booking, action: string) => {
-  if (action !== 'COMPLETE') return
-  if (!confirm(`ยืนยันจบงาน ${booking.docNo} และออกใบวางบิล?`)) return
-  bookingStore.completeJob(booking.id, [], undefined)
-  salesDocumentsStore.createBillingFromBookings([booking.id])
+  if (action === 'COMPLETE') {
+    if (!confirm(`ยืนยันจบงาน ${booking.docNo} และออกใบวางบิล?`)) return
+    bookingStore.completeJob(booking.id, [], undefined)
+    salesDocumentsStore.createBillingFromBookings([booking.id])
+    return
+  }
+  if (action === 'RESET') {
+    if (booking.status === 'DELIVERED') {
+      const billing = salesDocumentsStore.documents.find((d) => d.type === 'BILLING' && d.bookingIds.includes(booking.id))
+      if (billing && billing.status !== 'BILLING_PENDING') {
+        alert(`ไม่สามารถ Reset งาน ${booking.docNo} ได้ เนื่องจากใบวางบิล ${billing.number} ถูกดำเนินการต่อแล้ว (ออกใบแจ้งหนี้แล้ว) กรุณา Reset เอกสารปลายทางก่อน`)
+        return
+      }
+      if (!confirm(`ยืนยัน Reset สถานะงาน ${booking.docNo} จาก "ส่งของสำเร็จ" กลับไปขั้นก่อนหน้า?${billing ? ` (จะลบใบวางบิล ${billing.number} ที่ยังไม่ได้ดำเนินการต่อด้วย)` : ''}`)) return
+      if (billing) salesDocumentsStore.cancelBillingNote(billing.id)
+    } else if (!confirm(`ยืนยัน Reset สถานะงาน ${booking.docNo} กลับไปขั้นก่อนหน้า?`)) {
+      return
+    }
+    const result = bookingStore.resetBookingStatus(booking.id)
+    if (!result.ok && result.message) alert(result.message)
+  }
 }
 
 const openMenuId = ref<string | null>(null)

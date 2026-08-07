@@ -171,7 +171,12 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
       { value: 'CANCEL', label: 'ยกเลิก' },
     ]
   }
-  if (s === 'BILLED') return [{ value: 'BILLED', label: statusLabel.BILLED! }]
+  if (s === 'BILLED') {
+    return [
+      { value: 'BILLED', label: statusLabel.BILLED! },
+      { value: 'RESET', label: 'รีเซ็ต' },
+    ]
+  }
   return [{ value: s, label: s }]
 }
 
@@ -217,6 +222,12 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
     case 'CANCEL':
       if (confirm(`ยืนยันยกเลิกใบวางบิล ${doc.number}? งานขนส่งที่ผูกไว้จะกลับไปรอวางบิลใหม่`)) salesDocumentsStore.cancelBillingNote(doc.id)
       break
+    case 'RESET': {
+      if (!confirm(`ยืนยัน Reset ใบวางบิล ${doc.number} กลับเป็น "รอวางบิล"? (ใบแจ้งหนี้ที่ยังไม่ส่งซึ่งออกจากใบวางบิลนี้จะถูกลบไปด้วย)`)) break
+      const result = salesDocumentsStore.resetBillingNote(doc.id)
+      if (!result.ok && result.message) alert(result.message)
+      break
+    }
     default:
       break
   }

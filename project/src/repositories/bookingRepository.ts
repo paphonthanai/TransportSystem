@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
+import { collection, deleteDoc, deleteField, doc, getDocs, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import type { Booking } from '@/types'
 
@@ -21,11 +21,21 @@ function serializeValue(value: unknown): unknown {
   return value
 }
 
-/** แปลง Date fields ทั้งหมด (ระดับงาน + ระดับ items[]) เป็น ISO string ก่อนเขียน Firestore และตัด field ที่เป็น undefined ออก (Firestore ไม่รับ undefined) */
+/**
+ * แปลง Date fields ทั้งหมด (ระดับงาน + ระดับ items[]) เป็น ISO string ก่อนเขียน Firestore
+ * field ระดับบนสุดที่เป็น undefined (เช่น booking.driverName ตอน declineDispatch เคลียร์ทิ้ง) ต้องแปลงเป็น
+ * deleteField() ไม่ใช่แค่ตัดออกจาก payload เฉยๆ — เพราะ update() ใช้ setDoc(...,{merge:true}) เสมอ การไม่ส่ง key
+ * นั้นไปเลยแปลว่า "ไม่แตะ field นี้" ค่าเก่าใน Firestore จะยังค้างอยู่ ไม่ได้ถูกล้างจริงตามที่โค้ดฝั่ง store ตั้งใจ
+ * (ระดับ items[] ไม่ใช้ deleteField() เพราะ Firestore ไม่รองรับ sentinel นี้ในสมาชิกของ array — แต่ items ทั้งก้อน
+ * ถูกเขียนทับใหม่ทั้ง array อยู่แล้วทุกครั้ง การตัด key ที่ undefined ออกจากแต่ละ item จึงถูกต้องอยู่แล้วโดยธรรมชาติ)
+ */
 export function sanitizeBooking(data: Partial<Booking> & Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(data)) {
-    if (value === undefined) continue
+    if (value === undefined) {
+      out[key] = deleteField()
+      continue
+    }
     if (key === 'items' && Array.isArray(value)) {
       out.items = value.map((item: any) => {
         const cleanItem: Record<string, unknown> = {}
