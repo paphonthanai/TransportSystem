@@ -100,6 +100,7 @@
                     @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
                     @start-transit="bookingStore.startTransit(booking.id)"
                     @complete="openCompleteDialog(booking)"
+                    @delete="deleteBooking(booking)"
                   />
                 </div>
               </td>
@@ -181,6 +182,7 @@
                     @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
                     @start-transit="bookingStore.startTransit(booking.id)"
                     @complete="openCompleteDialog(booking)"
+                    @delete="deleteBooking(booking)"
                   />
                 </div>
               </td>
@@ -794,6 +796,11 @@ const confirmDispatch = () => {
     if (vehicle && driver) vehiclesStore.assignDriver(vehicle.id, driver.code)
   }
   dispatchTarget.value = null
+}
+
+const deleteBooking = (booking: Booking) => {
+  if (!confirm(`ยืนยันลบงาน ${booking.docNo}? ไม่สามารถกู้คืนได้`)) return
+  bookingStore.deleteBooking(booking.id)
 }
 
 // --- Complete job flow ---

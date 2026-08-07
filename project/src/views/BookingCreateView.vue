@@ -381,9 +381,8 @@ const driverOptionLabel = (name: string) => {
  * จึง sync ได้แค่ระดับหัวเอกสาร ส่วนรายการขนส่งจริงยังต้องให้ผู้ใช้กรอกเองผ่าน "เพิ่มรายการ" ตามปกติ
  */
 const prefill = route.query
-/** มาจาก "สร้างใบสั่งสินค้า" (ใบเสนอราคา) หรือ "สร้างใหม่" (หน้ารายการใบสั่งสินค้า) — บันทึกงานสำเร็จแล้วต้องสร้าง
- * ระเบียนใบสั่งสินค้าที่ผูกกับงานนี้อัตโนมัติ ดูฟังก์ชัน createSalesOrderForBooking ใน salesDocuments.ts */
-const sourceIsSalesOrder = prefill.source === 'sales_order'
+/** ทุกงานที่บันทึกสำเร็จ (ไม่ว่ามาจากช่องทางไหน) ต้องสร้างระเบียนใบสั่งสินค้าที่ผูกกับงานนี้อัตโนมัติเสมอ
+ * ดูฟังก์ชัน createSalesOrderForBooking ใน salesDocuments.ts */
 /** ถ้ามาจากใบเสนอราคา (ทั้งทางลัด "สร้างใบสั่งงาน" และ "สร้างใบสั่งสินค้า") ให้ผูกอ้างอิงกลับไปเพื่อดูย้อนหลังได้ */
 const sourceQuotationId = typeof prefill.quotationId === 'string' ? prefill.quotationId : undefined
 const defaultHeader = () => ({
@@ -542,6 +541,7 @@ const draftToItem = (draft: JobItemDraft, existingId?: string): JobItem => {
     jobType: isCements.value ? draft.jobType : undefined,
     tripFee: isMulti ? draft.tripFee : undefined,
     tripCount: isMulti ? draft.tripCount || 1 : undefined,
+    extraProducts: draft.extraProducts.length ? draft.extraProducts : undefined,
   }
 }
 
@@ -611,7 +611,7 @@ const saveAllItems = () => {
     docNo: bookingStore.nextDocNo(props.fleet),
     releaseNo: bookingStore.nextReleaseNo(),
     po: header.value.po || undefined,
-    sourceDocumentId: !sourceIsSalesOrder ? sourceQuotationId : undefined,
+    sourceDocumentId: sourceQuotationId,
     shipDate,
     returnDate,
     createdAt,
@@ -636,29 +636,28 @@ const saveAllItems = () => {
     plate: header.value.plate || '',
     driverName: header.value.driverName || undefined,
   })
-  if (sourceIsSalesOrder) {
-    const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
-      bookingId: newBooking.id,
-      customer: newBooking.customer,
-      amount: resolvedTripFee.value,
-      reference: newBooking.po,
-      quotationId: sourceQuotationId,
-      items: [
-        {
-          description: `${newBooking.docNo} · ${destinationSummary.value}`,
-          qty: 1,
-          unit: 'เที่ยว',
-          unitPrice: resolvedTripFee.value,
-          amount: resolvedTripFee.value,
-          discountMode: header.value.discountMode,
-          discountPercent: header.value.discountPercent || undefined,
-          discountAmount: header.value.discountAmount || undefined,
-          vatRate: header.value.vatRate || undefined,
-        },
-      ],
-    })
-    newBooking.sourceDocumentId = salesOrderDoc.id
-  }
+  // ทุกงานที่สร้าง (ไม่ว่าจะมาจากช่องทางไหน) ต้องมีระเบียนใบสั่งสินค้าคู่กันเสมอ ไม่ใช่แค่ตอนมาจากใบเสนอราคา/หน้าใบสั่งสินค้า
+  const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
+    bookingId: newBooking.id,
+    customer: newBooking.customer,
+    amount: resolvedTripFee.value,
+    reference: newBooking.po,
+    quotationId: sourceQuotationId,
+    items: [
+      {
+        description: `${newBooking.docNo} · ${destinationSummary.value}`,
+        qty: 1,
+        unit: 'เที่ยว',
+        unitPrice: resolvedTripFee.value,
+        amount: resolvedTripFee.value,
+        discountMode: header.value.discountMode,
+        discountPercent: header.value.discountPercent || undefined,
+        discountAmount: header.value.discountAmount || undefined,
+        vatRate: header.value.vatRate || undefined,
+      },
+    ],
+  })
+  newBooking.sourceDocumentId = salesOrderDoc.id
   // ปรับคนขับประจำของรถให้ตรงกับที่เลือกไว้ในงานนี้ เพื่อให้ทุกหน้าที่ใช้รถเห็นคนขับล่าสุด
   if (header.value.plate && header.value.driverName) {
     const vehicle = vehiclesStore.findByFullPlate(header.value.plate)

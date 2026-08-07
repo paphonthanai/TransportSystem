@@ -437,6 +437,7 @@ const draftToItem = (draft: JobItemDraft, existingId?: string): JobItem => {
     jobType: isCements.value ? draft.jobType : undefined,
     tripFee: isMulti ? draft.tripFee : undefined,
     tripCount: isMulti ? draft.tripCount || 1 : undefined,
+    extraProducts: draft.extraProducts.length ? draft.extraProducts : undefined,
   }
 }
 

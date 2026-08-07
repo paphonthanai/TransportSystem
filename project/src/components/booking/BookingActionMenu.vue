@@ -23,12 +23,20 @@
           เริ่มขนส่ง
         </button>
         <button
-          v-if="booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING'"
+          v-if="booking.status !== 'WAITING_DISPATCH' && booking.status !== 'DELIVERED'"
           @click="fire('complete')"
           class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-green-700"
         >
           <span class="material-symbols-rounded text-base">task_alt</span>
-          จบงาน
+          จบงาน{{ booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING' ? '' : ' (ข้ามขั้นตอน)' }}
+        </button>
+        <button
+          v-if="booking.status === 'WAITING_DISPATCH'"
+          @click="fire('delete')"
+          class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-red-700"
+        >
+          <span class="material-symbols-rounded text-base">delete</span>
+          ลบงาน
         </button>
       </div>
     </Teleport>
@@ -46,6 +54,7 @@ const emit = defineEmits<{
   edit: []
   'start-transit': []
   complete: []
+  delete: []
 }>()
 
 const open = ref(false)

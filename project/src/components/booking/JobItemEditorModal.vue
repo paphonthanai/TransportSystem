@@ -103,6 +103,33 @@
                 <input :value="draft.unit || '-'" disabled class="input-field w-full opacity-70" />
               </div>
             </div>
+            <div class="md:col-span-2 pt-2">
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-xs font-semibold text-muted">สินค้าอื่นในรายการนี้ (ไม่มีผลกับราคา)</label>
+                <button type="button" @click="addExtraProduct" class="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
+                  <span class="material-symbols-rounded text-sm">add</span>
+                  เพิ่มสินค้าอื่น
+                </button>
+              </div>
+              <div v-for="(ep, idx) in draft.extraProducts" :key="idx" class="grid grid-cols-[1fr_90px_70px_auto] gap-2 items-center mb-2">
+                <input
+                  v-model="ep.product"
+                  @change="setExtraProductUnit(ep)"
+                  list="itemEditorProductOptions"
+                  placeholder="พิมพ์หรือเลือกชื่อสินค้า"
+                  class="input-field w-full"
+                />
+                <input v-model.number="ep.qty" type="number" placeholder="0" class="input-field w-full" />
+                <input :value="ep.unit || '-'" disabled class="input-field w-full opacity-70" />
+                <button
+                  type="button"
+                  @click="removeExtraProduct(idx)"
+                  class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border shrink-0"
+                >
+                  <span class="material-symbols-rounded text-base text-red-600">delete</span>
+                </button>
+              </div>
+            </div>
             <template v-if="pricingMode === 'MULTI_DESTINATION'">
               <div class="grid grid-cols-2 gap-2 mt-1">
                 <div>
@@ -176,6 +203,7 @@ export interface JobItemDraft {
   jobType: BookingJobType | undefined
   tripFee: number
   tripCount: number
+  extraProducts: { product: string; qty: number; unit: string }[]
 }
 
 const props = defineProps<{
@@ -216,6 +244,7 @@ const defaultDraft = (): JobItemDraft => ({
   jobType: undefined,
   tripFee: 0,
   tripCount: 1,
+  extraProducts: [],
 })
 
 const draft = ref<JobItemDraft>(defaultDraft())
@@ -246,6 +275,7 @@ const seed = () => {
       jobType: i.jobType,
       tripFee: i.tripFee || 0,
       tripCount: i.tripCount || 1,
+      extraProducts: (i.extraProducts || []).map((ep) => ({ ...ep })),
     }
   } else {
     draft.value = defaultDraft()
@@ -309,9 +339,21 @@ const canSave = computed(
       (draft.value.tripFee > 0 && Number.isInteger(draft.value.tripCount) && draft.value.tripCount >= 1))
 )
 
+const addExtraProduct = () => {
+  draft.value.extraProducts.push({ product: '', qty: 0, unit: '' })
+}
+
+const removeExtraProduct = (idx: number) => {
+  draft.value.extraProducts.splice(idx, 1)
+}
+
+const setExtraProductUnit = (row: { product: string; unit: string }) => {
+  row.unit = inventoryStore.products.find((p) => p.name === row.product)?.unit || ''
+}
+
 const handleSave = () => {
   if (!canSave.value) return
   applyLock()
-  emit('save', { ...draft.value })
+  emit('save', { ...draft.value, extraProducts: draft.value.extraProducts.filter((ep) => ep.product) })
 }
 </script>
