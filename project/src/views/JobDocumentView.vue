@@ -88,8 +88,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, i) in productRows" :key="row.destinationName + row.product + i">
-              <td class="border border-gray-400 px-2 py-1">{{ i + 1 }}</td>
+            <tr v-for="(row, i) in productRows" :key="row.destinationName + row.product + i" :class="row.isExtra ? 'text-gray-500 italic' : ''">
+              <td class="border border-gray-400 px-2 py-1">{{ row.seq ?? '' }}</td>
               <td class="border border-gray-400 px-2 py-1">
                 {{ row.destinationName }} ({{ row.province }} · {{ row.district }}) · {{ row.product }}
                 <span v-if="row.jobType" class="text-xs text-gray-600">· {{ row.jobType }}</span>
@@ -421,18 +421,41 @@ const productLabel = (b: Booking) => {
   return names.length ? names.join(', ') : '-'
 }
 
-/** แต่ละรายการสินค้าในงานนี้ ขึ้นแถวของตัวเองในตารางเอกสาร คนละแถวไม่รวมกัน */
+/**
+ * แต่ละรายการสินค้าในงานนี้ ขึ้นแถวของตัวเองในตารางเอกสาร คนละแถวไม่รวมกัน — สินค้าอื่น (extraProducts) ของแต่ละ
+ * รายการก็ขึ้นแถวของตัวเองต่อท้ายสินค้าหลักเช่นกัน (ติด prefix "+" ให้เห็นชัดว่าเป็นสินค้าอื่น ไม่ใช่รายการหลัก)
+ * ไม่มีคอลัมน์ราคาในตารางนี้อยู่แล้ว จึงไม่กระทบยอดรวมไม่ว่าจะเพิ่มแถวสินค้าอื่นเข้าไปกี่แถวก็ตาม
+ */
 const productRows = computed(() => {
   if (!booking.value) return []
-  return booking.value.items.map((item) => ({
-    product: item.product,
-    qty: item.qty,
-    unit: item.unit,
-    destinationName: item.siteName,
-    province: item.province,
-    district: item.district,
-    jobType: item.jobType,
-  }))
+  let seq = 0
+  return booking.value.items.flatMap((item) => {
+    seq += 1
+    return [
+      {
+        seq,
+        product: item.product,
+        qty: item.qty,
+        unit: item.unit,
+        destinationName: item.siteName,
+        province: item.province,
+        district: item.district,
+        jobType: item.jobType,
+        isExtra: false,
+      },
+      ...(item.extraProducts || []).map((ep) => ({
+        seq: null as number | null,
+        product: `+ สินค้าอื่น: ${ep.product}`,
+        qty: ep.qty,
+        unit: ep.unit,
+        destinationName: item.siteName,
+        province: item.province,
+        district: item.district,
+        jobType: undefined,
+        isExtra: true,
+      })),
+    ]
+  })
 })
 
 /** สรุประยะทาง/อัตราสิ้นเปลืองน้ำมัน/ชดเชยน้ำมัน เมื่อมีเลขไมล์เริ่มต้น-สิ้นสุดครบแล้ว */
