@@ -70,7 +70,16 @@
               </td>
               <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(row.doc.amount) }}</td>
               <td class="px-3 py-3">
-                <span v-if="row.booking" class="status-pill" :class="bookingStatusClass[row.booking.status]">{{ bookingStatusLabel[row.booking.status] }}</span>
+                <select
+                  v-if="row.booking"
+                  :value="row.booking.status"
+                  @change="onStatusSelect(row.booking, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = row.booking.status"
+                  class="status-select"
+                  :class="bookingStatusClass[row.booking.status]"
+                >
+                  <option :value="row.booking.status">{{ bookingStatusLabel[row.booking.status] }}</option>
+                  <option v-if="row.booking.status !== 'DELIVERED'" value="COMPLETE">✓ จบงาน (ออกใบวางบิล)</option>
+                </select>
                 <span v-else class="status-pill bg-gray-100 text-gray-700">ไม่พบงานขนส่ง</span>
               </td>
               <td class="px-3 py-3 text-right relative">
@@ -142,7 +151,7 @@ import { useSalesDocumentsStore, type SalesDocument } from '@/stores/salesDocume
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
-import type { BookingCategory, BookingStatus } from '@/types'
+import type { Booking, BookingCategory, BookingStatus } from '@/types'
 
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
@@ -188,6 +197,15 @@ const createNew = (fleet: BookingCategory) => {
 const syncMissingSalesOrders = () => {
   const created = salesDocumentsStore.backfillMissingSalesOrders()
   alert(created > 0 ? `สร้างใบสั่งสินค้าให้งานที่ขาดหายแล้ว ${created} ใบ` : 'ทุกงานมีใบสั่งสินค้าครบแล้ว ไม่มีรายการที่ต้องซิงก์')
+}
+
+/** Dropdown สถานะงานขนส่งในตารางนี้ — ปัจจุบันมีแค่ทางลัดเดียวคือ "จบงาน" ข้ามทุกขั้นตอนไปเลย (ใช้ completeJob
+ * ตัวเดียวกับปุ่ม "จบงาน (ข้ามขั้นตอน)" ในหน้ารายการงานขนส่ง) แล้วสร้างใบวางบิลอัตโนมัติทันที เหมือนปุ่มสร้างใบวางบิลด้วยมือ */
+const onStatusSelect = (booking: Booking, action: string) => {
+  if (action !== 'COMPLETE') return
+  if (!confirm(`ยืนยันจบงาน ${booking.docNo} และออกใบวางบิล?`)) return
+  bookingStore.completeJob(booking.id, [], undefined)
+  salesDocumentsStore.createBillingFromBookings([booking.id])
 }
 
 const openMenuId = ref<string | null>(null)
@@ -254,6 +272,10 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 
 .status-pill {
   @apply inline-flex h-7 px-2.5 rounded-full text-xs font-semibold items-center;
+}
+
+.status-select {
+  @apply h-8 px-2 rounded-full border-0 text-xs font-semibold cursor-pointer focus:outline-none;
 }
 
 .menu-item {
