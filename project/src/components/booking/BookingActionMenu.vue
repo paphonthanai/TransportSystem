@@ -23,7 +23,7 @@
           เริ่มขนส่ง
         </button>
         <button
-          v-if="booking.status !== 'WAITING_DISPATCH' && booking.status !== 'DELIVERED'"
+          v-if="booking.status !== 'DELIVERED'"
           @click="fire('complete')"
           class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-green-700"
         >

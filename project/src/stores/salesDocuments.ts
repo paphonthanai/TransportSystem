@@ -719,6 +719,45 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return salesOrder
   }
 
+  /**
+   * ซ่อมย้อนหลัง: สร้างใบสั่งสินค้าให้กับงานขนส่งที่ยังไม่มีใบสั่งสินค้าผูกอยู่เลย (เช่น งานที่ถูกสร้างไว้ก่อนหน้านี้
+   * ผ่านช่องทางที่ยังไม่ได้สร้างใบสั่งสินค้าคู่กันอัตโนมัติ) ใช้ createSalesOrderForBooking ตัวเดียวกับตอนสร้างงานใหม่
+   * เพื่อให้เอกสารที่ได้มีโครงสร้าง/พฤติกรรมเหมือนกันทุกอย่าง ทำงานซ้ำได้อย่างปลอดภัย (idempotent) เพราะเช็คก่อนว่า
+   * งานนั้นมีใบสั่งสินค้าอยู่แล้วหรือยัง คืนค่าจำนวนใบสั่งสินค้าที่สร้างเพิ่ม
+   */
+  function backfillMissingSalesOrders(): number {
+    const bookingStore = useBookingStore()
+    let created = 0
+    bookingStore.bookings.forEach((booking) => {
+      const hasSalesOrder = documents.value.some((d) => d.type === 'SALES_ORDER' && d.bookingIds.includes(booking.id))
+      if (hasSalesOrder) return
+      const amount = booking.agreedPrice || booking.tripFee || 0
+      const destinationSummary = booking.items.map((i) => i.siteName).filter(Boolean).join(', ') || '-'
+      const salesOrder = createSalesOrderForBooking({
+        bookingId: booking.id,
+        customer: booking.customer,
+        amount,
+        reference: booking.po,
+        items: [
+          {
+            description: `${booking.docNo} · ${destinationSummary}`,
+            qty: 1,
+            unit: 'เที่ยว',
+            unitPrice: amount,
+            amount,
+            discountMode: booking.discountMode,
+            discountPercent: booking.discountPercent,
+            discountAmount: booking.discountAmount,
+            vatRate: booking.vatRate,
+          },
+        ],
+      })
+      booking.sourceDocumentId = salesOrder.id
+      created++
+    })
+    return created
+  }
+
   /** ลบระเบียนใบสั่งสินค้าออกจากรายการ (ไม่กระทบ Booking ที่ผูกอยู่ — งานขนส่งยังอยู่ตามปกติ) */
   function deleteSalesOrder(id: string) {
     const doc = documents.value.find((d) => d.id === id && d.type === 'SALES_ORDER')
@@ -1269,6 +1308,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     convertQuotationToBilling,
     convertQuotationToPurchaseOrder,
     createSalesOrderForBooking,
+    backfillMissingSalesOrders,
     deleteSalesOrder,
     createBillingFromBookings,
     createBillingManual,

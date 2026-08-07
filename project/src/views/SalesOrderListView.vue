@@ -2,7 +2,12 @@
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xs text-muted">ใบสั่งสินค้า &gt; {{ statusFilterLabel }}</div>
-      <div class="relative">
+      <div class="flex items-center gap-2">
+        <button @click="syncMissingSalesOrders" class="btn-secondary" title="สร้างใบสั่งสินค้าให้กับงานขนส่งที่ยังไม่มีใบสั่งสินค้าผูกอยู่">
+          <span class="material-symbols-rounded text-base">sync</span>
+          ซิงก์ใบสั่งสินค้าที่ขาดหาย
+        </button>
+        <div class="relative">
         <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
           <span class="material-symbols-rounded text-base">add</span>
           สร้างใหม่
@@ -17,6 +22,7 @@
             <span class="material-symbols-rounded text-base">category</span>
             Fleet Ceramics
           </button>
+        </div>
         </div>
       </div>
     </div>
@@ -177,6 +183,11 @@ const sourceQuotationNumber = (doc: SalesDocument) => salesDocumentsStore.docume
 const createNew = (fleet: BookingCategory) => {
   createMenuOpen.value = false
   router.push({ name: 'BookingCreate', params: { fleet }, query: { source: 'sales_order' } })
+}
+
+const syncMissingSalesOrders = () => {
+  const created = salesDocumentsStore.backfillMissingSalesOrders()
+  alert(created > 0 ? `สร้างใบสั่งสินค้าให้งานที่ขาดหายแล้ว ${created} ใบ` : 'ทุกงานมีใบสั่งสินค้าครบแล้ว ไม่มีรายการที่ต้องซิงก์')
 }
 
 const openMenuId = ref<string | null>(null)
