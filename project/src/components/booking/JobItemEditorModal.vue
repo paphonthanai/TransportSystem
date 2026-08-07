@@ -99,8 +99,8 @@
                 <input v-model.number="draft.qty" type="number" placeholder="0" class="input-field w-full" />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-muted mb-1">หน่วย <span class="font-normal text-[10px]">(จากสินค้า)</span></label>
-                <input :value="draft.unit || '-'" disabled class="input-field w-full opacity-70" />
+                <label class="block text-xs font-semibold text-muted mb-1">หน่วย</label>
+                <input v-model="draft.unit" placeholder="หน่วย" class="input-field w-full" />
               </div>
             </div>
             <div class="md:col-span-2 pt-2">
@@ -120,7 +120,7 @@
                   class="input-field w-full"
                 />
                 <input v-model.number="ep.qty" type="number" placeholder="0" class="input-field w-full" />
-                <input :value="ep.unit || '-'" disabled class="input-field w-full opacity-70" />
+                <input v-model="ep.unit" placeholder="หน่วย" class="input-field w-full" />
                 <button
                   type="button"
                   @click="removeExtraProduct(idx)"
@@ -293,12 +293,13 @@ const corridorWarning = computed(() => {
   return fuelRateStore.isDifferentCorridor(draft.value.province, draft.value.district, props.otherItems)
 })
 
-// เลือกสินค้าปุ๊บ ดึงหน่วยนับจากสินค้าที่ตั้งค่าไว้มาให้อัตโนมัติเสมอ ไม่ให้พิมพ์หน่วยเอง กันตัดสต๊อกผิดหน่วย
+// เลือกสินค้าปุ๊บ เติมหน่วยนับจากสินค้าที่ตั้งค่าไว้ให้เป็นค่าเริ่มต้นเฉยๆ (เฉพาะตอนช่องหน่วยยังว่างอยู่) ไม่ทับค่าที่ผู้ใช้พิมพ์เองไว้แล้ว — ผู้ใช้แก้ไขหน่วยเองได้อิสระเสมอ
 watch(
   () => draft.value.product,
   (name) => {
+    if (draft.value.unit) return
     const match = inventoryStore.products.find((p) => p.name === name)
-    draft.value.unit = match?.unit || ''
+    if (match?.unit) draft.value.unit = match.unit
   }
 )
 
@@ -348,7 +349,9 @@ const removeExtraProduct = (idx: number) => {
 }
 
 const setExtraProductUnit = (row: { product: string; unit: string }) => {
-  row.unit = inventoryStore.products.find((p) => p.name === row.product)?.unit || ''
+  if (row.unit) return
+  const match = inventoryStore.products.find((p) => p.name === row.product)
+  if (match?.unit) row.unit = match.unit
 }
 
 const handleSave = () => {
