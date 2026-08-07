@@ -6,6 +6,10 @@
         <span class="material-symbols-rounded">person_add</span>
         เพิ่มผู้ใช้งาน
       </button>
+      <button @click="runDriverIdSync" class="btn-secondary" title="จับคู่ driverId ให้บัญชี/งานเดิมที่ยังผูกด้วยชื่ออยู่">
+        <span class="material-symbols-rounded">sync</span>
+        ซิงก์ driverId ให้ข้อมูลเดิม
+      </button>
     </div>
 
     <div class="card-lg overflow-x-auto">
@@ -77,6 +81,14 @@
                 <option v-for="r in roleOptions" :key="r" :value="r">{{ roleLabels[r] }}</option>
               </select>
             </div>
+            <div v-if="form.role === 'DRIVER'">
+              <label class="block text-xs font-semibold text-muted mb-1">ผูกกับคนขับในสมุดรายชื่อ (ไม่บังคับ)</label>
+              <select v-model="form.driverId" class="input-field w-full">
+                <option :value="undefined">-- ไม่ผูก (จับคู่งานด้วยชื่อแบบเดิม) --</option>
+                <option v-for="d in driversStore.drivers" :key="d.id" :value="d.id">{{ driversStore.fullName(d) }}</option>
+              </select>
+              <div class="text-[11px] text-muted mt-1">ผูกไว้แล้วงานที่จ่ายให้คนขับคนนี้จะขึ้นในแอปคนขับแม่นยำ ไม่พึ่งชื่อบัญชีตรงกับสมุดรายชื่อเป๊ะอีกต่อไป</div>
+            </div>
             <div v-if="formError" class="text-xs text-red-600">{{ formError }}</div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
@@ -119,9 +131,14 @@
 import { ref } from 'vue'
 import { useUserStore, type UserProfile, type UserRole } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
+import { useDriversStore } from '@/stores/drivers'
+import { useBookingStore } from '@/stores/booking'
+import { matchDriverIds } from '@/utils/driverIdMigration'
 
 const userStore = useUserStore()
 const authStore = useAuthStore()
+const driversStore = useDriversStore()
+const bookingStore = useBookingStore()
 
 const roleOptions: UserRole[] = ['ADMIN', 'STAFF', 'DISPATCHER', 'DRIVER', 'ACCOUNTING']
 const roleLabels: Record<UserRole, string> = {
@@ -134,7 +151,7 @@ const roleLabels: Record<UserRole, string> = {
 
 const showDialog = ref(false)
 const editingUser = ref<UserProfile | null>(null)
-const form = ref({ name: '', email: '', password: '', role: 'STAFF' as UserRole })
+const form = ref({ name: '', email: '', password: '', role: 'STAFF' as UserRole, driverId: undefined as string | undefined })
 const formError = ref('')
 const saving = ref(false)
 
@@ -163,14 +180,14 @@ const sendReset = async () => {
 
 const openCreateDialog = () => {
   editingUser.value = null
-  form.value = { name: '', email: '', password: '', role: 'STAFF' }
+  form.value = { name: '', email: '', password: '', role: 'STAFF', driverId: undefined }
   formError.value = ''
   showDialog.value = true
 }
 
 const openEditDialog = (user: UserProfile) => {
   editingUser.value = user
-  form.value = { name: user.name, email: user.email, password: '', role: user.role }
+  form.value = { name: user.name, email: user.email, password: '', role: user.role, driverId: user.driverId }
   formError.value = ''
   showDialog.value = true
 }
@@ -188,9 +205,9 @@ const save = async () => {
   saving.value = true
   try {
     if (editingUser.value) {
-      await userStore.updateProfile(editingUser.value.id, { name: form.value.name, role: form.value.role })
+      await userStore.updateProfile(editingUser.value.id, { name: form.value.name, role: form.value.role, driverId: form.value.driverId })
     } else {
-      const uid = await authStore.createStaffAccount(form.value.email, form.value.password, form.value.name, form.value.role)
+      const uid = await authStore.createStaffAccount(form.value.email, form.value.password, form.value.name, form.value.role, form.value.driverId)
       userStore.addLocalCopy({
         id: uid,
         email: form.value.email.trim(),
@@ -199,6 +216,7 @@ const save = async () => {
         active: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        driverId: form.value.driverId,
       })
     }
     showDialog.value = false
@@ -213,6 +231,29 @@ const save = async () => {
 const toggleActive = (user: UserProfile) => {
   if (user.id === authStore.currentUser?.id) return
   userStore.setActive(user.id, !user.active)
+}
+
+/** จับคู่ driverId ย้อนหลังให้งาน/บัญชีคนขับเดิมที่ยังผูกด้วยชื่ออยู่ (ดู utils/driverIdMigration.ts) — เพิ่มข้อมูล
+ * อย่างเดียว ไม่ลบ/ทับของเดิม ปลอดภัยกดซ้ำได้ รายงานสรุปพร้อมรายการที่ต้องตรวจสอบเองผ่าน alert */
+const runDriverIdSync = async () => {
+  const report = await matchDriverIds(bookingStore.bookings, driversStore.drivers, userStore.users)
+  const lines = [
+    `งานขนส่ง: จับคู่ใหม่ ${report.bookings.matched.length} · มีอยู่แล้ว ${report.bookings.alreadyLinked} · หาไม่เจอ ${report.bookings.unmatched.length} · กำกวม ${report.bookings.ambiguous.length}`,
+    `บัญชีคนขับ: จับคู่ใหม่ ${report.users.matched.length} · มีอยู่แล้ว ${report.users.alreadyLinked} · หาไม่เจอ ${report.users.unmatched.length} · กำกวม ${report.users.ambiguous.length}`,
+  ]
+  if (report.bookings.unmatched.length) {
+    lines.push('', 'งานที่หาคนขับไม่เจอ (ต้องตรวจสอบเอง):')
+    lines.push(...report.bookings.unmatched.slice(0, 10).map((b) => `- ${b.docNo}: "${b.driverName}"`))
+  }
+  if (report.bookings.ambiguous.length) {
+    lines.push('', 'งานที่ชื่อกำกวม เจอมากกว่า 1 คน (ต้องเลือกเอง):')
+    lines.push(...report.bookings.ambiguous.slice(0, 10).map((b) => `- ${b.docNo}: "${b.driverName}" (${b.candidates.length} คน)`))
+  }
+  if (report.users.unmatched.length) {
+    lines.push('', 'บัญชีคนขับที่หาคนขับไม่เจอ (ต้องผูกเอง):')
+    lines.push(...report.users.unmatched.slice(0, 10).map((u) => `- ${u.email}: "${u.name}"`))
+  }
+  alert(lines.join('\n'))
 }
 </script>
 

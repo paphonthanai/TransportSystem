@@ -114,6 +114,24 @@ export const useInventoryStore = defineStore('inventory', () => {
     return result
   }
 
+  /**
+   * คืนสต๊อกที่ตัดไปตอนรับสินค้า (ดู recordDeliveryMovement) เมื่อ Reset สถานะงานขนส่งย้อนกลับไปก่อนขั้นรับสินค้า
+   * สร้างรายการ "in" ชดเชยแทนการลบรายการ "out" เดิม เพื่อรักษาประวัติการตัดสต๊อกไว้ตรวจสอบย้อนหลังได้ครบ
+   */
+  function reverseDeliveryMovement(booking: Booking, items: JobItem[]): { matched: string[]; unmatched: string[] } {
+    const result = { matched: [] as string[], unmatched: [] as string[] }
+    items.forEach((item) => {
+      const product = products.value.find((p) => p.name === item.product || item.product.includes(p.name))
+      if (!product) {
+        result.unmatched.push(item.product)
+        return
+      }
+      addMovement({ productId: product.id, type: 'in', qty: item.qty, refBookingId: booking.id, note: `คืนสต๊อกจากการ Reset สถานะงาน ${booking.docNo}` })
+      result.matched.push(`${product.name} ${item.qty} ${product.unit}`)
+    })
+    return result
+  }
+
   return {
     products,
     movements,
@@ -124,5 +142,6 @@ export const useInventoryStore = defineStore('inventory', () => {
     addMovement,
     stockBalance,
     recordDeliveryMovement,
+    reverseDeliveryMovement,
   }
 })

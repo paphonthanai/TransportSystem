@@ -611,6 +611,7 @@ const saveAllItems = () => {
   const shipDate = header.value.shipDate ? new Date(header.value.shipDate) : undefined
   const returnDate = header.value.returnDate ? new Date(header.value.returnDate) : undefined
   const createdAt = header.value.jobDate ? new Date(header.value.jobDate) : undefined
+  const selectedDriver = header.value.driverName ? findDriverByName(header.value.driverName) : undefined
   const newBooking = bookingStore.addBooking({
     category: props.fleet,
     docNo: bookingStore.nextDocNo(props.fleet),
@@ -640,6 +641,7 @@ const saveAllItems = () => {
     fuelRate: fuelRateStore.settings.todayPricePerLiter,
     plate: header.value.plate || '',
     driverName: header.value.driverName || undefined,
+    driverId: selectedDriver?.id,
   })
   // ทุกงานที่สร้าง (ไม่ว่าจะมาจากช่องทางไหน) ต้องมีระเบียนใบสั่งสินค้าคู่กันเสมอ ไม่ใช่แค่ตอนมาจากใบเสนอราคา/หน้าใบสั่งสินค้า
   const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
@@ -664,10 +666,9 @@ const saveAllItems = () => {
   })
   newBooking.sourceDocumentId = salesOrderDoc.id
   // ปรับคนขับประจำของรถให้ตรงกับที่เลือกไว้ในงานนี้ เพื่อให้ทุกหน้าที่ใช้รถเห็นคนขับล่าสุด
-  if (header.value.plate && header.value.driverName) {
+  if (header.value.plate && selectedDriver) {
     const vehicle = vehiclesStore.findByFullPlate(header.value.plate)
-    const driver = findDriverByName(header.value.driverName)
-    if (vehicle && driver) vehiclesStore.assignDriver(vehicle.id, driver.code)
+    if (vehicle) vehiclesStore.assignDriver(vehicle.id, selectedDriver.code)
   }
   goBack()
 }

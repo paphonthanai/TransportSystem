@@ -218,8 +218,9 @@ const onStatusSelect = (booking: Booking, action: string) => {
       }
       if (!confirm(`ยืนยัน Reset สถานะงาน ${booking.docNo} จาก "ส่งของสำเร็จ" กลับไปขั้นก่อนหน้า?${billing ? ` (จะลบใบวางบิล ${billing.number} ที่ยังไม่ได้ดำเนินการต่อด้วย)` : ''}`)) return
       if (billing) salesDocumentsStore.cancelBillingNote(billing.id)
-    } else if (!confirm(`ยืนยัน Reset สถานะงาน ${booking.docNo} กลับไปขั้นก่อนหน้า?`)) {
-      return
+    } else {
+      const stockWarning = booking.status === 'LOADED' ? ' (สต๊อกที่ตัดไปจากการรับสินค้าจะถูกคืนกลับ)' : ''
+      if (!confirm(`ยืนยัน Reset สถานะงาน ${booking.docNo} กลับไปขั้นก่อนหน้า?${stockWarning}`)) return
     }
     const result = bookingStore.resetBookingStatus(booking.id)
     if (!result.ok && result.message) alert(result.message)

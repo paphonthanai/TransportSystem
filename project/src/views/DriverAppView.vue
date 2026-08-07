@@ -305,12 +305,35 @@ const selectedDriver = ref(authStore.userName)
 watch(
   driverOptions,
   (opts) => {
+    // ถ้าบัญชีคนขับผูก driverId ไว้แล้ว (ดู UserManagementView.vue) ให้โชว์ชื่อจากสมุดรายชื่อคนขับตัวจริงเสมอ
+    // แม่นยำกว่าชื่อบัญชี login ที่ admin พิมพ์เอง ไม่ต้องพึ่งชื่อบัญชีตรงกับสมุดรายชื่อเป๊ะ
+    if (isDriverRole.value && authStore.profile?.driverId) {
+      const linked = driversStore.drivers.find((d) => d.id === authStore.profile?.driverId)
+      if (linked) {
+        selectedDriver.value = driversStore.fullName(linked)
+        return
+      }
+    }
     if (opts.length && !opts.includes(selectedDriver.value)) {
       selectedDriver.value = isDriverRole.value && opts.includes(authStore.userName) ? authStore.userName : opts[0]
     }
   },
   { immediate: true }
 )
+
+/** id คนขับที่กำลังเลือกอยู่ตอนนี้ — ใช้ authStore.profile.driverId ตรงๆ ถ้าเป็นบัญชีคนขับที่ผูกไว้แล้ว (แม่นยำสุด
+ *  ไม่ต้องพึ่งชื่อ) ไม่งั้น fallback เป็นหาโดยเทียบชื่อจาก dropdown เหมือนเดิม (สำหรับ admin ที่สลับดูมุมมองคนขับต่างๆ) */
+const selectedDriverId = computed(() => {
+  if (isDriverRole.value && authStore.profile?.driverId) return authStore.profile.driverId
+  return driversStore.drivers.find((d) => driversStore.fullName(d) === selectedDriver.value)?.id
+})
+
+/** จับคู่งานกับคนขับที่เลือกอยู่ — ถ้างานมี driverId และเรารู้ id คนขับที่เลือกอยู่ ให้เทียบด้วย id (แม่นยำ ไม่พังเพราะ
+ *  รูปแบบชื่อไม่ตรงกัน) งานเก่าก่อนมี driverId (หรือยังไม่รู้ id คนขับที่เลือก) fallback ไปเทียบชื่อแบบเดิม */
+const matchesSelectedDriver = (b: Booking) => {
+  if (b.driverId && selectedDriverId.value) return b.driverId === selectedDriverId.value
+  return b.driverName === selectedDriver.value
+}
 
 const logout = async () => {
   await authStore.logout()
@@ -320,9 +343,7 @@ const logout = async () => {
 const ACTIVE_STATUSES = ['ASSIGNED', 'ACCEPTED', 'FUEL_RECEIVED', 'LOADING', 'LOADED', 'IN_TRANSIT', 'DELIVERING'] as const
 
 const activeJobs = computed(() =>
-  bookingStore.bookings.filter(
-    (b) => b.driverName === selectedDriver.value && (ACTIVE_STATUSES as readonly string[]).includes(b.status)
-  )
+  bookingStore.bookings.filter((b) => matchesSelectedDriver(b) && (ACTIVE_STATUSES as readonly string[]).includes(b.status))
 )
 
 // นาฬิกาสำหรับนับถอยหลังเวลาที่เหลือให้ตอบรับงาน
@@ -352,7 +373,7 @@ const nextDelivery = (job: Booking): JobItem | null => {
 
 const recentJobs = computed(() =>
   bookingStore.bookings
-    .filter((b) => b.driverName === selectedDriver.value && b.status === 'DELIVERED')
+    .filter((b) => matchesSelectedDriver(b) && b.status === 'DELIVERED')
     .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime())
     .slice(0, 5)
 )

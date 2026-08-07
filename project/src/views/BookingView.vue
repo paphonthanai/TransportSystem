@@ -785,15 +785,16 @@ watch(
 
 const confirmDispatch = () => {
   if (!dispatchTarget.value || !dispatchForm.value.plate) return
+  const selectedDriver = dispatchForm.value.driverName ? findDriverByName(dispatchForm.value.driverName) : undefined
   bookingStore.dispatchBooking(dispatchTarget.value.id, dispatchForm.value.plate, {
     driverName: dispatchForm.value.driverName || undefined,
+    driverId: selectedDriver?.id,
     odometerBefore: dispatchForm.value.odometerBefore,
   })
   // ปรับคนขับประจำของรถให้ตรงกับที่เลือกจ่ายงานจริง เพื่อให้ทุกหน้าที่ใช้รถเห็นคนขับล่าสุด
-  if (dispatchForm.value.driverName) {
+  if (selectedDriver) {
     const vehicle = vehiclesStore.findByFullPlate(dispatchForm.value.plate)
-    const driver = findDriverByName(dispatchForm.value.driverName)
-    if (vehicle && driver) vehiclesStore.assignDriver(vehicle.id, driver.code)
+    if (vehicle) vehiclesStore.assignDriver(vehicle.id, selectedDriver.code)
   }
   dispatchTarget.value = null
 }

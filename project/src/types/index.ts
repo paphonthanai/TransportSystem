@@ -174,6 +174,11 @@ export interface Booking {
   fuelRate: number
   plate?: string
   driverName?: string
+  /** id ของ DriverRecord (stores/drivers.ts) ที่ตรงกับ driverName — เพิ่มเข้ามาคู่กับ driverName เพื่อจับคู่งานกับ
+   * บัญชี login คนขับให้แม่นยำด้วย id แทนการเทียบชื่อ (string) ที่พลาดง่ายเวลารูปแบบชื่อไม่ตรงกัน (มี/ไม่มีคำนำหน้า
+   * ฯลฯ) — งานเก่าก่อนมี field นี้จะไม่มีค่า ต้องรันสคริปต์จับคู่ย้อนหลัง (ดู utils/driverIdMigration.ts) หรือจ่ายงาน
+   * ใหม่อีกครั้งถึงจะได้ค่านี้ ทุกจุดที่ใช้ driverId ต้อง fallback ไปเทียบ driverName เดิมเสมอสำหรับงานที่ยังไม่มีค่านี้ */
+  driverId?: string
   /** เลขไมล์เริ่มต้น (กม.) ก่อนออกเที่ยวนี้ กรอกตอนจัดรถ ใช้คำนวณระยะทาง/อัตราสิ้นเปลืองน้ำมัน */
   odometerBefore?: number
   /** เลขไมล์สิ้นสุด (กม.) เมื่อกลับถึง กรอกตอนจบงาน */

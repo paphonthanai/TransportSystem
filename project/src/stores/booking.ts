@@ -389,13 +389,18 @@ export const useBookingStore = defineStore('booking', () => {
     plate: string,
     extra?: {
       driverName?: string
+      driverId?: string
       odometerBefore?: number
     }
   ) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
     booking.plate = plate
-    if (extra?.driverName) booking.driverName = extra.driverName
+    if (extra?.driverName) {
+      booking.driverName = extra.driverName
+      // อัปเดต driverId คู่กันเสมอเมื่อเปลี่ยนชื่อคนขับ (แม้จะเป็น undefined เพราะจับคู่ไม่ได้) กันไม่ให้ driverId เก่าค้างชี้ไปคนขับคนละคนกับ driverName ปัจจุบัน
+      booking.driverId = extra.driverId
+    }
     if (extra?.odometerBefore !== undefined) booking.odometerBefore = extra.odometerBefore
     // น้ำมันคำนวณและล็อกไว้ตั้งแต่ตอนสร้างงานแล้ว (จากจังหวัด/อำเภอของแต่ละปลายทาง) ตอนจัดรถจึงไม่ต้องกรอก/คำนวณซ้ำ
     // การวางบิลแยกอิสระจากการจัดรถโดยเจตนา — booking.billingStatus ยังคง UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล (ดู addBookingsToBatch)
@@ -478,6 +483,7 @@ export const useBookingStore = defineStore('booking', () => {
     booking.status = 'WAITING_DISPATCH'
     booking.plate = ''
     booking.driverName = undefined
+    booking.driverId = undefined
     booking.dispatchedAt = undefined
     addLog(`คนขับไม่รับงาน ${booking.docNo} รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`, { bookingId: booking.id })
   }
@@ -494,10 +500,18 @@ export const useBookingStore = defineStore('booking', () => {
     'DELIVERED',
   ]
 
+  const LOADING_INDEX = BOOKING_STATUS_SEQUENCE.indexOf('LOADING')
+
   /**
    * Reset สถานะงานกลับไปขั้นก่อนหน้า 1 ขั้น — จัดการเฉพาะข้อมูลฝั่งงานขนส่งเท่านั้น ไม่แตะเอกสารขาย (booking.ts
    * ห้าม import salesDocuments.ts เพราะจะเกิด circular import — เหมือน createBillingFromBookings ที่ต้องเรียกจาก
    * view แทน) ฝั่งที่เรียกใช้ต้องตรวจสอบ/จัดการความสัมพันธ์กับใบวางบิลเองก่อนเรียกฟังก์ชันนี้เมื่อ Reset จาก DELIVERED
+   *
+   * ถ้าขั้นที่ Reset จะพาไป (prevStatus) อยู่ที่ LOADING หรือก่อนหน้า (เช่น LOADED -> LOADING หรือ LOADING ->
+   * FUEL_RECEIVED) แปลว่างานกำลังถอยกลับไปก่อน/ระหว่างขั้น "รับสินค้าที่ต้นทาง" ต้องคืนสต๊อกที่ตัดไปแล้วให้ทุกรายการ
+   * ที่มีสถานะ PICKED_UP อยู่ พร้อมเคลียร์สถานะรับสินค้าของทุกรายการทิ้ง (ให้กลับไปรับใหม่ได้สะอาดจาก LOADING) —
+   * เช็คจาก item.pickupStatus จริงเสมอ (ไม่ใช่ครั้งเดียวจากสถานะงาน) จึงกด Reset ซ้ำได้โดยไม่คืนสต๊อกซ้ำ เพราะหลังคืน
+   * ครั้งแรก pickupStatus ของทุกรายการถูกเคลียร์ไปแล้ว ไม่มีอะไรให้คืนซ้ำอีก
    */
   function resetBookingStatus(id: string): { ok: boolean; message?: string } {
     const booking = bookings.value.find((b) => b.id === id)
@@ -510,6 +524,28 @@ export const useBookingStore = defineStore('booking', () => {
       return { ok: true }
     }
 
+    const prevIdx = idx - 1
+    const prevStatus = BOOKING_STATUS_SEQUENCE[prevIdx]
+
+    if (prevIdx <= LOADING_INDEX) {
+      const pickedItems = booking.items.filter((i) => i.pickupStatus === 'PICKED_UP')
+      if (pickedItems.length) {
+        const result = inventoryStore.reverseDeliveryMovement(booking, pickedItems)
+        result.matched.forEach((m) => addLog(`คืนสต๊อก ${m} จากการ Reset สถานะงาน ${booking.docNo}`, { bookingId: id }))
+        result.unmatched.forEach((name) =>
+          addLog(`ไม่พบสินค้า "${name}" ในตั้งค่าสินค้า ข้ามการคืนสต๊อกสำหรับ ${booking.docNo}`, { bookingId: id })
+        )
+      }
+      booking.items.forEach((item) => {
+        item.pickupStatus = undefined
+        item.pickupSequence = undefined
+        item.pickedUpAt = undefined
+        item.deliverySequence = undefined
+      })
+      booking.goodsReceivedAt = undefined
+      booking.goodsReceivedBy = undefined
+    }
+
     if (booking.status === 'DELIVERED') {
       booking.items.forEach((item) => {
         item.deliveryStatus = 'PENDING'
@@ -520,7 +556,6 @@ export const useBookingStore = defineStore('booking', () => {
       booking.completedAt = undefined
     }
 
-    const prevStatus = BOOKING_STATUS_SEQUENCE[idx - 1]
     addLog(`Reset สถานะงาน ${booking.docNo} กลับไปขั้นก่อนหน้า`, { bookingId: booking.id })
     booking.status = prevStatus
     return { ok: true }
@@ -586,6 +621,7 @@ export const useBookingStore = defineStore('booking', () => {
       booking.status = 'WAITING_DISPATCH'
       booking.plate = ''
       booking.driverName = undefined
+      booking.driverId = undefined
       booking.dispatchedAt = undefined
       addLog(`ยกเลิกการจ่ายงาน ${booking.docNo} (คนขับไม่ตอบรับภายใน 15 นาที) รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`, { bookingId: booking.id })
     })

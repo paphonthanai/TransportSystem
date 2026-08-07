@@ -99,7 +99,7 @@ export const useAuthStore = defineStore('auth', () => {
    * ทันทีและเตะ Admin ที่ล็อกอินอยู่ออกจาก session (ข้อจำกัดของ Firebase Auth ฝั่ง client ที่ไม่มี Admin SDK/
    * backend) — สร้างเสร็จ sign out ออกจาก instance ที่สองแล้วทิ้งทันที ไม่กระทบ session ของ Admin เลย
    */
-  async function createStaffAccount(email: string, password: string, name: string, staffRole: UserRole) {
+  async function createStaffAccount(email: string, password: string, name: string, staffRole: UserRole, driverId?: string) {
     const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}-${Math.random().toString(36).slice(2)}`)
     const secondaryAuth = getAuth(secondaryApp)
     if (useEmulator) {
@@ -109,7 +109,15 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const cred = await createUserWithEmailAndPassword(secondaryAuth, email.trim(), password)
       const now = new Date().toISOString()
-      await userRepository.create(cred.user.uid, { email: email.trim(), name, role: staffRole, active: true, createdAt: now, updatedAt: now })
+      await userRepository.create(cred.user.uid, {
+        email: email.trim(),
+        name,
+        role: staffRole,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+        ...(driverId ? { driverId } : {}),
+      })
       await signOut(secondaryAuth)
       return cred.user.uid
     } finally {
