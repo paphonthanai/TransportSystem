@@ -38,7 +38,8 @@ const labelsByType: Record<SalesDocumentType, Partial<Record<SalesDocumentStatus
   },
   TAX_INVOICE: {
     DRAFT: 'ร่าง',
-    SENT: 'ส่งแล้ว',
+    /** ตามคำที่ลูกค้าระบุในเอกสารความต้องการ ("สถานะเปิดใบเสร็จแล้ว") — ใช้ค่า status เดิม 'SENT' ไม่เปลี่ยน แค่เปลี่ยน label ที่แสดง */
+    SENT: 'เปิดใบเสร็จแล้ว',
     PAID: 'ชำระแล้ว',
   },
   RECEIPT: {

@@ -100,6 +100,7 @@
               <div v-for="item in job.items" :key="item.id" class="rounded-xl bg-surface-2 p-2.5 space-y-1.5">
                 <div class="text-sm font-semibold text-text">{{ item.product }} <span class="text-xs text-muted font-normal">{{ item.qty }} {{ item.unit }}</span></div>
                 <div class="text-xs text-muted">ต้นทาง: {{ item.pickupOriginName || job.origin || '-' }}</div>
+                <div v-if="item.jobType" class="text-xs text-muted">ประเภทงาน: {{ item.jobType }}</div>
                 <button
                   v-if="item.pickupStatus !== 'PICKED_UP'"
                   @click="bookingStore.pickupJobItem(job.id, item.id, selectedDriver)"
@@ -135,6 +136,7 @@
                     {{ nextDelivery(job)!.siteName }} <span class="text-xs text-muted font-normal">({{ nextDelivery(job)!.province }} · {{ nextDelivery(job)!.district }})</span>
                   </div>
                   <div class="text-xs text-text"><span class="text-muted">สินค้า:</span> {{ nextDelivery(job)!.product }} {{ nextDelivery(job)!.qty }} {{ nextDelivery(job)!.unit }}</div>
+                  <div v-if="nextDelivery(job)!.jobType" class="text-xs text-text"><span class="text-muted">ประเภทงาน:</span> {{ nextDelivery(job)!.jobType }}</div>
                   <div class="flex gap-2 pt-1">
                     <a
                       :href="nextDelivery(job)!.sitePhone ? `tel:${nextDelivery(job)!.sitePhone}` : undefined"

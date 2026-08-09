@@ -95,7 +95,8 @@
             น้ำมัน (ลิตร)
             <span class="font-normal text-[10px]">(มาตรฐานตามปลายทาง: {{ standardFuelEstimate }} ล.)</span>
           </label>
-          <input v-model.number="editForm.fuelLiters" type="number" placeholder="0" class="input-field w-full" />
+          <input v-model.number="editForm.fuelLiters" type="number" placeholder="0" class="input-field w-full" :readonly="fuelLiterLocked" :class="fuelLiterLocked && 'bg-surface-2 cursor-not-allowed'" />
+          <div v-if="fuelLiterLocked" class="text-[10px] text-amber-600 mt-1">ปลายทางนี้ยังไม่ได้ตั้งค่าน้ำมันไว้ล่วงหน้า ต้องให้ผู้จัดการเป็นผู้กรอกค่านี้</div>
         </div>
         <div>
           <label class="block text-xs font-semibold text-muted mb-1">เรทน้ำมัน (บาท/ลิตร)</label>
@@ -261,6 +262,7 @@ import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useInventoryStore } from '@/stores/inventory'
 import { useFuelRateStore } from '@/stores/fuelRates'
+import { useAuthStore } from '@/stores/auth'
 import type { Booking, BookingCategory, JobItem, PricingMode } from '@/types'
 import { parseGpsInput } from '@/utils/gps'
 import JobItemEditorModal, { type JobItemDraft } from '@/components/booking/JobItemEditorModal.vue'
@@ -271,6 +273,11 @@ const router = useRouter()
 const bookingStore = useBookingStore()
 const inventoryStore = useInventoryStore()
 const fuelRateStore = useFuelRateStore()
+const authStore = useAuthStore()
+
+/** ล็อกช่องน้ำมันถ้ามีปลายทางที่ยังไม่ได้ตั้งค่าน้ำมันไว้ล่วงหน้า — ต้องเป็นบัญชีที่มีสิทธิ์ผู้จัดการ (canOverrideFuelRate) เท่านั้นที่กรอกค่านอกเหนือจากที่ตั้งไว้ได้ */
+const hasUnconfiguredDistrict = computed(() => editLineItems.value.some((li) => !fuelRateStore.findRate(li.province, li.district)))
+const fuelLiterLocked = computed(() => hasUnconfiguredDistrict.value && !authStore.currentUser?.canOverrideFuelRate)
 
 const isCements = computed(() => props.fleet === 'cements')
 const productOptionsForFleet = computed(() => inventoryStore.products.filter((p) => p.category === props.fleet))

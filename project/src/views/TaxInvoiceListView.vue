@@ -122,7 +122,7 @@ const search = ref('')
 
 const statusLabel: Partial<Record<SalesDocumentStatus, string>> = {
   DRAFT: 'ร่าง',
-  SENT: 'ส่งแล้ว',
+  SENT: 'เปิดใบเสร็จแล้ว',
   PAID: 'ชำระแล้ว',
 }
 

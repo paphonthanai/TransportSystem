@@ -30,6 +30,14 @@
           <span class="material-symbols-rounded text-base">task_alt</span>
           จบงาน
         </button>
+        <button
+          v-if="booking.status === 'ASSIGNED'"
+          @click="fire('cancel')"
+          class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-red-600"
+        >
+          <span class="material-symbols-rounded text-base">undo</span>
+          ยกเลิกจ่ายงาน
+        </button>
       </div>
     </Teleport>
   </div>
@@ -46,6 +54,7 @@ const emit = defineEmits<{
   edit: []
   'start-transit': []
   complete: []
+  cancel: []
 }>()
 
 const open = ref(false)
@@ -65,7 +74,7 @@ const toggle = () => {
   open.value = !open.value
 }
 
-const fire = (action: 'view' | 'edit' | 'start-transit' | 'complete') => {
+const fire = (action: 'view' | 'edit' | 'start-transit' | 'complete' | 'cancel') => {
   open.value = false
   emit(action)
 }

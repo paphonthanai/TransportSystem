@@ -12,6 +12,8 @@ export interface CompletedJobsFilters {
   customer: string
   driverName: string
   billingStatus: string
+  site: string
+  district: string
 }
 
 export const defaultCompletedJobsFilters = (fleet?: BookingCategory): CompletedJobsFilters => ({
@@ -22,6 +24,8 @@ export const defaultCompletedJobsFilters = (fleet?: BookingCategory): CompletedJ
   customer: '',
   driverName: '',
   billingStatus: '',
+  site: '',
+  district: '',
 })
 
 /**
@@ -36,7 +40,8 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     b.docNo.toLowerCase().includes(q) ||
     (b.po || '').toLowerCase().includes(q) ||
     b.customer.toLowerCase().includes(q) ||
-    (b.plate || '').toLowerCase().includes(q)
+    (b.plate || '').toLowerCase().includes(q) ||
+    b.items.some((i) => i.siteName.toLowerCase().includes(q) || i.district.toLowerCase().includes(q))
 
   const completedBookings = computed(() => {
     const f = filters.value
@@ -50,6 +55,8 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
       .filter((b) => !f.customer || b.customer === f.customer)
       .filter((b) => !f.driverName || b.driverName === f.driverName)
       .filter((b) => !f.billingStatus || (b.billingStatus || 'UNBILLED') === f.billingStatus)
+      .filter((b) => !f.site || b.items.some((i) => i.siteName.toLowerCase().includes(f.site.trim().toLowerCase())))
+      .filter((b) => !f.district || b.items.some((i) => i.district.toLowerCase().includes(f.district.trim().toLowerCase())))
       .filter((b) => {
         if (!from && !to) return true
         const completed = b.completedAt ? new Date(b.completedAt) : null
@@ -95,6 +102,9 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
   const distinctDrivers = computed(() =>
     [...new Set(bookingStore.bookings.filter((b) => b.status === 'DELIVERED' && b.driverName).map((b) => b.driverName as string))].sort()
   )
+  const distinctDistricts = computed(() =>
+    [...new Set(bookingStore.bookings.filter((b) => b.status === 'DELIVERED').flatMap((b) => b.items.map((i) => i.district)).filter(Boolean))].sort()
+  )
 
   const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
   const formatShortDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-')
@@ -108,6 +118,7 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     documentsForBooking,
     distinctCustomers,
     distinctDrivers,
+    distinctDistricts,
     formatBaht,
     formatShortDate,
   }

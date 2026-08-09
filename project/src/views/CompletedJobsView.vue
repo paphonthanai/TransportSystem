@@ -29,6 +29,11 @@
           <option value="">ทุกสถานะวางบิล</option>
           <option v-for="s in billingStatusOptions" :key="s" :value="s">{{ billingStatusLabel[s] }}</option>
         </select>
+        <input v-model="filters.site" type="text" placeholder="ค้นหาหน้างาน..." class="input-field w-40" />
+        <select v-model="filters.district" class="input-field w-40">
+          <option value="">ทุกเขตอำเภอ</option>
+          <option v-for="d in distinctDistricts" :key="d" :value="d">{{ d }}</option>
+        </select>
       </div>
       <div class="flex gap-3 flex-wrap items-center">
         <div class="flex items-center gap-2">
@@ -151,16 +156,27 @@ const {
   documentsForBooking,
   distinctCustomers,
   distinctDrivers,
+  distinctDistricts,
   formatBaht,
   formatShortDate,
 } = useCompletedJobs(filters)
 
 const hasActiveDateOrPicks = computed(
-  () => !!(filters.value.dateFrom || filters.value.dateTo || filters.value.customer || filters.value.driverName || filters.value.billingStatus || filters.value.fleet)
+  () =>
+    !!(
+      filters.value.dateFrom ||
+      filters.value.dateTo ||
+      filters.value.customer ||
+      filters.value.driverName ||
+      filters.value.billingStatus ||
+      filters.value.fleet ||
+      filters.value.site ||
+      filters.value.district
+    )
 )
 
 const clearFilters = () => {
-  filters.value = { fleet: undefined, search: filters.value.search, dateFrom: '', dateTo: '', customer: '', driverName: '', billingStatus: '' }
+  filters.value = { fleet: undefined, search: filters.value.search, dateFrom: '', dateTo: '', customer: '', driverName: '', billingStatus: '', site: '', district: '' }
 }
 
 const podPreviewImage = ref<string | null>(null)

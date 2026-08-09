@@ -223,6 +223,20 @@ export interface WHTCertificate {
   createdAt: Date
 }
 
+export type PayrollDeductionType = 'WHT' | 'GENERAL' | 'INSURANCE' | 'GPS' | 'INSTALLMENT'
+
+/** รายการหักเงินเดือนคนขับต่อรอบ (เดือน) — จับคู่กับคนขับด้วยชื่อเต็ม เหมือนกับที่ Booking.driverName เก็บ snapshot ไว้ */
+export interface PayrollDeduction {
+  id: string
+  driverName: string
+  /** รอบบัญชี รูปแบบ "YYYY-MM" เช่น "2569-08" */
+  periodLabel: string
+  type: PayrollDeductionType
+  label: string
+  amount: number
+  createdAt: Date
+}
+
 export interface LogEntry {
   id: string
   timestamp: Date
@@ -318,7 +332,7 @@ export interface Driver {
   bankAccount?: string
 }
 
-export type VehicleType = 'รถบริษัท' | 'รถร่วม' | 'รถหุ้นส่วน'
+export type VehicleType = 'รถบริษัท' | 'รถร่วมใน' | 'รถร่วมนอก' | 'รถหุ้นส่วน'
 
 export interface Vehicle {
   id: string
@@ -340,6 +354,8 @@ export interface Vehicle {
   engineNo: string
   /** หน่วยงาน (ประเภทรถ) */
   department: VehicleType
+  /** ปีรถ (พ.ศ. หรือ ค.ศ. ตามที่กรอก — ไม่บังคับรูปแบบ) */
+  year?: number
   /** เลขไมล์ */
   mileage: number
   repairStatus?: string

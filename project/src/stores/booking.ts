@@ -477,7 +477,8 @@ export const useBookingStore = defineStore('booking', () => {
     removeFromBatch(booking)
     booking.status = 'WAITING_DISPATCH'
     booking.plate = ''
-    booking.driverName = undefined
+    /** ตั้งเป็น '' แทน undefined เพราะ sanitizeBooking() ข้าม field ที่เป็น undefined ทิ้งเลย (setDoc merge:true จะไม่ล้างค่าเดิมใน Firestore) — '' เป็น falsy เหมือนกันทุกจุดที่เช็ค booking.driverName */
+    booking.driverName = ''
     booking.dispatchedAt = undefined
     addLog(`คนขับไม่รับงาน ${booking.docNo} รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`, { bookingId: booking.id })
   }
