@@ -102,6 +102,11 @@ service cloud.firestore {
       allow read, write: if hasRole(['ADMIN', 'ACCOUNTING']);
     }
 
+    // รายการหักเงินเดือนคนขับต่อรอบ — หน้าเงินเดือน (payroll/*) ทุก route จำกัดแค่ ADMIN อยู่แล้ว
+    match /payrollDeductions/{deductionId} {
+      allow read, write: if hasRole(['ADMIN']);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

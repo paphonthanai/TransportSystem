@@ -45,6 +45,10 @@
               <th class="text-left px-4 py-3 font-semibold text-muted">ปลายทาง</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน' : 'สินค้า' }}</th>
               <th class="text-right px-4 py-3 font-semibold text-muted">น้ำหนัก/จำนวน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เขตอำเภอ</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เบอร์โทรหน้างาน</th>
+              <th class="text-right px-4 py-3 font-semibold text-muted">น้ำมัน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">ประเภทงาน</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">รถ / คนขับ</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ขนส่ง</th>
               <th class="text-right px-4 py-3 font-semibold text-muted">ราคา</th>
@@ -68,6 +72,10 @@
               </td>
               <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
               <td class="px-4 py-3 text-right text-text">{{ weightQtyLabel(booking) }}</td>
+              <td class="px-4 py-3 text-muted">{{ districtLabel(booking) }}</td>
+              <td class="px-4 py-3 text-muted">{{ sitePhoneLabel(booking) }}</td>
+              <td class="px-4 py-3 text-right text-muted">{{ fuelLitersLabel(booking) }}</td>
+              <td class="px-4 py-3 text-muted">{{ jobTypeLabel(booking) }}</td>
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ booking.plate || '-' }}</div>
                 <div class="text-xs text-muted flex items-center gap-1">
@@ -101,12 +109,13 @@
                     @start-transit="bookingStore.startTransit(booking.id)"
                     @complete="openCompleteDialog(booking)"
                     @delete="deleteBooking(booking)"
+                    @cancel="onCancelDispatch(booking)"
                   />
                 </div>
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
-              <td colspan="10" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="14" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -130,6 +139,10 @@
               <th class="text-left px-4 py-3 font-semibold text-muted">ปลายทาง</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน' : 'สินค้า' }}</th>
               <th class="text-right px-4 py-3 font-semibold text-muted">น้ำหนัก/จำนวน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เขตอำเภอ</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เบอร์โทรหน้างาน</th>
+              <th class="text-right px-4 py-3 font-semibold text-muted">น้ำมัน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">ประเภทงาน</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">รถ / คนขับ</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ขนส่ง</th>
               <th class="text-right px-4 py-3 font-semibold text-muted">ราคา</th>
@@ -153,6 +166,10 @@
               </td>
               <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
               <td class="px-4 py-3 text-right text-text">{{ weightQtyLabel(booking) }}</td>
+              <td class="px-4 py-3 text-muted">{{ districtLabel(booking) }}</td>
+              <td class="px-4 py-3 text-muted">{{ sitePhoneLabel(booking) }}</td>
+              <td class="px-4 py-3 text-right text-muted">{{ fuelLitersLabel(booking) }}</td>
+              <td class="px-4 py-3 text-muted">{{ jobTypeLabel(booking) }}</td>
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ booking.plate || '-' }}</div>
                 <div class="text-xs text-muted flex items-center gap-1">
@@ -183,12 +200,13 @@
                     @start-transit="bookingStore.startTransit(booking.id)"
                     @complete="openCompleteDialog(booking)"
                     @delete="deleteBooking(booking)"
+                    @cancel="onCancelDispatch(booking)"
                   />
                 </div>
               </td>
             </tr>
             <tr v-if="inTransitBookings.length === 0">
-              <td colspan="10" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="14" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -613,6 +631,20 @@ const destinationLabel = (booking: Booking) => {
 
 const weightQtyLabel = (booking: Booking) => booking.items.map((i) => `${i.qty} ${i.unit}`).join(', ') || '-'
 
+const districtLabel = (booking: Booking) => {
+  const names = [...new Set(booking.items.map((i) => i.district).filter(Boolean))]
+  return names.length ? names.join(', ') : '-'
+}
+
+const sitePhoneLabel = (booking: Booking) => booking.items[0]?.sitePhone || '-'
+
+const fuelLitersLabel = (booking: Booking) => (booking.fuelLiters ? `${booking.fuelLiters} ล.` : '-')
+
+const jobTypeLabel = (booking: Booking) => {
+  const types = [...new Set(booking.items.map((i) => i.jobType).filter(Boolean))]
+  return types.length ? types.join(', ') : '-'
+}
+
 const deliveredItemCount = (booking: Booking) => booking.items.filter((i) => i.deliveryStatus === 'DELIVERED').length
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
@@ -813,6 +845,11 @@ const openCompleteDialog = (booking: Booking) => {
   completeTarget.value = booking
   debtAdjustments.value = []
   completeOdometerAfter.value = booking.odometerAfter || 0
+}
+
+const onCancelDispatch = (booking: Booking) => {
+  if (!confirm(`ยกเลิกการจ่ายงาน ${booking.docNo} และคืนกลับไปที่ตารางจองงาน?`)) return
+  bookingStore.declineDispatch(booking.id)
 }
 
 const addAdjustmentRow = () => {

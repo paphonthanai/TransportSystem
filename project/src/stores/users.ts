@@ -15,6 +15,8 @@ export interface UserProfile {
   name: string
   role: UserRole
   active: boolean
+  /** สิทธิ์พิเศษ: กรอกค่าน้ำมัน (ลิตร) สำหรับอำเภอที่ยังไม่ได้ตั้งค่าไว้ล่วงหน้าได้ — ปกติ ADMIN ทั่วไปก็ทำไม่ได้ ต้องเปิดสิทธิ์นี้ให้เฉพาะบัญชีผู้จัดการเท่านั้น */
+  canOverrideFuelRate?: boolean
   createdAt: string
   updatedAt: string
   /** id ของ DriverRecord (stores/drivers.ts) ที่บัญชีนี้คือ — มีความหมายเฉพาะ role DRIVER เท่านั้น ใช้จับคู่งานที่
@@ -46,7 +48,7 @@ export const useUserStore = defineStore('users', () => {
     users.value.unshift(profile)
   }
 
-  async function updateProfile(uid: string, data: Partial<Pick<UserProfile, 'name' | 'role' | 'driverId'>>) {
+  async function updateProfile(uid: string, data: Partial<Pick<UserProfile, 'name' | 'role' | 'canOverrideFuelRate' | 'driverId'>>) {
     await userRepository.update(uid, { ...data, updatedAt: new Date().toISOString() })
     const index = users.value.findIndex((u) => u.id === uid)
     if (index !== -1) users.value[index] = { ...users.value[index], ...data }

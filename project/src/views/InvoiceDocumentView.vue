@@ -68,7 +68,8 @@
 
             <div class="text-right flex-shrink-0">
               <div class="text-2xl font-bold text-primary">{{ docModeLabel[docMode].th }}</div>
-              <div class="text-xs text-gray-500 mb-3">{{ label }}</div>
+              <div class="text-xs text-gray-500">{{ label }}</div>
+              <div v-if="statusStampLabel" class="status-stamp">{{ statusStampLabel }}</div>
               <div class="doc-meta-box text-left text-xs w-64">
                 <div class="flex justify-between gap-4">
                   <span class="text-gray-500">เลขที่</span>
@@ -279,6 +280,7 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { useAuthStore } from '@/stores/auth'
 import { bahtText } from '@/utils/companyInfo'
+import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import DocumentSettingsPanel, { type DocumentSettingsToggles } from '@/components/shared/DocumentSettingsPanel.vue'
 import type { Booking } from '@/types'
@@ -464,6 +466,9 @@ const netPayable = computed(() => grandTotal.value - whtAmount.value)
 /** จำนวนชุดที่จะพิมพ์ — ผู้ใช้ปรับจำนวนต้นฉบับ/สำเนาได้จากแถบด้านข้าง (ไม่มีผลต่อข้อมูลเอกสาร แค่จำนวนชุดที่พิมพ์) */
 const originalCount = ref(1)
 const copyCount = ref(0)
+
+/** สถานะเอกสารพิมพ์บนกระดาษด้วย — เฉพาะเอกสารระบบใหม่ (newDoc) เท่านั้น เอกสารระบบเดิม (legacyDoc) ไม่มี SalesDocumentStatus ให้ map */
+const statusStampLabel = computed(() => (newDoc.value ? salesDocumentStatusLabel(newDoc.value.type, newDoc.value.status) : null))
 const copyLabels = computed(() => {
   const labels: string[] = []
   for (let i = 0; i < originalCount.value; i++) labels.push('ต้นฉบับ')
@@ -519,6 +524,10 @@ const printDoc = () => window.print()
 
 .spin-input {
   @apply w-16 h-8 px-2 border border-border rounded-lg bg-surface text-text text-sm font-medium text-center focus:outline-none focus:border-primary;
+}
+
+.status-stamp {
+  @apply inline-block text-[11px] font-bold px-2 py-0.5 rounded border border-primary text-primary mt-1 mb-3;
 }
 
 .corner-flag {

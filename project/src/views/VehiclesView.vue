@@ -9,7 +9,7 @@
     </div>
 
     <div class="card-lg overflow-x-auto">
-      <table class="min-w-[1080px] w-full text-sm border-separate border-spacing-0">
+      <table class="min-w-[1180px] w-full text-sm border-separate border-spacing-0">
         <thead class="bg-surface-2 text-left text-xs text-muted">
           <tr>
             <th class="px-4 py-3 font-semibold">ลำดับ</th>
@@ -21,6 +21,7 @@
             <th class="px-4 py-3 font-semibold">ลักษณะรถ</th>
             <th class="px-4 py-3 font-semibold">เลขตัวถัง</th>
             <th class="px-4 py-3 font-semibold">เลขเครื่อง</th>
+            <th class="px-4 py-3 font-semibold">ปีรถ</th>
             <th class="px-4 py-3 font-semibold">หน่วยงาน</th>
             <th class="px-4 py-3 font-semibold">คนขับประจำ</th>
             <th class="px-4 py-3 font-semibold text-right">เลขไมล์</th>
@@ -38,6 +39,7 @@
             <td class="px-4 py-3 text-muted">{{ vehicle.bodyType }}</td>
             <td class="px-4 py-3 text-muted">{{ vehicle.chassisNo }}</td>
             <td class="px-4 py-3 text-muted">{{ vehicle.engineNo }}</td>
+            <td class="px-4 py-3 text-muted">{{ vehicle.year || '-' }}</td>
             <td class="px-4 py-3">
               <span class="text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">{{ vehicle.department }}</span>
             </td>
@@ -93,6 +95,10 @@
               <label class="block text-xs font-semibold text-muted mb-1">เลขเครื่อง</label>
               <input v-model="form.engineNo" class="input-field w-full" />
             </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">ปีรถ</label>
+              <input v-model.number="form.year" type="number" class="input-field w-full" />
+            </div>
             <div class="md:col-span-2">
               <label class="block text-xs font-semibold text-muted mb-1">หน่วยงาน</label>
               <div class="flex gap-2 flex-wrap">
@@ -142,7 +148,7 @@ const driversStore = useDriversStore()
 
 type VehicleForm = Omit<Vehicle, 'id' | 'repairStatus' | 'repairDays' | 'driverCode'>
 
-const departmentOptions: VehicleType[] = ['รถบริษัท', 'รถร่วม', 'รถหุ้นส่วน']
+const departmentOptions: VehicleType[] = ['รถบริษัท', 'รถร่วมใน', 'รถร่วมนอก', 'รถหุ้นส่วน']
 
 /** ต้องเป็น computed (ไม่ใช่ const เฉยๆ) เพราะตอนนี้ vehiclesStore.vehicles โหลดข้อมูลแบบ async จาก Firestore —
  *  ค่าตอน setup อาจยังว่างอยู่ ถ้า snapshot เป็น const ธรรมดา ตารางจะไม่อัปเดตตอนโหลดเสร็จ (ใช้ได้เฉยๆ ตอนเป็น
@@ -172,6 +178,7 @@ const emptyForm = (): VehicleForm => ({
   chassisNo: '',
   engineNo: '',
   department: 'รถบริษัท',
+  year: undefined,
   mileage: 0,
 })
 

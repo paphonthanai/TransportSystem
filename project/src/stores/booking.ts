@@ -482,6 +482,7 @@ export const useBookingStore = defineStore('booking', () => {
     removeFromBatch(booking)
     booking.status = 'WAITING_DISPATCH'
     booking.plate = ''
+    // sanitizeBooking() แปลง field ที่เป็น undefined เป็น deleteField() ให้แล้ว (ดู bookingRepository.ts) จึงเคลียร์ด้วย undefined ตรงๆ ได้จริง ไม่ค้างค่าเดิมใน Firestore
     booking.driverName = undefined
     booking.driverId = undefined
     booking.dispatchedAt = undefined

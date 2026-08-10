@@ -27,7 +27,10 @@
           <tr v-for="user in userStore.users" :key="user.id" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 font-semibold text-text">{{ user.name }}</td>
             <td class="px-4 py-3 text-muted font-mono">{{ user.email }}</td>
-            <td class="px-4 py-3 text-muted">{{ roleLabels[user.role] }}</td>
+            <td class="px-4 py-3 text-muted">
+              {{ roleLabels[user.role] }}
+              <span v-if="user.canOverrideFuelRate" class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">ผู้จัดการ (น้ำมัน)</span>
+            </td>
             <td class="px-4 py-3">
               <span :class="['text-xs font-semibold px-2 py-1 rounded-full', user.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
                 {{ user.active ? 'เปิดใช้งาน' : 'ปิดใช้งาน' }}
@@ -89,6 +92,10 @@
               </select>
               <div class="text-[11px] text-muted mt-1">ผูกไว้แล้วงานที่จ่ายให้คนขับคนนี้จะขึ้นในแอปคนขับแม่นยำ ไม่พึ่งชื่อบัญชีตรงกับสมุดรายชื่อเป๊ะอีกต่อไป</div>
             </div>
+            <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
+              <input v-model="form.canOverrideFuelRate" type="checkbox" class="w-4 h-4" />
+              สิทธิ์ผู้จัดการ: กรอกค่าน้ำมันสำหรับอำเภอที่ยังไม่ได้ตั้งค่าไว้ได้
+            </label>
             <div v-if="formError" class="text-xs text-red-600">{{ formError }}</div>
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
@@ -151,7 +158,14 @@ const roleLabels: Record<UserRole, string> = {
 
 const showDialog = ref(false)
 const editingUser = ref<UserProfile | null>(null)
-const form = ref({ name: '', email: '', password: '', role: 'STAFF' as UserRole, driverId: undefined as string | undefined })
+const form = ref({
+  name: '',
+  email: '',
+  password: '',
+  role: 'STAFF' as UserRole,
+  driverId: undefined as string | undefined,
+  canOverrideFuelRate: false,
+})
 const formError = ref('')
 const saving = ref(false)
 
@@ -180,14 +194,21 @@ const sendReset = async () => {
 
 const openCreateDialog = () => {
   editingUser.value = null
-  form.value = { name: '', email: '', password: '', role: 'STAFF', driverId: undefined }
+  form.value = { name: '', email: '', password: '', role: 'STAFF', driverId: undefined, canOverrideFuelRate: false }
   formError.value = ''
   showDialog.value = true
 }
 
 const openEditDialog = (user: UserProfile) => {
   editingUser.value = user
-  form.value = { name: user.name, email: user.email, password: '', role: user.role, driverId: user.driverId }
+  form.value = {
+    name: user.name,
+    email: user.email,
+    password: '',
+    role: user.role,
+    driverId: user.driverId,
+    canOverrideFuelRate: user.canOverrideFuelRate ?? false,
+  }
   formError.value = ''
   showDialog.value = true
 }
@@ -205,7 +226,12 @@ const save = async () => {
   saving.value = true
   try {
     if (editingUser.value) {
-      await userStore.updateProfile(editingUser.value.id, { name: form.value.name, role: form.value.role, driverId: form.value.driverId })
+      await userStore.updateProfile(editingUser.value.id, {
+        name: form.value.name,
+        role: form.value.role,
+        driverId: form.value.driverId,
+        canOverrideFuelRate: form.value.canOverrideFuelRate,
+      })
     } else {
       const uid = await authStore.createStaffAccount(form.value.email, form.value.password, form.value.name, form.value.role, form.value.driverId)
       userStore.addLocalCopy({
@@ -214,10 +240,14 @@ const save = async () => {
         name: form.value.name,
         role: form.value.role,
         active: true,
+        canOverrideFuelRate: form.value.canOverrideFuelRate,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         driverId: form.value.driverId,
       })
+      if (form.value.canOverrideFuelRate) {
+        await userStore.updateProfile(uid, { canOverrideFuelRate: true })
+      }
     }
     showDialog.value = false
   } catch (err: any) {
