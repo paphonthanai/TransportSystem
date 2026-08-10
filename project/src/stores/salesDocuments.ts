@@ -11,6 +11,9 @@ export type SalesDocumentType = 'QUOTATION' | 'SALES_ORDER' | 'BILLING' | 'TAX_I
 /** QUOTATION เท่านั้น: เงื่อนไขการชำระที่เลือกในฟอร์ม — กำหนดว่าจะให้กรอกจำนวนวันเครดิต/แสดงวันครบกำหนดหรือไม่ */
 export type PaymentTermMode = 'CREDIT_DAYS' | 'CASH' | 'CREDIT_NO_DATE'
 
+/** ประเภทเอกสารต้นทางที่ใบเสร็จอ้างอิงตรงได้ — TAX_INVOICE (เดิม) หรือ BILLING ตรงๆ (ข้าม Tax Invoice ไปเลย, ดู createReceiptFromSourceDocs) */
+export type ReceiptSourceType = 'TAX_INVOICE' | 'BILLING'
+
 /**
  * หนึ่ง union รวมทุกประเภทเอกสาร แทนที่จะแยก union ต่อประเภท เพราะสถานะของ BILLING ต้องคงค่าเดิมเป๊ะ
  * (มี UI ที่ผูกกับค่าพวกนี้อยู่แล้วจาก BillingView.vue) และ 'PAID' ต้องมีความหมายเดียวกันไม่ว่าจะเป็น
@@ -1185,7 +1188,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
     if (doc.status !== 'BILLED') return { ok: false, message: 'เอกสารนี้อยู่สถานะรอวางบิลอยู่แล้ว' }
     const childId = (doc.convertedToDocumentIds || [])[0]
-    const child = childId ? documents.value.find((d) => d.id === childId && d.type === 'TAX_INVOICE') : undefined
+    const childDoc = childId ? documents.value.find((d) => d.id === childId) : undefined
+    /** ใบวางบิลนี้อาจถูกแปลงเป็นใบแจ้งหนี้ (ทางเดิม) หรือถูกอ้างอิงตรงจากใบเสร็จ (ทางใหม่ createReceiptFromBillingNotes) ก็ได้ — Reset ผ่านปุ่มนี้รองรับแค่ทางแรก ทางที่สองต้องยกเลิกที่ใบเสร็จแทน (cancelReceipt คืนสถานะให้อัตโนมัติอยู่แล้ว) */
+    if (childDoc?.type === 'RECEIPT') {
+      return { ok: false, message: `ไม่สามารถ Reset ได้ เนื่องจากใบวางบิลนี้ถูกอ้างอิงตรงจากใบเสร็จรับเงิน ${childDoc.number} — ให้ยกเลิกใบเสร็จนั้นแทน` }
+    }
+    const child = childDoc?.type === 'TAX_INVOICE' ? childDoc : undefined
     if (!child) return { ok: false, message: 'ไม่พบใบแจ้งหนี้ที่ผูกอยู่ ไม่สามารถ Reset ได้' }
     if (child.status !== 'DRAFT') {
       return { ok: false, message: `ไม่สามารถ Reset ได้ เนื่องจากใบแจ้งหนี้ ${child.number} ถูกส่งให้ลูกค้าแล้วหรือชำระเงินแล้ว` }
@@ -1221,25 +1229,81 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return true
   }
 
+  /** เอกสาร (ใบแจ้งหนี้หรือใบวางบิล) ที่ id นี้ถูกอ้างอิงไว้แล้วในใบเสร็จรับเงินใบอื่น (ที่ยังไม่ถูกยกเลิก) หรือยัง — กันสร้าง/แก้ไขใบเสร็จให้ไปอ้างอิงเอกสารต้นทางซ้ำกับใบเสร็จอื่น ใช้ร่วมกันทั้งสองเส้นทาง (Tax Invoice/Billing Note) เพราะ sourceDocumentIds เก็บ id แบบไม่ผูกชนิดอยู่แล้ว
+   *  excludeReceiptId ใช้ตอนแก้ไขใบเสร็จเดิม เพื่อไม่ให้เอกสารตัวเองมานับชนกับตัวเอง */
+  function sourceDocsClaimedByOtherReceipts(sourceIds: string[], excludeReceiptId?: string): string[] {
+    const claimed = new Set<string>()
+    documents.value.forEach((d) => {
+      if (d.type !== 'RECEIPT' || d.id === excludeReceiptId) return
+      ;(d.sourceDocumentIds || []).forEach((sid) => {
+        if (sourceIds.includes(sid)) claimed.add(sid)
+      })
+    })
+    return [...claimed]
+  }
+
   /**
-   * สร้างใบเสร็จรับเงิน (เดี่ยวหรือรวม) จากใบแจ้งหนี้ที่ยังไม่ชำระของลูกค้ารายเดียวกัน — รายการต่อบรรทัด = 1 ใบแจ้งหนี้
-   * ต่อ 1 บรรทัด สถานะเริ่มต้นเป็น DRAFT (แสดงผลเป็น "รอดำเนินการ") จนกว่าจะกด "เก็บเงิน" ผ่าน recordReceiptPayment
+   * รวมยอด/ภาษี/ส่วนลด/หัก ณ ที่จ่าย จากเอกสารต้นทางตรงๆ (ไม่คำนวณ VAT%/ส่วนลด% ใหม่เอง) เพื่อให้ใบเสร็จสะท้อนตัวเลขที่
+   * เอกสารต้นทางคำนวณไว้แล้วเป๊ะ — ใช้ร่วมกันทั้งเส้นทาง Tax Invoice และ Billing Note ตรงๆ (createReceiptFromSourceDocs/updateReceiptFromSourceDocs)
+   * ใบวางบิลที่สร้างจากงานขนส่งโดยตรง (createBillingFromBookings) มักไม่มี vatAmount/whtAmount/dueDate เลย (ไม่ได้ตั้งใจละไว้ ตัวฟังก์ชันนั้นไม่ได้คำนวณภาษีในชั้นนี้) จึงต้องเตือนแทนการเดาเป็น 0 เงียบๆ
    */
-  function createReceiptFromInvoices(invoiceIds: string[], overrides?: { customer?: string; reference?: string }): SalesDocument | null {
-    if (invoiceIds.length === 0) return null
-    const targetInvoices = documents.value.filter((d) => invoiceIds.includes(d.id) && d.type === 'TAX_INVOICE')
-    if (targetInvoices.length !== invoiceIds.length) return null
-    const sameCustomer = targetInvoices.every((d) => d.customer === targetInvoices[0].customer)
-    const allUnpaid = targetInvoices.every((d) => d.status !== 'PAID')
-    if (!sameCustomer || !allUnpaid) return null
+  function buildReceiptTotalsFromSourceDocs(targetDocs: SalesDocument[]) {
+    const amount = targetDocs.reduce((sum, d) => sum + d.amount, 0)
+    const discountTotal = targetDocs.reduce((sum, d) => sum + (d.discountTotal || 0), 0)
+    const vatAmount = targetDocs.reduce((sum, d) => sum + (d.vatAmount || 0), 0)
+    const whtAmount = targetDocs.reduce((sum, d) => sum + (d.whtAmount || 0), 0)
+    const bookingIds = [...new Set(targetDocs.flatMap((d) => d.bookingIds))]
+    const warnings: string[] = []
+    targetDocs.forEach((d) => {
+      const label = d.type === 'BILLING' ? 'ใบวางบิล' : 'ใบแจ้งหนี้'
+      if (d.dueDate === undefined) warnings.push(`${label} ${d.number} ไม่มีวันครบกำหนด`)
+      if (d.vatAmount === undefined && d.whtAmount === undefined) warnings.push(`${label} ${d.number} ไม่มีข้อมูลภาษี/หัก ณ ที่จ่าย — ตรวจสอบยอดก่อนเก็บเงินจริง`)
+    })
+    return { amount, discountTotal, vatAmount, whtAmount, bookingIds, warnings }
+  }
+
+  function receiptItemRowsFromSourceDocs(targetDocs: SalesDocument[]): Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>> {
+    return targetDocs.map((d) => ({
+      description: `${d.type === 'BILLING' ? 'ใบวางบิล' : 'ใบแจ้งหนี้'} ${d.number}`,
+      qty: 1,
+      unit: 'รายการ',
+      unitPrice: d.amount,
+      amount: d.amount,
+      vatRate: d.amount ? Math.round(((d.vatAmount || 0) / d.amount) * 10000) / 100 : 0,
+      whtRate: d.amount ? Math.round(((d.whtAmount || 0) / d.amount) * 10000) / 100 : 0,
+    }))
+  }
+
+  /** เอกสารสถานะ "ยังเรียกเก็บได้อยู่" ตามชนิด — ใบแจ้งหนี้คือยังไม่ PAID, ใบวางบิลคือยังไม่ถูกแปลงไปเป็นใบแจ้งหนี้/ใบเสร็จอื่น (BILLING_PENDING เท่านั้น) */
+  const isSourceDocEligible = (d: SalesDocument, sourceType: ReceiptSourceType) =>
+    sourceType === 'TAX_INVOICE' ? d.status !== 'PAID' : d.status === 'BILLING_PENDING'
+
+  /**
+   * สร้างใบเสร็จรับเงิน (เดี่ยวหรือรวม) จากเอกสารต้นทางชนิดเดียวกันของลูกค้ารายเดียวกัน — รายการต่อบรรทัด = 1 เอกสารต้นทาง
+   * ต่อ 1 บรรทัด สถานะเริ่มต้นเป็น DRAFT (แสดงผลเป็น "รอดำเนินการ") จนกว่าจะกด "เก็บเงิน" ผ่าน recordReceiptPayment
+   * sourceType = 'TAX_INVOICE': เส้นทางเดิม (ผ่านใบแจ้งหนี้) — sourceType = 'BILLING': เส้นทางใหม่ ข้ามใบแจ้งหนี้ไปเลย
+   * (Booking → Sales Order → Billing Note → Receipt) — ตอนสำเร็จจะปิดสถานะใบวางบิลต้นทางเป็น BILLED เหมือน createInvoiceFromBilling
+   * ทำ เพื่อกันไม่ให้ใบวางบิลใบเดียวกันถูกนำไปออกทั้งใบแจ้งหนี้ปกติ "และ" ใบเสร็จตรงพร้อมกัน (เงินก้อนเดียวกันถูกเรียกเก็บซ้ำ)
+   * ยอด/ภาษี/ส่วนลด/หัก ณ ที่จ่าย ดึงจากเอกสารต้นทางตรงๆ (ดู buildReceiptTotalsFromSourceDocs) ไม่คำนวณเปอร์เซ็นต์ใหม่เอง
+   */
+  function createReceiptFromSourceDocs(
+    sourceIds: string[],
+    sourceType: ReceiptSourceType,
+    overrides?: { customer?: string; reference?: string }
+  ): { doc: SalesDocument; warnings: string[] } | null {
+    if (sourceIds.length === 0) return null
+    const targetDocs = documents.value.filter((d) => sourceIds.includes(d.id) && d.type === sourceType)
+    if (targetDocs.length !== sourceIds.length) return null
+    const sameCustomer = targetDocs.every((d) => d.customer === targetDocs[0].customer)
+    const allEligible = targetDocs.every((d) => isSourceDocEligible(d, sourceType))
+    if (!sameCustomer || !allEligible) return null
+    if (sourceDocsClaimedByOtherReceipts(sourceIds).length > 0) return null
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.receipt
     const seq = documents.value.filter((d) => d.type === 'RECEIPT').length + 1
-    const customer = overrides?.customer?.trim() || targetInvoices[0].customer
-    const reference = overrides?.reference ?? targetInvoices.map((d) => d.number).join(', ')
-    const amount = targetInvoices.reduce((sum, d) => sum + d.amount, 0)
-    /** รวม bookingIds จากทุกใบแจ้งหนี้ต้นทาง (ไม่ใช่ปล่อยว่าง) เพื่อให้ Completed Jobs cross-link มาที่ใบเสร็จนี้ได้เหมือน Billing Note/Tax Invoice */
-    const bookingIds = [...new Set(targetInvoices.flatMap((d) => d.bookingIds))]
+    const customer = overrides?.customer?.trim() || targetDocs[0].customer
+    const reference = overrides?.reference ?? targetDocs.map((d) => d.number).join(', ')
+    const { amount, discountTotal, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
     const now = new Date()
     const receipt: SalesDocument = {
       id: genId('sdoc'),
@@ -1250,26 +1314,96 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       date: now,
       amount,
       bookingIds,
-      sourceDocumentIds: targetInvoices.map((d) => d.id),
+      sourceDocumentIds: targetDocs.map((d) => d.id),
       reference,
+      discountTotal,
+      vatAmount,
+      whtAmount,
       createdAt: now,
     }
     documents.value.unshift(receipt)
-    addItemsToDocument(
-      receipt.id,
-      targetInvoices.map((d) => ({
-        description: `ใบแจ้งหนี้ ${d.number}`,
-        qty: 1,
-        unit: 'รายการ',
-        unitPrice: d.amount,
-        amount: d.amount,
-      }))
-    )
+    addItemsToDocument(receipt.id, receiptItemRowsFromSourceDocs(targetDocs))
+    if (sourceType === 'BILLING') {
+      targetDocs.forEach((billing) => {
+        billing.status = 'BILLED'
+        billing.convertedToDocumentIds = [...(billing.convertedToDocumentIds || []), receipt.id]
+      })
+    }
     useBookingStore().addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
-    return receipt
+    return { doc: receipt, warnings }
   }
 
-  /** กด "เก็บเงิน" บนใบเสร็จรับเงิน — จบขั้นตอนทั้ง chain โดยปิดสถานะใบแจ้งหนี้ต้นทางทั้งหมดเป็นชำระแล้วด้วย */
+  /** แก้ไขใบเสร็จรับเงินที่สร้างจากเอกสารต้นทาง (เฉพาะตอนยังไม่เก็บเงิน — สถานะ DRAFT) แทนที่รายการเอกสารอ้างอิงทั้งหมด ไม่เปลี่ยนเลขที่/สถานะ
+   *  sourceType ต้องตรงกับที่ตอนสร้างไว้เสมอ (ห้ามสลับจากอ้างอิงใบแจ้งหนี้ไปอ้างอิงใบวางบิลระหว่างแก้ไข — ผู้เรียกต้องส่ง type เดิมของเอกสารมา) */
+  function updateReceiptFromSourceDocs(
+    id: string,
+    sourceIds: string[],
+    sourceType: ReceiptSourceType,
+    overrides?: { customer?: string; reference?: string }
+  ): { doc: SalesDocument; warnings: string[] } | null {
+    if (sourceIds.length === 0) return null
+    const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
+    if (!doc || doc.status !== 'DRAFT') return null
+    const targetDocs = documents.value.filter((d) => sourceIds.includes(d.id) && d.type === sourceType)
+    if (targetDocs.length !== sourceIds.length) return null
+    const sameCustomer = targetDocs.every((d) => d.customer === targetDocs[0].customer)
+    const allEligible = targetDocs.every((d) => isSourceDocEligible(d, sourceType))
+    if (!sameCustomer || !allEligible) return null
+    if (sourceDocsClaimedByOtherReceipts(sourceIds, id).length > 0) return null
+    /** ใบวางบิลที่ถูกถอดออกจากรายการอ้างอิงตอนแก้ไข ต้องคืนสถานะกลับ BILLING_PENDING ให้มันด้วย ไม่งั้นจะค้างสถานะ BILLED ทั้งที่ไม่มีใบเสร็จอ้างอิงแล้ว */
+    if (sourceType === 'BILLING') {
+      const removedIds = (doc.sourceDocumentIds || []).filter((sid) => !sourceIds.includes(sid))
+      removedIds.forEach((sid) => {
+        const billing = documents.value.find((d) => d.id === sid && d.type === 'BILLING')
+        if (billing && billing.status === 'BILLED') {
+          billing.status = 'BILLING_PENDING'
+          billing.convertedToDocumentIds = (billing.convertedToDocumentIds || []).filter((cid) => cid !== doc.id)
+        }
+      })
+    }
+    const customer = overrides?.customer?.trim() || targetDocs[0].customer
+    const reference = overrides?.reference ?? targetDocs.map((d) => d.number).join(', ')
+    const { amount, discountTotal, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
+    doc.customer = customer
+    doc.reference = reference
+    doc.amount = amount
+    doc.bookingIds = bookingIds
+    doc.sourceDocumentIds = targetDocs.map((d) => d.id)
+    doc.discountTotal = discountTotal
+    doc.vatAmount = vatAmount
+    doc.whtAmount = whtAmount
+    items.value = items.value.filter((i) => i.documentId !== id)
+    addItemsToDocument(id, receiptItemRowsFromSourceDocs(targetDocs))
+    if (sourceType === 'BILLING') {
+      targetDocs.forEach((billing) => {
+        billing.status = 'BILLED'
+        billing.convertedToDocumentIds = [...(billing.convertedToDocumentIds || []), doc.id].filter((v, i, arr) => arr.indexOf(v) === i)
+      })
+    }
+    useBookingStore().addLog('แก้ไขเอกสาร ' + doc.number, { docId: doc.id })
+    return { doc, warnings }
+  }
+
+  /** เดิม: สร้างใบเสร็จจากใบแจ้งหนี้ — คงชื่อไว้เพื่อความเข้ากันได้กับที่เรียกใช้อยู่ ภายในเรียก createReceiptFromSourceDocs เส้นทาง TAX_INVOICE */
+  function createReceiptFromInvoices(invoiceIds: string[], overrides?: { customer?: string; reference?: string }) {
+    return createReceiptFromSourceDocs(invoiceIds, 'TAX_INVOICE', overrides)
+  }
+  function updateReceiptFromInvoices(id: string, invoiceIds: string[], overrides?: { customer?: string; reference?: string }) {
+    return updateReceiptFromSourceDocs(id, invoiceIds, 'TAX_INVOICE', overrides)
+  }
+  /** ใหม่: สร้าง/แก้ไขใบเสร็จจากใบวางบิลตรงๆ ข้ามขั้นใบแจ้งหนี้ (Booking → Sales Order → Billing Note → Receipt) */
+  function createReceiptFromBillingNotes(billingIds: string[], overrides?: { customer?: string; reference?: string }) {
+    return createReceiptFromSourceDocs(billingIds, 'BILLING', overrides)
+  }
+  function updateReceiptFromBillingNotes(id: string, billingIds: string[], overrides?: { customer?: string; reference?: string }) {
+    return updateReceiptFromSourceDocs(id, billingIds, 'BILLING', overrides)
+  }
+  /** เผื่อผู้เรียกไม่ทราบ/ไม่อยากสนใจว่า id เอกสารต้นทางเป็นใบแจ้งหนี้หรือใบวางบิล — ตรวจชนิดจาก id แรกที่พบให้อัตโนมัติ */
+  function invoicesClaimedByOtherReceipts(sourceIds: string[], excludeReceiptId?: string) {
+    return sourceDocsClaimedByOtherReceipts(sourceIds, excludeReceiptId)
+  }
+
+  /** กด "เก็บเงิน" บนใบเสร็จรับเงิน — จบขั้นตอนทั้ง chain โดยปิดสถานะเอกสารต้นทางเป็นชำระแล้วด้วย (ใบแจ้งหนี้ -> PAID, ใบวางบิลที่อ้างอิงตรง คงสถานะ BILLED เดิมไว้เพราะไม่มีสถานะ "จ่ายแล้ว" แยกของตัวเอง — ใช้สถานะใบเสร็จเป็นตัวบอกแทน) */
   function recordReceiptPayment(
     receiptId: string,
     payment: { paidDate?: Date; whtAmount?: number; paymentMethod?: string; note?: string }
@@ -1288,10 +1422,17 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return doc
   }
 
-  /** ยกเลิกใบเสร็จรับเงินที่ยังไม่ได้เก็บเงิน — คืนสถานะไม่กระทบใบแจ้งหนี้ต้นทาง (ยังไม่ได้ปิดสถานะ) */
+  /** ยกเลิกใบเสร็จรับเงินที่ยังไม่ได้เก็บเงิน — ไม่กระทบใบแจ้งหนี้ต้นทาง (ยังไม่ได้ปิดสถานะ) แต่ถ้ามาจากใบวางบิลตรงๆ ต้องคืนสถานะใบวางบิลกลับ BILLING_PENDING ไม่งั้นใบวางบิลจะค้างสถานะ BILLED ทั้งที่ไม่มีใบเสร็จอ้างอิงแล้ว (ออกใบแจ้งหนี้/ใบเสร็จใหม่จากใบวางบิลนี้ไม่ได้อีกเลย) */
   function cancelReceipt(id: string) {
     const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
     if (!doc || doc.status !== 'DRAFT') return false
+    ;(doc.sourceDocumentIds || []).forEach((sid) => {
+      const billing = documents.value.find((d) => d.id === sid && d.type === 'BILLING')
+      if (billing && billing.status === 'BILLED') {
+        billing.status = 'BILLING_PENDING'
+        billing.convertedToDocumentIds = (billing.convertedToDocumentIds || []).filter((cid) => cid !== doc.id)
+      }
+    })
     documents.value = documents.value.filter((d) => d.id !== id)
     items.value = items.value.filter((i) => i.documentId !== id)
     return true
@@ -1356,6 +1497,13 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     resetTaxInvoice,
     sendInvoice,
     createReceiptFromInvoices,
+    updateReceiptFromInvoices,
+    createReceiptFromBillingNotes,
+    updateReceiptFromBillingNotes,
+    createReceiptFromSourceDocs,
+    updateReceiptFromSourceDocs,
+    invoicesClaimedByOtherReceipts,
+    sourceDocsClaimedByOtherReceipts,
     createReceiptManual,
     updateReceiptManual,
     recordReceiptPayment,

@@ -10,6 +10,13 @@
           <span class="block text-xs text-muted mt-0.5">เลือกใบแจ้งหนี้/ใบกำกับภาษีของลูกค้ารายเดียว ใบเดียวหรือหลายใบมารวมกันได้</span>
         </span>
       </button>
+      <button @click="router.push('/receipts/select?source=billing')" class="option-card">
+        <span class="material-symbols-rounded text-2xl text-primary">request_quote</span>
+        <span class="flex-1 text-left">
+          <span class="block font-semibold text-text">รับเงินจากใบวางบิลโดยตรง (ข้ามใบแจ้งหนี้)</span>
+          <span class="block text-xs text-muted mt-0.5">ลูกค้าที่ไม่ต้องออกใบกำกับภาษี — เก็บเงินจากใบวางบิลได้เลยโดยไม่ต้องแปลงเป็นใบแจ้งหนี้ก่อน</span>
+        </span>
+      </button>
       <button @click="router.push('/receipts/new-manual')" class="option-card">
         <span class="material-symbols-rounded text-2xl text-primary">payments</span>
         <span class="flex-1 text-left">

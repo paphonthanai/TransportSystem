@@ -112,7 +112,42 @@
             </div>
           </div>
 
-          <table class="w-full text-sm border border-gray-400 mb-4">
+          <!-- ใบเสร็จที่อ้างอิงใบแจ้งหนี้ต้นทาง (sourceDocumentIds) แสดงเป็นตารางรายการใบแจ้งหนี้ ไม่ใช่ตารางสินค้าทั่วไป -->
+          <table v-if="receiptSourceRows.length" class="w-full text-sm border border-gray-400 mb-4">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">เลขที่เอกสาร</th>
+                <th class="border border-gray-400 px-2 py-1 text-left w-24">วันที่เอกสาร</th>
+                <th class="border border-gray-400 px-2 py-1 text-left w-24">วันครบกำหนด</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-28">ยอดรวมตามเอกสาร</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-24">หัก ณ ที่จ่าย</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-28">ยอดชำระ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, ridx) in receiptSourceRows" :key="ridx">
+                <td class="border border-gray-400 px-2 py-1">{{ ridx + 1 }}</td>
+                <td class="border border-gray-400 px-2 py-1">{{ row.number }}</td>
+                <td class="border border-gray-400 px-2 py-1">{{ formatDate(row.date) }}</td>
+                <td class="border border-gray-400 px-2 py-1">{{ formatDate(row.dueDate) }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.whtAmount) }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.netPayable) }}</td>
+              </tr>
+              <tr v-for="n in Math.max(0, 4 - receiptSourceRows.length)" :key="'rfiller' + n">
+                <td class="border border-gray-400 px-2 py-1 h-7">&nbsp;</td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <table v-else class="w-full text-sm border border-gray-400 mb-4">
             <thead class="bg-gray-100">
               <tr>
                 <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
@@ -257,6 +292,29 @@
       </div>
     </div>
 
+    <div v-if="receiptTrace" class="card-lg no-print">
+      <div class="font-bold text-text mb-3">อ้างอิงเอกสาร</div>
+      <div class="space-y-3 text-sm">
+        <div v-if="receiptTrace.taxInvoices.length">
+          <div class="text-xs font-semibold text-muted mb-1">ใบแจ้งหนี้/ใบกำกับภาษี</div>
+          <RouterLink v-for="d in receiptTrace.taxInvoices" :key="d.id" :to="`/documents/${d.id}`" class="block text-primary hover:underline">{{ d.number }}</RouterLink>
+        </div>
+        <div v-if="receiptTrace.billingNotes.length">
+          <div class="text-xs font-semibold text-muted mb-1">ใบวางบิล</div>
+          <RouterLink v-for="d in receiptTrace.billingNotes" :key="d.id" :to="`/documents/${d.id}`" class="block text-primary hover:underline">{{ d.number }}</RouterLink>
+        </div>
+        <div v-if="receiptTrace.salesOrders.length">
+          <div class="text-xs font-semibold text-muted mb-1">ใบสั่งสินค้า</div>
+          <RouterLink v-for="d in receiptTrace.salesOrders" :key="d.id" :to="`/documents/${d.id}`" class="block text-primary hover:underline">{{ d.number }}</RouterLink>
+        </div>
+        <div v-if="receiptTrace.bookings.length">
+          <div class="text-xs font-semibold text-muted mb-1">งานขนส่ง</div>
+          <RouterLink v-for="b in receiptTrace.bookings" :key="b.id" :to="`/job/${b.id}`" class="block text-primary hover:underline">{{ b.docNo }}</RouterLink>
+        </div>
+        <div v-if="!receiptTrace.taxInvoices.length && !receiptTrace.bookings.length" class="text-muted text-xs">ไม่มีเอกสารต้นทางอ้างอิง (สร้างแบบกรอกเอง)</div>
+      </div>
+    </div>
+
     <div v-if="docExists" class="card-lg no-print">
       <div class="font-bold text-text mb-3">ประวัติเอกสาร</div>
       <EntityTimeline :doc-id="route.params.docId as string" />
@@ -281,6 +339,7 @@ import { useCustomerStore } from '@/stores/customers'
 import { useAuthStore } from '@/stores/auth'
 import { bahtText } from '@/utils/companyInfo'
 import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
+import { traceReceiptChain } from '@/utils/documentTrace'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import DocumentSettingsPanel, { type DocumentSettingsToggles } from '@/components/shared/DocumentSettingsPanel.vue'
 import type { Booking } from '@/types'
@@ -440,6 +499,40 @@ const docRows = computed<PrintRow[]>(() => {
 })
 
 const fillerRows = computed(() => Math.max(0, 4 - docRows.value.length))
+
+interface ReceiptSourceRow {
+  number: string
+  date: Date
+  dueDate?: Date
+  amount: number
+  whtAmount: number
+  netPayable: number
+}
+
+/** ตารางรายการเอกสารต้นทาง — มีค่าเฉพาะใบเสร็จที่ถูกสร้าง/แก้ไขจากใบแจ้งหนี้หรือใบวางบิลตรง (sourceDocumentIds) เท่านั้น ใบเสร็จกรอกเองคืนอาเรย์ว่าง (ใช้ docRows ตามปกติ) */
+const receiptSourceRows = computed<ReceiptSourceRow[]>(() => {
+  if (!newDoc.value || newDoc.value.type !== 'RECEIPT' || !newDoc.value.sourceDocumentIds?.length) return []
+  return salesDocumentsStore.documents
+    .filter((d) => (d.type === 'TAX_INVOICE' || d.type === 'BILLING') && newDoc.value!.sourceDocumentIds!.includes(d.id))
+    .map((d) => {
+      /** "ยอดรวมตามเอกสาร" ต้องเป็นยอดรวมทั้งสิ้นของใบแจ้งหนี้ (รวม VAT แล้ว) ไม่ใช่แค่ subtotal ก่อน VAT — ให้ตรงกับที่บล็อกสรุปยอดด้านล่างของใบเสร็จเอง (ซึ่งเอา receipt.amount + receipt.vatAmount มาบวกกันตามธรรมเนียมเอกสารทุกประเภทในระบบ) */
+      const grandTotal = d.amount + (d.vatAmount || 0)
+      return {
+        number: d.number,
+        date: d.date,
+        dueDate: d.dueDate,
+        amount: grandTotal,
+        whtAmount: d.whtAmount || 0,
+        netPayable: grandTotal - (d.whtAmount || 0),
+      }
+    })
+})
+
+/** สายอ้างอิงเอกสารของใบเสร็จ (Receipt -> TaxInvoice -> BillingNote -> Booking -> SalesOrder) — เฉพาะเอกสารประเภท RECEIPT เท่านั้น ที่เหลือเป็น null (ไม่แสดงพาแนล) */
+const receiptTrace = computed(() => {
+  if (!newDoc.value || newDoc.value.type !== 'RECEIPT') return null
+  return traceReceiptChain(newDoc.value, salesDocumentsStore.documents, bookingStore.bookings)
+})
 
 const subtotal = computed(() => activeDoc.value?.amount || 0)
 const settingsToggles = ref<DocumentSettingsToggles>({ vat: true, wht: true, discount: true })

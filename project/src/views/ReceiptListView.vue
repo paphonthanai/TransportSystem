@@ -60,7 +60,7 @@
                 <div class="flex items-center justify-end gap-1.5">
                   <button
                     v-if="doc.status === 'DRAFT'"
-                    @click="router.push(`/receipts/new-manual/${doc.id}/edit`)"
+                    @click="router.push(editRouteFor(doc))"
                     class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2"
                   >
                     <span class="material-symbols-rounded text-base">edit</span>
@@ -188,6 +188,9 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
 }
 
 const statusDotClass = (status: SalesDocumentStatus) => ({ DRAFT: 'bg-amber-500', PAID: 'bg-green-500' })[status as 'DRAFT' | 'PAID'] || 'bg-gray-400'
+
+/** ใบเสร็จที่มาจากใบแจ้งหนี้ (มี sourceDocumentIds) แก้ไขผ่านฟอร์มอ้างอิงใบแจ้งหนี้ (ReceiptCreateView.vue) ส่วนใบเสร็จกรอกเอง แก้ไขผ่านฟอร์มรายการสินค้าเดิม (ReceiptFormView.vue) — ห้ามสลับกันเพราะโครงสร้างรายการต่างกัน */
+const editRouteFor = (doc: SalesDocument) => (doc.sourceDocumentIds?.length ? `/receipts/create/${doc.id}/edit` : `/receipts/new-manual/${doc.id}/edit`)
 
 const paymentDoc = ref<SalesDocument | null>(null)
 const paymentDate = ref(new Date().toISOString().slice(0, 10))

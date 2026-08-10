@@ -179,6 +179,13 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN', 'ACCOUNTING'] },
       },
       {
+        path: 'receipts/create/:id/edit',
+        name: 'ReceiptFromInvoicesEdit',
+        component: () => import('@/views/ReceiptCreateView.vue'),
+        props: true,
+        meta: { roles: ['ADMIN', 'ACCOUNTING'] },
+      },
+      {
         path: 'cash-sale',
         name: 'CashSale',
         component: () => import('@/views/CashSaleListView.vue'),
