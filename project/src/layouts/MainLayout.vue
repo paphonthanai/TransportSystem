@@ -198,6 +198,11 @@ const getScreenTitle = () => {
   }
   if (currentRoute.path.startsWith('/documents/')) return 'เอกสารขาย · พิมพ์เอกสาร'
   if (currentRoute.path.startsWith('/job/')) return 'รายละเอียดงาน'
+  if (currentRoute.path.startsWith('/settings/drivers/')) return 'รายละเอียดพนักงานขับรถ'
+  if (currentRoute.path.startsWith('/payroll/vendor-fleet/')) return 'เงินเดือน · รายละเอียดรถร่วม'
+  if (currentRoute.path === '/payroll/staff/new') return 'เงินเดือน · สร้างเงินเดือน'
+  if (currentRoute.path.startsWith('/payroll/staff/') && currentRoute.path.endsWith('/edit')) return 'เงินเดือน · แก้ไขเงินเดือน'
+  if (currentRoute.path.startsWith('/payroll/staff/')) return 'เงินเดือน · รายละเอียดเงินเดือน'
   if (currentRoute.path === '/quotation/new') return 'สร้างใบเสนอราคา'
   if (currentRoute.path.startsWith('/quotation/') && currentRoute.path.endsWith('/edit')) return 'แก้ไขใบเสนอราคา'
   if (currentRoute.path.startsWith('/billing-notes/manual/') && currentRoute.path.endsWith('/edit')) return 'แก้ไขใบวางบิล'

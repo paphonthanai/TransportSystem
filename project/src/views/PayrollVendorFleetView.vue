@@ -15,21 +15,50 @@
 
     <div class="flex items-center gap-3 flex-wrap">
       <div class="flex gap-2">
-        <button @click="mode = 'summary'" :class="['tab-btn', mode === 'summary' && 'tab-btn-active']">สรุปทั้งหมด</button>
-        <button @click="mode = 'detail'" :class="['tab-btn', mode === 'detail' && 'tab-btn-active']">รายเที่ยว</button>
+        <button @click="viewMode = 'summary'" :class="['tab-btn', viewMode === 'summary' && 'tab-btn-active']">สรุปทั้งหมด</button>
+        <button @click="viewMode = 'detail'" :class="['tab-btn', viewMode === 'detail' && 'tab-btn-active']">รายเที่ยว</button>
+        <button @click="viewMode = 'vehicle'" :class="['tab-btn', viewMode === 'vehicle' && 'tab-btn-active']">เลือกรถ</button>
       </div>
       <input v-model="period" type="month" class="input-field" />
-      <select v-if="mode === 'detail'" v-model="selectedDriver" class="input-field">
+      <select v-if="viewMode === 'detail'" v-model="selectedDriver" class="input-field">
         <option value="">ทุกคน</option>
         <option v-for="d in driverOptions" :key="d" :value="d">{{ d }}</option>
       </select>
-      <button @click="mode === 'summary' ? exportSummary() : exportDetail()" class="btn-secondary ml-auto">
+      <button v-if="viewMode !== 'vehicle'" @click="viewMode === 'summary' ? exportSummary() : exportDetail()" class="btn-secondary ml-auto">
         <span class="material-symbols-rounded text-base">download</span>
         นำออกเป็น Excel
       </button>
     </div>
 
-    <div v-if="mode === 'summary'" class="card-lg overflow-x-auto">
+    <div v-if="viewMode === 'vehicle'" class="card-lg overflow-x-auto">
+      <table class="min-w-[700px] w-full text-sm border-separate border-spacing-0">
+        <thead class="bg-surface-2 text-left text-xs text-muted">
+          <tr>
+            <th class="px-4 py-3 font-semibold">ทะเบียนรถ</th>
+            <th class="px-4 py-3 font-semibold">ประเภท</th>
+            <th class="px-4 py-3 font-semibold">ยี่ห้อ/รูปแบบตัวถัง</th>
+            <th class="px-4 py-3 font-semibold">คนขับประจำปัจจุบัน</th>
+            <th class="px-4 py-3 font-semibold"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="v in vendorFleetVehicles" :key="v.id" class="border-t border-border hover:bg-surface-2 transition-colors">
+            <td class="px-4 py-3 font-semibold text-text">{{ vehiclesStore.fullPlate(v) }}</td>
+            <td class="px-4 py-3 text-muted">{{ v.department }}</td>
+            <td class="px-4 py-3 text-muted">{{ v.brand }} {{ v.bodyType }}</td>
+            <td class="px-4 py-3 text-muted">{{ driverLabelFor(v) }}</td>
+            <td class="px-4 py-3 text-right">
+              <RouterLink :to="`/payroll/vendor-fleet/${v.id}`" class="btn-sm">รายละเอียด</RouterLink>
+            </td>
+          </tr>
+          <tr v-if="vendorFleetVehicles.length === 0">
+            <td colspan="5" class="px-4 py-8 text-center text-muted">ยังไม่มีรถร่วมในหมวดที่เลือก</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div v-else-if="viewMode === 'summary'" class="card-lg overflow-x-auto">
       <table class="min-w-[900px] w-full text-sm border-separate border-spacing-0">
         <thead class="bg-surface-2 text-left text-xs text-muted">
           <tr>
@@ -96,8 +125,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useDriverPayroll } from '@/composables/useDriverPayroll'
+import { useVehiclesStore } from '@/stores/vehicles'
+import { useDriversStore } from '@/stores/drivers'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
-import type { VehicleType } from '@/types'
+import type { Vehicle, VehicleType } from '@/types'
 
 const categoryOptions: { value: VehicleType | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'ทั้งหมด' },
@@ -116,9 +147,25 @@ const departmentFilter = computed(() => (department: VehicleType | undefined) =>
 const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, formatDate, formatBaht, exportSummary, exportDetail } =
   useDriverPayroll((department) => departmentFilter.value(department), 'พขร-รถร่วม')
 
+/** แท็บ "เลือกรถ" เป็นมุมมองเพิ่มเติมของหน้านี้ แยกจาก mode ของ useDriverPayroll (ซึ่งใช้ร่วมกับหน้าพนักงานขับรถด้วย
+ *  จึงไม่ควรมีค่า 'vehicle' ปนอยู่ในนั้น) — sync กลับไปที่ mode เฉพาะตอนสลับ summary/detail เท่านั้น */
+const viewMode = ref<'summary' | 'detail' | 'vehicle'>('summary')
+
+const vehiclesStore = useVehiclesStore()
+const driversStore = useDriversStore()
+
+const vendorFleetVehicles = computed(() => vehiclesStore.vehicles.filter((v) => departmentFilter.value(v.department)))
+
+const driverLabelFor = (v: Vehicle) => {
+  if (!v.driverCode) return 'ไม่มีคนขับประจำ'
+  const driver = driversStore.drivers.find((d) => d.code === v.driverCode)
+  return driver ? driversStore.fullName(driver) : v.driverCode
+}
+
 const selectDriverDetail = (driver: string) => {
   selectedDriver.value = driver
   mode.value = 'detail'
+  viewMode.value = 'detail'
 }
 </script>
 

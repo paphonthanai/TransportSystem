@@ -249,7 +249,15 @@
         </div>
         <div>
           <div class="text-muted text-xs">น้ำมันมาตรฐานรวม</div>
-          <div class="font-semibold text-text">{{ computedFuel }} ล.</div>
+          <div v-if="!hasUnconfiguredDistrict" class="font-semibold text-text">{{ computedFuel }} ล.</div>
+          <template v-else-if="fuelLiterLocked">
+            <div class="font-semibold text-text">-</div>
+            <div class="text-[10px] text-amber-600 mt-0.5">ยังไม่มีการกำหนดราคาน้ำมันสำหรับพื้นที่นี้ และไม่มีสิทธิ์กำหนดเอง</div>
+          </template>
+          <template v-else>
+            <input v-model.number="fuelLitersOverride" type="number" placeholder="0" class="input-field h-8 w-24 px-2 text-sm" />
+            <div class="text-[10px] text-amber-600 mt-0.5">ปลายทางนี้ยังไม่ได้ตั้งค่าน้ำมันไว้ล่วงหน้า กรอกเองได้ (เฉพาะงานนี้)</div>
+          </template>
         </div>
         <div>
           <div class="text-muted text-xs">ค่าเที่ยวรวม</div>
@@ -317,6 +325,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
+import { useAuthStore } from '@/stores/auth'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useDocumentPrefillStore } from '@/stores/documentPrefill'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
@@ -336,6 +345,7 @@ const vehiclesStore = useVehiclesStore()
 const inventoryStore = useInventoryStore()
 const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
+const authStore = useAuthStore()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentPrefillStore = useDocumentPrefillStore()
 const documentSettingsStore = useDocumentSettingsStore()
@@ -439,9 +449,19 @@ const hasIncompleteDestination = computed(() => lineItems.value.some((i) => !i.s
 /** รวมลิตรน้ำมันมาตรฐานของงานนี้ ตาม pricingMode (SINGLE_DESTINATION คิดจากรายการหลักเพียงครั้งเดียว, MULTI_DESTINATION รวมทุกรายการ) */
 const computedFuel = computed(() => fuelRateStore.standardFuelLiters(lineItems.value, header.value.pricingMode))
 
+/** ปลายทางใดในงานนี้ยังไม่มี Configuration ลิตรมาตรฐานตั้งไว้ล่วงหน้าบ้าง — ถ้ามี ต้องเป็นบัญชีที่มีสิทธิ์ผู้จัดการ
+ *  (canOverrideFuelRate) เท่านั้นที่กรอกค่าน้ำมันของงานนี้เองได้ (ตัวเดียวกับ Logic ที่ BookingEditView.vue ใช้อยู่แล้ว) */
+const hasUnconfiguredDistrict = computed(() => lineItems.value.some((li) => li.siteName && !fuelRateStore.findRate(li.province, li.district)))
+const fuelLiterLocked = computed(() => hasUnconfiguredDistrict.value && !authStore.currentUser?.canOverrideFuelRate)
+/** ค่าที่ผู้มีสิทธิ์กรอกเองเมื่อปลายทางยังไม่มี Configuration — ใช้เฉพาะ Booking นี้ ไม่เขียนกลับไปที่ Configuration กลาง (fuelRateStore) เลย */
+const fuelLitersOverride = ref<number | null>(null)
+/** ค่าน้ำมันจริงที่จะบันทึกลง Booking — ถ้าปลายทางมี Configuration ครบใช้ค่าตาม Configuration เสมอ (ผู้ใช้แก้ไม่ได้)
+ *  ถ้าไม่มี Configuration และผู้ใช้มีสิทธิ์ ใช้ค่าที่กรอกเอง (fuelLitersOverride) ถ้ายังไม่ได้กรอกถือเป็น 0 */
+const finalFuelLiters = computed(() => (hasUnconfiguredDistrict.value ? fuelLitersOverride.value ?? 0 : computedFuel.value))
+
 const headerCalculatedAllowance = computed(() => {
   const fee = header.value.pricingMode === 'MULTI_DESTINATION' ? multiTripFeeTotal.value : header.value.tripFee || 0
-  return Math.round(fee * 0.99 * 0.62 - computedFuel.value * fuelRateStore.settings.todayPricePerLiter)
+  return Math.round(fee * 0.99 * 0.62 - finalFuelLiters.value * fuelRateStore.settings.todayPricePerLiter)
 })
 
 /** รวมค่าเที่ยวจากทุกรายการ (tripFee * tripCount) — ใช้เฉพาะงาน MULTI_DESTINATION เป็น booking.tripFee โดยอัตโนมัติ */
@@ -637,7 +657,7 @@ const saveAllItems = () => {
     discountAmount: header.value.discountAmount || undefined,
     vatRate: header.value.vatRate || undefined,
     pricingMode: header.value.pricingMode,
-    fuelLiters: computedFuel.value,
+    fuelLiters: finalFuelLiters.value,
     fuelRate: fuelRateStore.settings.todayPricePerLiter,
     plate: header.value.plate || '',
     driverName: header.value.driverName || undefined,

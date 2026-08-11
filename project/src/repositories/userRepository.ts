@@ -10,6 +10,16 @@ import type { UserProfile } from '@/stores/users'
  */
 const COLLECTION = 'users'
 
+/** setDoc ปฏิเสธ field ที่เป็น undefined ตรงๆ (ต่างจาก Repository อื่นในระบบที่กรองออกก่อนเขียนกันหมดแล้ว) — ตัดทิ้งก่อนเขียนเสมอ */
+function stripUndefined<T extends Record<string, unknown>>(data: T): Partial<T> {
+  const out: Partial<T> = {}
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue
+    ;(out as Record<string, unknown>)[key] = value
+  }
+  return out
+}
+
 export const userRepository = {
   async getAll(): Promise<UserProfile[]> {
     const snapshot = await getDocs(collection(db, COLLECTION))
@@ -23,10 +33,10 @@ export const userRepository = {
   },
 
   async create(uid: string, data: Omit<UserProfile, 'id'>): Promise<void> {
-    await setDoc(doc(db, COLLECTION, uid), data)
+    await setDoc(doc(db, COLLECTION, uid), stripUndefined(data))
   },
 
   async update(uid: string, data: Partial<Omit<UserProfile, 'id'>>): Promise<void> {
-    await setDoc(doc(db, COLLECTION, uid), data, { merge: true })
+    await setDoc(doc(db, COLLECTION, uid), stripUndefined(data), { merge: true })
   },
 }

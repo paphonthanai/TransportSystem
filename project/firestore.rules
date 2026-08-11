@@ -107,6 +107,11 @@ service cloud.firestore {
       allow read, write: if hasRole(['ADMIN']);
     }
 
+    // เงินเดือนพนักงานเสมียน (payroll/staff) — เช่นเดียวกับ payrollDeductions จำกัดแค่ ADMIN อยู่แล้ว
+    match /staffSalaries/{salaryId} {
+      allow read, write: if hasRole(['ADMIN']);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

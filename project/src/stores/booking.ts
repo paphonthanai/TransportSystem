@@ -5,6 +5,7 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useInventoryStore } from '@/stores/inventory'
 import { useBillingRuleStore } from '@/stores/billingRule'
+import { useFuelRateStore } from '@/stores/fuelRates'
 import { bookingRepository } from '@/repositories/bookingRepository'
 import type { Booking, BookingCategory, BookingStatus, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
 
@@ -117,6 +118,22 @@ export const useBookingStore = defineStore('booking', () => {
   const onboardingStore = useOnboardingStore()
   const inventoryStore = useInventoryStore()
   const billingRuleStore = useBillingRuleStore()
+  const fuelRateStore = useFuelRateStore()
+
+  /**
+   * ป้องกันในชั้น Business Logic (ไม่ใช่แค่ UI) — ถ้าปลายทางของงานนี้มี Configuration ลิตรมาตรฐานครบทุกจุด ค่าที่บันทึกได้
+   * ต้องเป็นค่าตาม Configuration เท่านั้น (เพิกเฉยค่าที่ส่งมาจาก client แม้พยายามส่งค่าอื่นมาก็ตาม) ถ้ามีปลายทางที่ยังไม่มี
+   * Configuration ตั้งไว้ อนุญาตให้ใช้ค่าที่ส่งมาได้เฉพาะบัญชีที่มีสิทธิ์ canOverrideFuelRate เท่านั้น บัญชีอื่นถูกบังคับกลับ
+   * เป็นค่ามาตรฐานที่คำนวณได้ (0 ถ้าไม่มี Configuration เลยสักปลายทาง) เสมอ — Override เป็นค่าเฉพาะ Booking นี้ ไม่มีจุดใดเขียน
+   * กลับไปที่ fuelRateStore (Configuration กลาง) เลย
+   */
+  function resolveFuelLiters(requested: number | undefined, items: JobItem[], pricingMode: PricingMode | undefined): number {
+    const standard = fuelRateStore.standardFuelLiters(items, pricingMode)
+    const hasUnconfiguredDistrict = items.some((li) => li.siteName && !fuelRateStore.findRate(li.province, li.district))
+    if (!hasUnconfiguredDistrict) return standard
+    if (authStore.currentUser?.canOverrideFuelRate) return requested ?? standard
+    return standard
+  }
 
   const bookings = ref<Booking[]>([])
   const bookingsLoading = ref(false)
@@ -252,6 +269,7 @@ export const useBookingStore = defineStore('booking', () => {
     const { createdAt, ...rest } = data
     const booking: Booking = {
       ...rest,
+      fuelLiters: resolveFuelLiters(rest.fuelLiters, rest.items, rest.pricingMode),
       id: bookingRepository.newId(),
       status: 'WAITING_DISPATCH',
       createdAt: createdAt || new Date(),
@@ -330,9 +348,9 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.tripFee !== undefined) booking.tripFee = data.tripFee
     if (data.agreedPrice !== undefined) booking.agreedPrice = data.agreedPrice
     if (data.allowance !== undefined) booking.allowance = data.allowance
-    if (data.fuelLiters !== undefined) booking.fuelLiters = data.fuelLiters
-    if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
     if (data.pricingMode !== undefined) booking.pricingMode = data.pricingMode
+    if (data.fuelLiters !== undefined) booking.fuelLiters = resolveFuelLiters(data.fuelLiters, booking.items, booking.pricingMode)
+    if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
     addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`, { bookingId: booking.id })
   }
 

@@ -46,7 +46,10 @@
               </span>
             </td>
             <td class="px-4 py-3 text-right">
-              <button @click="openDialog(driver)" class="btn-sm">แก้ไข</button>
+              <div class="flex items-center justify-end gap-1.5">
+                <RouterLink v-if="driver.id" :to="`/settings/drivers/${driver.id}`" class="btn-sm">รายละเอียด</RouterLink>
+                <button @click="openDialog(driver)" class="btn-sm">แก้ไข</button>
+              </div>
             </td>
           </tr>
         </tbody>
