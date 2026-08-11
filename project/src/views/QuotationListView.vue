@@ -62,7 +62,7 @@
                 <div class="font-semibold text-text">{{ doc.customer }}</div>
                 <div v-if="doc.project" class="text-xs text-muted">{{ doc.project }}</div>
               </td>
-              <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(doc.amount) }}</td>
+              <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(doc.amount + (doc.vatAmount || 0)) }}</td>
               <td class="px-3 py-3">
                 <select
                   :value="doc.status"
@@ -204,7 +204,7 @@ const page = ref(1)
 const perPage = ref(20)
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredDocs.value.length / perPage.value)))
 const pagedDocs = computed(() => filteredDocs.value.slice((page.value - 1) * perPage.value, page.value * perPage.value))
-const totalAmount = computed(() => filteredDocs.value.reduce((sum, d) => sum + d.amount, 0))
+const totalAmount = computed(() => filteredDocs.value.reduce((sum, d) => sum + d.amount + (d.vatAmount || 0), 0))
 
 const selectedIds = ref<Set<string>>(new Set())
 const allSelected = computed(() => pagedDocs.value.length > 0 && pagedDocs.value.every((d) => selectedIds.value.has(d.id)))

@@ -4,6 +4,8 @@ import { useDocumentSettingsStore, type PriceDisplay } from './documentSettings'
 import { useBookingStore } from './booking'
 import { salesDocumentRepository } from '@/repositories/salesDocumentRepository'
 import { salesDocumentItemRepository } from '@/repositories/salesDocumentItemRepository'
+import { computeRowAmount, computeRowDiscountBaht, computeRowVat } from '@/utils/documentTotals'
+import type { Booking } from '@/types'
 
 export type SalesDocumentType = 'QUOTATION' | 'SALES_ORDER' | 'BILLING' | 'TAX_INVOICE' | 'RECEIPT' | 'CASH_SALE' | 'PURCHASE_ORDER'
 // Future: 'CREDIT_NOTE' | 'DEBIT_NOTE' (Round 3) — leave the union open via this comment, don't build now.
@@ -1037,6 +1039,20 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    * ต้องเป็นลูกค้าเดียวกันทุกงาน และยังไม่เคยถูกวางบิลมาก่อน (billingStatus ยังเป็น UNBILLED) มิฉะนั้นคืนค่า null
    * รายการต่อบรรทัด = 1 งานต่อ 1 บรรทัด เหมือน docRows ของ InvoiceDocumentView.vue ฝั่งเอกสารเดิม
    */
+  /** แถวคำนวณเงินของ 1 booking ป้อนเข้า computeRowDiscountBaht/computeRowAmount/computeRowVat (documentTotals.ts) ตัวเดียวกับที่
+   *  BookingCreateView.vue/JobDocumentView.vue ใช้กับงานนี้เอง — ยอดก่อนส่วนลด = ค่าเที่ยว + extraCharges รวม (ยอดที่เรียกเก็บลูกค้าจริง),
+   *  ส่วนลด/VAT ใช้ discountMode/discountPercent/discountAmount/vatRate ของ booking นี้ตรงๆ ไม่คำนวณเปอร์เซ็นต์ใหม่เอง */
+  function bookingBillingRow(b: Booking) {
+    return {
+      qty: 1,
+      unitPrice: (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0),
+      discountMode: b.discountMode,
+      discountPercent: b.discountPercent,
+      discountAmount: b.discountAmount,
+      vatRate: b.vatRate,
+    }
+  }
+
   function createBillingFromBookings(bookingIds: string[], overrides?: { customer?: string; reference?: string }): SalesDocument | null {
     if (bookingIds.length === 0) return null
     const bookingStore = useBookingStore()
@@ -1051,13 +1067,16 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const seq = bookingStore.batches.length + documents.value.filter((d) => d.type === 'BILLING').length + 1
     const customer = overrides?.customer?.trim() || targetBookings[0].customer
     const reference = overrides?.reference ?? targetBookings.map((b) => b.docNo).join(', ')
-    const bookingTotal = (b: (typeof targetBookings)[number]) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)
     const destinationLabel = (b: (typeof targetBookings)[number]) => {
       if (!b.items.length) return '-'
       const first = b.items[0].siteName
       return b.items.length > 1 ? `${first} +${b.items.length - 1} ที่อื่น` : first
     }
-    const amount = targetBookings.reduce((sum, b) => sum + bookingTotal(b), 0)
+    const discountTotal = Math.round(targetBookings.reduce((sum, b) => sum + computeRowDiscountBaht(bookingBillingRow(b)), 0))
+    const amount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowAmount(bookingBillingRow(b)), 0))
+    const vatAmount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowVat(bookingBillingRow(b)), 0))
+    const vatRates = new Set(targetBookings.map((b) => b.vatRate || 0))
+    const vatRate = vatRates.size === 1 ? targetBookings[0].vatRate : undefined
     const now = new Date()
     const billing: SalesDocument = {
       id: genId('sdoc'),
@@ -1067,6 +1086,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       status: 'BILLING_PENDING',
       date: now,
       amount,
+      discountTotal,
+      vatRate,
+      vatAmount,
       bookingIds: targetBookings.map((b) => b.id),
       label: `รายการวางบิล ${customer}`,
       dateFrom: now,
@@ -1077,13 +1099,20 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     documents.value.unshift(billing)
     addItemsToDocument(
       billing.id,
-      targetBookings.map((b) => ({
-        description: `${b.docNo} · ${destinationLabel(b)}`,
-        qty: 1,
-        unit: 'เที่ยว',
-        unitPrice: bookingTotal(b),
-        amount: bookingTotal(b),
-      }))
+      targetBookings.map((b) => {
+        const row = bookingBillingRow(b)
+        return {
+          description: `${b.docNo} · ${destinationLabel(b)}`,
+          qty: 1,
+          unit: 'เที่ยว',
+          unitPrice: row.unitPrice,
+          amount: computeRowAmount(row),
+          discountMode: row.discountMode,
+          discountPercent: row.discountPercent,
+          discountAmount: row.discountAmount,
+          vatRate: row.vatRate,
+        }
+      })
     )
     targetBookings.forEach((b) => {
       b.billingStatus = 'IN_BATCH'
@@ -1106,8 +1135,14 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const dueDate = new Date(issueDate)
     dueDate.setDate(dueDate.getDate() + creditDays)
     const salesCalcMode = documentSettingsStore.settings.calcMode.sales
-    const vatRate = salesCalcMode.vat === 'included' ? 0 : documentSettingsStore.settings.vatRate
-    const vatAmount = Math.round((amount * vatRate) / 100)
+    /** ใบวางบิลที่สร้างจากงานขนส่ง (createBillingFromBookings) มี vatAmount/discountTotal ที่คำนวณจาก booking ต้นทางไว้แล้ว —
+     *  ต้อง sync ตรงๆ ไม่คำนวณ VAT% ของระบบซ้ำอีกชั้น (จะได้ค่าคลาดเคลื่อนถ้า booking ตั้ง vatRate ต่างจากค่า default)
+     *  ใบวางบิลกรอกเอง/จากใบเสนอราคา (createBillingManual) ไม่มี vatAmount เก็บไว้ ยังคงคำนวณจากอัตราของระบบเหมือนเดิม
+     *  ถ้าผู้ใช้แก้ไขรายการเองตอนแปลง (overrides.items) ถือว่าตัวเลขต้นทางใช้ไม่ได้แล้ว คำนวณใหม่จากอัตราของระบบเช่นกัน */
+    const syncFromBilling = doc.vatAmount !== undefined && !overrides?.items
+    const vatRate = syncFromBilling ? doc.vatRate ?? 0 : salesCalcMode.vat === 'included' ? 0 : documentSettingsStore.settings.vatRate
+    const vatAmount = syncFromBilling ? doc.vatAmount! : Math.round((amount * vatRate) / 100)
+    const discountTotal = syncFromBilling ? doc.discountTotal : undefined
     const whtRate = salesCalcMode.wht === 'included' ? 0 : documentSettingsStore.settings.whtRate
     const whtAmount = Math.round((amount * whtRate) / 100)
     const invoice: SalesDocument = {
@@ -1118,6 +1153,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       status: 'DRAFT',
       date: issueDate,
       amount,
+      discountTotal,
       bookingIds: doc.bookingIds,
       parentDocumentId: doc.id,
       creditDays,
@@ -1142,6 +1178,214 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
     bookingStore.addLog('สร้างเอกสาร ' + invoice.number, { docId: invoice.id })
     return invoice
+  }
+
+  /**
+   * Migration/Backfill: ซ่อมใบวางบิลเดิมที่สร้างจากงานขนส่ง (bookingIds ไม่ว่าง) ก่อนที่ createBillingFromBookings จะเริ่มคำนวณ
+   * ส่วนลด/VAT จาก booking ต้นทาง (ของเดิมมี amount แบบไม่หักส่วนลด/ไม่มี vatAmount เลย) — Trace กลับไปยัง Booking ต้นทางด้วย
+   * bookingIds ที่มีอยู่แล้ว ใช้ Booking เป็น source of truth คำนวณด้วย logic เดียวกับ createBillingFromBookings เป๊ะ
+   * (bookingBillingRow + computeRowDiscountBaht/computeRowAmount/computeRowVat) แล้วอัปเดตเฉพาะ amount/discountTotal/vatAmount/vatRate
+   * ของเอกสารเดิม (คง id/number/bookingIds/sourceDocumentIds/parentDocumentId/convertedToDocumentIds ไว้ทั้งหมด ไม่สร้างเอกสารใหม่)
+   * ใบวางบิลที่มี Tax Invoice/Receipt อ้างอิงต่อแล้ว จะไม่ถูกแก้ตามไปด้วย (เสี่ยงเกินไปถ้าเอกสารนั้นส่งลูกค้า/เก็บเงินไปแล้ว) —
+   * แค่ตรวจสอบแล้วรายงานเป็น downstreamMismatches ให้ผู้ใช้ตัดสินใจเอง
+   */
+  interface BillingVatBackfillTotals {
+    amount: number
+    discountTotal?: number
+    vatAmount?: number
+    vatRate?: number
+  }
+  interface BillingVatBackfillChange {
+    billingId: string
+    billingNumber: string
+    customer: string
+    before: BillingVatBackfillTotals
+    after: BillingVatBackfillTotals
+  }
+  interface BillingVatBackfillDownstreamMismatch {
+    /** เลขที่เอกสารต้นทาง (ใบวางบิลที่เพิ่งซิงก์ยอดใหม่) */
+    billingId: string
+    billingNumber: string
+    /** เลขที่เอกสารปลายทางที่ยอดไม่ตรงกับใบวางบิลต้นทางหลังซิงก์ — ไม่ถูกแก้ไขให้อัตโนมัติ */
+    downstreamType: 'TAX_INVOICE' | 'RECEIPT'
+    downstreamId: string
+    downstreamNumber: string
+    /** ยอดที่ควรจะเป็นตามใบวางบิลต้นทางหลังซิงก์ (grandTotal = amount + vatAmount) */
+    expected: BillingVatBackfillTotals & { grandTotal: number }
+    /** ยอดที่เก็บอยู่จริงในเอกสารปลายทาง ณ ตอนนี้ (ไม่ถูกแตะต้อง) */
+    stored: BillingVatBackfillTotals & { grandTotal: number }
+    /** รายชื่อ field ที่ค่าไม่ตรงกันระหว่าง expected/stored เช่น ['vatRate', 'vatAmount', 'grandTotal'] */
+    mismatchedFields: string[]
+  }
+  interface BillingVatBackfillReport {
+    /** true ถ้าเรียกใช้ตอนที่ store ของ Booking ยังโหลดจาก Firestore ไม่เสร็จ (เพิ่งเข้าเว็บมาสดๆ) — ตอนนี้ยังไม่ได้ตรวจ/แก้อะไรเลย
+     *  ต้องลองกดใหม่อีกครั้งหลังหน้าโหลดข้อมูลเสร็จ ไม่งั้นจะเข้าใจผิดว่า Booking ต้นทางหาไม่เจอ (untraceable) ทั้งที่จริงๆ แค่ยังโหลดไม่เสร็จ */
+    notReady: boolean
+    totalCandidates: number
+    updated: number
+    unchanged: number
+    untraceable: Array<{ billingId: string; billingNumber: string; reason: string }>
+    changes: BillingVatBackfillChange[]
+    downstreamMismatches: BillingVatBackfillDownstreamMismatch[]
+  }
+
+  /** เทียบยอด "ที่ควรจะเป็น" (expected, จากใบวางบิลต้นทางหลังซิงก์) กับ "ที่เก็บอยู่จริง" (stored, ในเอกสารปลายทาง)
+   *  ทีละ field คืน field ที่ไม่ตรงกันทั้งหมด (รวม grandTotal ที่คำนวณจาก amount+vatAmount) — ไม่คืนอะไรถ้ายอดตรงกันหมด */
+  function diffBillingVatBackfillTotals(
+    expected: BillingVatBackfillTotals,
+    stored: BillingVatBackfillTotals
+  ): { mismatchedFields: string[]; expected: BillingVatBackfillTotals & { grandTotal: number }; stored: BillingVatBackfillTotals & { grandTotal: number } } {
+    const expectedGrandTotal = expected.amount + (expected.vatAmount || 0)
+    const storedGrandTotal = stored.amount + (stored.vatAmount || 0)
+    const mismatchedFields: string[] = []
+    if (stored.amount !== expected.amount) mismatchedFields.push('amount')
+    if ((stored.discountTotal || 0) !== (expected.discountTotal || 0)) mismatchedFields.push('discountTotal')
+    if ((stored.vatAmount || 0) !== (expected.vatAmount || 0)) mismatchedFields.push('vatAmount')
+    if ((stored.vatRate || 0) !== (expected.vatRate || 0)) mismatchedFields.push('vatRate')
+    if (storedGrandTotal !== expectedGrandTotal) mismatchedFields.push('grandTotal')
+    return {
+      mismatchedFields,
+      expected: { ...expected, grandTotal: expectedGrandTotal },
+      stored: { ...stored, grandTotal: storedGrandTotal },
+    }
+  }
+
+  function recalcBillingTotalsFromBookings(targetBookings: Booking[]): BillingVatBackfillTotals {
+    const discountTotal = Math.round(targetBookings.reduce((sum, b) => sum + computeRowDiscountBaht(bookingBillingRow(b)), 0))
+    const amount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowAmount(bookingBillingRow(b)), 0))
+    const vatAmount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowVat(bookingBillingRow(b)), 0))
+    const vatRates = new Set(targetBookings.map((b) => b.vatRate || 0))
+    const vatRate = vatRates.size === 1 ? targetBookings[0].vatRate : undefined
+    return { amount, discountTotal, vatAmount, vatRate }
+  }
+
+  function backfillBillingVatFromBookings(): BillingVatBackfillReport {
+    const bookingStore = useBookingStore()
+    const candidates = documents.value.filter((d) => d.type === 'BILLING' && d.bookingIds.length > 0)
+    const report: BillingVatBackfillReport = {
+      notReady: false,
+      totalCandidates: candidates.length,
+      updated: 0,
+      unchanged: 0,
+      untraceable: [],
+      changes: [],
+      downstreamMismatches: [],
+    }
+    /** bookingStore โหลดจาก Firestore แบบ async แยกอิสระจาก salesDocumentsStore — ถ้าเพิ่งเข้าหน้านี้มาสดๆ (hard reload)
+     *  แล้วกดปุ่มนี้ทันที bookings อาจยังว่างเปล่าอยู่ ทำให้ทุกใบดูเหมือน "trace ไม่ได้" ทั้งที่จริงๆ มี booking อยู่ครบ
+     *  กันเข้าใจผิด: ถ้ามีใบวางบิลที่ผูก booking อยู่ (candidates > 0) แต่ bookingStore ว่างเปล่าสนิท ให้ถือว่ายังไม่พร้อม ไม่ตรวจ/ไม่แก้อะไรเลย */
+    if (candidates.length > 0 && bookingStore.bookings.length === 0) {
+      report.notReady = true
+      return report
+    }
+    const changedBillingIds = new Set<string>()
+
+    candidates.forEach((billing) => {
+      const targetBookings = billing.bookingIds
+        .map((id) => bookingStore.bookings.find((b) => b.id === id))
+        .filter((b): b is Booking => !!b)
+      if (targetBookings.length !== billing.bookingIds.length) {
+        report.untraceable.push({ billingId: billing.id, billingNumber: billing.number, reason: 'หา Booking ต้นทางไม่ครบ (บางงานถูกลบไปแล้ว)' })
+        return
+      }
+      const billingItems = itemsForDocument(billing.id)
+      if (billingItems.length !== targetBookings.length) {
+        report.untraceable.push({
+          billingId: billing.id,
+          billingNumber: billing.number,
+          reason: 'จำนวนรายการในเอกสารไม่ตรงกับจำนวนงานขนส่ง ข้ามไปเพื่อความปลอดภัย (ไม่แก้ไข)',
+        })
+        return
+      }
+
+      const before: BillingVatBackfillTotals = {
+        amount: billing.amount,
+        discountTotal: billing.discountTotal,
+        vatAmount: billing.vatAmount,
+        vatRate: billing.vatRate,
+      }
+      const after = recalcBillingTotalsFromBookings(targetBookings)
+      const changed =
+        before.amount !== after.amount ||
+        (before.discountTotal || 0) !== (after.discountTotal || 0) ||
+        before.vatAmount !== after.vatAmount ||
+        before.vatRate !== after.vatRate
+
+      if (!changed) {
+        report.unchanged++
+        return
+      }
+
+      billing.amount = after.amount
+      billing.discountTotal = after.discountTotal
+      billing.vatAmount = after.vatAmount
+      billing.vatRate = after.vatRate
+      targetBookings.forEach((b, idx) => {
+        const row = bookingBillingRow(b)
+        const item = billingItems[idx]
+        item.amount = computeRowAmount(row)
+        item.discountMode = row.discountMode
+        item.discountPercent = row.discountPercent
+        item.discountAmount = row.discountAmount
+        item.vatRate = row.vatRate
+      })
+      changedBillingIds.add(billing.id)
+      report.updated++
+      report.changes.push({ billingId: billing.id, billingNumber: billing.number, customer: billing.customer, before, after })
+    })
+
+    /** ตรวจสอบเอกสารปลายทาง (Tax Invoice/Receipt) ที่อ้างอิงใบวางบิลที่เพิ่งแก้ไป — อ่านอย่างเดียว ไม่มีการ assign ค่าใดๆ
+     *  ลงในเอกสารปลายทางเลยในบล็อกนี้ (เทียบเลขแล้วแค่ push เข้า report) แค่รายงานให้ผู้ใช้ตัดสินใจเอง */
+    changedBillingIds.forEach((billingId) => {
+      const billing = documents.value.find((d) => d.id === billingId)!
+      const expected: BillingVatBackfillTotals = { amount: billing.amount, discountTotal: billing.discountTotal, vatAmount: billing.vatAmount, vatRate: billing.vatRate }
+      const invoiceChild = documents.value.find((d) => d.type === 'TAX_INVOICE' && d.parentDocumentId === billingId)
+      if (invoiceChild) {
+        const stored: BillingVatBackfillTotals = {
+          amount: invoiceChild.amount,
+          discountTotal: invoiceChild.discountTotal,
+          vatAmount: invoiceChild.vatAmount,
+          vatRate: invoiceChild.vatRate,
+        }
+        const diff = diffBillingVatBackfillTotals(expected, stored)
+        if (diff.mismatchedFields.length > 0) {
+          report.downstreamMismatches.push({
+            billingId,
+            billingNumber: billing.number,
+            downstreamType: 'TAX_INVOICE',
+            downstreamId: invoiceChild.id,
+            downstreamNumber: invoiceChild.number,
+            expected: diff.expected,
+            stored: diff.stored,
+            mismatchedFields: diff.mismatchedFields,
+          })
+        }
+      }
+    })
+    documents.value
+      .filter((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).some((sid) => changedBillingIds.has(sid)))
+      .forEach((receipt) => {
+        const sourceDocs = documents.value.filter((d) => (receipt.sourceDocumentIds || []).includes(d.id))
+        const expectedTotals = buildReceiptTotalsFromSourceDocs(sourceDocs)
+        const expected: BillingVatBackfillTotals = { amount: expectedTotals.amount, discountTotal: expectedTotals.discountTotal, vatAmount: expectedTotals.vatAmount, vatRate: expectedTotals.vatRate }
+        const stored: BillingVatBackfillTotals = { amount: receipt.amount, discountTotal: receipt.discountTotal, vatAmount: receipt.vatAmount, vatRate: receipt.vatRate }
+        const diff = diffBillingVatBackfillTotals(expected, stored)
+        if (diff.mismatchedFields.length > 0) {
+          const sourceBilling = sourceDocs.find((d) => changedBillingIds.has(d.id))!
+          report.downstreamMismatches.push({
+            billingId: sourceBilling.id,
+            billingNumber: sourceBilling.number,
+            downstreamType: 'RECEIPT',
+            downstreamId: receipt.id,
+            downstreamNumber: receipt.number,
+            expected: diff.expected,
+            stored: diff.stored,
+            mismatchedFields: diff.mismatchedFields,
+          })
+        }
+      })
+
+    return report
   }
 
   /** ยกเลิกใบวางบิลที่ยังไม่ออกใบแจ้งหนี้ — คืนสถานะการเงินของงานขนส่งที่ผูกอยู่กลับเป็น UNBILLED แล้วลบเอกสารทิ้ง */
@@ -1252,6 +1496,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const discountTotal = targetDocs.reduce((sum, d) => sum + (d.discountTotal || 0), 0)
     const vatAmount = targetDocs.reduce((sum, d) => sum + (d.vatAmount || 0), 0)
     const whtAmount = targetDocs.reduce((sum, d) => sum + (d.whtAmount || 0), 0)
+    /** vatRate เก็บไว้แค่ใช้แสดงผล (เช่น "ภาษีมูลค่าเพิ่ม 7%") — ถ้าเอกสารต้นทางทุกใบใช้อัตราเดียวกันก็ใช้อัตรานั้น ถ้าผสมหลายอัตรา (รวมหลายใบ) ไม่มีอัตราเดียวที่ถูกต้อง ปล่อยว่างไว้ */
+    const vatRates = new Set(targetDocs.map((d) => d.vatRate || 0))
+    const vatRate = vatRates.size === 1 ? targetDocs[0].vatRate : undefined
     const bookingIds = [...new Set(targetDocs.flatMap((d) => d.bookingIds))]
     const warnings: string[] = []
     targetDocs.forEach((d) => {
@@ -1259,7 +1506,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       if (d.dueDate === undefined) warnings.push(`${label} ${d.number} ไม่มีวันครบกำหนด`)
       if (d.vatAmount === undefined && d.whtAmount === undefined) warnings.push(`${label} ${d.number} ไม่มีข้อมูลภาษี/หัก ณ ที่จ่าย — ตรวจสอบยอดก่อนเก็บเงินจริง`)
     })
-    return { amount, discountTotal, vatAmount, whtAmount, bookingIds, warnings }
+    return { amount, discountTotal, vatRate, vatAmount, whtAmount, bookingIds, warnings }
   }
 
   function receiptItemRowsFromSourceDocs(targetDocs: SalesDocument[]): Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>> {
@@ -1303,7 +1550,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const seq = documents.value.filter((d) => d.type === 'RECEIPT').length + 1
     const customer = overrides?.customer?.trim() || targetDocs[0].customer
     const reference = overrides?.reference ?? targetDocs.map((d) => d.number).join(', ')
-    const { amount, discountTotal, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
+    const { amount, discountTotal, vatRate, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
     const now = new Date()
     const receipt: SalesDocument = {
       id: genId('sdoc'),
@@ -1317,6 +1564,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       sourceDocumentIds: targetDocs.map((d) => d.id),
       reference,
       discountTotal,
+      vatRate,
       vatAmount,
       whtAmount,
       createdAt: now,
@@ -1363,13 +1611,14 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
     const customer = overrides?.customer?.trim() || targetDocs[0].customer
     const reference = overrides?.reference ?? targetDocs.map((d) => d.number).join(', ')
-    const { amount, discountTotal, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
+    const { amount, discountTotal, vatRate, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
     doc.customer = customer
     doc.reference = reference
     doc.amount = amount
     doc.bookingIds = bookingIds
     doc.sourceDocumentIds = targetDocs.map((d) => d.id)
     doc.discountTotal = discountTotal
+    doc.vatRate = vatRate
     doc.vatAmount = vatAmount
     doc.whtAmount = whtAmount
     items.value = items.value.filter((i) => i.documentId !== id)
@@ -1486,6 +1735,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     backfillMissingSalesOrders,
     deleteSalesOrder,
     createBillingFromBookings,
+    backfillBillingVatFromBookings,
     createBillingManual,
     updateBillingManual,
     createInvoiceFromBilling,

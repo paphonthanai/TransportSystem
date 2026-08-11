@@ -447,6 +447,11 @@ const exemptAmount = computed(() => rows.value.filter((r) => !r.vatRate).reduce(
 const taxableAmount = computed(() => rows.value.filter((r) => r.vatRate > 0).reduce((sum, r) => sum + rowAmount(r), 0))
 const vatTotal = computed(() => rows.value.reduce((sum, r) => sum + rowVat(r), 0))
 const grandTotal = computed(() => afterDiscount.value + vatTotal.value)
+/** อัตรา VAT ระดับเอกสาร (ใช้แค่แสดงผล) — ถ้าทุกแถวใช้อัตราเดียวกันก็ใช้อัตรานั้นตรงๆ ถ้าผสมหลายอัตรา fallback ไปอัตรา default ของระบบ */
+const documentVatRate = computed(() => {
+  const rates = new Set(rows.value.filter((r) => r.vatRate > 0).map((r) => r.vatRate))
+  return rates.size === 1 ? [...rates][0] : documentSettingsStore.settings.vatRate
+})
 const whtComputed = computed(() => rows.value.reduce((sum, r) => sum + rowWht(r), 0))
 const whtOverride = ref<number | null>(null)
 const whtOverrideEditing = ref(false)
@@ -553,7 +558,7 @@ const saveAndGetDoc = () => {
     attachmentImage: attachmentPreview.value || undefined,
     useESignature: useESignature.value,
     discountTotal: discountTotal.value,
-    vatRate: documentSettingsStore.settings.vatRate,
+    vatRate: documentVatRate.value,
     vatAmount: vatTotal.value,
     whtAmount: whtTotal.value,
   }

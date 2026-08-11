@@ -68,7 +68,7 @@
                 </RouterLink>
                 <span v-else>-</span>
               </td>
-              <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(row.doc.amount) }}</td>
+              <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(row.doc.amount + (row.doc.vatAmount || 0)) }}</td>
               <td class="px-3 py-3">
                 <select
                   v-if="row.booking"
@@ -186,7 +186,7 @@ const page = ref(1)
 const perPage = ref(20)
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / perPage.value)))
 const pagedRows = computed(() => filteredRows.value.slice((page.value - 1) * perPage.value, page.value * perPage.value))
-const totalAmount = computed(() => filteredRows.value.reduce((sum, r) => sum + r.doc.amount, 0))
+const totalAmount = computed(() => filteredRows.value.reduce((sum, r) => sum + r.doc.amount + (r.doc.vatAmount || 0), 0))
 
 const sourceQuotationNumber = (doc: SalesDocument) => salesDocumentsStore.documents.find((d) => d.id === doc.parentDocumentId)?.number || '-'
 

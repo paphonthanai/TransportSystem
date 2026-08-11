@@ -2,7 +2,16 @@
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xs text-muted">ใบวางบิล &gt; {{ statusFilterLabel }}</div>
-      <div class="relative">
+      <div class="flex items-center gap-2">
+        <button
+          @click="runVatBackfill"
+          class="btn-secondary"
+          title="คำนวณยอดก่อนส่วนลด/ส่วนลด/VAT ของใบวางบิลที่สร้างจากงานขนส่งใหม่ตามข้อมูลของงานขนส่งต้นทาง (เผื่อกรณีสร้างไว้ก่อนระบบรองรับ VAT ต่องาน)"
+        >
+          <span class="material-symbols-rounded text-base">sync</span>
+          ซิงก์ยอด VAT/ส่วนลดจากงานขนส่ง
+        </button>
+        <div class="relative">
         <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
           <span class="material-symbols-rounded text-base">add</span>
           สร้างใหม่
@@ -17,6 +26,7 @@
             <span class="material-symbols-rounded text-base">library_add</span>
             ใบวางบิลรวม
           </button>
+        </div>
         </div>
       </div>
     </div>
@@ -58,7 +68,7 @@
               </td>
               <td class="px-3 py-3 font-semibold text-text">{{ doc.customer }}</td>
               <td class="px-3 py-3 text-right text-muted">{{ doc.bookingIds.length || '-' }}</td>
-              <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(doc.amount) }}</td>
+              <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(doc.amount + (doc.vatAmount || 0)) }}</td>
               <td class="px-3 py-3">
                 <select
                   :value="doc.status"
@@ -146,7 +156,49 @@ const page = ref(1)
 const perPage = ref(20)
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredDocs.value.length / perPage.value)))
 const pagedDocs = computed(() => filteredDocs.value.slice((page.value - 1) * perPage.value, page.value * perPage.value))
-const totalAmount = computed(() => filteredDocs.value.reduce((sum, d) => sum + d.amount, 0))
+const totalAmount = computed(() => filteredDocs.value.reduce((sum, d) => sum + d.amount + (d.vatAmount || 0), 0))
+
+/** ปุ่ม "ซิงก์ยอด VAT/ส่วนลดจากงานขนส่ง" — Backfill ใบวางบิลเดิมที่สร้างจากงานขนส่งก่อนระบบรองรับ VAT/ส่วนลดต่องาน
+ *  ให้คำนวณจาก booking ต้นทางใหม่ (ดู salesDocumentsStore.backfillBillingVatFromBookings) แล้วสรุปผลให้ผู้ใช้เห็น
+ *  ไม่แก้ Tax Invoice/Receipt ที่อ้างอิงอยู่แล้วให้อัตโนมัติ — แค่แจ้งเตือนถ้ายอดไม่ตรงกันหลังซิงก์ */
+const vatBackfillFieldLabel: Record<string, string> = {
+  amount: 'ยอดหลังหักส่วนลด (amount)',
+  discountTotal: 'ส่วนลดรวม (discountTotal)',
+  vatAmount: 'ภาษีมูลค่าเพิ่ม (vatAmount)',
+  vatRate: 'อัตราภาษี (vatRate)',
+  grandTotal: 'ยอดรวมสุทธิ (grandTotal)',
+}
+
+const runVatBackfill = () => {
+  const report = salesDocumentsStore.backfillBillingVatFromBookings()
+  if (report.notReady) {
+    alert('ข้อมูลงานขนส่งยังโหลดไม่เสร็จ กรุณารอสักครู่แล้วลองกดใหม่อีกครั้ง')
+    return
+  }
+  const lines = [
+    `ตรวจสอบใบวางบิลที่มาจากงานขนส่ง ${report.totalCandidates} ใบ`,
+    `แก้ไขยอดแล้ว ${report.updated} ใบ, ไม่ต้องแก้ ${report.unchanged} ใบ`,
+  ]
+  if (report.untraceable.length) lines.push(`Trace กลับ Booking ไม่ได้ ${report.untraceable.length} ใบ (ข้ามไป ไม่แตะต้อง): ${report.untraceable.map((u) => u.billingNumber).join(', ')}`)
+  if (report.downstreamMismatches.length) {
+    lines.push(
+      `\nพบเอกสารปลายทางที่ยอดไม่ตรงกับใบวางบิลต้นทางหลังซิงก์ ${report.downstreamMismatches.length} รายการ — ไม่ได้แก้ไขให้อัตโนมัติ (Reference/ความสัมพันธ์เดิมยังคงอยู่ครบ) ต้องตรวจสอบและตัดสินใจเอง:`
+    )
+    report.downstreamMismatches.forEach((m) => {
+      const destLabel = m.downstreamType === 'TAX_INVOICE' ? 'ใบแจ้งหนี้/ใบกำกับภาษี' : 'ใบเสร็จรับเงิน'
+      const fieldsLabel = m.mismatchedFields.map((f) => vatBackfillFieldLabel[f] || f).join(', ')
+      lines.push(`- ต้นทาง ${m.billingNumber} → ปลายทาง ${destLabel} ${m.downstreamNumber}`)
+      lines.push(`  field ที่ไม่ตรงกัน: ${fieldsLabel}`)
+      m.mismatchedFields.forEach((f) => {
+        const label = vatBackfillFieldLabel[f] || f
+        const expectedVal = f === 'vatRate' ? `${m.expected.vatRate ?? 0}%` : formatBaht((m.expected as Record<string, number>)[f] || 0)
+        const storedVal = f === 'vatRate' ? `${m.stored.vatRate ?? 0}%` : formatBaht((m.stored as Record<string, number>)[f] || 0)
+        lines.push(`    ${label}: เก็บไว้ ${storedVal} / คำนวณใหม่จากใบวางบิล ${expectedVal}`)
+      })
+    })
+  }
+  alert(lines.join('\n'))
+}
 
 const vClickOutside = {
   mounted(el: HTMLElement & { _clickOutside?: (e: MouseEvent) => void }, binding: { value: () => void }) {

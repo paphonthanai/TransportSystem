@@ -210,7 +210,7 @@
                   <span>{{ formatBaht(taxableAmount) }}</span>
                 </div>
                 <div class="flex justify-between">
-                  <span class="text-gray-600">ภาษีมูลค่าเพิ่ม {{ documentSettingsStore.settings.vatRate }}%</span>
+                  <span class="text-gray-600">ภาษีมูลค่าเพิ่ม {{ activeDoc?.vatRate ?? documentSettingsStore.settings.vatRate }}%</span>
                   <span>{{ formatBaht(vatAmount) }}</span>
                 </div>
               </template>
@@ -416,6 +416,7 @@ const activeDoc = computed(() => {
       dueDate: d.dueDate,
       reference: d.reference,
       amount: d.amount,
+      vatRate: d.vatRate,
       vatAmount: d.vatAmount,
       whtAmount: d.whtAmount,
       batchId: d.batchId,
@@ -433,6 +434,7 @@ const activeDoc = computed(() => {
       dueDate: d.dueDate,
       reference: d.reference,
       amount: d.amount,
+      vatRate: d.vatRate,
       vatAmount: d.vatAmount,
       whtAmount: d.whtAmount,
       batchId: d.batchId,
