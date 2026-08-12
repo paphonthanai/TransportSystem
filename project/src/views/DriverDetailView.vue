@@ -33,7 +33,7 @@
         </div>
       </div>
 
-      <div class="card-lg grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
+      <div class="card-lg grid grid-cols-2 sm:grid-cols-6 gap-4 text-sm">
         <div>
           <div class="text-xs text-muted">จำนวนเที่ยว (รอบนี้)</div>
           <div class="font-semibold text-text">{{ rows.length }}</div>
@@ -45,6 +45,10 @@
         <div>
           <div class="text-xs text-muted">รายได้รวม (เบี้ยเลี้ยง)</div>
           <div class="font-semibold text-text">{{ formatBaht(totalIncome) }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-muted">รายได้อื่นๆ</div>
+          <div class="font-semibold text-green-600">+{{ formatBaht(additionTotal) }}</div>
         </div>
         <div>
           <div class="text-xs text-muted">รายการหักรวม</div>
@@ -61,6 +65,11 @@
             <option value="PAID">จ่ายแล้ว</option>
           </select>
         </div>
+      </div>
+
+      <div class="card-lg flex items-center justify-between text-sm">
+        <span class="font-semibold text-text">รายได้สุทธิ (เบี้ยเลี้ยง + รายได้อื่นๆ − รายการหัก)</span>
+        <span class="text-lg font-bold text-primary">{{ formatBaht(totalIncome + additionTotal - deductionTotal) }}</span>
       </div>
 
       <div class="card-lg overflow-x-auto">
@@ -103,7 +112,8 @@
         </div>
       </div>
 
-      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" />
+      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" kind="ADDITION" />
+      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" kind="DEDUCTION" />
     </template>
   </div>
 </template>
@@ -172,6 +182,10 @@ const totalIncome = computed(() => rows.value.reduce((sum, r) => sum + r.income,
 const deductionTotal = computed(() => {
   if (!driver.value) return 0
   return deductionsStore.deductionsFor(driversStore.fullName(driver.value), periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
+})
+const additionTotal = computed(() => {
+  if (!driver.value) return 0
+  return deductionsStore.additionsFor(driversStore.fullName(driver.value), periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
 })
 
 /** สถานะจ่ายรายได้คนขับของรอบนี้ — คนละเรื่องกับสถานะงาน (bookingStatusLabel ด้านบนในตาราง) โดยเจตนา ไม่แตะกันเลย */

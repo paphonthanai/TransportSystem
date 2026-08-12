@@ -91,9 +91,10 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
       byDriver.set(driver, entry)
     })
     return Array.from(byDriver.entries()).map(([driver, data]) => {
+      const additionTotal = deductionsStore.additionsFor(driver, periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
       const deductionTotal = deductionsStore.deductionsFor(driver, periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
       const paymentStatus = paymentsStore.statusFor(driver, periodLabel.value)
-      return { driver, ...data, deductionTotal, finalNet: data.netIncome - deductionTotal, paymentStatus }
+      return { driver, ...data, additionTotal, deductionTotal, finalNet: data.netIncome + additionTotal - deductionTotal, paymentStatus }
     })
   })
 
@@ -126,6 +127,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
         เบี้ยเลี้ยงรวม: r.baseAllowance,
         'เพิ่ม/ลดหนี้สะสม': r.debtNet,
         รายได้สุทธิก่อนหัก: r.netIncome,
+        รายได้อื่นๆ: r.additionTotal,
         รายการหักรวม: r.deductionTotal,
         รายได้สุทธิ: r.finalNet,
       }))

@@ -230,21 +230,27 @@ export interface WHTCertificate {
   createdAt: Date
 }
 
-/** ประเภทรายการหัก — ผู้ใช้กรอกเองเป็นข้อความอิสระ (ไม่ใช่ enum ตายตัว) ไม่มี default/predefined category ในระบบ */
+/** ประเภทรายการหัก/รายได้อื่นๆ — ผู้ใช้กรอกเองเป็นข้อความอิสระ (ไม่ใช่ enum ตายตัว) ไม่มี default/predefined category ในระบบ */
 export type PayrollDeductionType = string
 
-/** รายการหักเงินเดือนคนขับต่อรอบ (เดือน) — จับคู่กับคนขับด้วยชื่อเต็ม เหมือนกับที่ Booking.driverName เก็บ snapshot ไว้ */
+/** ADDITION = รายได้อื่นๆ เพิ่มจากเบี้ยเลี้ยงปกติ (บวกเข้ารายได้สุทธิ), DEDUCTION = รายการหัก (ลบออกจากรายได้สุทธิ) — ไม่มีค่า (undefined) ถือเป็น DEDUCTION เสมอ เพื่อเข้ากันได้กับรายการเก่าก่อนมี field นี้ */
+export type PayrollLineKind = 'ADDITION' | 'DEDUCTION'
+
+/** รายการหักเงินเดือน/รายได้อื่นๆ ของคนขับต่อรอบ (เดือน) — จับคู่กับคนขับด้วยชื่อเต็ม เหมือนกับที่ Booking.driverName เก็บ snapshot ไว้
+ *  ใช้ collection/store เดียวกันสำหรับทั้งรายได้อื่นๆ และรายการหัก แยกกันด้วย field kind เท่านั้น ไม่แยก collection */
 export interface PayrollDeduction {
   id: string
   driverName: string
   /** รอบบัญชี รูปแบบ "YYYY-MM" เช่น "2569-08" */
   periodLabel: string
-  /** ประเภท/รายการที่ผู้ใช้กรอกเอง เช่น "หักภาษี ณ ที่จ่าย", "ค่าเสียหายสินค้า" — ข้อความอิสระ ไม่ใช่ค่าคงที่ของระบบ */
+  /** ประเภท/รายการที่ผู้ใช้กรอกเอง เช่น "หักภาษี ณ ที่จ่าย", "ค่าเสียหายสินค้า", "ค่าล่วงเวลา" — ข้อความอิสระ ไม่ใช่ค่าคงที่ของระบบ */
   type: PayrollDeductionType
   label: string
-  /** วันที่ของรายการหัก (ไม่บังคับ — รายการเก่าก่อนมี field นี้ไม่มีค่า ให้ตกไปใช้ createdAt แสดงแทน) */
+  /** วันที่ของรายการ (ไม่บังคับ — รายการเก่าก่อนมี field นี้ไม่มีค่า ให้ตกไปใช้ createdAt แสดงแทน) */
   date?: Date
   amount: number
+  /** ไม่มีค่า = DEDUCTION (รายการหักเดิม) */
+  kind?: PayrollLineKind
   createdAt: Date
 }
 

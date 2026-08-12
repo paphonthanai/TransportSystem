@@ -28,8 +28,8 @@ export const payrollDeductionRepository = {
     return ref.id
   },
 
-  /** แก้ไขรายการหักเดิม in-place (type/label/amount/date) — ไม่เปลี่ยน driverName/periodLabel/createdAt ผ่านทางนี้ */
-  async update(id: string, data: Partial<Pick<PayrollDeduction, 'type' | 'label' | 'amount' | 'date'>>): Promise<void> {
+  /** แก้ไขรายการเดิม in-place (type/label/amount/date/kind) — ไม่เปลี่ยน driverName/periodLabel/createdAt ผ่านทางนี้ */
+  async update(id: string, data: Partial<Pick<PayrollDeduction, 'type' | 'label' | 'amount' | 'date' | 'kind'>>): Promise<void> {
     await updateDoc(doc(db, COLLECTION, id), sanitize(data))
   },
 

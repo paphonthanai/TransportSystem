@@ -38,7 +38,7 @@ export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => 
     return deduction
   }
 
-  async function updateDeduction(id: string, data: Partial<Pick<PayrollDeduction, 'type' | 'label' | 'amount' | 'date'>>) {
+  async function updateDeduction(id: string, data: Partial<Pick<PayrollDeduction, 'type' | 'label' | 'amount' | 'date' | 'kind'>>) {
     await payrollDeductionRepository.update(id, data)
     const existing = deductions.value.find((d) => d.id === id)
     if (existing) Object.assign(existing, data)
@@ -50,8 +50,13 @@ export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => 
     await payrollDeductionRepository.delete(id)
   }
 
+  /** รายการหักของคนขับ+รอบนี้ — ไม่มี kind (รายการเก่า) หรือ kind === 'DEDUCTION' เท่านั้น ไม่รวมรายได้อื่นๆ */
   const deductionsFor = (driverName: string, periodLabel: string) =>
-    deductions.value.filter((d) => d.driverName === driverName && d.periodLabel === periodLabel)
+    deductions.value.filter((d) => d.driverName === driverName && d.periodLabel === periodLabel && d.kind !== 'ADDITION')
+
+  /** รายได้อื่นๆ ของคนขับ+รอบนี้ (kind === 'ADDITION') — เก็บใน collection/store เดียวกับรายการหัก แยกกันด้วย field kind เท่านั้น */
+  const additionsFor = (driverName: string, periodLabel: string) =>
+    deductions.value.filter((d) => d.driverName === driverName && d.periodLabel === periodLabel && d.kind === 'ADDITION')
 
   return {
     deductions,
@@ -61,5 +66,6 @@ export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => 
     updateDeduction,
     deleteDeduction,
     deductionsFor,
+    additionsFor,
   }
 })

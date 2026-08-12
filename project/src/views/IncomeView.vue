@@ -29,6 +29,7 @@
             <th class="px-4 py-3 font-semibold text-right">จำนวนเที่ยว</th>
             <th class="px-4 py-3 font-semibold text-right">เบี้ยเลี้ยงรวม</th>
             <th class="px-4 py-3 font-semibold text-right">เพิ่ม/ลดหนี้สะสม</th>
+            <th class="px-4 py-3 font-semibold text-right">รายได้อื่นๆ</th>
             <th class="px-4 py-3 font-semibold text-right">รายการหักรวม</th>
             <th class="px-4 py-3 font-semibold text-right">รายได้สุทธิ</th>
             <th class="px-4 py-3 font-semibold">สถานะจ่าย</th>
@@ -42,6 +43,7 @@
             <td class="px-4 py-3 text-right cursor-pointer" :class="row.debtNet >= 0 ? 'text-red-500' : 'text-green-600'" @click="selectDriverDetail(row.driver)">
               {{ row.debtNet >= 0 ? '-' : '+' }}{{ formatBaht(Math.abs(row.debtNet)) }}
             </td>
+            <td class="px-4 py-3 text-right text-green-600 cursor-pointer" @click="selectDriverDetail(row.driver)">+{{ formatBaht(row.additionTotal) }}</td>
             <td class="px-4 py-3 text-right text-red-500 cursor-pointer" @click="selectDriverDetail(row.driver)">-{{ formatBaht(row.deductionTotal) }}</td>
             <td class="px-4 py-3 text-right font-bold text-text cursor-pointer" @click="selectDriverDetail(row.driver)">{{ formatBaht(row.finalNet) }}</td>
             <td class="px-4 py-3">
@@ -56,7 +58,7 @@
             </td>
           </tr>
           <tr v-if="summaryRows.length === 0">
-            <td colspan="7" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่จบแล้วในรอบนี้</td>
+            <td colspan="8" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่จบแล้วในรอบนี้</td>
           </tr>
         </tbody>
       </table>
@@ -88,7 +90,8 @@
       </table>
     </div>
 
-    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" />
+    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" kind="ADDITION" />
+    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" kind="DEDUCTION" />
   </div>
 </template>
 
