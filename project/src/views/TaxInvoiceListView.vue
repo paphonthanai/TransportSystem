@@ -2,10 +2,36 @@
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xs text-muted">ใบแจ้งหนี้/ใบกำกับภาษี &gt; {{ statusFilterLabel }}</div>
-      <button @click="router.push('/tax-invoices/new')" class="btn-primary">
-        <span class="material-symbols-rounded text-base">add</span>
-        สร้างใหม่
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          @click="syncMissingSalesOrders"
+          class="btn-secondary"
+          title="สร้างใบสั่งสินค้าให้กับงานขนส่งที่ยังไม่มีใบสั่งสินค้าผูกอยู่ — เอกสารขั้นก่อนหน้าต้องครบก่อนออกใบแจ้งหนี้/ใบกำกับภาษีได้"
+        >
+          <span class="material-symbols-rounded text-base">sync</span>
+          ซิงก์เอกสารที่ขาดหาย
+        </button>
+        <button
+          @click="syncBillingReadiness"
+          class="btn-secondary"
+          title="ซ่อมสถานะวางบิลที่ค้างจากระบบเดิม ให้งานที่ส่งของสำเร็จแล้วสามารถเดินเอกสารต่อได้ตามปกติ โดยไม่ต้อง Reset งาน"
+        >
+          <span class="material-symbols-rounded text-base">sync_alt</span>
+          ซิงก์ข้อมูล/เอกสารก่อนหน้า
+        </button>
+        <button
+          @click="syncInvoiceReferences"
+          class="btn-secondary"
+          title="ซ่อมความสัมพันธ์ใบวางบิล → ใบแจ้งหนี้/ใบกำกับภาษี — เติม reference ที่ขาดโดยจับคู่กับเลขที่ใบวางบิลต้นทางที่บันทึกไว้"
+        >
+          <span class="material-symbols-rounded text-base">link</span>
+          ซิงก์ความสัมพันธ์ใบวางบิล
+        </button>
+        <button @click="router.push('/tax-invoices/new')" class="btn-primary">
+          <span class="material-symbols-rounded text-base">add</span>
+          สร้างใหม่
+        </button>
+      </div>
     </div>
 
     <div class="card-lg space-y-4">
@@ -128,6 +154,39 @@ const statusLabel: Partial<Record<SalesDocumentStatus, string>> = {
 
 const statusFilterLabel = computed(() => (statusFilter.value === 'all' ? 'แสดงทั้งหมด' : statusLabel[statusFilter.value] || 'แสดงทั้งหมด'))
 
+const syncMissingSalesOrders = () => {
+  const created = salesDocumentsStore.backfillMissingSalesOrders()
+  alert(created > 0 ? `สร้างใบสั่งสินค้าให้งานที่ขาดหายแล้ว ${created} ใบ` : 'ทุกงานมีใบสั่งสินค้าครบแล้ว ไม่มีรายการที่ต้องซิงก์')
+}
+
+/** ซ่อมสถานะวางบิล (billingStatus) ที่ค้างจากระบบเดิม ให้กลับมาเดินเอกสารต่อได้ตามปกติ — ไม่สร้าง/ลบเอกสารใดๆ
+ * ไม่แตะสถานะงานขนส่ง ทำได้ปลอดภัยแม้กดซ้ำหลายครั้ง (idempotent) ดู syncBillingReadiness ใน stores/salesDocuments.ts */
+const syncBillingReadiness = () => {
+  const result = salesDocumentsStore.syncBillingReadiness()
+  if (result.repaired.length === 0) {
+    alert(`ตรวจสอบแล้ว ${result.checked} งาน ไม่พบรายการที่ค้างสถานะวางบิลจากระบบเดิม`)
+    return
+  }
+  const list = result.repaired.map((r) => `- ${r.docNo} (เดิม: ${r.previousBillingStatus})`).join('\n')
+  alert(`ซ่อมสถานะวางบิลให้ ${result.repaired.length} งาน สามารถเดินเอกสารต่อได้แล้ว:\n${list}`)
+}
+
+/** ซ่อม parentDocumentId ของใบแจ้งหนี้/ใบกำกับภาษีที่ขาด/ชี้ผิด โดยจับคู่กับเลขที่ใบวางบิลต้นทางที่เก็บไว้ใน
+ * reference ตรงตัวเป๊ะเท่านั้น ไม่เดา ดู repairTaxInvoiceReferences ใน stores/salesDocuments.ts */
+const syncInvoiceReferences = () => {
+  const result = salesDocumentsStore.repairTaxInvoiceReferences()
+  const lines: string[] = []
+  if (result.repaired.length > 0) {
+    lines.push(`ซ่อมความสัมพันธ์ให้ ${result.repaired.length} ใบ: ${result.repaired.map((r) => `${r.number} → ${r.matchedBilling}`).join(', ')}`)
+  } else {
+    lines.push(`ตรวจสอบแล้ว ${result.checked} ใบ ไม่พบรายการที่ reference ขาด/ชี้ผิด`)
+  }
+  if (result.unmatched.length > 0) {
+    lines.push(`\nจับคู่ไม่ได้ (ต้องตรวจสอบเอง) ${result.unmatched.length} ใบ: ${result.unmatched.map((u) => u.number).join(', ')}`)
+  }
+  alert(lines.join('\n'))
+}
+
 const allInvoices = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE'))
 
 const filteredDocs = computed(() =>
@@ -216,6 +275,10 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 
 .btn-primary {
   @apply h-10 px-4 rounded-lg border-0 bg-primary text-white font-semibold text-sm flex items-center gap-2 cursor-pointer transition-all hover:opacity-90 shadow-md;
+}
+
+.btn-secondary {
+  @apply h-10 px-3 rounded-lg border border-border bg-surface text-text font-medium text-sm flex items-center gap-2 cursor-pointer hover:bg-surface-2;
 }
 
 .page-btn {

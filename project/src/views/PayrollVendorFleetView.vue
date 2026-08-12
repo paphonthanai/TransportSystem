@@ -69,22 +69,33 @@
             <th class="px-4 py-3 font-semibold text-right">เพิ่ม/ลดหนี้สะสม</th>
             <th class="px-4 py-3 font-semibold text-right">รายการหักรวม</th>
             <th class="px-4 py-3 font-semibold text-right">รายได้สุทธิ</th>
+            <th class="px-4 py-3 font-semibold">สถานะจ่าย</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in summaryRows" :key="row.driver" class="border-t border-border hover:bg-surface-2 transition-colors cursor-pointer" @click="selectDriverDetail(row.driver)">
-            <td class="px-4 py-3 font-semibold text-text">{{ row.driver }}</td>
-            <td class="px-4 py-3 text-right text-text">{{ row.trips }}</td>
-            <td class="px-4 py-3 text-right text-text">{{ formatBaht(row.baseAllowance) }}</td>
-            <td class="px-4 py-3 text-right text-muted">{{ formatBaht(row.fuelCost) }}</td>
-            <td class="px-4 py-3 text-right" :class="row.debtNet >= 0 ? 'text-red-500' : 'text-green-600'">
+          <tr v-for="row in summaryRows" :key="row.driver" class="border-t border-border hover:bg-surface-2 transition-colors">
+            <td class="px-4 py-3 font-semibold text-text cursor-pointer" @click="selectDriverDetail(row.driver)">{{ row.driver }}</td>
+            <td class="px-4 py-3 text-right text-text cursor-pointer" @click="selectDriverDetail(row.driver)">{{ row.trips }}</td>
+            <td class="px-4 py-3 text-right text-text cursor-pointer" @click="selectDriverDetail(row.driver)">{{ formatBaht(row.baseAllowance) }}</td>
+            <td class="px-4 py-3 text-right text-muted cursor-pointer" @click="selectDriverDetail(row.driver)">{{ formatBaht(row.fuelCost) }}</td>
+            <td class="px-4 py-3 text-right cursor-pointer" :class="row.debtNet >= 0 ? 'text-red-500' : 'text-green-600'" @click="selectDriverDetail(row.driver)">
               {{ row.debtNet >= 0 ? '-' : '+' }}{{ formatBaht(Math.abs(row.debtNet)) }}
             </td>
-            <td class="px-4 py-3 text-right text-red-500">-{{ formatBaht(row.deductionTotal) }}</td>
-            <td class="px-4 py-3 text-right font-bold text-text">{{ formatBaht(row.finalNet) }}</td>
+            <td class="px-4 py-3 text-right text-red-500 cursor-pointer" @click="selectDriverDetail(row.driver)">-{{ formatBaht(row.deductionTotal) }}</td>
+            <td class="px-4 py-3 text-right font-bold text-text cursor-pointer" @click="selectDriverDetail(row.driver)">{{ formatBaht(row.finalNet) }}</td>
+            <td class="px-4 py-3">
+              <select
+                :value="row.paymentStatus"
+                @change="setPaymentStatus(row.driver, ($event.target as HTMLSelectElement).value as 'UNPAID' | 'PAID')"
+                :class="['status-select', row.paymentStatus === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700']"
+              >
+                <option value="UNPAID">ยังไม่จ่าย</option>
+                <option value="PAID">จ่ายแล้ว</option>
+              </select>
+            </td>
           </tr>
           <tr v-if="summaryRows.length === 0">
-            <td colspan="7" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่จบแล้วในรอบนี้</td>
+            <td colspan="8" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่จบแล้วในรอบนี้</td>
           </tr>
         </tbody>
       </table>
@@ -144,7 +155,7 @@ const departmentFilter = computed(() => (department: VehicleType | undefined) =>
   return category.value === 'ALL' || department === category.value
 })
 
-const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, formatDate, formatBaht, exportSummary, exportDetail } =
+const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, formatDate, formatBaht, exportSummary, exportDetail, setPaymentStatus } =
   useDriverPayroll((department) => departmentFilter.value(department), 'พขร-รถร่วม')
 
 /** แท็บ "เลือกรถ" เป็นมุมมองเพิ่มเติมของหน้านี้ แยกจาก mode ของ useDriverPayroll (ซึ่งใช้ร่วมกับหน้าพนักงานขับรถด้วย
@@ -184,6 +195,10 @@ const selectDriverDetail = (driver: string) => {
 
 .tab-btn-active {
   @apply bg-primary text-white border-primary;
+}
+
+.status-select {
+  @apply h-8 px-2 rounded-full border-0 text-xs font-semibold cursor-pointer focus:outline-none;
 }
 
 .card-lg {

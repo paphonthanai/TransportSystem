@@ -118,6 +118,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { useContactStore } from '@/stores/contacts'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
 import OnboardingChecklist from '@/components/OnboardingChecklist.vue'
 
@@ -126,6 +127,13 @@ const currentRoute = useRoute()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const isSmallScreen = ref(false)
+
+/**
+ * เรียก useContactStore() ให้เร็วที่สุดตั้งแต่ Layout หลัก mount (เริ่ม fetchContacts() ทันทีที่ล็อกอิน) — ป้องกัน race
+ * condition ที่ resolveContactSnapshot() ใน salesDocuments.ts จะถูกเรียกตอนกด "บันทึกเอกสาร" ก่อนที่ contacts จะโหลด
+ * เสร็จ (ถ้าไม่มีใครเรียก useContactStore() มาก่อนเลยในเซสชันนั้น ผู้ติดต่อ Primary จะหายไปเงียบๆ)
+ */
+useContactStore()
 
 const sidebarOpen = computed(() => appStore.sidebarOpen)
 
@@ -202,6 +210,7 @@ const getScreenTitle = () => {
   if (currentRoute.path.startsWith('/payroll/vendor-fleet/')) return 'เงินเดือน · รายละเอียดรถร่วม'
   if (currentRoute.path === '/payroll/staff/new') return 'เงินเดือน · สร้างเงินเดือน'
   if (currentRoute.path.startsWith('/payroll/staff/') && currentRoute.path.endsWith('/edit')) return 'เงินเดือน · แก้ไขเงินเดือน'
+  if (currentRoute.path.startsWith('/payroll/staff/') && currentRoute.path.endsWith('/print')) return 'เงินเดือน · พิมพ์เอกสาร'
   if (currentRoute.path.startsWith('/payroll/staff/')) return 'เงินเดือน · รายละเอียดเงินเดือน'
   if (currentRoute.path === '/quotation/new') return 'สร้างใบเสนอราคา'
   if (currentRoute.path.startsWith('/quotation/') && currentRoute.path.endsWith('/edit')) return 'แก้ไขใบเสนอราคา'

@@ -83,7 +83,9 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
   }
 
-  const weightQtyLabel = (booking: Booking) => booking.items.map((i) => `${i.qty} ${i.unit}`).join(', ') || '-'
+  /** งานเก่าบางรายการอาจไม่มี qty/unit ต่อรายการ (ข้อมูลไม่ครบ) — แสดง "-" แทน ห้ามโชว์ "undefined" ดิบๆ */
+  const weightQtyLabel = (booking: Booking) =>
+    booking.items.map((i) => (i.qty !== undefined && i.unit ? `${i.qty} ${i.unit}` : '-')).join(', ') || '-'
 
   /** รูป POD อยู่ระดับรายการสินค้า (JobItem.podImage) ไม่ใช่ระดับงาน — ใช้รูปแรกที่มีเป็นตัวแทนของทั้งงาน */
   const firstPodImage = (booking: Booking) => booking.items.find((i) => i.podImage)?.podImage

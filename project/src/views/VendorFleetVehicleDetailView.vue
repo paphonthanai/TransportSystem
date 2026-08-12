@@ -33,9 +33,9 @@
 
       <div class="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg p-3">
         งานในตารางด้านล่าง Trace ตรงจาก Booking → ทะเบียนรถ (ไม่ใช้คนขับประจำปัจจุบันของรถมาไล่ย้อนหลัง) จึงยังคงแสดง
-        งานเดิมของรถคันนี้ครบ แม้จะเคยเปลี่ยนคนขับมาแล้วก็ตาม — ค่าใช้จ่ายที่แสดงคือค่าน้ำมันเท่านั้น (Trace ได้ตรงจาก Booking)
-        ส่วนรายการหักอื่นๆ ของคนขับ (ประกัน/GPS/ผ่อนชำระ ฯลฯ) เป็นข้อมูลผูกกับ "คนขับ" ไม่ใช่ "รถ" ในระบบปัจจุบัน จึงไม่นำมารวมในหน้านี้
-        เพื่อไม่ให้ยอดคลาดเคลื่อนจากการเดา Trace ที่ไม่ยืนยันได้ — ดูรายการหักของคนขับแต่ละคนได้ที่หน้ารายละเอียดพนักงานขับรถ
+        งานเดิมของรถคันนี้ครบ แม้จะเคยเปลี่ยนคนขับมาแล้วก็ตาม — ค่าน้ำมันด้านล่าง Trace ได้ตรงจาก Booking ส่วนค่าใช้จ่าย
+        ประจำรถ (ประกัน/GPS/ค่างวด) อยู่ในส่วนแยกด้านล่างนี้ ผูกกับรถคันนี้โดยตรง ไม่ปนกับรายการหักของคนขับ (ประกันงาน/
+        ผ่อนชำระของคนขับ) ที่ดูได้ที่หน้ารายละเอียดพนักงานขับรถแทน — สองรายการนี้เป็นคนละ Entity กัน ไม่รวมยอดกัน
       </div>
 
       <div class="card-lg grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
@@ -44,18 +44,24 @@
           <div class="font-semibold text-text">{{ rows.length }}</div>
         </div>
         <div>
-          <div class="text-xs text-muted">รายได้จากงาน (ค่าเที่ยวที่เรียกเก็บลูกค้า)</div>
+          <div class="text-xs text-muted">รายได้จากงาน (รอบนี้)</div>
           <div class="font-semibold text-text">{{ formatBaht(totalTripFee) }}</div>
         </div>
         <div>
-          <div class="text-xs text-muted">ค่าน้ำมันที่ใช้ (ต้นทุนรถ)</div>
+          <div class="text-xs text-muted">ค่าน้ำมันที่ใช้ (รอบนี้)</div>
           <div class="font-semibold text-red-500">-{{ formatBaht(totalFuelCost) }}</div>
         </div>
         <div>
-          <div class="text-xs text-muted">ยอดสุทธิเฉพาะรายการที่ Trace ได้จากรถโดยตรง</div>
-          <div class="font-bold text-primary">{{ formatBaht(totalTripFee - totalFuelCost) }}</div>
+          <div class="text-xs text-muted">ค่าใช้จ่ายประจำรถ (สะสมทั้งหมด)</div>
+          <div class="font-semibold text-red-500">-{{ formatBaht(totalVehicleExpense) }}</div>
+        </div>
+        <div class="sm:col-span-4 border-t border-border pt-3">
+          <div class="text-xs text-muted">ต้นทุนรวม (ค่าน้ำมันรอบนี้ + ค่าใช้จ่ายประจำรถสะสมทั้งหมด)</div>
+          <div class="font-bold text-primary">{{ formatBaht(totalFuelCost + totalVehicleExpense) }}</div>
         </div>
       </div>
+
+      <VehicleExpensePanel :vehicle-id="vehicle.id" />
 
       <div class="card-lg overflow-x-auto">
         <h3 class="font-semibold text-text mb-3">งาน — รอบ {{ periodLabel }}</h3>
@@ -103,13 +109,16 @@ import { useRouter } from 'vue-router'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useDriversStore } from '@/stores/drivers'
 import { useBookingStore } from '@/stores/booking'
+import { useVehicleExpensesStore } from '@/stores/vehicleExpenses'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
+import VehicleExpensePanel from '@/components/vehicle/VehicleExpensePanel.vue'
 
 const props = defineProps<{ vehicleId: string }>()
 const router = useRouter()
 const vehiclesStore = useVehiclesStore()
 const driversStore = useDriversStore()
 const bookingStore = useBookingStore()
+const vehicleExpensesStore = useVehicleExpensesStore()
 
 const vehicle = computed(() => vehiclesStore.vehicles.find((v) => v.id === props.vehicleId) || null)
 const currentDriverLabel = computed(() => {
@@ -155,10 +164,12 @@ const rows = computed(() => {
 
 const totalTripFee = computed(() => rows.value.reduce((sum, r) => sum + (r.booking.tripFee || 0), 0))
 const totalFuelCost = computed(() => rows.value.reduce((sum, r) => sum + r.fuelCost, 0))
+/** ค่าใช้จ่ายประจำรถ (ประกัน/GPS/ค่างวด/อื่นๆ) เป็นสะสมทั้งหมด ไม่กรองตามรอบเดือนเหมือนงาน เพราะรายการแบบนี้มักจ่ายเป็นก้อนไม่ใช่รายเดือน (เช่น ประกันต่อปี) กรองตามรอบจะทำให้ยอดหายไปผิดๆ */
+const totalVehicleExpense = computed(() => (vehicle.value ? vehicleExpensesStore.expensesForVehicle(vehicle.value.id).reduce((sum, e) => sum + e.amount, 0) : 0))
 
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {
   if (!booking.items.length) return '-'
-  const first = booking.items[0].siteName
+  const first = booking.items[0].siteName || '-'
   return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
 }
 

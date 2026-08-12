@@ -264,6 +264,13 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN'] },
       },
       {
+        path: 'payroll/staff/:id/print',
+        name: 'StaffSalaryDocument',
+        component: () => import('@/views/StaffSalaryDocumentView.vue'),
+        props: true,
+        meta: { roles: ['ADMIN'] },
+      },
+      {
         path: 'payroll/drivers',
         name: 'PayrollDrivers',
         component: () => import('@/views/IncomeView.vue'),

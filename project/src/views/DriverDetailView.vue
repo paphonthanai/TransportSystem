@@ -33,7 +33,7 @@
         </div>
       </div>
 
-      <div class="card-lg grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+      <div class="card-lg grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
         <div>
           <div class="text-xs text-muted">จำนวนเที่ยว (รอบนี้)</div>
           <div class="font-semibold text-text">{{ rows.length }}</div>
@@ -49,6 +49,17 @@
         <div>
           <div class="text-xs text-muted">รายการหักรวม</div>
           <div class="font-semibold text-red-500">-{{ formatBaht(deductionTotal) }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-muted mb-1">สถานะการจ่ายเงิน (รอบนี้)</div>
+          <select
+            :value="paymentStatus"
+            @change="setPaymentStatus(($event.target as HTMLSelectElement).value as 'UNPAID' | 'PAID')"
+            :class="['status-select', paymentStatus === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700']"
+          >
+            <option value="UNPAID">ยังไม่จ่าย</option>
+            <option value="PAID">จ่ายแล้ว</option>
+          </select>
         </div>
       </div>
 
@@ -88,7 +99,7 @@
           </tbody>
         </table>
         <div class="text-[11px] text-muted mt-2">
-          หมายเหตุ: ระบบยังไม่มีฟิลด์ "สถานะการจ่าย" ระดับงานสำหรับคนขับ (มีเฉพาะรายการหักต่อรอบด้านล่าง) จึงไม่แสดงคอลัมน์นี้ในตาราง เพื่อไม่ให้ข้อมูลที่แสดงคลาดเคลื่อนจากของจริง
+          หมายเหตุ: สถานะการจ่ายเงิน (ด้านบน) เป็นสถานะระดับ "รอบเดือน" ต่อคนขับ ไม่ใช่ระดับงานแต่ละเที่ยว จึงไม่มีคอลัมน์นี้ในตารางประวัติงาน — และไม่มีผลต่อสถานะงาน (สถานะงาน) ของแต่ละแถวด้านบนเลย
         </div>
       </div>
 
@@ -104,8 +115,10 @@ import { useDriversStore } from '@/stores/drivers'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
+import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
+import type { DriverPaymentStatusValue } from '@/types'
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
@@ -113,6 +126,7 @@ const driversStore = useDriversStore()
 const vehiclesStore = useVehiclesStore()
 const bookingStore = useBookingStore()
 const deductionsStore = usePayrollDeductionsStore()
+const paymentsStore = useDriverPaymentsStore()
 
 const driver = computed(() => driversStore.drivers.find((d) => d.id === props.id) || null)
 const assignedVehicleLabel = computed(() => {
@@ -160,9 +174,16 @@ const deductionTotal = computed(() => {
   return deductionsStore.deductionsFor(driversStore.fullName(driver.value), periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
 })
 
+/** สถานะจ่ายรายได้คนขับของรอบนี้ — คนละเรื่องกับสถานะงาน (bookingStatusLabel ด้านบนในตาราง) โดยเจตนา ไม่แตะกันเลย */
+const paymentStatus = computed(() => (driver.value ? paymentsStore.statusFor(driversStore.fullName(driver.value), periodLabel.value) : 'UNPAID'))
+const setPaymentStatus = (status: DriverPaymentStatusValue) => {
+  if (!driver.value) return
+  paymentsStore.setStatus(driversStore.fullName(driver.value), periodLabel.value, status)
+}
+
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {
   if (!booking.items.length) return '-'
-  const first = booking.items[0].siteName
+  const first = booking.items[0].siteName || '-'
   return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
 }
 
@@ -177,6 +198,10 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 
 .btn-secondary {
   @apply h-10 px-3 rounded-lg border border-border bg-surface text-text font-medium text-sm flex items-center gap-2 cursor-pointer hover:bg-surface-2;
+}
+
+.status-select {
+  @apply h-9 px-2 rounded-full border-0 text-xs font-semibold cursor-pointer focus:outline-none;
 }
 
 .card-lg {

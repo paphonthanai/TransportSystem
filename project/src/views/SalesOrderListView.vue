@@ -3,9 +3,21 @@
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xs text-muted">ใบสั่งสินค้า &gt; {{ statusFilterLabel }}</div>
       <div class="flex items-center gap-2">
-        <button @click="syncMissingSalesOrders" class="btn-secondary" title="สร้างใบสั่งสินค้าให้กับงานขนส่งที่ยังไม่มีใบสั่งสินค้าผูกอยู่">
+        <button
+          @click="syncMissingSalesOrders"
+          class="btn-secondary"
+          title="สร้างใบสั่งสินค้าให้กับงานขนส่งที่ยังไม่มีใบสั่งสินค้าผูกอยู่ + ซ่อมยอด VAT ของใบสั่งสินค้าเดิมที่สร้างไว้ก่อนระบบรองรับ VAT ระดับเอกสาร"
+        >
           <span class="material-symbols-rounded text-base">sync</span>
           ซิงก์ใบสั่งสินค้าที่ขาดหาย
+        </button>
+        <button
+          @click="syncBookingRelationship"
+          class="btn-secondary"
+          title="ซ่อมความสัมพันธ์ Booking ↔ ใบสั่งสินค้า — ซ่อมสถานะวางบิลของงานที่ค้างจากระบบเดิม ให้กลับมากดออกใบวางบิลได้ตามปกติ"
+        >
+          <span class="material-symbols-rounded text-base">sync_alt</span>
+          ซิงก์ความสัมพันธ์ Booking
         </button>
         <div class="relative">
         <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
@@ -79,6 +91,7 @@
                 >
                   <option :value="row.booking.status">{{ bookingStatusLabel[row.booking.status] }}</option>
                   <option v-if="row.booking.status !== 'DELIVERED'" value="COMPLETE">✓ จบงาน (ออกใบวางบิล)</option>
+                  <option v-if="row.booking.status === 'DELIVERED' && !hasActiveBillingDoc(row.booking)" value="CREATE_BILLING">🧾 ออกใบวางบิล</option>
                   <option v-if="row.booking.status !== 'WAITING_DISPATCH'" value="RESET">↺ Reset สถานะ</option>
                 </select>
                 <span v-else class="status-pill bg-gray-100 text-gray-700">ไม่พบงานขนส่ง</span>
@@ -195,10 +208,39 @@ const createNew = (fleet: BookingCategory) => {
   router.push({ name: 'BookingCreate', params: { fleet }, query: { source: 'sales_order' } })
 }
 
+/** ปุ่มเดียวทำ 2 อย่าง: (1) สร้างใบสั่งสินค้าให้งานที่ยังไม่มี (2) ซ่อมยอด VAT ของใบสั่งสินค้าเดิมที่ไม่เคยคำนวณ
+ *  VAT ระดับเอกสารเลย — แยกฟังก์ชันกันในสโตร์ (backfillMissingSalesOrders / repairSalesOrderVat) แต่รวมปุ่มเดียว
+ *  ในหน้านี้เพราะเป้าหมายเดียวกันคือ "ทำให้ใบสั่งสินค้าถูกต้อง/ครบถ้วน" ไม่ใช่การสร้างเอกสารขั้นถัดไปแต่อย่างใด */
 const syncMissingSalesOrders = () => {
   const created = salesDocumentsStore.backfillMissingSalesOrders()
-  alert(created > 0 ? `สร้างใบสั่งสินค้าให้งานที่ขาดหายแล้ว ${created} ใบ` : 'ทุกงานมีใบสั่งสินค้าครบแล้ว ไม่มีรายการที่ต้องซิงก์')
+  const vatResult = salesDocumentsStore.repairSalesOrderVat()
+  const lines: string[] = []
+  lines.push(created > 0 ? `สร้างใบสั่งสินค้าให้งานที่ขาดหายแล้ว ${created} ใบ` : 'ทุกงานมีใบสั่งสินค้าครบแล้ว ไม่มีรายการที่ต้องสร้างเพิ่ม')
+  if (vatResult.repaired.length > 0) {
+    lines.push(`ซ่อมยอด VAT ของใบสั่งสินค้าเดิมแล้ว ${vatResult.repaired.length} ใบ: ${vatResult.repaired.map((r) => r.number).join(', ')}`)
+  } else {
+    lines.push('ไม่พบใบสั่งสินค้าที่ยอด VAT ค้าง (ตรวจแล้ว ' + vatResult.checked + ' ใบ)')
+  }
+  alert(lines.join('\n'))
 }
+
+/** ซ่อมความสัมพันธ์ Booking ↔ ใบสั่งสินค้า โดยตรง — เดิมฟังก์ชันนี้ (syncBillingReadiness) ถูกย้ายไปอยู่แค่หน้า
+ * ใบวางบิล/ใบแจ้งหนี้/ใบเสร็จ แต่ผู้ใช้ต้องมาที่หน้านี้ก่อนเพื่อกด "ออกใบวางบิล" อยู่ดี จึงต้องมี Sync ที่จุดนี้ด้วย
+ * ไม่งั้นต้องสลับหน้าไปมาเพื่อซ่อมข้อมูลก่อนถึงจะกลับมากดปุ่มในหน้านี้ได้จริง */
+const syncBookingRelationship = () => {
+  const result = salesDocumentsStore.syncBillingReadiness()
+  if (result.repaired.length === 0) {
+    alert(`ตรวจสอบแล้ว ${result.checked} งาน ไม่พบรายการที่ค้างสถานะวางบิลจากระบบเดิม`)
+    return
+  }
+  const list = result.repaired.map((r) => `- ${r.docNo} (เดิม: ${r.previousBillingStatus})`).join('\n')
+  alert(`ซ่อมสถานะวางบิลให้ ${result.repaired.length} งาน สามารถกด "ออกใบวางบิล" ได้แล้ว:\n${list}`)
+}
+
+/** งานนี้มีเอกสารระบบปัจจุบัน (BILLING/TAX_INVOICE/RECEIPT) อ้างอิงอยู่แล้วหรือยัง — ใช้ซ่อนตัวเลือก "ออกใบวางบิล"
+ * เมื่อออกไปแล้ว กันไม่ให้กดออกซ้ำจากจุดนี้ (เหมือนเงื่อนไขเดียวกับ syncBillingReadiness) */
+const hasActiveBillingDoc = (booking: Booking) =>
+  salesDocumentsStore.documents.some((d) => (d.type === 'BILLING' || d.type === 'TAX_INVOICE' || d.type === 'RECEIPT') && d.bookingIds.includes(booking.id))
 
 /** Dropdown สถานะงานขนส่งในตารางนี้ — ปัจจุบันมีแค่ทางลัดเดียวคือ "จบงาน" ข้ามทุกขั้นตอนไปเลย (ใช้ completeJob
  * ตัวเดียวกับปุ่ม "จบงาน (ข้ามขั้นตอน)" ในหน้ารายการงานขนส่ง) แล้วสร้างใบวางบิลอัตโนมัติทันที เหมือนปุ่มสร้างใบวางบิลด้วยมือ */
@@ -207,6 +249,16 @@ const onStatusSelect = (booking: Booking, action: string) => {
     if (!confirm(`ยืนยันจบงาน ${booking.docNo} และออกใบวางบิล?`)) return
     bookingStore.completeJob(booking.id, [], undefined)
     salesDocumentsStore.createBillingFromBookings([booking.id])
+    return
+  }
+  if (action === 'CREATE_BILLING') {
+    if (!confirm(`ยืนยันออกใบวางบิลสำหรับงาน ${booking.docNo}?`)) return
+    const result = salesDocumentsStore.createBillingFromBookings([booking.id])
+    if (!result) {
+      alert(
+        `ไม่สามารถออกใบวางบิลให้งาน ${booking.docNo} ได้ — สถานะการวางบิลของงานนี้อาจค้างจากระบบเดิม กรุณาไปที่หน้า "ใบวางบิล" แล้วกดปุ่ม "ซิงก์ข้อมูล/เอกสารก่อนหน้า" ก่อน แล้วค่อยลองใหม่อีกครั้ง`
+      )
+    }
     return
   }
   if (action === 'RESET') {

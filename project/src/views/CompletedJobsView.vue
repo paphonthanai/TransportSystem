@@ -67,7 +67,7 @@
                 <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ส่งของสำเร็จ</th>
                 <th class="text-right px-4 py-3 font-semibold text-muted">ราคา</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">สถานะวางบิล</th>
-                <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">สถานะการจัดการ</th>
               </tr>
             </thead>
             <tbody>

@@ -100,6 +100,10 @@
                   <span class="text-gray-500">ผู้ติดต่อ</span>
                   <span class="font-semibold">{{ contactPerson }}</span>
                 </div>
+                <div v-if="contactPosition" class="flex justify-between gap-4">
+                  <span class="text-gray-500">ตำแหน่ง</span>
+                  <span class="font-semibold">{{ contactPosition }}</span>
+                </div>
                 <div v-if="contactPhone" class="flex justify-between gap-4">
                   <span class="text-gray-500">เบอร์โทร</span>
                   <span class="font-semibold">{{ contactPhone }}</span>
@@ -153,7 +157,7 @@
                 <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">รายละเอียด</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-24">จำนวน</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-24">ราคาต่อหน่วย</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-24">{{ docMode === 'sales_order' ? 'ราคาต่อเที่ยว' : 'ราคาต่อหน่วย' }}</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-16">ส่วนลด</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-16">ภาษี</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-28">มูลค่า</th>
@@ -292,26 +296,35 @@
       </div>
     </div>
 
-    <div v-if="receiptTrace" class="card-lg no-print">
-      <div class="font-bold text-text mb-3">อ้างอิงเอกสาร</div>
+    <div v-if="documentTrace" class="card-lg no-print">
+      <div class="font-bold text-text mb-3">เอกสารต้นทาง (Source Chain)</div>
       <div class="space-y-3 text-sm">
-        <div v-if="receiptTrace.taxInvoices.length">
-          <div class="text-xs font-semibold text-muted mb-1">ใบแจ้งหนี้/ใบกำกับภาษี</div>
-          <RouterLink v-for="d in receiptTrace.taxInvoices" :key="d.id" :to="`/documents/${d.id}`" class="block text-primary hover:underline">{{ d.number }}</RouterLink>
-        </div>
-        <div v-if="receiptTrace.billingNotes.length">
-          <div class="text-xs font-semibold text-muted mb-1">ใบวางบิล</div>
-          <RouterLink v-for="d in receiptTrace.billingNotes" :key="d.id" :to="`/documents/${d.id}`" class="block text-primary hover:underline">{{ d.number }}</RouterLink>
-        </div>
-        <div v-if="receiptTrace.salesOrders.length">
+        <div v-if="documentTrace.salesOrders.length">
           <div class="text-xs font-semibold text-muted mb-1">ใบสั่งสินค้า</div>
-          <RouterLink v-for="d in receiptTrace.salesOrders" :key="d.id" :to="`/documents/${d.id}`" class="block text-primary hover:underline">{{ d.number }}</RouterLink>
+          <RouterLink v-for="d in documentTrace.salesOrders" :key="d.id" :to="`/documents/${d.id}`" class="block text-primary hover:underline">{{ d.number }}</RouterLink>
         </div>
-        <div v-if="receiptTrace.bookings.length">
-          <div class="text-xs font-semibold text-muted mb-1">งานขนส่ง</div>
-          <RouterLink v-for="b in receiptTrace.bookings" :key="b.id" :to="`/job/${b.id}`" class="block text-primary hover:underline">{{ b.docNo }}</RouterLink>
+        <div v-if="documentTrace.billingNotes.length">
+          <div class="text-xs font-semibold text-muted mb-1">ใบวางบิล</div>
+          <RouterLink v-for="d in documentTrace.billingNotes" :key="d.id" :to="`/documents/${d.id}`" class="block text-primary hover:underline">{{ d.number }}</RouterLink>
         </div>
-        <div v-if="!receiptTrace.taxInvoices.length && !receiptTrace.bookings.length" class="text-muted text-xs">ไม่มีเอกสารต้นทางอ้างอิง (สร้างแบบกรอกเอง)</div>
+        <div v-if="documentTrace.taxInvoices.length">
+          <div class="text-xs font-semibold text-muted mb-1">ใบแจ้งหนี้/ใบกำกับภาษี</div>
+          <RouterLink v-for="d in documentTrace.taxInvoices" :key="d.id" :to="`/documents/${d.id}`" class="block text-primary hover:underline">{{ d.number }}</RouterLink>
+        </div>
+        <div v-if="documentTrace.receipts.length">
+          <div class="text-xs font-semibold text-muted mb-1">ใบเสร็จรับเงิน</div>
+          <RouterLink v-for="d in documentTrace.receipts" :key="d.id" :to="`/documents/${d.id}`" class="block text-primary hover:underline">{{ d.number }}</RouterLink>
+        </div>
+        <div v-if="documentTrace.bookings.length">
+          <div class="text-xs font-semibold text-muted mb-1">งานขนส่ง (Booking)</div>
+          <RouterLink v-for="b in documentTrace.bookings" :key="b.id" :to="`/job/${b.id}`" class="block text-primary hover:underline">{{ b.docNo }}</RouterLink>
+        </div>
+        <div
+          v-if="!documentTrace.salesOrders.length && !documentTrace.billingNotes.length && !documentTrace.taxInvoices.length && !documentTrace.receipts.length && !documentTrace.bookings.length"
+          class="text-muted text-xs"
+        >
+          -
+        </div>
       </div>
     </div>
 
@@ -336,10 +349,9 @@ import { useBookingStore } from '@/stores/booking'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
-import { useAuthStore } from '@/stores/auth'
 import { bahtText } from '@/utils/companyInfo'
 import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
-import { traceReceiptChain } from '@/utils/documentTrace'
+import { traceDocumentChain } from '@/utils/documentTrace'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import DocumentSettingsPanel, { type DocumentSettingsToggles } from '@/components/shared/DocumentSettingsPanel.vue'
 import type { Booking } from '@/types'
@@ -352,7 +364,6 @@ const bookingStore = useBookingStore()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
-const authStore = useAuthStore()
 
 // เอกสารเดิม (ใบแจ้งหนี้/ใบเสร็จ) ยังอยู่ใน bookingStore จนกว่าจะย้ายที่ Step 5 (migration)
 const legacyDoc = computed(() => bookingStore.documents.find((d) => d.id === route.params.docId))
@@ -440,6 +451,11 @@ const activeDoc = computed(() => {
       batchId: d.batchId,
       parentDocumentId: d.parentDocumentId,
       salesperson: d.salesperson,
+      contactId: d.contactId,
+      contactName: d.contactName,
+      contactPosition: d.contactPosition,
+      contactPhone: d.contactPhone,
+      contactEmail: d.contactEmail,
     }
   }
   return null
@@ -530,10 +546,11 @@ const receiptSourceRows = computed<ReceiptSourceRow[]>(() => {
     })
 })
 
-/** สายอ้างอิงเอกสารของใบเสร็จ (Receipt -> TaxInvoice -> BillingNote -> Booking -> SalesOrder) — เฉพาะเอกสารประเภท RECEIPT เท่านั้น ที่เหลือเป็น null (ไม่แสดงพาแนล) */
-const receiptTrace = computed(() => {
-  if (!newDoc.value || newDoc.value.type !== 'RECEIPT') return null
-  return traceReceiptChain(newDoc.value, salesDocumentsStore.documents, bookingStore.bookings)
+/** สายอ้างอิงเอกสารทั้งสาย (SalesOrder ↔ BillingNote ↔ TaxInvoice ↔ Receipt ↔ Booking) — ใช้ได้กับเอกสารระบบปัจจุบัน
+ * ทั้ง 4 ประเภท (เดิมมีแค่ RECEIPT) เอกสารระบบเดิม (legacyDoc/QUOTATION/CASH_SALE/PURCHASE_ORDER) เป็น null ไม่แสดงพาแนล */
+const documentTrace = computed(() => {
+  if (!newDoc.value || !(['SALES_ORDER', 'BILLING', 'TAX_INVOICE', 'RECEIPT'] as const).includes(newDoc.value.type as any)) return null
+  return traceDocumentChain(newDoc.value, salesDocumentsStore.documents, bookingStore.bookings)
 })
 
 const subtotal = computed(() => activeDoc.value?.amount || 0)
@@ -592,10 +609,14 @@ const formatPercent = (value?: number) => (value === undefined ? '-' : `${value}
 const formatDiscount = (row: PrintRow) =>
   row.discountMode === 'fixed' ? (row.discountAmount ? formatBaht(row.discountAmount) : '-') : formatPercent(row.discountPercent)
 
-/** "ผู้ติดต่อ" บนเอกสาร = ผู้ใช้ที่ล็อกอินอยู่ตอนออกเอกสาร (ระบบยังไม่มีฟิลด์ผู้ติดต่อแยกต่อเอกสาร) */
-const contactPerson = computed(() => authStore.userName)
-const contactPhone = computed(() => documentSettingsStore.settings.company.phone)
-const contactEmail = computed(() => authStore.user?.email || '')
+/** "ผู้ติดต่อ" บนเอกสาร = ผู้ติดต่อของลูกค้า (Customer Contact) ที่ Snapshot ไว้บนเอกสาร ณ ตอนสร้าง (activeDoc.contactName
+ * ฯลฯ ดู stores/salesDocuments.ts: resolveContactSnapshot) — ตั้งใจไม่ใช้ authStore/ผู้ใช้ที่ login อยู่แทนค่านี้อีก
+ * ต่อไป เพราะเป็นคนละ Entity กัน (ผู้ใช้ระบบ vs ผู้ติดต่อของลูกค้า) เอกสารเก่าที่ออกก่อนมี field นี้ หรือลูกค้าที่ยัง
+ * ไม่มีผู้ติดต่อ Primary ตั้งไว้ จะแสดง "-" แทน ไม่เดา/ไม่ auto-fill จากที่อื่น */
+const contactPerson = computed(() => activeDoc.value?.contactName || '-')
+const contactPosition = computed(() => activeDoc.value?.contactPosition || '')
+const contactPhone = computed(() => activeDoc.value?.contactPhone || '')
+const contactEmail = computed(() => activeDoc.value?.contactEmail || '')
 
 const printDoc = () => window.print()
 </script>

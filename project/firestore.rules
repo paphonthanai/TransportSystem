@@ -40,6 +40,11 @@ service cloud.firestore {
       allow read, write: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING']);
     }
 
+    // ผู้ติดต่อของลูกค้า (Contact) — Entity แยกจาก CustomerRecord.contact เดิม อ้างอิงกลับด้วย customerId สิทธิ์เดียวกับ customers
+    match /contacts/{contactId} {
+      allow read, write: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING']);
+    }
+
     match /drivers/{driverId} {
       allow read, write: if hasRole(['ADMIN', 'DISPATCHER']);
     }
@@ -109,6 +114,16 @@ service cloud.firestore {
 
     // เงินเดือนพนักงานเสมียน (payroll/staff) — เช่นเดียวกับ payrollDeductions จำกัดแค่ ADMIN อยู่แล้ว
     match /staffSalaries/{salaryId} {
+      allow read, write: if hasRole(['ADMIN']);
+    }
+
+    // ค่าใช้จ่ายประจำรถ (ประกัน/GPS/ค่างวด/อื่นๆ) ผูกกับ vehicleId — ข้อมูลการเงินของรถ จำกัดแค่ ADMIN เหมือน payrollDeductions/staffSalaries
+    match /vehicleExpenses/{expenseId} {
+      allow read, write: if hasRole(['ADMIN']);
+    }
+
+    // สถานะจ่ายรายได้คนขับต่อรอบ (ยังไม่จ่าย/จ่ายแล้ว) — แยกจาก Operational Status ของ Booking โดยเจตนา จำกัดแค่ ADMIN เหมือน payrollDeductions
+    match /driverPayments/{paymentId} {
       allow read, write: if hasRole(['ADMIN']);
     }
 

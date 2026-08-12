@@ -45,8 +45,9 @@
             </td>
             <td class="px-4 py-3 text-muted">{{ assignedDriverLabel(vehicle) }}</td>
             <td class="px-4 py-3 text-right text-text">{{ vehicle.mileage.toLocaleString('th-TH') }}</td>
-            <td class="px-4 py-3 text-right">
-              <button @click="openDialog(vehicle)" class="btn-sm">แก้ไข</button>
+            <td class="px-4 py-3 text-right whitespace-nowrap">
+              <button v-if="authStore.role === 'ADMIN'" @click="router.push(`/payroll/vendor-fleet/${vehicle.id}`)" class="btn-sm">รายละเอียด</button>
+              <button @click="openDialog(vehicle)" class="btn-sm ml-1.5">แก้ไข</button>
             </td>
           </tr>
         </tbody>
@@ -137,11 +138,15 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useDriversStore } from '@/stores/drivers'
+import { useAuthStore } from '@/stores/auth'
 import type { Vehicle, VehicleType } from '@/types'
 
+const router = useRouter()
+const authStore = useAuthStore()
 const onboardingStore = useOnboardingStore()
 const vehiclesStore = useVehiclesStore()
 const driversStore = useDriversStore()

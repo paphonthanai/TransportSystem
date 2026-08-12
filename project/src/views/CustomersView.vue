@@ -185,6 +185,13 @@
             </div>
           </div>
 
+          <div class="px-6 pb-5">
+            <CustomerContactsPanel v-if="editingId" :customer-id="editingId" />
+            <div v-else class="text-xs text-muted border border-dashed border-border rounded-lg p-3">
+              บันทึกลูกค้ารายนี้ก่อน จึงจะเพิ่มรายชื่อผู้ติดต่อได้
+            </div>
+          </div>
+
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border bg-surface sticky bottom-0">
             <button @click="showDialog = false" class="btn-secondary">ยกเลิก</button>
             <button @click="save" :disabled="!form.name" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">บันทึก</button>
@@ -199,6 +206,7 @@
 import { ref, computed } from 'vue'
 import { useCustomerStore, type CustomerRecord } from '@/stores/customers'
 import { useBookingStore } from '@/stores/booking'
+import CustomerContactsPanel from '@/components/customers/CustomerContactsPanel.vue'
 
 const customerStore = useCustomerStore()
 const bookingStore = useBookingStore()

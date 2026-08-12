@@ -2,10 +2,12 @@
 import { ref, watch } from 'vue'
 import { useDocumentSettingsStore, type PriceDisplay } from './documentSettings'
 import { useBookingStore } from './booking'
+import { useCustomerStore } from './customers'
+import { useContactStore } from './contacts'
 import { salesDocumentRepository } from '@/repositories/salesDocumentRepository'
 import { salesDocumentItemRepository } from '@/repositories/salesDocumentItemRepository'
 import { computeRowAmount, computeRowDiscountBaht, computeRowVat } from '@/utils/documentTotals'
-import type { Booking } from '@/types'
+import type { Booking, BillingStatus } from '@/types'
 
 export type SalesDocumentType = 'QUOTATION' | 'SALES_ORDER' | 'BILLING' | 'TAX_INVOICE' | 'RECEIPT' | 'CASH_SALE' | 'PURCHASE_ORDER'
 // Future: 'CREDIT_NOTE' | 'DEBIT_NOTE' (Round 3) — leave the union open via this comment, don't build now.
@@ -101,6 +103,18 @@ export interface SalesDocument {
   discountTotal?: number
   /** QUOTATION: เงื่อนไขการชำระที่เลือกในฟอร์ม (กำหนดว่าจะแสดงช่องจำนวนวัน/วันครบกำหนดหรือไม่) */
   paymentTermMode?: PaymentTermMode
+  /**
+   * ผู้ติดต่อของลูกค้า (ContactRecord.id) ที่ใช้บนเอกสารนี้ — เก็บเป็น Snapshot ของชื่อ/ตำแหน่ง/เบอร์/อีเมล ณ ตอน
+   * ออกเอกสาร (contactName/contactPosition/contactPhone/contactEmail) ตาม pattern เดียวกับ customerAddress/
+   * customerZipCode/customerTaxId ด้านบนที่ snapshot ข้อมูลลูกค้าไว้อยู่แล้ว ไม่ผูก live กับ ContactRecord — ถ้า
+   * แก้ไขผู้ติดต่อภายหลัง เอกสารเก่าที่ออกไปแล้วจะยังเห็นข้อมูล ณ ตอนออกเอกสารเดิม ไม่เปลี่ยนตาม
+   * ห้ามใช้ Current User (authStore) แทนค่านี้เด็ดขาด — เป็นคนละ Entity กัน (ผู้ใช้ระบบ vs ผู้ติดต่อของลูกค้า)
+   */
+  contactId?: string
+  contactName?: string
+  contactPosition?: string
+  contactPhone?: string
+  contactEmail?: string
 }
 
 /**
@@ -185,6 +199,35 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   const items = ref<SalesDocumentItem[]>([])
   const loading = ref(true)
   const error = ref<string | null>(null)
+
+  /**
+   * Snapshot ผู้ติดต่อของลูกค้า (Customer Contact) มาใส่บนเอกสาร ณ ตอนสร้าง — ใช้ Primary Contact ของลูกค้ารายนั้น
+   * ถ้ามี (ดู stores/contacts.ts) ไม่มีการเลือกผู้ติดต่อรายเอกสารในฟอร์มตอนนี้ จึงใช้ Primary เป็นค่าเริ่มต้นเสมอ —
+   * ตั้งใจไม่ใช้ authStore/ผู้ใช้ที่ login อยู่มาแทนค่านี้เด็ดขาด เพราะเป็นคนละ Entity กัน (ผู้ใช้ระบบ vs ผู้ติดต่อ
+   * ของลูกค้า) ถ้าลูกค้ายังไม่มีผู้ติดต่อที่ตั้ง Primary ไว้เลย คืนค่าว่างทั้งหมด (แสดงเป็น "-" ตอน render เท่านั้น
+   * ไม่เขียน "-" ลง Firestore)
+   */
+  function resolveContactSnapshot(customerName: string): {
+    contactId?: string
+    contactName?: string
+    contactPosition?: string
+    contactPhone?: string
+    contactEmail?: string
+  } {
+    const customerStore = useCustomerStore()
+    const contactStore = useContactStore()
+    const customer = customerStore.customers.find((c) => c.name === customerName)
+    if (!customer?.id) return {}
+    const primary = contactStore.primaryContactFor(customer.id)
+    if (!primary) return {}
+    return {
+      contactId: primary.id,
+      contactName: primary.name || undefined,
+      contactPosition: primary.position || undefined,
+      contactPhone: primary.phone || undefined,
+      contactEmail: primary.email || undefined,
+    }
+  }
 
   /**
    * Sales document data source: Firestore (แทน localStorage เดิม) เหมือน booking.ts แต่ฟังก์ชันสร้าง/แก้ไข/ลบ
@@ -573,6 +616,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       whtAmount,
       createdAt: issueDate,
     }
+    Object.assign(invoice, resolveContactSnapshot(customer))
     documents.value.unshift(invoice)
     addItemsToDocument(invoice.id, itemRows)
     doc.status = 'CONVERTED'
@@ -642,6 +686,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       reference,
       createdAt: now,
     }
+    Object.assign(billing, resolveContactSnapshot(customer))
     documents.value.unshift(billing)
     addItemsToDocument(billing.id, itemRows)
     doc.status = 'CONVERTED'
@@ -698,6 +743,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const numbering = documentSettingsStore.settings.numbering.salesOrder
     const seq = documents.value.filter((d) => d.type === 'SALES_ORDER').length + 1
     const now = new Date()
+    /** คำนวณ VAT ระดับเอกสารจาก item.amount/item.vatRate ของแต่ละรายการ (item.amount คำนวณหักส่วนลดไว้แล้ว) —
+     *  เดิม createSalesOrderForBooking ไม่เคยเซ็ต vatAmount/vatRate ระดับเอกสารเลย ทำให้พิมพ์ใบสั่งสินค้าแล้ว
+     *  ยอดรวมทั้งสิ้นไม่รวม VAT (ต่างจากใบวางบิลที่คำนวณให้ถูกต้องอยู่แล้ว ดู createBillingFromBookings) */
+    const vatAmount = Math.round(data.items.reduce((sum, item) => sum + (item.amount * (item.vatRate || 0)) / 100, 0))
+    const vatRates = new Set(data.items.map((item) => item.vatRate || 0))
+    const vatRate = vatRates.size === 1 ? data.items[0]?.vatRate : undefined
     const salesOrder: SalesDocument = {
       id: genId('sdoc'),
       type: 'SALES_ORDER',
@@ -706,11 +757,14 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       status: 'CONVERTED',
       date: now,
       amount: data.amount,
+      vatRate,
+      vatAmount,
       bookingIds: [data.bookingId],
       parentDocumentId: data.quotationId,
       reference: data.reference,
       createdAt: now,
     }
+    Object.assign(salesOrder, resolveContactSnapshot(data.customer))
     documents.value.unshift(salesOrder)
     addItemsToDocument(salesOrder.id, data.items)
     useBookingStore().addLog('สร้างเอกสาร ' + salesOrder.number, { docId: salesOrder.id, bookingId: data.bookingId })
@@ -761,6 +815,144 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       created++
     })
     return created
+  }
+
+  /**
+   * ซ่อมยอด VAT ของใบสั่งสินค้าเดิมที่สร้างไว้ก่อนหน้า createSalesOrderForBooking จะเริ่มคำนวณ vatAmount/vatRate
+   * ระดับเอกสาร (ดูคอมเมนต์ที่ createSalesOrderForBooking) — ยืนยันจากข้อมูลจริงใน Firestore: ใบสั่งสินค้าที่สร้าง
+   * ก่อนแก้จุดนั้นจะไม่มี field vatAmount เลย ทำให้พิมพ์เอกสารแล้วยอดรวมไม่รวม VAT
+   *
+   * ใช้ engine เดิม (computeRowVat จาก documentTotals.ts ตัวเดียวกับที่ createBillingFromBookings ใช้) คำนวณจาก
+   * "รายการที่บันทึกไว้แล้วจริง" ของเอกสารนั้น (itemsForDocument) — ไม่เดา ไม่สร้างสูตรคำนวณ VAT ใหม่แยกเฉพาะ
+   * Migration แตะแค่ vatAmount/vatRate เท่านั้น ไม่แตะ amount/discountTotal ที่ถูกต้องอยู่แล้ว ไม่แตะ Booking เลย
+   *
+   * เงื่อนไข "ต้องซ่อม": vatAmount ยังไม่มีค่า (undefined) เท่านั้น — ถ้ามีค่าอยู่แล้ว (แม้เป็น 0 จริงๆ เพราะงานนั้น
+   * ไม่มี VAT) ถือว่าเคยคำนวณแล้ว ไม่แตะซ้ำ — Idempotent เต็มรูปแบบ: รันซ้ำแล้วไม่มีใบไหนเข้าเงื่อนไขอีกเพราะ
+   * vatAmount ถูกเติมไปแล้วตั้งแต่รอบแรก
+   */
+  function repairSalesOrderVat(): { checked: number; repaired: { id: string; number: string; vatAmount: number }[] } {
+    const salesOrders = documents.value.filter((d) => d.type === 'SALES_ORDER')
+    const repaired: { id: string; number: string; vatAmount: number }[] = []
+    salesOrders.forEach((doc) => {
+      if (doc.vatAmount !== undefined) return
+      const docItems = itemsForDocument(doc.id)
+      if (docItems.length === 0) return
+      const vatAmount = Math.round(docItems.reduce((sum, item) => sum + computeRowVat(item), 0))
+      const vatRates = new Set(docItems.map((item) => item.vatRate || 0))
+      const vatRate = vatRates.size === 1 ? docItems[0].vatRate : undefined
+      doc.vatAmount = vatAmount
+      doc.vatRate = vatRate
+      repaired.push({ id: doc.id, number: doc.number, vatAmount })
+    })
+    if (repaired.length) useBookingStore().addLog(`ซ่อมยอด VAT ของใบสั่งสินค้าเดิม ${repaired.length} ใบ`)
+    return { checked: salesOrders.length, repaired }
+  }
+
+  /**
+   * ซ่อม TAX_INVOICE.parentDocumentId ที่ขาด/ชี้ไปเอกสารที่ไม่มีอยู่จริง — เกิดได้ถ้าข้อมูลถูกย้าย/แก้ไขนอกระบบ
+   * จนความสัมพันธ์ตรงขาดไป ทั้งที่ตัวเอกสารยังมี field `reference` เก็บเลขที่ใบวางบิลต้นทางไว้เป็นข้อความอยู่แล้ว
+   * (ดู createInvoiceFromBilling ด้านบนที่ set reference มาจาก billing.number ตรงๆ) — ใช้ reference นั้นจับคู่กลับ
+   * ไปยัง BILLING.number แบบตรงตัวเป๊ะเท่านั้น ถ้าจับคู่ได้แบบเดียวไม่กำกวมเท่านั้นถึงจะเติม parentDocumentId ให้ พร้อม
+   * เติม BILLING.convertedToDocumentIds ย้อนกลับให้ครบทั้งสองทาง — ถ้าจับคู่ไม่ได้/กำกวม (reference ตรงกับหลายใบ)
+   * ปล่อยเป็น undefined ไว้เหมือนเดิม ห้ามเดา รายงานเป็น unmatched ให้ผู้ใช้ตรวจเอง
+   */
+  function repairTaxInvoiceReferences(): {
+    checked: number
+    repaired: { id: string; number: string; matchedBilling: string }[]
+    unmatched: { id: string; number: string; reference?: string }[]
+  } {
+    const invoices = documents.value.filter((d) => d.type === 'TAX_INVOICE')
+    const repaired: { id: string; number: string; matchedBilling: string }[] = []
+    const unmatched: { id: string; number: string; reference?: string }[] = []
+    invoices.forEach((inv) => {
+      const parentExists = inv.parentDocumentId && documents.value.some((d) => d.id === inv.parentDocumentId && d.type === 'BILLING')
+      if (parentExists) return
+      if (!inv.reference) {
+        unmatched.push({ id: inv.id, number: inv.number, reference: inv.reference })
+        return
+      }
+      const candidates = documents.value.filter((d) => d.type === 'BILLING' && d.number === inv.reference)
+      if (candidates.length !== 1) {
+        unmatched.push({ id: inv.id, number: inv.number, reference: inv.reference })
+        return
+      }
+      const billing = candidates[0]
+      inv.parentDocumentId = billing.id
+      billing.convertedToDocumentIds = [...new Set([...(billing.convertedToDocumentIds || []), inv.id])]
+      repaired.push({ id: inv.id, number: inv.number, matchedBilling: billing.number })
+    })
+    if (repaired.length) useBookingStore().addLog(`ซ่อม reference ของใบแจ้งหนี้/ใบกำกับภาษีเดิม ${repaired.length} ใบ`)
+    return { checked: invoices.length, repaired, unmatched }
+  }
+
+  /**
+   * ซ่อม RECEIPT.sourceDocumentIds ที่ขาด/ชี้ไปเอกสารที่ไม่มีอยู่จริง — pattern เดียวกับ repairTaxInvoiceReferences
+   * ทุกประการ แต่ต้นทางของ Receipt เป็นได้ทั้ง TAX_INVOICE หรือ BILLING (ข้ามขั้นใบแจ้งหนี้ไปเลยก็ได้ ดู
+   * createReceiptFromSourceDocs) จึงต้องลองจับคู่ reference กับทั้งสองประเภท — จับคู่ได้แบบเดียวไม่กำกวมเท่านั้นถึง
+   * จะเติมให้ ห้ามเดา ไม่แตะ bookingIds/amount/vatAmount ที่มีอยู่แล้วของ Receipt เอง
+   */
+  function repairReceiptReferences(): {
+    checked: number
+    repaired: { id: string; number: string; matchedSource: string }[]
+    unmatched: { id: string; number: string; reference?: string }[]
+  } {
+    const receipts = documents.value.filter((d) => d.type === 'RECEIPT')
+    const repaired: { id: string; number: string; matchedSource: string }[] = []
+    const unmatched: { id: string; number: string; reference?: string }[] = []
+    receipts.forEach((rec) => {
+      const hasValidSource = (rec.sourceDocumentIds || []).some((id) => documents.value.some((d) => d.id === id))
+      if (hasValidSource) return
+      if (!rec.reference) {
+        unmatched.push({ id: rec.id, number: rec.number, reference: rec.reference })
+        return
+      }
+      const candidates = documents.value.filter((d) => (d.type === 'TAX_INVOICE' || d.type === 'BILLING') && d.number === rec.reference)
+      if (candidates.length !== 1) {
+        unmatched.push({ id: rec.id, number: rec.number, reference: rec.reference })
+        return
+      }
+      const source = candidates[0]
+      rec.sourceDocumentIds = [source.id]
+      if (rec.bookingIds.length === 0 && source.bookingIds.length) rec.bookingIds = source.bookingIds
+      repaired.push({ id: rec.id, number: rec.number, matchedSource: source.number })
+    })
+    if (repaired.length) useBookingStore().addLog(`ซ่อม reference ของใบเสร็จรับเงินเดิม ${repaired.length} ใบ`)
+    return { checked: receipts.length, repaired, unmatched }
+  }
+
+  /**
+   * ซ่อม Booking.billingStatus ที่ค้างมาจากระบบวางบิลเดิม (batches/documents เดิมที่เคยเก็บใน localStorage
+   * ก่อนย้ายมาใช้ SalesDocument ผ่าน Firestore) — งานที่เคยถูกดึงเข้ารอบบิลเดิมจะมี billingStatus ค้างเป็น
+   * IN_BATCH/HOLD/INVOICED/PAID ตลอดไปเพราะไม่มีจุดไหนในระบบปัจจุบันเคลียร์ค่านี้ให้ (removeFromBatch ใน
+   * booking.ts เป็นจุดเดียวที่เคลียร์ได้ แต่เข้าถึงได้ทางอ้อมผ่านการ Reset สถานะงานย้อนไปถึง ASSIGNED เท่านั้น
+   * ซึ่งไม่ควรเป็นทางเดียวที่ใช้แก้ปัญหานี้ — ดู createBillingFromBookings ด้านล่างที่เช็ค billingStatus ===
+   * UNBILLED เป็นเงื่อนไขจำเป็นก่อนสร้างใบวางบิลได้)
+   *
+   * เงื่อนไข "ถือว่าค้าง ต้องซ่อม": status === DELIVERED, billingStatus มีค่าและไม่ใช่ UNBILLED, และไม่มี
+   * SalesDocument ประเภท BILLING/TAX_INVOICE/RECEIPT ของระบบปัจจุบันที่ bookingIds อ้างถึงงานนี้อยู่จริงเลย
+   * (ถ้ามีอยู่จริงแปลว่ากำลังอยู่ระหว่างดำเนินการในระบบปัจจุบันจริงๆ ไม่ใช่ค่าที่ค้างมาจากระบบเดิม ห้ามไปแตะ —
+   * ป้องกัน Case C ที่มี Billing Note อยู่แล้วไม่ให้ syncBillingReadiness ไปยุ่งด้วย)
+   *
+   * ทำแค่ 2 อย่างต่องานที่เข้าเงื่อนไข: billingStatus = 'UNBILLED', batchId = undefined — เหมือนที่
+   * removeFromBatch ทำเป๊ะ ไม่สร้าง/ลบเอกสารใดๆ ไม่แตะ status ของงานเลย Idempotent เต็มรูปแบบ: รันซ้ำแล้วไม่มี
+   * งานไหนเข้าเงื่อนไข "ค้าง" อีก เพราะ billingStatus ถูกซ่อมเป็น UNBILLED ไปแล้วตั้งแต่รอบแรก
+   */
+  function syncBillingReadiness(): { checked: number; repaired: { bookingId: string; docNo: string; previousBillingStatus: BillingStatus }[] } {
+    const bookingStore = useBookingStore()
+    const deliveredBookings = bookingStore.bookings.filter((b) => b.status === 'DELIVERED')
+    const repaired: { bookingId: string; docNo: string; previousBillingStatus: BillingStatus }[] = []
+    deliveredBookings.forEach((b) => {
+      if (!b.billingStatus || b.billingStatus === 'UNBILLED') return
+      const hasCurrentDocument = documents.value.some(
+        (d) => (d.type === 'BILLING' || d.type === 'TAX_INVOICE' || d.type === 'RECEIPT') && d.bookingIds.includes(b.id)
+      )
+      if (hasCurrentDocument) return
+      repaired.push({ bookingId: b.id, docNo: b.docNo, previousBillingStatus: b.billingStatus })
+      b.billingStatus = 'UNBILLED'
+      b.batchId = undefined
+    })
+    if (repaired.length) bookingStore.addLog(`ซิงก์สถานะวางบิลที่ค้างจากระบบเดิม ${repaired.length} งาน`)
+    return { checked: deliveredBookings.length, repaired }
   }
 
   /** ลบระเบียนใบสั่งสินค้าออกจากรายการ (ไม่กระทบ Booking ที่ผูกอยู่ — งานขนส่งยังอยู่ตามปกติ) */
@@ -815,6 +1007,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       paymentTermMode: data.paymentTermMode,
       creditDays: data.creditDays,
     }
+    Object.assign(billing, resolveContactSnapshot(data.customer))
     documents.value.unshift(billing)
     addItemsToDocument(billing.id, data.items)
     linkManualDocToSource(billing, data)
@@ -902,6 +1095,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       discountTotal: data.discountTotal,
       paymentTermMode: data.paymentTermMode,
     }
+    Object.assign(invoice, resolveContactSnapshot(data.customer))
     documents.value.unshift(invoice)
     addItemsToDocument(invoice.id, data.items)
     linkManualDocToSource(invoice, data)
@@ -992,6 +1186,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       useESignature: data.useESignature,
       discountTotal: data.discountTotal,
     }
+    Object.assign(receipt, resolveContactSnapshot(data.customer))
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, data.items)
     useBookingStore().addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
@@ -1066,7 +1261,14 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const numbering = documentSettingsStore.settings.numbering.billingList
     const seq = bookingStore.batches.length + documents.value.filter((d) => d.type === 'BILLING').length + 1
     const customer = overrides?.customer?.trim() || targetBookings[0].customer
-    const reference = overrides?.reference ?? targetBookings.map((b) => b.docNo).join(', ')
+    /** ใช้เลขที่เอกสารใบสั่งสินค้าต้นทาง (booking.sourceDocumentId) เป็นเลขที่อ้างอิง ไม่ใช่ docNo ของ Booking ตรงๆ —
+     *  เพื่อให้ "เลขที่อ้างอิงเอกสาร" ที่พิมพ์บนใบวางบิล ชี้กลับไปเอกสารขั้นก่อนหน้าจริงๆ ตาม Document Flow
+     *  ถ้างานไหนไม่มีใบสั่งสินค้าผูกอยู่ (เช่นยังไม่ได้ซิงก์) ใช้ docNo เป็น fallback เหมือนเดิม */
+    const referenceFor = (b: (typeof targetBookings)[number]) => {
+      const salesOrder = b.sourceDocumentId ? documents.value.find((d) => d.type === 'SALES_ORDER' && d.id === b.sourceDocumentId) : undefined
+      return salesOrder?.number || b.docNo
+    }
+    const reference = overrides?.reference ?? targetBookings.map(referenceFor).join(', ')
     const destinationLabel = (b: (typeof targetBookings)[number]) => {
       if (!b.items.length) return '-'
       const first = b.items[0].siteName
@@ -1096,6 +1298,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       reference,
       createdAt: now,
     }
+    Object.assign(billing, resolveContactSnapshot(customer))
     documents.value.unshift(billing)
     addItemsToDocument(
       billing.id,
@@ -1165,6 +1368,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       whtAmount,
       createdAt: issueDate,
     }
+    Object.assign(invoice, resolveContactSnapshot(customer))
     documents.value.unshift(invoice)
     addItemsToDocument(invoice.id, itemRows)
     doc.status = 'BILLED'
@@ -1569,6 +1773,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       whtAmount,
       createdAt: now,
     }
+    Object.assign(receipt, resolveContactSnapshot(customer))
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, receiptItemRowsFromSourceDocs(targetDocs))
     if (sourceType === 'BILLING') {
@@ -1733,6 +1938,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     convertQuotationToPurchaseOrder,
     createSalesOrderForBooking,
     backfillMissingSalesOrders,
+    repairSalesOrderVat,
+    repairTaxInvoiceReferences,
+    repairReceiptReferences,
+    syncBillingReadiness,
     deleteSalesOrder,
     createBillingFromBookings,
     backfillBillingVatFromBookings,

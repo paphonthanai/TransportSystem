@@ -16,7 +16,7 @@
           <label class="field-label">พนักงาน</label>
           <select v-model="staffId" :disabled="isEditMode" class="input-field w-full disabled:opacity-70">
             <option value="">เลือกพนักงาน...</option>
-            <option v-for="u in staffPool" :key="u.id" :value="u.id">{{ u.name }} ({{ roleLabel[u.role] || u.role }})</option>
+            <option v-for="s in staffPool" :key="s.id" :value="s.id">{{ staffStore.fullName(s) }}{{ s.position ? ` (${s.position})` : '' }}</option>
           </select>
         </div>
         <div>
@@ -28,10 +28,26 @@
           <input v-model.number="baseSalary" type="number" min="0" class="input-field w-full" />
         </div>
         <div>
-          <label class="field-label">สถานะ</label>
+          <label class="field-label">สถานะจ่ายเงิน (Payment Status)</label>
           <select v-model="status" class="input-field w-full">
             <option value="DRAFT">รอจ่าย</option>
             <option value="PAID">จ่ายแล้ว</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">เลขที่เอกสาร (ไม่บังคับ)</label>
+          <input v-model="documentNumber" placeholder="เช่น SLR2569-0001" class="input-field w-full" />
+          <div v-if="documentNumberDuplicate" class="text-[11px] text-red-600 mt-1">เลขที่เอกสารนี้ถูกใช้ไปแล้ว</div>
+        </div>
+        <div>
+          <label class="field-label">วันที่ออกเอกสาร (ไม่บังคับ)</label>
+          <input v-model="documentDateValue" type="date" class="input-field w-full" />
+        </div>
+        <div>
+          <label class="field-label">สถานะเอกสาร (Document Status)</label>
+          <select v-model="documentStatus" class="input-field w-full">
+            <option value="DRAFT">ร่าง</option>
+            <option value="ISSUED">ออกเอกสารแล้ว</option>
           </select>
         </div>
       </div>
@@ -100,7 +116,7 @@
         <div class="w-full max-w-sm bg-surface rounded-2xl shadow-2xl p-6 space-y-4">
           <div class="font-bold text-text">ยืนยันบันทึกเงินเดือน</div>
           <div class="text-sm text-muted">
-            บันทึกเงินเดือน {{ staffPool.find((u) => u.id === staffId)?.name }} รอบ {{ periodLabel }} ยอดสุทธิ {{ formatBaht(netAmount) }} — ยืนยันหรือไม่?
+            บันทึกเงินเดือน {{ selectedStaffName }} รอบ {{ periodLabel }} ยอดสุทธิ {{ formatBaht(netAmount) }} — ยืนยันหรือไม่?
           </div>
           <div class="flex justify-end gap-2">
             <button @click="confirmOpen = false" class="btn-secondary">ยกเลิก</button>
@@ -115,19 +131,18 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useUserStore } from '@/stores/users'
-import { useStaffSalaryStore, type SalaryLineItem, type StaffSalaryStatus } from '@/stores/staffSalaries'
+import { useStaffStore } from '@/stores/staff'
+import { useStaffSalaryStore, type SalaryLineItem, type StaffSalaryStatus, type StaffSalaryDocumentStatus } from '@/stores/staffSalaries'
 
 const props = defineProps<{ id?: string }>()
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
+const staffStore = useStaffStore()
 const staffSalaryStore = useStaffSalaryStore()
 
 const isEditMode = !!props.id
 
-const roleLabel: Record<string, string> = { ADMIN: 'ผู้ดูแลระบบ', STAFF: 'เสมียน', DISPATCHER: 'จัดรถ', ACCOUNTING: 'บัญชี' }
-const staffPool = computed(() => userStore.users.filter((u) => u.role !== 'DRIVER'))
+const staffPool = computed(() => staffStore.staffList)
 
 const record = computed(() => (props.id ? staffSalaryStore.records.find((r) => r.id === props.id) || null : null))
 
@@ -155,6 +170,9 @@ const additions = ref<SalaryLineItem[]>([])
 const deductions = ref<SalaryLineItem[]>([])
 const status = ref<StaffSalaryStatus>('DRAFT')
 const note = ref('')
+const documentNumber = ref('')
+const documentDateValue = ref('')
+const documentStatus = ref<StaffSalaryDocumentStatus>('DRAFT')
 
 /** โหลดข้อมูลเดิมมาเติมฟอร์มทันทีที่ record ปรากฏจริง (กันกรณี hard reload เข้าหน้าแก้ไขตรงๆ ก่อน store โหลดจาก Firestore เสร็จ) */
 const prefilled = ref(false)
@@ -170,13 +188,21 @@ watch(
     deductions.value = r.deductions.map((d) => ({ ...d }))
     status.value = r.status
     note.value = r.note || ''
+    documentNumber.value = r.documentNumber || ''
+    documentDateValue.value = r.documentDate ? new Date(r.documentDate).toISOString().slice(0, 10) : ''
+    documentStatus.value = r.documentStatus || 'DRAFT'
   },
   { immediate: true }
 )
 
+const selectedStaffName = computed(() => {
+  const s = staffPool.value.find((s) => s.id === staffId.value)
+  return s ? staffStore.fullName(s) : ''
+})
 const netAmount = computed(() => staffSalaryStore.computeNet(baseSalary.value, additions.value, deductions.value))
 const duplicateWarning = computed(() => !!staffId.value && staffSalaryStore.recordExistsFor(staffId.value, periodLabel.value, props.id))
-const canSave = computed(() => !!staffId.value && !!periodLabel.value && !duplicateWarning.value)
+const documentNumberDuplicate = computed(() => staffSalaryStore.documentNumberExistsFor(documentNumber.value, props.id))
+const canSave = computed(() => !!staffId.value && !!periodLabel.value && !duplicateWarning.value && !documentNumberDuplicate.value)
 
 const submitError = ref('')
 const confirmOpen = ref(false)
@@ -199,6 +225,9 @@ const confirmSave = async () => {
     deductions: deductions.value.filter((d) => d.label),
     status: status.value,
     note: note.value || undefined,
+    documentNumber: documentNumber.value.trim() || undefined,
+    documentDate: documentDateValue.value ? new Date(documentDateValue.value) : undefined,
+    documentStatus: documentStatus.value,
   }
   const result = props.id ? await staffSalaryStore.updateSalary(props.id, payload) : await staffSalaryStore.createSalary(payload)
   if (!result) {

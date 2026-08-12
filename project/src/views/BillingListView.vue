@@ -4,6 +4,22 @@
       <div class="text-xs text-muted">ใบวางบิล &gt; {{ statusFilterLabel }}</div>
       <div class="flex items-center gap-2">
         <button
+          @click="syncMissingSalesOrders"
+          class="btn-secondary"
+          title="สร้างใบสั่งสินค้าให้กับงานขนส่งที่ยังไม่มีใบสั่งสินค้าผูกอยู่ — ใบวางบิลต้องอาศัยใบสั่งสินค้าต้นทางเสมอ"
+        >
+          <span class="material-symbols-rounded text-base">sync</span>
+          ซิงก์เอกสารที่ขาดหาย
+        </button>
+        <button
+          @click="syncBillingReadiness"
+          class="btn-secondary"
+          title="ซ่อมสถานะวางบิลที่ค้างจากระบบเดิม ให้งานที่ส่งของสำเร็จแล้วสามารถสร้างใบวางบิลต่อได้ตามปกติ โดยไม่ต้อง Reset งาน"
+        >
+          <span class="material-symbols-rounded text-base">sync_alt</span>
+          ซิงก์ข้อมูล/เอกสารก่อนหน้า
+        </button>
+        <button
           @click="runVatBackfill"
           class="btn-secondary"
           title="คำนวณยอดก่อนส่วนลด/ส่วนลด/VAT ของใบวางบิลที่สร้างจากงานขนส่งใหม่ตามข้อมูลของงานขนส่งต้นทาง (เผื่อกรณีสร้างไว้ก่อนระบบรองรับ VAT ต่องาน)"
@@ -167,6 +183,23 @@ const vatBackfillFieldLabel: Record<string, string> = {
   vatAmount: 'ภาษีมูลค่าเพิ่ม (vatAmount)',
   vatRate: 'อัตราภาษี (vatRate)',
   grandTotal: 'ยอดรวมสุทธิ (grandTotal)',
+}
+
+const syncMissingSalesOrders = () => {
+  const created = salesDocumentsStore.backfillMissingSalesOrders()
+  alert(created > 0 ? `สร้างใบสั่งสินค้าให้งานที่ขาดหายแล้ว ${created} ใบ` : 'ทุกงานมีใบสั่งสินค้าครบแล้ว ไม่มีรายการที่ต้องซิงก์')
+}
+
+/** ซ่อมสถานะวางบิล (billingStatus) ที่ค้างจากระบบเดิม ให้กลับมาสร้างใบวางบิลต่อได้ตามปกติ — ไม่สร้าง/ลบเอกสารใดๆ
+ * ไม่แตะสถานะงานขนส่ง ทำได้ปลอดภัยแม้กดซ้ำหลายครั้ง (idempotent) ดู syncBillingReadiness ใน stores/salesDocuments.ts */
+const syncBillingReadiness = () => {
+  const result = salesDocumentsStore.syncBillingReadiness()
+  if (result.repaired.length === 0) {
+    alert(`ตรวจสอบแล้ว ${result.checked} งาน ไม่พบรายการที่ค้างสถานะวางบิลจากระบบเดิม`)
+    return
+  }
+  const list = result.repaired.map((r) => `- ${r.docNo} (เดิม: ${r.previousBillingStatus})`).join('\n')
+  alert(`ซ่อมสถานะวางบิลให้ ${result.repaired.length} งาน สามารถสร้างใบวางบิลต่อได้แล้ว:\n${list}`)
 }
 
 const runVatBackfill = () => {

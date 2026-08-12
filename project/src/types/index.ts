@@ -244,6 +244,22 @@ export interface PayrollDeduction {
   createdAt: Date
 }
 
+export type DriverPaymentStatusValue = 'UNPAID' | 'PAID'
+
+/**
+ * สถานะการจ่ายรายได้คนขับต่อรอบ (เดือน) — แยกจาก Booking/Operational Status ของงานขนส่งโดยเจตนา (ดูหัวข้อ Driver
+ * Payment Status ในสเปก) การเปลี่ยนค่านี้ต้องไม่ไปแตะสถานะ Booking/Dispatch/Delivery/Billing/TaxInvoice/Receipt เลย
+ * คีย์ด้วย (driverName, periodLabel) คู่กันเหมือน PayrollDeduction — 1 คนขับ 1 รอบ มีได้ระเบียนเดียว (upsert)
+ */
+export interface DriverPaymentRecord {
+  id: string
+  driverName: string
+  /** รอบบัญชี รูปแบบ "YYYY-MM" (พ.ศ.) เช่น "2569-08" — ธรรมเนียมเดียวกับ PayrollDeduction.periodLabel */
+  periodLabel: string
+  status: DriverPaymentStatusValue
+  updatedAt: Date
+}
+
 export interface LogEntry {
   id: string
   timestamp: Date
@@ -369,6 +385,24 @@ export interface Vehicle {
   repairDays?: number
   /** รหัสคนขับประจำรถคันนี้ (ผูกกับ DriverRecord.code) ไม่บังคับต้องมี และเปลี่ยนได้ภายหลังเสมอ — แก้ไขผ่าน vehiclesStore.assignDriver() เท่านั้น เพื่อให้ทุกหน้าเห็นข้อมูลตรงกัน */
   driverCode?: string
+}
+
+export type VehicleExpenseType = 'INSURANCE' | 'GPS' | 'INSTALLMENT' | 'GENERAL'
+
+/**
+ * ค่าใช้จ่ายประจำรถ (ประกัน/GPS/ค่างวด/อื่นๆ) — ผูกกับ vehicleId ตรงๆ ตั้งใจแยกจาก PayrollDeduction (ผูกกับ driverName)
+ * แม้จะมี type ทับซ้อนกัน (INSURANCE/GPS/INSTALLMENT) เพราะค่าใช้จ่ายนี้เป็นของ "รถ" ไม่ใช่ "คนขับที่ขับอยู่ตอนนี้" —
+ * คนขับเปลี่ยนได้ตลอดแต่ค่าใช้จ่ายนี้ต้องยัง Trace กลับไปที่รถคันเดิมเสมอ ไม่ย้ายตามคนขับ (ดู vehicleExpenses.ts)
+ */
+export interface VehicleExpense {
+  id: string
+  vehicleId: string
+  expenseType: VehicleExpenseType
+  description?: string
+  amount: number
+  date: Date
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface Document {

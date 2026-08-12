@@ -2,8 +2,9 @@ import { ref, computed } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
+import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import { exportRowsToExcel } from '@/utils/exportExcel'
-import type { Booking, VehicleType } from '@/types'
+import type { Booking, VehicleType, DriverPaymentStatusValue } from '@/types'
 
 function currentMonthValue(): string {
   const now = new Date()
@@ -38,6 +39,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
   const bookingStore = useBookingStore()
   const vehiclesStore = useVehiclesStore()
   const deductionsStore = usePayrollDeductionsStore()
+  const paymentsStore = useDriverPaymentsStore()
 
   const mode = ref<'summary' | 'detail'>('summary')
   const period = ref(currentMonthValue())
@@ -73,9 +75,13 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
     })
     return Array.from(byDriver.entries()).map(([driver, data]) => {
       const deductionTotal = deductionsStore.deductionsFor(driver, periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
-      return { driver, ...data, deductionTotal, finalNet: data.netIncome - deductionTotal }
+      const paymentStatus = paymentsStore.statusFor(driver, periodLabel.value)
+      return { driver, ...data, deductionTotal, finalNet: data.netIncome - deductionTotal, paymentStatus }
     })
   })
+
+  /** เปลี่ยนสถานะจ่ายรายได้คนขับของรอบที่กำลังดูอยู่ — ไม่แตะ Booking/Operational Status ใดๆ เลย (ดู driverPayments.ts) */
+  const setPaymentStatus = (driver: string, status: DriverPaymentStatusValue) => paymentsStore.setStatus(driver, periodLabel.value, status)
 
   const detailRows = computed(() =>
     bookingsInScope.value
@@ -135,5 +141,6 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
     formatBaht,
     exportSummary,
     exportDetail,
+    setPaymentStatus,
   }
 }
