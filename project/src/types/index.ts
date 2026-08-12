@@ -230,7 +230,8 @@ export interface WHTCertificate {
   createdAt: Date
 }
 
-export type PayrollDeductionType = 'WHT' | 'GENERAL' | 'INSURANCE' | 'GPS' | 'INSTALLMENT'
+/** ประเภทรายการหัก — ผู้ใช้กรอกเองเป็นข้อความอิสระ (ไม่ใช่ enum ตายตัว) ไม่มี default/predefined category ในระบบ */
+export type PayrollDeductionType = string
 
 /** รายการหักเงินเดือนคนขับต่อรอบ (เดือน) — จับคู่กับคนขับด้วยชื่อเต็ม เหมือนกับที่ Booking.driverName เก็บ snapshot ไว้ */
 export interface PayrollDeduction {
@@ -238,8 +239,11 @@ export interface PayrollDeduction {
   driverName: string
   /** รอบบัญชี รูปแบบ "YYYY-MM" เช่น "2569-08" */
   periodLabel: string
+  /** ประเภท/รายการที่ผู้ใช้กรอกเอง เช่น "หักภาษี ณ ที่จ่าย", "ค่าเสียหายสินค้า" — ข้อความอิสระ ไม่ใช่ค่าคงที่ของระบบ */
   type: PayrollDeductionType
   label: string
+  /** วันที่ของรายการหัก (ไม่บังคับ — รายการเก่าก่อนมี field นี้ไม่มีค่า ให้ตกไปใช้ createdAt แสดงแทน) */
+  date?: Date
   amount: number
   createdAt: Date
 }
@@ -387,7 +391,8 @@ export interface Vehicle {
   driverCode?: string
 }
 
-export type VehicleExpenseType = 'INSURANCE' | 'GPS' | 'INSTALLMENT' | 'REPAIR' | 'GENERAL'
+/** ประเภทค่าใช้จ่ายประจำรถ — ผู้ใช้กรอกเองเป็นข้อความอิสระ (ไม่ใช่ enum ตายตัว) ไม่มี default/predefined category ในระบบ */
+export type VehicleExpenseType = string
 
 /**
  * ค่าใช้จ่ายประจำรถ (ประกัน/GPS/ค่างวด/อื่นๆ) — ผูกกับ vehicleId ตรงๆ ตั้งใจแยกจาก PayrollDeduction (ผูกกับ driverName)

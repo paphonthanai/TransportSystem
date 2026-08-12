@@ -2,35 +2,62 @@
   <div class="card-lg space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <h3 class="text-sm font-bold text-text">รายการหักเงินเดือน</h3>
-      <div class="text-xs text-muted">รอบ {{ periodLabel }}{{ driverName ? ` · ${driverName}` : '' }}</div>
+      <div class="flex items-center gap-3">
+        <div class="text-xs text-muted">รอบ {{ periodLabel }}{{ driverName ? ` · ${driverName}` : '' }}</div>
+        <button v-if="driverName && !formOpen" @click="openAddForm" class="btn-sm">
+          <span class="material-symbols-rounded text-sm align-middle">add</span>
+          เพิ่มรายการหัก
+        </button>
+      </div>
     </div>
 
     <div v-if="!driverName" class="text-sm text-muted py-4 text-center">เลือกคนขับเพื่อดู/เพิ่มรายการหักเงินเดือน</div>
 
     <template v-else>
-      <div v-for="cat in categories" :key="cat.type" class="border border-border rounded-lg p-3 space-y-2">
-        <div class="text-xs font-semibold text-text">{{ cat.label }}</div>
-        <template v-for="row in rowsFor(cat.type)" :key="row.id">
-          <div v-if="editingId === row.id" class="flex items-center gap-2 text-sm bg-surface-2 rounded-lg p-1.5">
-            <input v-model="editDraft.label" placeholder="รายละเอียด (ไม่บังคับ)" class="input-field flex-1 h-8 text-xs" />
-            <input v-model.number="editDraft.amount" type="number" placeholder="จำนวนเงิน" class="input-field w-24 h-8 text-xs" />
-            <button @click="saveEdit(row.id)" :disabled="!editDraft.amount" class="text-primary hover:underline text-xs disabled:opacity-40">บันทึก</button>
-            <button @click="cancelEdit" class="text-muted hover:text-text text-xs">ยกเลิก</button>
-          </div>
-          <div v-else class="flex items-center justify-between text-sm gap-2">
-            <span class="text-muted">{{ row.label || cat.label }}</span>
-            <div class="flex items-center gap-2">
-              <span class="font-semibold text-text">{{ formatBaht(row.amount) }}</span>
-              <button @click="startEdit(row)" class="text-muted hover:text-text text-xs">แก้ไข</button>
-              <button @click="remove(row.id)" class="text-red-500 hover:text-red-600 text-xs">ลบ</button>
-            </div>
-          </div>
-        </template>
-        <div class="flex items-center gap-2 pt-1">
-          <input v-model="drafts[cat.type].label" placeholder="รายละเอียด (ไม่บังคับ)" class="input-field flex-1 h-8 text-xs" />
-          <input v-model.number="drafts[cat.type].amount" type="number" placeholder="จำนวนเงิน" class="input-field w-28 h-8 text-xs" />
-          <button @click="add(cat.type)" class="btn-sm">เพิ่ม</button>
+      <div v-if="formOpen" class="border border-dashed border-border rounded-lg p-3 space-y-2">
+        <div class="text-xs font-semibold text-muted">{{ editingId ? 'แก้ไขรายการหัก' : 'เพิ่มรายการหักใหม่' }}</div>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+          <input v-model="draft.type" placeholder="ประเภท/รายการ เช่น หักภาษี ณ ที่จ่าย" class="input-field h-9 text-xs sm:col-span-2" />
+          <input v-model="draft.label" placeholder="รายละเอียด (ไม่บังคับ)" class="input-field h-9 text-xs sm:col-span-2" />
+          <input v-model.number="draft.amount" type="number" placeholder="จำนวนเงิน" class="input-field h-9 text-xs" />
+          <input v-model="draft.date" type="date" class="input-field h-9 text-xs" />
         </div>
+        <div class="flex items-center gap-2 justify-end">
+          <button @click="closeForm" class="btn-sm">ยกเลิก</button>
+          <button @click="save" :disabled="!draft.type || !draft.amount" class="btn-sm disabled:opacity-40 disabled:cursor-not-allowed">
+            {{ editingId ? 'บันทึก' : 'เพิ่ม' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="border border-border rounded-lg overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-surface-2 text-xs text-muted">
+            <tr>
+              <th class="text-left px-3 py-2 font-semibold">ประเภท/รายละเอียด</th>
+              <th class="text-left px-3 py-2 font-semibold">วันที่</th>
+              <th class="text-right px-3 py-2 font-semibold">จำนวนเงิน</th>
+              <th class="px-3 py-2 font-semibold w-24"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in rows" :key="row.id" class="border-t border-border">
+              <td class="px-3 py-2">
+                <div class="font-semibold text-text">{{ row.type }}</div>
+                <div v-if="row.label" class="text-xs text-muted">{{ row.label }}</div>
+              </td>
+              <td class="px-3 py-2 text-muted">{{ row.date ? formatDate(row.date) : formatDate(row.createdAt) }}</td>
+              <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(row.amount) }}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap">
+                <button @click="startEdit(row)" class="text-muted hover:text-text text-xs">แก้ไข</button>
+                <button @click="remove(row.id)" class="text-red-500 hover:text-red-600 text-xs ml-2">ลบ</button>
+              </td>
+            </tr>
+            <tr v-if="rows.length === 0">
+              <td colspan="4" class="px-3 py-6 text-center text-muted">ยังไม่มีรายการหักเงินเดือนรอบนี้</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div class="flex items-center justify-between pt-2 border-t border-border">
@@ -44,73 +71,77 @@
 <script setup lang="ts">
 import { reactive, ref, computed } from 'vue'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
-import type { PayrollDeduction, PayrollDeductionType } from '@/types'
+import type { PayrollDeduction } from '@/types'
 
+/**
+ * รายการหักเงินเดือนเป็นข้อมูล User-defined ล้วนๆ — ไม่มี predefined category (หักภาษี ณ ที่จ่าย/ค่าประกันงาน ฯลฯ
+ * เป็นแค่ตัวอย่าง placeholder ไม่ใช่ default ของระบบ) ผู้ใช้กรอกประเภท/รายการเองเป็นข้อความอิสระ เก็บลง field type เดิม
+ * ห้ามสร้างรายการอัตโนมัติจาก Vehicle Expense/Booking/Vehicle Income/Driver Income/Fuel Cost — ยังคง Reuse
+ * store/repository/collection เดิมทั้งหมด ไม่มีการสร้างใหม่
+ */
 const props = defineProps<{ driverName: string; periodLabel: string }>()
 
 const deductionsStore = usePayrollDeductionsStore()
 
-const categories: { type: PayrollDeductionType; label: string }[] = [
-  { type: 'WHT', label: 'หักภาษี ณ ที่จ่าย / ค่าดำเนินการบริษัท-หุ้นส่วน / 50 ทวิ' },
-  { type: 'GENERAL', label: 'หักค่าใช้จ่ายทั่วไป' },
-  { type: 'INSURANCE', label: 'หักค่าประกันงาน' },
-  { type: 'GPS', label: 'หักค่า GPS / ค่าใช้จ่ายประจำ' },
-  { type: 'INSTALLMENT', label: 'หักค่างวด' },
-]
-
-const drafts = reactive<Record<PayrollDeductionType, { label: string; amount: number | undefined }>>({
-  WHT: { label: '', amount: undefined },
-  GENERAL: { label: '', amount: undefined },
-  INSURANCE: { label: '', amount: undefined },
-  GPS: { label: '', amount: undefined },
-  INSTALLMENT: { label: '', amount: undefined },
-})
-
-const rowsFor = (type: PayrollDeductionType) =>
-  deductionsStore.deductionsFor(props.driverName, props.periodLabel).filter((d) => d.type === type)
-
-const totalDeductions = computed(() =>
-  deductionsStore.deductionsFor(props.driverName, props.periodLabel).reduce((sum, d) => sum + d.amount, 0)
+const rows = computed(() =>
+  [...deductionsStore.deductionsFor(props.driverName, props.periodLabel)].sort(
+    (a, b) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
+  )
 )
 
-const add = (type: PayrollDeductionType) => {
-  const draft = drafts[type]
-  if (!draft.amount) return
-  deductionsStore.addDeduction({
-    driverName: props.driverName,
-    periodLabel: props.periodLabel,
-    type,
-    label: draft.label,
-    amount: draft.amount,
-  })
-  draft.label = ''
-  draft.amount = undefined
+const totalDeductions = computed(() => rows.value.reduce((sum, d) => sum + d.amount, 0))
+
+const todayValue = () => new Date().toISOString().slice(0, 10)
+
+type Draft = { type: string; label: string; amount: number | undefined; date: string }
+const emptyDraft = (): Draft => ({ type: '', label: '', amount: undefined, date: todayValue() })
+
+const draft = reactive<Draft>(emptyDraft())
+const formOpen = ref(false)
+const editingId = ref<string | null>(null)
+
+const openAddForm = () => {
+  Object.assign(draft, emptyDraft())
+  editingId.value = null
+  formOpen.value = true
 }
 
-const remove = (id: string) => deductionsStore.deleteDeduction(id)
-
-const editingId = ref<string | null>(null)
-const editDraft = reactive<{ label: string; amount: number | undefined }>({ label: '', amount: undefined })
+const closeForm = () => {
+  formOpen.value = false
+  editingId.value = null
+  Object.assign(draft, emptyDraft())
+}
 
 const startEdit = (row: PayrollDeduction) => {
   editingId.value = row.id
-  editDraft.label = row.label
-  editDraft.amount = row.amount
+  Object.assign(draft, { type: row.type, label: row.label || '', amount: row.amount, date: (row.date ? new Date(row.date) : new Date(row.createdAt)).toISOString().slice(0, 10) })
+  formOpen.value = true
 }
 
-const cancelEdit = () => {
-  editingId.value = null
-  editDraft.label = ''
-  editDraft.amount = undefined
+const save = () => {
+  if (!draft.type || !draft.amount) return
+  if (editingId.value) {
+    deductionsStore.updateDeduction(editingId.value, { type: draft.type, label: draft.label, amount: draft.amount, date: draft.date ? new Date(draft.date) : undefined })
+  } else {
+    deductionsStore.addDeduction({
+      driverName: props.driverName,
+      periodLabel: props.periodLabel,
+      type: draft.type,
+      label: draft.label,
+      amount: draft.amount,
+      date: draft.date ? new Date(draft.date) : undefined,
+    })
+  }
+  closeForm()
 }
 
-const saveEdit = (id: string) => {
-  if (!editDraft.amount) return
-  deductionsStore.updateDeduction(id, { label: editDraft.label, amount: editDraft.amount })
-  cancelEdit()
+const remove = (id: string) => {
+  if (editingId.value === id) closeForm()
+  deductionsStore.deleteDeduction(id)
 }
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatDate = (date: Date) => new Date(date).toLocaleDateString('th-TH')
 
 defineExpose({ totalDeductions })
 </script>

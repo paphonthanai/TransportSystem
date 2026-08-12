@@ -14,7 +14,7 @@ function sanitize(data: Partial<PayrollDeduction> & Record<string, unknown>): Re
 }
 
 function revive(raw: any): PayrollDeduction {
-  return { ...raw, createdAt: new Date(raw.createdAt) }
+  return { ...raw, createdAt: new Date(raw.createdAt), date: raw.date ? new Date(raw.date) : undefined }
 }
 
 export const payrollDeductionRepository = {
@@ -28,8 +28,8 @@ export const payrollDeductionRepository = {
     return ref.id
   },
 
-  /** แก้ไขรายการหักเดิม in-place (label/amount/type) — ไม่เปลี่ยน driverName/periodLabel/createdAt ผ่านทางนี้ */
-  async update(id: string, data: Partial<Pick<PayrollDeduction, 'type' | 'label' | 'amount'>>): Promise<void> {
+  /** แก้ไขรายการหักเดิม in-place (type/label/amount/date) — ไม่เปลี่ยน driverName/periodLabel/createdAt ผ่านทางนี้ */
+  async update(id: string, data: Partial<Pick<PayrollDeduction, 'type' | 'label' | 'amount' | 'date'>>): Promise<void> {
     await updateDoc(doc(db, COLLECTION, id), sanitize(data))
   },
 

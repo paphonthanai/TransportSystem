@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useVehiclesStore } from '@/stores/vehicles'
+import { useDriversStore } from '@/stores/drivers'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import { exportRowsToExcel } from '@/utils/exportExcel'
@@ -38,6 +39,7 @@ function destinationLabel(booking: Booking): string {
 export function useDriverPayroll(departmentFilter: (department: VehicleType | undefined) => boolean, exportPrefix: string) {
   const bookingStore = useBookingStore()
   const vehiclesStore = useVehiclesStore()
+  const driversStore = useDriversStore()
   const deductionsStore = usePayrollDeductionsStore()
   const paymentsStore = useDriverPaymentsStore()
 
@@ -50,20 +52,35 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
   const categoryFor = (booking: Booking): VehicleType | undefined =>
     booking.plate ? vehiclesStore.findByFullPlate(booking.plate)?.department : undefined
 
+  /**
+   * ชื่อคนขับที่ใช้เป็น key จับกลุ่มรายได้/หา deduction/payment status — ถ้า booking มี driverId ให้ resolve เป็นชื่อ
+   * ปัจจุบันของคนขับคนนั้นเสมอ (driverId = canonical identity) กันปัญหาถ้าคนขับถูกแก้ชื่อภายหลัง งานเก่า (ชื่อเดิม) กับ
+   * งานใหม่ (ชื่อใหม่) จะได้ไม่แยกเป็นคนละแถว/คนละคนในสรุปนี้ ถ้า booking ไม่มี driverId (งานเก่าก่อนมี field นี้) fallback
+   * ไปใช้ driverName ที่บันทึกไว้ตรงๆ ตามเดิม — payrollDeductions/driverPayments เองก็ผูกกับ driverName (ไม่ใช่ id) อยู่แล้ว
+   * จึงต้อง resolve ชื่อให้นิ่งก่อนใช้เป็น key ร่วมกันทั้งหมด
+   */
+  const driverKeyFor = (booking: Booking): string => {
+    if (booking.driverId) {
+      const driver = driversStore.drivers.find((d) => d.id === booking.driverId)
+      if (driver) return driversStore.fullName(driver)
+    }
+    return booking.driverName as string
+  }
+
   const bookingsInScope = computed(() =>
     bookingStore.bookings.filter(
       (b) => b.status === 'DELIVERED' && b.driverName && departmentFilter(categoryFor(b)) && inPeriod(b, period.value)
     )
   )
 
-  const driverOptions = computed(() => [...new Set(bookingsInScope.value.map((b) => b.driverName as string))].sort())
+  const driverOptions = computed(() => [...new Set(bookingsInScope.value.map((b) => driverKeyFor(b)))].sort())
 
   const fuelCost = (booking: Booking) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0))
 
   const summaryRows = computed(() => {
     const byDriver = new Map<string, { trips: number; baseAllowance: number; debtNet: number; netIncome: number; fuelCost: number }>()
     bookingsInScope.value.forEach((b) => {
-      const driver = b.driverName as string
+      const driver = driverKeyFor(b)
       const entry = byDriver.get(driver) || { trips: 0, baseAllowance: 0, debtNet: 0, netIncome: 0, fuelCost: 0 }
       const debtNet = b.debtAdjustments?.reduce((sum, d) => sum + d.amount, 0) || 0
       entry.trips += b.items.length
@@ -85,12 +102,12 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
 
   const detailRows = computed(() =>
     bookingsInScope.value
-      .filter((b) => !selectedDriver.value || b.driverName === selectedDriver.value)
+      .filter((b) => !selectedDriver.value || driverKeyFor(b) === selectedDriver.value)
       .map((b) => ({
         shipDate: b.shipDate || b.completedAt,
         shipmentNo: b.shipmentNo || b.docNo,
         siteName: destinationLabel(b),
-        driverName: b.driverName as string,
+        driverName: driverKeyFor(b),
         driverIncome: b.finalAllowance ?? b.allowance ?? 0,
         fuelCost: fuelCost(b),
       }))
