@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-6">
     <div class="flex items-center gap-3 flex-wrap">
-      <h2 class="text-lg font-bold text-text">พนักงานขับรถ (รถบริษัท)</h2>
-      <div class="text-xs text-muted">คำนวณจากเบี้ยเลี้ยงของงานที่ส่งของสำเร็จแล้ว</div>
+      <h2 class="text-lg font-bold text-text">พนักงานขับรถ</h2>
+      <div class="text-xs text-muted">รายได้คนขับทุกคน (รถบริษัท + รถร่วม/รถหุ้นส่วน) คำนวณจากเบี้ยเลี้ยงของงานที่ส่งของสำเร็จแล้ว — เจ้าของข้อมูลรายได้คนขับคือหน้านี้เพียงที่เดียว</div>
     </div>
 
     <div class="flex items-center gap-3 flex-wrap">
@@ -96,8 +96,11 @@
 import { useDriverPayroll } from '@/composables/useDriverPayroll'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
 
+/** พนักงานขับรถเป็นเจ้าของข้อมูลรายได้คนขับทั้งหมด ไม่ว่าจะขับรถบริษัทหรือรถร่วม/รถหุ้นส่วน — ไม่กรองตามประเภทรถ
+ *  (ต่างจากเดิมที่กรองเฉพาะ 'รถบริษัท' ทำให้รายได้คนขับรถร่วมไปโผล่ปนอยู่ในหน้า "เงินเดือน · รถร่วม" แทน ซึ่งหน้านั้น
+ *  ควรมีแต่ข้อมูลของ "รถ" เท่านั้น ดู PayrollVendorFleetView.vue) */
 const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, formatDate, formatBaht, exportSummary, exportDetail, setPaymentStatus } =
-  useDriverPayroll((department) => department === 'รถบริษัท', 'พขร-บริษัท')
+  useDriverPayroll(() => true, 'พขร')
 
 const selectDriverDetail = (driver: string) => {
   selectedDriver.value = driver

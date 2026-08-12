@@ -23,6 +23,10 @@
         </select>
       </div>
 
+      <div v-if="selectedCustomer" class="max-w-sm">
+        <ContactPickerField :customer-id="selectedCustomerId" v-model="contactId" />
+      </div>
+
       <div v-if="selectedCustomer" class="space-y-2">
         <div class="border border-border rounded-xl overflow-hidden">
           <table class="w-full text-sm">
@@ -63,23 +67,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useCustomerStore } from '@/stores/customers'
+import { useContactStore } from '@/stores/contacts'
+import ContactPickerField from '@/components/shared/ContactPickerField.vue'
 import type { Booking } from '@/types'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const customerStore = useCustomerStore()
+const contactStore = useContactStore()
 
 const isUnbilledEligible = (b: Booking) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED'
 
 const eligibleCustomers = computed(() => [...new Set(bookingStore.bookings.filter(isUnbilledEligible).map((b) => b.customer))].sort())
 
 const selectedCustomer = ref('')
+const selectedCustomerId = computed(() => customerStore.customers.find((c) => c.name === selectedCustomer.value)?.id)
+const contactId = ref<string | undefined>(undefined)
+watch(selectedCustomer, (name) => {
+  const customer = customerStore.customers.find((c) => c.name === name)
+  contactId.value = customer?.id ? contactStore.primaryContactFor(customer.id)?.id : undefined
+})
 const selectedIds = ref<Set<string>>(new Set())
 
 const eligibleBookings = computed(() => bookingStore.bookings.filter((b) => b.customer === selectedCustomer.value && isUnbilledEligible(b)))
@@ -106,7 +121,7 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 
 const submit = () => {
   if (!canSubmit.value) return
-  const result = salesDocumentsStore.createBillingFromBookings([...selectedIds.value])
+  const result = salesDocumentsStore.createBillingFromBookings([...selectedIds.value], { contactId: contactId.value })
   if (result) router.push(`/documents/${result.id}`)
 }
 </script>

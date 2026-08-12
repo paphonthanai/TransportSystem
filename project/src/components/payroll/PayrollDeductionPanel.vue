@@ -10,13 +10,22 @@
     <template v-else>
       <div v-for="cat in categories" :key="cat.type" class="border border-border rounded-lg p-3 space-y-2">
         <div class="text-xs font-semibold text-text">{{ cat.label }}</div>
-        <div v-for="row in rowsFor(cat.type)" :key="row.id" class="flex items-center justify-between text-sm gap-2">
-          <span class="text-muted">{{ row.label || cat.label }}</span>
-          <div class="flex items-center gap-2">
-            <span class="font-semibold text-text">{{ formatBaht(row.amount) }}</span>
-            <button @click="remove(row.id)" class="text-red-500 hover:text-red-600 text-xs">ลบ</button>
+        <template v-for="row in rowsFor(cat.type)" :key="row.id">
+          <div v-if="editingId === row.id" class="flex items-center gap-2 text-sm bg-surface-2 rounded-lg p-1.5">
+            <input v-model="editDraft.label" placeholder="รายละเอียด (ไม่บังคับ)" class="input-field flex-1 h-8 text-xs" />
+            <input v-model.number="editDraft.amount" type="number" placeholder="จำนวนเงิน" class="input-field w-24 h-8 text-xs" />
+            <button @click="saveEdit(row.id)" :disabled="!editDraft.amount" class="text-primary hover:underline text-xs disabled:opacity-40">บันทึก</button>
+            <button @click="cancelEdit" class="text-muted hover:text-text text-xs">ยกเลิก</button>
           </div>
-        </div>
+          <div v-else class="flex items-center justify-between text-sm gap-2">
+            <span class="text-muted">{{ row.label || cat.label }}</span>
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-text">{{ formatBaht(row.amount) }}</span>
+              <button @click="startEdit(row)" class="text-muted hover:text-text text-xs">แก้ไข</button>
+              <button @click="remove(row.id)" class="text-red-500 hover:text-red-600 text-xs">ลบ</button>
+            </div>
+          </div>
+        </template>
         <div class="flex items-center gap-2 pt-1">
           <input v-model="drafts[cat.type].label" placeholder="รายละเอียด (ไม่บังคับ)" class="input-field flex-1 h-8 text-xs" />
           <input v-model.number="drafts[cat.type].amount" type="number" placeholder="จำนวนเงิน" class="input-field w-28 h-8 text-xs" />
@@ -33,9 +42,9 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed } from 'vue'
+import { reactive, ref, computed } from 'vue'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
-import type { PayrollDeductionType } from '@/types'
+import type { PayrollDeduction, PayrollDeductionType } from '@/types'
 
 const props = defineProps<{ driverName: string; periodLabel: string }>()
 
@@ -79,6 +88,27 @@ const add = (type: PayrollDeductionType) => {
 }
 
 const remove = (id: string) => deductionsStore.deleteDeduction(id)
+
+const editingId = ref<string | null>(null)
+const editDraft = reactive<{ label: string; amount: number | undefined }>({ label: '', amount: undefined })
+
+const startEdit = (row: PayrollDeduction) => {
+  editingId.value = row.id
+  editDraft.label = row.label
+  editDraft.amount = row.amount
+}
+
+const cancelEdit = () => {
+  editingId.value = null
+  editDraft.label = ''
+  editDraft.amount = undefined
+}
+
+const saveEdit = (id: string) => {
+  if (!editDraft.amount) return
+  deductionsStore.updateDeduction(id, { label: editDraft.label, amount: editDraft.amount })
+  cancelEdit()
+}
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
 

@@ -32,6 +32,9 @@
               <option v-for="c in customerStore.customers" :key="c.name" :value="c.name" />
             </datalist>
           </div>
+          <div class="w-full sm:w-1/2">
+            <ContactPickerField :customer-id="selectedCustomerId" v-model="header.contactId" />
+          </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="field-label">ใบสั่งงาน (PO)</label>
@@ -324,6 +327,8 @@ import { useDriversStore } from '@/stores/drivers'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
+import { useContactStore } from '@/stores/contacts'
+import ContactPickerField from '@/components/shared/ContactPickerField.vue'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { useAuthStore } from '@/stores/auth'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
@@ -344,6 +349,7 @@ const driversStore = useDriversStore()
 const vehiclesStore = useVehiclesStore()
 const inventoryStore = useInventoryStore()
 const customerStore = useCustomerStore()
+const contactStore = useContactStore()
 const fuelRateStore = useFuelRateStore()
 const authStore = useAuthStore()
 const salesDocumentsStore = useSalesDocumentsStore()
@@ -360,6 +366,7 @@ const discountModeOptions = [
 const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
 
 const isCements = computed(() => props.fleet === 'cements')
+const selectedCustomerId = computed(() => customerStore.customers.find((c) => c.name === header.value.customer)?.id)
 const productOptionsForFleet = computed(() => inventoryStore.products.filter((p) => p.category === props.fleet))
 const vehicleOptions = computed(() => vehiclesStore.vehicles.map((v) => vehiclesStore.fullPlate(v)))
 const nextReleaseNoPreview = computed(() => bookingStore.nextReleaseNo())
@@ -406,6 +413,7 @@ const defaultHeader = () => ({
   jobDate: new Date().toISOString().slice(0, 10),
   returnDate: '',
   customer: (prefill.customer as string) || (isCements.value ? '' : fixedCustomer),
+  contactId: undefined as string | undefined,
   plate: '',
   driverName: '',
   shipmentNo: '',
@@ -512,6 +520,15 @@ watch(
     const driver = driversStore.drivers.find((d) => d.code === vehicle.driverCode)
     if (driver) header.value.driverName = `${driver.firstName} ${driver.lastName}`
   }
+)
+/** เปลี่ยนลูกค้า -> preselect ผู้ติดต่อหลัก (Primary Contact) ของลูกค้ารายใหม่ให้อัตโนมัติ ผู้ใช้ยังเปลี่ยนเองได้ที่ picker */
+watch(
+  () => header.value.customer,
+  (name) => {
+    const customer = customerStore.customers.find((c) => c.name === name)
+    header.value.contactId = customer?.id ? contactStore.primaryContactFor(customer.id)?.id : undefined
+  },
+  { immediate: true }
 )
 
 // --- Item editor modal state ---
@@ -670,6 +687,7 @@ const saveAllItems = () => {
     amount: resolvedTripFee.value,
     reference: newBooking.po,
     quotationId: sourceQuotationId,
+    contactId: header.value.contactId,
     items: [
       {
         description: `${newBooking.docNo} · ${destinationSummary.value}`,

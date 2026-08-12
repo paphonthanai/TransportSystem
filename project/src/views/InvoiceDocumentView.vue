@@ -87,10 +87,6 @@
                   <span class="text-gray-500">ครบกำหนด</span>
                   <span class="font-semibold">{{ formatDate(activeDoc.dueDate) }}</span>
                 </div>
-                <div v-if="activeDoc?.salesperson" class="flex justify-between gap-4">
-                  <span class="text-gray-500">ผู้ขาย</span>
-                  <span class="font-semibold">{{ activeDoc.salesperson }}</span>
-                </div>
                 <div v-if="activeDoc?.reference" class="flex justify-between gap-4">
                   <span class="text-gray-500">เลขที่อ้างอิง</span>
                   <span class="font-semibold text-right max-w-[60%] truncate">{{ activeDoc.reference }}</span>

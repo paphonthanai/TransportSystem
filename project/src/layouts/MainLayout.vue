@@ -186,7 +186,7 @@ const getScreenTitle = () => {
     '/wht-certificates': 'หนังสือรับรองการหักภาษี ณ ที่จ่าย',
     '/payroll/staff': 'เงินเดือน · เสมียน',
     '/payroll/drivers': 'เงินเดือน · พนักงานขับรถ',
-    '/payroll/vendor-fleet': 'เงินเดือน · รถร่วม',
+    '/payroll/vendor-fleet': 'รถร่วม / รถหุ้นส่วน',
     '/settings/vehicles': 'ตั้งค่า · รถบรรทุก',
     '/settings/staff': 'สมุดรายชื่อ · เสมียน (พนักงานออฟฟิศ)',
     '/settings/drivers': 'สมุดรายชื่อ · พนักงานขับรถ',
@@ -207,7 +207,7 @@ const getScreenTitle = () => {
   if (currentRoute.path.startsWith('/documents/')) return 'เอกสารขาย · พิมพ์เอกสาร'
   if (currentRoute.path.startsWith('/job/')) return 'รายละเอียดงาน'
   if (currentRoute.path.startsWith('/settings/drivers/')) return 'รายละเอียดพนักงานขับรถ'
-  if (currentRoute.path.startsWith('/payroll/vendor-fleet/')) return 'เงินเดือน · รายละเอียดรถร่วม'
+  if (currentRoute.path.startsWith('/payroll/vendor-fleet/')) return 'รายละเอียดรถร่วม'
   if (currentRoute.path === '/payroll/staff/new') return 'เงินเดือน · สร้างเงินเดือน'
   if (currentRoute.path.startsWith('/payroll/staff/') && currentRoute.path.endsWith('/edit')) return 'เงินเดือน · แก้ไขเงินเดือน'
   if (currentRoute.path.startsWith('/payroll/staff/') && currentRoute.path.endsWith('/print')) return 'เงินเดือน · พิมพ์เอกสาร'

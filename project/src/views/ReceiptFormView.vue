@@ -37,6 +37,9 @@
               <option v-for="c in customerStore.customers" :key="c.code" :value="c.name" />
             </datalist>
           </div>
+          <div class="w-3/4">
+            <ContactPickerField :customer-id="selectedCustomerId" v-model="contactId" />
+          </div>
           <div>
             <label class="field-label">ที่อยู่</label>
             <textarea v-model="customerAddress" rows="2" class="input-field w-3/4" />
@@ -303,12 +306,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentItem } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
+import { useContactStore } from '@/stores/contacts'
 import { useInventoryStore } from '@/stores/inventory'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/users'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
+import ContactPickerField from '@/components/shared/ContactPickerField.vue'
 import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
 
 const route = useRoute()
@@ -316,6 +321,7 @@ const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
+const contactStore = useContactStore()
 const inventoryStore = useInventoryStore()
 const authStore = useAuthStore()
 const userStore = useUserStore()
@@ -331,6 +337,8 @@ const customerAddress = ref('')
 const customerZipCode = ref('')
 const customerTaxId = ref('')
 const customerBranchName = ref('')
+const selectedCustomerId = computed(() => customerStore.customers.find((c) => c.name === customerName.value)?.id)
+const contactId = ref<string | undefined>(undefined)
 
 const dateStr = ref(todayStr())
 
@@ -384,6 +392,7 @@ const onCustomerChange = () => {
   customerZipCode.value = found.zipCode
   customerTaxId.value = found.taxId
   customerBranchName.value = found.branchName
+  contactId.value = found.id ? contactStore.primaryContactFor(found.id)?.id : undefined
 }
 
 type Row = {
@@ -469,6 +478,7 @@ if (editingDoc) {
   customerZipCode.value = editingDoc.customerZipCode || ''
   customerTaxId.value = editingDoc.customerTaxId || ''
   customerBranchName.value = editingDoc.customerBranchName || ''
+  contactId.value = editingDoc.contactId
   dateStr.value = new Date(editingDoc.date).toISOString().slice(0, 10)
   paymentMethod.value = editingDoc.paymentMethod || 'เงินสด'
   salesperson.value = editingDoc.salesperson || authStore.userName
@@ -561,6 +571,7 @@ const saveAndGetDoc = () => {
     vatRate: documentVatRate.value,
     vatAmount: vatTotal.value,
     whtAmount: whtTotal.value,
+    contactId: contactId.value,
   }
   if (currentId.value) return salesDocumentsStore.updateReceiptManual(currentId.value, payload)
   const created = salesDocumentsStore.createReceiptManual(payload)

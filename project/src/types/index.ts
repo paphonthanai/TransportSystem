@@ -387,7 +387,7 @@ export interface Vehicle {
   driverCode?: string
 }
 
-export type VehicleExpenseType = 'INSURANCE' | 'GPS' | 'INSTALLMENT' | 'GENERAL'
+export type VehicleExpenseType = 'INSURANCE' | 'GPS' | 'INSTALLMENT' | 'REPAIR' | 'GENERAL'
 
 /**
  * ค่าใช้จ่ายประจำรถ (ประกัน/GPS/ค่างวด/อื่นๆ) — ผูกกับ vehicleId ตรงๆ ตั้งใจแยกจาก PayrollDeduction (ผูกกับ driverName)

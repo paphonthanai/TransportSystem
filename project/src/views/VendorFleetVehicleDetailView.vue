@@ -38,26 +38,48 @@
         ผ่อนชำระของคนขับ) ที่ดูได้ที่หน้ารายละเอียดพนักงานขับรถแทน — สองรายการนี้เป็นคนละ Entity กัน ไม่รวมยอดกัน
       </div>
 
-      <div class="card-lg grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+      <div class="card-lg space-y-4 text-sm">
         <div>
-          <div class="text-xs text-muted">จำนวนงาน (รอบนี้)</div>
-          <div class="font-semibold text-text">{{ rows.length }}</div>
+          <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">รายได้ (Sync จาก Booking — รอบนี้)</div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <div class="text-xs text-muted">จำนวนงาน</div>
+              <div class="font-semibold text-text">{{ rows.length }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">รายได้จากงาน</div>
+              <div class="font-semibold text-green-600">{{ formatBaht(totalTripFee) }}</div>
+            </div>
+          </div>
         </div>
-        <div>
-          <div class="text-xs text-muted">รายได้จากงาน (รอบนี้)</div>
-          <div class="font-semibold text-text">{{ formatBaht(totalTripFee) }}</div>
+
+        <div class="border-t border-border pt-4">
+          <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">ค่าใช้จ่าย</div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <div class="text-xs text-muted">ค่าน้ำมันที่ใช้ (Sync จาก Booking — รอบนี้)</div>
+              <div class="font-semibold text-red-500">-{{ formatBaht(totalFuelCost) }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">ค่าใช้จ่ายประจำรถ (ผู้ใช้กรอก — สะสมทั้งหมด)</div>
+              <div class="font-semibold text-red-500">-{{ formatBaht(totalVehicleExpense) }}</div>
+            </div>
+          </div>
         </div>
-        <div>
-          <div class="text-xs text-muted">ค่าน้ำมันที่ใช้ (รอบนี้)</div>
-          <div class="font-semibold text-red-500">-{{ formatBaht(totalFuelCost) }}</div>
-        </div>
-        <div>
-          <div class="text-xs text-muted">ค่าใช้จ่ายประจำรถ (สะสมทั้งหมด)</div>
-          <div class="font-semibold text-red-500">-{{ formatBaht(totalVehicleExpense) }}</div>
-        </div>
-        <div class="sm:col-span-4 border-t border-border pt-3">
-          <div class="text-xs text-muted">ต้นทุนรวม (ค่าน้ำมันรอบนี้ + ค่าใช้จ่ายประจำรถสะสมทั้งหมด)</div>
-          <div class="font-bold text-primary">{{ formatBaht(totalFuelCost + totalVehicleExpense) }}</div>
+
+        <div class="border-t border-border pt-4 grid grid-cols-3 gap-4">
+          <div>
+            <div class="text-xs text-muted">รายได้รวม</div>
+            <div class="font-bold text-green-600">{{ formatBaht(totalTripFee) }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted">ค่าใช้จ่ายรวม</div>
+            <div class="font-bold text-red-500">-{{ formatBaht(totalFuelCost + totalVehicleExpense) }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted">ยอดสุทธิ</div>
+            <div class="font-bold text-primary">{{ formatBaht(netTotal) }}</div>
+          </div>
         </div>
       </div>
 
@@ -166,6 +188,8 @@ const totalTripFee = computed(() => rows.value.reduce((sum, r) => sum + (r.booki
 const totalFuelCost = computed(() => rows.value.reduce((sum, r) => sum + r.fuelCost, 0))
 /** ค่าใช้จ่ายประจำรถ (ประกัน/GPS/ค่างวด/อื่นๆ) เป็นสะสมทั้งหมด ไม่กรองตามรอบเดือนเหมือนงาน เพราะรายการแบบนี้มักจ่ายเป็นก้อนไม่ใช่รายเดือน (เช่น ประกันต่อปี) กรองตามรอบจะทำให้ยอดหายไปผิดๆ */
 const totalVehicleExpense = computed(() => (vehicle.value ? vehicleExpensesStore.expensesForVehicle(vehicle.value.id).reduce((sum, e) => sum + e.amount, 0) : 0))
+/** ยอดสุทธิ = รายได้จากงาน (รอบนี้) - (ค่าน้ำมันรอบนี้ + ค่าใช้จ่ายประจำรถสะสมทั้งหมด) — เพื่อการแสดงผลสรุปเท่านั้น ไม่ใช้แก้ Driver Income/Vehicle Expense ที่มาจากแหล่งข้อมูลจริง */
+const netTotal = computed(() => totalTripFee.value - totalFuelCost.value - totalVehicleExpense.value)
 
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {
   if (!booking.items.length) return '-'

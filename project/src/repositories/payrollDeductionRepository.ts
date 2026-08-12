@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDocs } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import type { PayrollDeduction } from '@/types'
 
@@ -17,7 +17,6 @@ function revive(raw: any): PayrollDeduction {
   return { ...raw, createdAt: new Date(raw.createdAt) }
 }
 
-/** ไม่มี update — แก้ไขทำได้แค่ลบแล้วเพิ่มใหม่ เพราะเป็นรายการหักต่อรอบ ไม่ใช่ค่าที่ต้อง edit-in-place */
 export const payrollDeductionRepository = {
   async getAll(): Promise<PayrollDeduction[]> {
     const snapshot = await getDocs(collection(db, COLLECTION))
@@ -27,6 +26,11 @@ export const payrollDeductionRepository = {
   async create(data: Omit<PayrollDeduction, 'id'>): Promise<string> {
     const ref = await addDoc(collection(db, COLLECTION), sanitize(data))
     return ref.id
+  },
+
+  /** แก้ไขรายการหักเดิม in-place (label/amount/type) — ไม่เปลี่ยน driverName/periodLabel/createdAt ผ่านทางนี้ */
+  async update(id: string, data: Partial<Pick<PayrollDeduction, 'type' | 'label' | 'amount'>>): Promise<void> {
+    await updateDoc(doc(db, COLLECTION, id), sanitize(data))
   },
 
   async delete(id: string): Promise<void> {

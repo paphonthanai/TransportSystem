@@ -48,6 +48,9 @@
               <option v-for="c in customerStore.customers" :key="c.code" :value="c.name" />
             </datalist>
           </div>
+          <div class="w-3/4">
+            <ContactPickerField :customer-id="selectedCustomerId" v-model="contactId" />
+          </div>
           <div>
             <label class="field-label">ที่อยู่</label>
             <textarea v-model="customerAddress" rows="2" class="input-field w-3/4" />
@@ -210,11 +213,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type ReceiptSourceType } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
+import { useContactStore } from '@/stores/contacts'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/users'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
+import ContactPickerField from '@/components/shared/ContactPickerField.vue'
 
 const props = defineProps<{ id?: string }>()
 
@@ -223,6 +228,7 @@ const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
+const contactStore = useContactStore()
 const authStore = useAuthStore()
 const userStore = useUserStore()
 
@@ -240,6 +246,8 @@ const customerName = ref('')
 const customerAddress = ref('')
 const customerZipCode = ref('')
 const customerTaxId = ref('')
+const selectedCustomerId = computed(() => customerStore.customers.find((c) => c.name === customerName.value)?.id)
+const contactId = ref<string | undefined>(undefined)
 const dateStr = ref(todayStr())
 const reference = ref('')
 const salespersonOptions = computed(() =>
@@ -256,6 +264,7 @@ const onCustomerChange = () => {
   customerAddress.value = found.address
   customerZipCode.value = found.zipCode
   customerTaxId.value = found.taxId
+  contactId.value = found.id ? contactStore.primaryContactFor(found.id)?.id : undefined
 }
 
 /** รายการ id เอกสารต้นทางปัจจุบัน — query ?ids= (เพิ่งกลับมาจากหน้าเลือกพร้อมรายการที่เลือกใหม่) ต้องมาก่อนเสมอ ไม่งั้นตอนแก้ไข
@@ -274,6 +283,7 @@ watch(
     customerAddress.value = doc.customerAddress || ''
     customerZipCode.value = doc.customerZipCode || ''
     customerTaxId.value = doc.customerTaxId || ''
+    contactId.value = doc.contactId
     dateStr.value = new Date(doc.date).toISOString().slice(0, 10)
     reference.value = doc.reference || ''
     salesperson.value = doc.salesperson || authStore.userName
@@ -297,6 +307,10 @@ watch(
   (docs) => {
     if (docs.length && !customerName.value) customerName.value = docs[0].customer
     if (docs.length && !reference.value) reference.value = docs.map((d) => d.number).join(', ')
+    /** ค่าเริ่มต้นผู้ติดต่อของใบเสร็จที่สร้างจากเอกสารต้นทาง = ผู้ติดต่อที่ Snapshot ไว้บนเอกสารต้นทางนั้นเอง (ไม่ใช่ Primary
+     *  Contact ปัจจุบันของลูกค้า) — สอดคล้องกับ resolveContactSnapshot ฝั่ง store ที่ fallback ไปใช้ contactId ของเอกสารต้นทาง
+     *  ผู้ใช้ยังเปลี่ยนเองที่ picker ได้เสมอ */
+    if (docs.length && !contactId.value && !prefilled.value) contactId.value = docs[0].contactId
   },
   { immediate: true }
 )
@@ -359,7 +373,7 @@ const submitError = ref('')
 const saveAndGetDoc = () => {
   if (!canSubmit.value) return null
   submitError.value = ''
-  const overrides = { customer: customerName.value.trim(), reference: reference.value || undefined }
+  const overrides = { customer: customerName.value.trim(), reference: reference.value || undefined, contactId: contactId.value }
   const result = currentId.value
     ? salesDocumentsStore.updateReceiptFromSourceDocs(currentId.value, sourceIds.value, sourceType.value, overrides)
     : salesDocumentsStore.createReceiptFromSourceDocs(sourceIds.value, sourceType.value, overrides)

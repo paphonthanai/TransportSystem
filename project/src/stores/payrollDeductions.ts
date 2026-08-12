@@ -38,6 +38,12 @@ export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => 
     return deduction
   }
 
+  async function updateDeduction(id: string, data: Partial<Pick<PayrollDeduction, 'type' | 'label' | 'amount'>>) {
+    await payrollDeductionRepository.update(id, data)
+    const existing = deductions.value.find((d) => d.id === id)
+    if (existing) Object.assign(existing, data)
+  }
+
   async function deleteDeduction(id: string) {
     const idx = deductions.value.findIndex((d) => d.id === id)
     if (idx !== -1) deductions.value.splice(idx, 1)
@@ -52,6 +58,7 @@ export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => 
     loading,
     error,
     addDeduction,
+    updateDeduction,
     deleteDeduction,
     deductionsFor,
   }

@@ -47,6 +47,7 @@ const categories: { type: VehicleExpenseType; label: string }[] = [
   { type: 'INSURANCE', label: 'ประกัน' },
   { type: 'GPS', label: 'GPS' },
   { type: 'INSTALLMENT', label: 'ค่างวด' },
+  { type: 'REPAIR', label: 'ค่าซ่อมบำรุง' },
   { type: 'GENERAL', label: 'ค่าใช้จ่ายประจำรถอื่นๆ' },
 ]
 
@@ -59,6 +60,7 @@ const drafts = reactive<Record<VehicleExpenseType, Draft>>({
   INSURANCE: emptyDraft(),
   GPS: emptyDraft(),
   INSTALLMENT: emptyDraft(),
+  REPAIR: emptyDraft(),
   GENERAL: emptyDraft(),
 })
 

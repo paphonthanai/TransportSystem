@@ -192,6 +192,8 @@ export interface ManualDocumentFormData {
   sourceQuotationId?: string
   /** TAX_INVOICE ที่กรอกฟอร์มนี้โดยดึงข้อมูลมาจากใบวางบิล — ใช้ผูก parentDocumentId, สำเนา bookingIds และปิดสถานะใบวางบิลต้นทางเป็น BILLED */
   sourceBillingId?: string
+  /** ผู้ติดต่อของลูกค้าที่ผู้ใช้เลือกในฟอร์ม (ContactRecord.id) — ถ้าไม่ส่งมา จะ fallback ไปใช้ Primary Contact ของลูกค้ารายนั้นแทน (ดู resolveContactSnapshot) */
+  contactId?: string
 }
 
 export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
@@ -201,31 +203,38 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   const error = ref<string | null>(null)
 
   /**
-   * Snapshot ผู้ติดต่อของลูกค้า (Customer Contact) มาใส่บนเอกสาร ณ ตอนสร้าง — ใช้ Primary Contact ของลูกค้ารายนั้น
-   * ถ้ามี (ดู stores/contacts.ts) ไม่มีการเลือกผู้ติดต่อรายเอกสารในฟอร์มตอนนี้ จึงใช้ Primary เป็นค่าเริ่มต้นเสมอ —
-   * ตั้งใจไม่ใช้ authStore/ผู้ใช้ที่ login อยู่มาแทนค่านี้เด็ดขาด เพราะเป็นคนละ Entity กัน (ผู้ใช้ระบบ vs ผู้ติดต่อ
-   * ของลูกค้า) ถ้าลูกค้ายังไม่มีผู้ติดต่อที่ตั้ง Primary ไว้เลย คืนค่าว่างทั้งหมด (แสดงเป็น "-" ตอน render เท่านั้น
-   * ไม่เขียน "-" ลง Firestore)
+   * Snapshot ผู้ติดต่อของลูกค้า (Customer Contact) มาใส่บนเอกสาร ณ ตอนสร้าง — ถ้าผู้ใช้เลือกผู้ติดต่อเองในฟอร์ม
+   * (explicitContactId) ใช้ตัวที่เลือกจริงเสมอ ค้นหาแบบไม่กรอง active เพราะผู้ใช้อาจเลือกไว้ตอนที่ contact ยัง active
+   * อยู่ แล้วภายหลังถูกปิดใช้งาน — เอกสารที่ snapshot ไปแล้วต้องไม่เปลี่ยนตาม ถ้าไม่ได้เลือกมาจึง fallback ไปใช้ Primary
+   * Contact ของลูกค้ารายนั้นเป็นค่าเริ่มต้นเหมือนเดิม (ดู stores/contacts.ts) — ตั้งใจไม่ใช้ authStore/ผู้ใช้ที่ login
+   * อยู่มาแทนค่านี้เด็ดขาด เพราะเป็นคนละ Entity กัน (ผู้ใช้ระบบ vs ผู้ติดต่อของลูกค้า) ถ้าลูกค้ายังไม่มีผู้ติดต่อเลย
+   * คืนค่าว่างทั้งหมด (แสดงเป็น "-" ตอน render เท่านั้น ไม่เขียน "-" ลง Firestore)
    */
-  function resolveContactSnapshot(customerName: string): {
+  function resolveContactSnapshot(
+    customerName: string,
+    explicitContactId?: string
+  ): {
     contactId?: string
     contactName?: string
     contactPosition?: string
     contactPhone?: string
     contactEmail?: string
   } {
-    const customerStore = useCustomerStore()
     const contactStore = useContactStore()
-    const customer = customerStore.customers.find((c) => c.name === customerName)
-    if (!customer?.id) return {}
-    const primary = contactStore.primaryContactFor(customer.id)
-    if (!primary) return {}
+    let selected = explicitContactId ? contactStore.contacts.find((c) => c.id === explicitContactId) : undefined
+    if (!selected) {
+      const customerStore = useCustomerStore()
+      const customer = customerStore.customers.find((c) => c.name === customerName)
+      if (!customer?.id) return {}
+      selected = contactStore.primaryContactFor(customer.id) || undefined
+    }
+    if (!selected) return {}
     return {
-      contactId: primary.id,
-      contactName: primary.name || undefined,
-      contactPosition: primary.position || undefined,
-      contactPhone: primary.phone || undefined,
-      contactEmail: primary.email || undefined,
+      contactId: selected.id,
+      contactName: selected.name || undefined,
+      contactPosition: selected.position || undefined,
+      contactPhone: selected.phone || undefined,
+      contactEmail: selected.email || undefined,
     }
   }
 
@@ -616,7 +625,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       whtAmount,
       createdAt: issueDate,
     }
-    Object.assign(invoice, resolveContactSnapshot(customer))
+    Object.assign(invoice, resolveContactSnapshot(customer, doc.contactId))
     documents.value.unshift(invoice)
     addItemsToDocument(invoice.id, itemRows)
     doc.status = 'CONVERTED'
@@ -686,7 +695,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       reference,
       createdAt: now,
     }
-    Object.assign(billing, resolveContactSnapshot(customer))
+    Object.assign(billing, resolveContactSnapshot(customer, doc.contactId))
     documents.value.unshift(billing)
     addItemsToDocument(billing.id, itemRows)
     doc.status = 'CONVERTED'
@@ -738,6 +747,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     reference?: string
     quotationId?: string
     items: Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>>
+    /** ผู้ติดต่อของลูกค้าที่ผู้ใช้เลือกในฟอร์มสร้างงาน (BookingCreateView.vue) — ไม่ส่งมาจะ fallback ไปใช้ Primary Contact */
+    contactId?: string
   }): SalesDocument {
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.salesOrder
@@ -764,7 +775,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       reference: data.reference,
       createdAt: now,
     }
-    Object.assign(salesOrder, resolveContactSnapshot(data.customer))
+    Object.assign(salesOrder, resolveContactSnapshot(data.customer, data.contactId))
     documents.value.unshift(salesOrder)
     addItemsToDocument(salesOrder.id, data.items)
     useBookingStore().addLog('สร้างเอกสาร ' + salesOrder.number, { docId: salesOrder.id, bookingId: data.bookingId })
@@ -1007,7 +1018,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       paymentTermMode: data.paymentTermMode,
       creditDays: data.creditDays,
     }
-    Object.assign(billing, resolveContactSnapshot(data.customer))
+    Object.assign(billing, resolveContactSnapshot(data.customer, data.contactId))
     documents.value.unshift(billing)
     addItemsToDocument(billing.id, data.items)
     linkManualDocToSource(billing, data)
@@ -1044,6 +1055,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.vatAmount = data.vatAmount
     doc.whtAmount = data.whtAmount
     doc.paymentTermMode = data.paymentTermMode
+    Object.assign(doc, resolveContactSnapshot(data.customer, data.contactId))
     items.value = items.value.filter((i) => i.documentId !== id)
     addItemsToDocument(id, data.items)
     useBookingStore().addLog('แก้ไขเอกสาร ' + doc.number, { docId: doc.id })
@@ -1095,7 +1107,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       discountTotal: data.discountTotal,
       paymentTermMode: data.paymentTermMode,
     }
-    Object.assign(invoice, resolveContactSnapshot(data.customer))
+    Object.assign(invoice, resolveContactSnapshot(data.customer, data.contactId))
     documents.value.unshift(invoice)
     addItemsToDocument(invoice.id, data.items)
     linkManualDocToSource(invoice, data)
@@ -1139,6 +1151,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.useESignature = data.useESignature
     doc.discountTotal = data.discountTotal
     doc.paymentTermMode = data.paymentTermMode
+    Object.assign(doc, resolveContactSnapshot(data.customer, data.contactId))
     items.value = items.value.filter((i) => i.documentId !== id)
     addItemsToDocument(id, data.items)
     useBookingStore().addLog('แก้ไขเอกสาร ' + doc.number, { docId: doc.id })
@@ -1186,7 +1199,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       useESignature: data.useESignature,
       discountTotal: data.discountTotal,
     }
-    Object.assign(receipt, resolveContactSnapshot(data.customer))
+    Object.assign(receipt, resolveContactSnapshot(data.customer, data.contactId))
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, data.items)
     useBookingStore().addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
@@ -1223,6 +1236,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.attachmentImage = data.attachmentImage
     doc.useESignature = data.useESignature
     doc.discountTotal = data.discountTotal
+    Object.assign(doc, resolveContactSnapshot(data.customer, data.contactId))
     items.value = items.value.filter((i) => i.documentId !== id)
     addItemsToDocument(id, data.items)
     useBookingStore().addLog('แก้ไขเอกสาร ' + doc.number, { docId: doc.id })
@@ -1248,7 +1262,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
   }
 
-  function createBillingFromBookings(bookingIds: string[], overrides?: { customer?: string; reference?: string }): SalesDocument | null {
+  function createBillingFromBookings(bookingIds: string[], overrides?: { customer?: string; reference?: string; contactId?: string }): SalesDocument | null {
     if (bookingIds.length === 0) return null
     const bookingStore = useBookingStore()
     const targetBookings = bookingStore.bookings.filter((b) => bookingIds.includes(b.id))
@@ -1298,7 +1312,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       reference,
       createdAt: now,
     }
-    Object.assign(billing, resolveContactSnapshot(customer))
+    Object.assign(billing, resolveContactSnapshot(customer, overrides?.contactId))
     documents.value.unshift(billing)
     addItemsToDocument(
       billing.id,
@@ -1368,7 +1382,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       whtAmount,
       createdAt: issueDate,
     }
-    Object.assign(invoice, resolveContactSnapshot(customer))
+    Object.assign(invoice, resolveContactSnapshot(customer, doc.contactId))
     documents.value.unshift(invoice)
     addItemsToDocument(invoice.id, itemRows)
     doc.status = 'BILLED'
@@ -1740,7 +1754,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function createReceiptFromSourceDocs(
     sourceIds: string[],
     sourceType: ReceiptSourceType,
-    overrides?: { customer?: string; reference?: string }
+    overrides?: { customer?: string; reference?: string; contactId?: string }
   ): { doc: SalesDocument; warnings: string[] } | null {
     if (sourceIds.length === 0) return null
     const targetDocs = documents.value.filter((d) => sourceIds.includes(d.id) && d.type === sourceType)
@@ -1773,7 +1787,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       whtAmount,
       createdAt: now,
     }
-    Object.assign(receipt, resolveContactSnapshot(customer))
+    Object.assign(receipt, resolveContactSnapshot(customer, overrides?.contactId ?? targetDocs[0].contactId))
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, receiptItemRowsFromSourceDocs(targetDocs))
     if (sourceType === 'BILLING') {
@@ -1792,7 +1806,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     id: string,
     sourceIds: string[],
     sourceType: ReceiptSourceType,
-    overrides?: { customer?: string; reference?: string }
+    overrides?: { customer?: string; reference?: string; contactId?: string }
   ): { doc: SalesDocument; warnings: string[] } | null {
     if (sourceIds.length === 0) return null
     const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
@@ -1826,6 +1840,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.vatRate = vatRate
     doc.vatAmount = vatAmount
     doc.whtAmount = whtAmount
+    Object.assign(doc, resolveContactSnapshot(customer, overrides?.contactId ?? doc.contactId ?? targetDocs[0].contactId))
     items.value = items.value.filter((i) => i.documentId !== id)
     addItemsToDocument(id, receiptItemRowsFromSourceDocs(targetDocs))
     if (sourceType === 'BILLING') {
