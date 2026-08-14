@@ -110,7 +110,9 @@ export interface JobItem {
   deliverySequence?: number
   /** สถานะการส่งของของรายการนี้ — ไม่มีค่า = ยังไม่ส่ง (PENDING) */
   deliveryStatus?: 'PENDING' | 'DELIVERED'
-  /** รูปหลักฐานการส่งมอบสินค้า (POD) ของรายการนี้โดยเฉพาะ */
+  /** รูปหลักฐานการส่งมอบสินค้า (POD) ของรายการนี้โดยเฉพาะ — เก็บเป็น URL จาก Firebase Storage (ดู
+   *  repositories/podRepository.ts, path: pod/{bookingId}/{jobItemId}/...) ไม่ใช่ base64 ฝังตรงเหมือนเดิม
+   *  (เสี่ยงชนขีดจำกัดขนาดเอกสาร Firestore 1 MiB เวลามีหลายปลายทาง) */
   podImage?: string
   /** ชื่อผู้รับสินค้าที่ปลายทางนี้ */
   deliveredBy?: string

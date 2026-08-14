@@ -2,6 +2,38 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Storage rules เรียก Firestore ข้าม service ได้ผ่าน firestore.get() (ต่างจาก Firestore rules เองที่ใช้ get()
+    // เฉยๆ) — ใช้เช็ค role เดียวกับ firestore.rules (userRole()/hasRole()) ไม่สร้างระบบสิทธิ์แยกต่างหาก
+    function userRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isActive() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true;
+    }
+
+    function hasRole(roles) {
+      return isSignedIn() && isActive() && userRole() in roles;
+    }
+
+    function myDriverId() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.driverId;
+    }
+
+    // POD (หลักฐานการส่งมอบสินค้า) — path ผูกกับ bookingId/jobItemId เสมอ กันรูปชนกัน (ดู stores/booking.ts
+    // deliverJobItem, repositories/podRepository.ts) อ่านได้ทุก role ที่ล็อกอินอยู่ (ต้องโชว์ในหน้า Job
+    // Detail/office ฝั่งตรวจสอบ) แต่เขียนได้เฉพาะ ADMIN หรือคนขับที่ "เป็นคนขับของ Booking นี้จริง" เท่านั้น (เทียบ
+    // driverId ตรงๆ ไม่ใช่แค่ role DRIVER เฉยๆ กันคนขับคนอื่นอัปโหลดทับ POD ของงานที่ไม่ใช่ของตัวเอง)
+    match /pod/{bookingId}/{jobItemId}/{fileName} {
+      allow read: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING', 'DRIVER']);
+      allow write: if hasRole(['ADMIN']) ||
+        (hasRole(['DRIVER']) && myDriverId() == firestore.get(/databases/(default)/documents/bookings/$(bookingId)).data.driverId);
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

@@ -70,12 +70,30 @@
               <label class="block text-xs font-semibold text-muted mb-1">ชื่อ</label>
               <input v-model="form.name" class="input-field w-full" />
             </div>
+            <div v-if="form.role === 'DRIVER'">
+              <label class="block text-xs font-semibold text-muted mb-1">ผูกกับคนขับในสมุดรายชื่อ{{ editingUser ? '' : ' (แนะนำ — auto-fill Email จากรหัสคนขับ)' }}</label>
+              <select v-model="form.driverId" class="input-field w-full">
+                <option :value="undefined">-- ไม่ผูก (จับคู่งานด้วยชื่อแบบเดิม) --</option>
+                <option v-for="d in driversStore.drivers" :key="d.id" :value="d.id">{{ driversStore.fullName(d) }} ({{ d.code }})</option>
+              </select>
+              <div class="text-[11px] text-muted mt-1">ผูกไว้แล้วงานที่จ่ายให้คนขับคนนี้จะขึ้นในแอปคนขับแม่นยำ ไม่พึ่งชื่อบัญชีตรงกับสมุดรายชื่อเป๊ะอีกต่อไป และคนขับ login ด้วยรหัสคนขับ + PIN แทน Email ได้ทันที</div>
+              <div v-if="!form.driverId" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mt-2 flex items-start gap-1.5">
+                <span class="material-symbols-rounded text-sm flex-shrink-0">warning</span>
+                <span>
+                  ยังไม่ได้ผูกกับคนขับในสมุดรายชื่อ — งานที่จ่ายให้บัญชีนี้จะจับคู่ด้วยการเทียบชื่อเท่านั้น (ผิดพลาดง่ายกว่า) และคนขับจะ login ด้วยรหัสคนขับ + PIN ไม่ได้ ต้องใช้ Email เต็มแทน
+                  <label class="flex items-center gap-1.5 mt-1.5 cursor-pointer font-semibold">
+                    <input v-model="confirmNoDriverLink" type="checkbox" class="w-3.5 h-3.5" />
+                    เข้าใจแล้ว ต้องการสร้างบัญชีนี้โดยไม่ผูกกับคนขับ
+                  </label>
+                </span>
+              </div>
+            </div>
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">Email</label>
+              <label class="block text-xs font-semibold text-muted mb-1">{{ form.role === 'DRIVER' ? 'Email (auto จากรหัสคนขับ ถ้าผูกไว้ — แก้ไขเองได้)' : 'Email' }}</label>
               <input v-model="form.email" type="email" class="input-field w-full" :disabled="!!editingUser" />
             </div>
             <div v-if="!editingUser">
-              <label class="block text-xs font-semibold text-muted mb-1">Password เริ่มต้น</label>
+              <label class="block text-xs font-semibold text-muted mb-1">{{ form.role === 'DRIVER' ? 'PIN เริ่มต้น (ใช้ล็อกอินคู่กับรหัสคนขับ)' : 'Password เริ่มต้น' }}</label>
               <input v-model="form.password" type="password" class="input-field w-full" placeholder="อย่างน้อย 6 ตัวอักษร" />
             </div>
             <div>
@@ -83,14 +101,6 @@
               <select v-model="form.role" class="input-field w-full">
                 <option v-for="r in roleOptions" :key="r" :value="r">{{ roleLabels[r] }}</option>
               </select>
-            </div>
-            <div v-if="form.role === 'DRIVER'">
-              <label class="block text-xs font-semibold text-muted mb-1">ผูกกับคนขับในสมุดรายชื่อ (ไม่บังคับ)</label>
-              <select v-model="form.driverId" class="input-field w-full">
-                <option :value="undefined">-- ไม่ผูก (จับคู่งานด้วยชื่อแบบเดิม) --</option>
-                <option v-for="d in driversStore.drivers" :key="d.id" :value="d.id">{{ driversStore.fullName(d) }}</option>
-              </select>
-              <div class="text-[11px] text-muted mt-1">ผูกไว้แล้วงานที่จ่ายให้คนขับคนนี้จะขึ้นในแอปคนขับแม่นยำ ไม่พึ่งชื่อบัญชีตรงกับสมุดรายชื่อเป๊ะอีกต่อไป</div>
             </div>
             <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
               <input v-model="form.canOverrideFuelRate" type="checkbox" class="w-4 h-4" />
@@ -135,12 +145,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useUserStore, type UserProfile, type UserRole } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
 import { useBookingStore } from '@/stores/booking'
 import { matchDriverIds } from '@/utils/driverIdMigration'
+import { internalDriverEmail } from '@/utils/driverAuth'
 
 const userStore = useUserStore()
 const authStore = useAuthStore()
@@ -168,6 +179,26 @@ const form = ref({
 })
 const formError = ref('')
 const saving = ref(false)
+/** ต้องติ๊กยอมรับก่อนถึงจะบันทึกบัญชี role DRIVER ที่ไม่ได้ผูก driverId ได้ (D6 — เตือนแทนการบล็อกเด็ดขาด เพื่อให้ยัง
+ *  รองรับ workflow เดิมที่จับคู่งานด้วยชื่อได้ต่อไปถ้าตั้งใจจริงๆ) */
+const confirmNoDriverLink = ref(false)
+
+/** ผูกคนขับ (ตอนสร้างบัญชีใหม่เท่านั้น) -> auto-fill Email เป็นอีเมลภายใน d{code}@drivers.internal ให้ทันที
+ *  ไม่ทับ Email ที่แอดมินพิมพ์เองไปแล้วถ้าไม่ตรงกับค่าที่ auto-fill ไว้ก่อนหน้า (เผื่อแอดมินตั้งใจพิมพ์อีเมลจริงเอง) */
+let lastAutoFilledEmail = ''
+watch(
+  () => form.value.driverId,
+  (driverId) => {
+    if (editingUser.value || form.value.role !== 'DRIVER' || !driverId) return
+    const driver = driversStore.drivers.find((d) => d.id === driverId)
+    if (!driver) return
+    if (!form.value.email.trim() || form.value.email === lastAutoFilledEmail) {
+      form.value.email = internalDriverEmail(driver.code)
+      lastAutoFilledEmail = form.value.email
+    }
+    confirmNoDriverLink.value = false
+  }
+)
 
 const showPasswordDialog = ref(false)
 const passwordTarget = ref<UserProfile | null>(null)
@@ -196,6 +227,7 @@ const openCreateDialog = () => {
   editingUser.value = null
   form.value = { name: '', email: '', password: '', role: 'STAFF', driverId: undefined, canOverrideFuelRate: false }
   formError.value = ''
+  confirmNoDriverLink.value = false
   showDialog.value = true
 }
 
@@ -210,6 +242,7 @@ const openEditDialog = (user: UserProfile) => {
     canOverrideFuelRate: user.canOverrideFuelRate ?? false,
   }
   formError.value = ''
+  confirmNoDriverLink.value = !!user.driverId // บัญชีที่ผูกอยู่แล้วไม่ต้องติ๊กซ้ำ
   showDialog.value = true
 }
 
@@ -217,6 +250,10 @@ const save = async () => {
   formError.value = ''
   if (!form.value.name.trim() || !form.value.email.trim()) {
     formError.value = 'กรุณากรอกชื่อและ Email'
+    return
+  }
+  if (form.value.role === 'DRIVER' && !form.value.driverId && !confirmNoDriverLink.value) {
+    formError.value = 'กรุณาผูกกับคนขับในสมุดรายชื่อ หรือติ๊กยืนยันว่าต้องการสร้างบัญชีนี้โดยไม่ผูกกับคนขับ'
     return
   }
   if (!editingUser.value && form.value.password.trim().length < 6) {
@@ -247,6 +284,12 @@ const save = async () => {
       })
       if (form.value.canOverrideFuelRate) {
         await userStore.updateProfile(uid, { canOverrideFuelRate: true })
+      }
+      // เก็บอีเมลที่ใช้ล็อกอินจริงไว้ที่ DriverRecord ด้วย (โชว์ในหน้าแอดมินเท่านั้น — ไม่ใช่ตัวที่หน้า Login ใช้ resolve
+      // เพราะยังเป็นค่า default ที่ derive ได้ตรงๆ จาก code อยู่แล้ว ไม่ต้องเขียน driverAuthEmails index ซ้ำ)
+      if (form.value.role === 'DRIVER' && form.value.driverId) {
+        const driver = driversStore.drivers.find((d) => d.id === form.value.driverId)
+        if (driver) await driversStore.updateDriver(driver.id!, { ...driver, authEmail: form.value.email.trim() })
       }
     }
     showDialog.value = false

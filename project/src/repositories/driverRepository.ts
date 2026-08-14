@@ -43,6 +43,7 @@ export function sanitizeDriver(data: Partial<DriverRecord> & Record<string, unkn
     bankAccount: data.bankAccount ?? '',
     photo: (data.photo as string | null) ?? null,
     avatarBg: data.avatarBg ?? '#64748b',
+    ...(data.authEmail ? { authEmail: data.authEmail } : {}),
   }
 }
 

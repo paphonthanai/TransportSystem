@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { driverRepository, sanitizeDriver } from '@/repositories/driverRepository'
+import { driverAuthRepository } from '@/repositories/driverAuthRepository'
+import { internalDriverEmail } from '@/utils/driverAuth'
 
 export type EmploymentStatus = 'active' | 'resigned'
 export type IncomeType = 'daily' | 'monthly' | 'trip'
@@ -37,6 +39,10 @@ export interface DriverRecord {
   bankAccount: string
   photo: string | null
   avatarBg: string
+  /** อีเมลที่ใช้ล็อกอิน Firebase Auth ของบัญชีคนขับคนนี้ (ถ้าผูกบัญชี Driver App ไว้แล้ว) — ค่าเริ่มต้นเป็นอีเมลภายใน
+   *  d{code}@drivers.internal เสมอ (derive ได้ตรงๆ ไม่ต้องเก็บก็ได้) ฟิลด์นี้เก็บไว้แค่โชว์ในหน้าแอดมิน + เป็นสำเนาคู่กับ
+   *  driverAuthEmails/{code} (ดู repositories/driverAuthRepository.ts) เวลาคนขับเปลี่ยนไปใช้อีเมลจริงภายหลัง */
+  authEmail?: string
 }
 
 export const useDriversStore = defineStore('drivers', () => {
@@ -80,5 +86,31 @@ export const useDriversStore = defineStore('drivers', () => {
     drivers.value = drivers.value.filter((d) => d.id !== id)
   }
 
-  return { drivers, loading, error, fullName, createDriver, updateDriver, deleteDriver, sanitizeDriver }
+  /** resolve รหัสคนขับ -> อีเมลที่ใช้กับ Firebase Auth จริง เรียกจากหน้า Login ก่อน authenticate เสมอ (ดู
+   *  utils/driverAuth.ts + repositories/driverAuthRepository.ts) — ถ้ายังไม่เคยผูกอีเมลจริง (ไม่มี override ใน
+   *  driverAuthEmails) คืนค่าอีเมลภายในที่ derive ได้ตรงๆ จาก code เสมอ ไม่มีทาง fail แค่เพราะยังไม่ตั้งอีเมลจริง */
+  async function resolveLoginEmail(code: string): Promise<string> {
+    const override = await driverAuthRepository.getAuthEmail(code)
+    return override || internalDriverEmail(code)
+  }
+
+  /**
+   * เปลี่ยนอีเมลล็อกอินของ "ตัวเอง" (เรียกหลัง Firebase Auth updateEmail สำเร็จแล้วเท่านั้น — ดู
+   * authStore.updateOwnCredentials / DriverAppView.vue self-service) อัปเดตทั้ง DriverRecord.authEmail (โชว์ในหน้า
+   * แอดมิน) และ driverAuthEmails/{code} (index ที่หน้า Login ใช้ resolve) พร้อมกันเสมอ กันข้อมูลสองที่ไม่ตรงกัน
+   *
+   * ใช้ driverRepository.get(id) (single-doc get() ตรงๆ) แทนการหาใน drivers.value/fetchDrivers() ที่เป็น list()
+   * เจตนา — คนขับ (role DRIVER) มีสิทธิ์อ่านได้แค่ record ตัวเองเท่านั้น (ดู firestore.rules) ซึ่งใช้ได้กับ get()
+   * เท่านั้น ไม่รองรับ list() ทั้ง collection แม้จะกรองเหลือแค่ของตัวเองก็ตาม
+   */
+  async function setAuthEmail(driverId: string, newEmail: string) {
+    const driver = await driverRepository.get(driverId)
+    if (!driver) return
+    await driverAuthRepository.setAuthEmail(driver.code, newEmail)
+    await driverRepository.update(driverId, sanitizeDriver({ ...driver, authEmail: newEmail }))
+    const index = drivers.value.findIndex((d) => d.id === driverId)
+    if (index !== -1) drivers.value[index] = { ...drivers.value[index], authEmail: newEmail }
+  }
+
+  return { drivers, loading, error, fullName, createDriver, updateDriver, deleteDriver, sanitizeDriver, resolveLoginEmail, setAuthEmail }
 })

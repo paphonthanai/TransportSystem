@@ -29,10 +29,24 @@ service cloud.firestore {
       return isSignedIn() && isActive() && userRole() in roles;
     }
 
+    // driverId ของบัญชีที่ล็อกอินอยู่ (มีความหมายเฉพาะ role DRIVER) ใช้จำกัดให้คนขับแก้ไข/อ่านได้แค่ข้อมูล "ของตัวเอง"
+    // เท่านั้นใน self-service flow (เปลี่ยนอีเมล/PIN จาก Driver App) — ดู users/{uid}.driverId
+    function myDriverId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.driverId;
+    }
+
+    function myDriverCode() {
+      return get(/databases/$(database)/documents/drivers/$(myDriverId())).data.code;
+    }
+
     // User profiles (role/name/active) — id เอกสาร = Firebase Auth uid เสมอ
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create, update: if hasRole(['ADMIN']);
+      // Self-service: เจ้าของบัญชีซิงก์ field email ของตัวเองได้ (หลังเปลี่ยนอีเมลจริงผ่าน Firebase Auth สำเร็จแล้ว —
+      // ดู authStore.updateOwnCredentials / DriverAppView.vue) แก้ได้เฉพาะ email เท่านั้น ห้ามแตะ role/active/driverId เอง
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email', 'updatedAt']);
       allow delete: if false; // ลบบัญชีจริงต้องผ่าน Firebase Auth (Admin SDK) — ที่นี่ปิดใช้งานผ่าน active:false แทน
     }
 
@@ -47,6 +61,21 @@ service cloud.firestore {
 
     match /drivers/{driverId} {
       allow read, write: if hasRole(['ADMIN', 'DISPATCHER']);
+      // Self-service: คนขับอ่าน/แก้ไข record ของ "ตัวเอง" เท่านั้นได้ (เปลี่ยนอีเมล/PIN จาก Driver App — ดู
+      // stores/auth.ts updateOwnCredentials) แก้ได้เฉพาะ field authEmail เท่านั้น ห้ามแตะ field อื่นของตัวเอง
+      // หรือ record ของคนขับคนอื่นเลย
+      allow read: if isSignedIn() && hasRole(['DRIVER']) && myDriverId() == driverId;
+      allow update: if isSignedIn() && hasRole(['DRIVER']) && myDriverId() == driverId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['authEmail']);
+    }
+
+    // Index สาธารณะเล็กๆ "รหัสคนขับ -> authEmail ปัจจุบัน" ใช้ resolve ตอน Login ก่อน authenticate เท่านั้น (ไม่มี
+    // ข้อมูลส่วนตัวอื่นในเอกสารนี้เลย) — allow get แบบ public เพราะต้องรู้ code เป๊ะถึงจะอ่านได้ (enumerate ไม่ได้
+    // เพราะ list ปิดไว้) ดู repositories/driverAuthRepository.ts
+    match /driverAuthEmails/{code} {
+      allow get: if true;
+      allow list: if hasRole(['ADMIN', 'DISPATCHER']);
+      allow write: if hasRole(['ADMIN']) || (isSignedIn() && hasRole(['DRIVER']) && myDriverCode() == code);
     }
 
     match /vehicles/{vehicleId} {

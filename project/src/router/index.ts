@@ -408,7 +408,14 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/driver-app',
     name: 'DriverApp',
-    component: () => import('@/views/DriverAppView.vue'),
+    component: () => import('@/views/DriverJobsView.vue'),
+    meta: { requiresAuth: true, roles: ['DRIVER'] },
+  },
+  {
+    path: '/driver-app/job/:id',
+    name: 'DriverJobDetail',
+    component: () => import('@/views/DriverJobDetailView.vue'),
+    props: true,
     meta: { requiresAuth: true, roles: ['DRIVER'] },
   },
   {
@@ -441,8 +448,8 @@ router.beforeEach(async (to, from, next) => {
     next({ name: 'Login', query: { redirect: to.fullPath } })
   } else if (to.name === 'Login' && authStore.isAuthenticated) {
     next(authStore.role === 'DRIVER' ? { name: 'DriverApp' } : { name: 'DashboardHome' })
-  } else if (authStore.isAuthenticated && authStore.role === 'DRIVER' && to.name !== 'DriverApp') {
-    // แยกมุมมองคนขับออกจากส่วนแอดมิน: คนขับเข้าได้เฉพาะหน้า Driver App
+  } else if (authStore.isAuthenticated && authStore.role === 'DRIVER' && to.name !== 'DriverApp' && to.name !== 'DriverJobDetail') {
+    // แยกมุมมองคนขับออกจากส่วนแอดมิน: คนขับเข้าได้เฉพาะหน้า Driver App (My Jobs + Job Detail)
     next({ name: 'DriverApp' })
   } else if (authStore.isAuthenticated && !canAccess(authStore.role, to.meta.roles as UserRole[] | undefined) && to.name !== 'Unauthorized') {
     next({ name: 'Unauthorized' })

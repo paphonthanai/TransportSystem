@@ -8,6 +8,10 @@ import {
   signOut,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updateEmail as firebaseUpdateEmail,
+  updatePassword as firebaseUpdatePassword,
   type User as FirebaseUser,
 } from 'firebase/auth'
 import { auth, firebaseConfig, useEmulator } from '@/config/firebase'
@@ -131,6 +135,33 @@ export const useAuthStore = defineStore('auth', () => {
     await sendPasswordResetEmail(auth, email.trim())
   }
 
+  /**
+   * Self-service: เปลี่ยนอีเมล/PIN ของ "บัญชีตัวเอง" เท่านั้น (ใช้กับคนขับที่อยากผูกอีเมลจริงแทนอีเมลภายใน
+   * d{code}@drivers.internal ทีหลัง — ดู DriverAppView.vue) เปลี่ยนอีเมลของบัญชีคนอื่นจาก client ทำไม่ได้เลย
+   * (ต้องมี Admin SDK/Cloud Function ซึ่งระบบนี้ไม่มี — ดูรายงาน Inspect) จึงออกแบบให้เป็นการกระทำของเจ้าของบัญชีเอง
+   * เท่านั้น ไม่ใช่แอดมินทำแทน
+   *
+   * Firebase Auth บังคับ re-authenticate ก่อนแก้ email/password เสมอ (auth/requires-recent-login) — ใช้ PIN/
+   * password ปัจจุบันเป็น credential ยืนยันตัวตนก่อนเรียก updateEmail/updatePassword จริง
+   */
+  async function updateOwnCredentials(data: { currentPassword: string; newEmail?: string; newPassword?: string }) {
+    const fbUser = firebaseUser.value
+    if (!fbUser?.email) throw new Error('ไม่พบบัญชีที่ล็อกอินอยู่')
+    const credential = EmailAuthProvider.credential(fbUser.email, data.currentPassword)
+    await reauthenticateWithCredential(fbUser, credential)
+    const newEmail = data.newEmail?.trim()
+    if (newEmail && newEmail !== fbUser.email) {
+      await firebaseUpdateEmail(fbUser, newEmail)
+      // ซิงก์ /users/{uid}.email ให้ตรงกับ Firebase Auth ทันที (ไม่งั้นหน้าแอดมิน/จัดการผู้ใช้งานจะโชว์อีเมลเก่าค้างอยู่
+      // แม้ Auth จะเปลี่ยนไปแล้วจริง) — เขียนได้เพราะเป็น uid ตัวเอง (ดู firestore.rules self-service email update)
+      await userRepository.update(fbUser.uid, { email: newEmail, updatedAt: new Date().toISOString() })
+      if (profile.value) profile.value = { ...profile.value, email: newEmail }
+    }
+    if (data.newPassword && data.newPassword.trim()) {
+      await firebaseUpdatePassword(fbUser, data.newPassword.trim())
+    }
+  }
+
   return {
     user,
     currentUser,
@@ -146,5 +177,6 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     createStaffAccount,
     sendPasswordReset,
+    updateOwnCredentials,
   }
 })

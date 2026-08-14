@@ -15,21 +15,21 @@
         <h2 class="text-2xl font-bold text-text mb-6">เข้าสู่ระบบ</h2>
 
         <form @submit.prevent="handleLogin" class="space-y-4">
-          <!-- Email Input -->
+          <!-- Email/Driver Code Input — คนขับกรอกรหัสคนขับ (เช่น 1025) แทน Email ได้ ระบบตรวจรูปแบบให้อัตโนมัติ (ดู handleLogin) -->
           <div>
-            <label class="block text-sm font-semibold text-text mb-2">Email</label>
+            <label class="block text-sm font-semibold text-text mb-2">Email / รหัสคนขับ</label>
             <input
               v-model="email"
-              type="email"
-              placeholder="you@company.com"
+              type="text"
+              placeholder="you@company.com หรือรหัสคนขับ เช่น 1025"
               class="input-field w-full"
               required
             />
           </div>
 
-          <!-- Password Input -->
+          <!-- Password/PIN Input -->
           <div>
-            <label class="block text-sm font-semibold text-text mb-2">รหัสผ่าน</label>
+            <label class="block text-sm font-semibold text-text mb-2">รหัสผ่าน / PIN</label>
             <input
               v-model="password"
               type="password"
@@ -77,19 +77,30 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useDriversStore } from '@/stores/drivers'
+import { isEmailLike } from '@/utils/driverAuth'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const driversStore = useDriversStore()
 
 const email = ref('')
 const password = ref('')
 const error = ref('')
 
+/**
+ * ช่องเดียวกันรองรับทั้ง Email (STAFF/ADMIN/ฯลฯ) และรหัสคนขับ (ตัวเลข เช่น 1025) — ไม่ใช่รูปแบบอีเมลแปลว่าเป็นรหัสคนขับ
+ * ต้อง resolve เป็นอีเมลจริงก่อนเรียก signInWithEmailAndPassword เสมอ (ดู stores/drivers.ts resolveLoginEmail:
+ * เช็ค override ที่ผูกไว้ก่อน ถ้าไม่มีค่อย derive เป็นอีเมลภายใน d{code}@drivers.internal — ไม่มีการ query Firestore
+ * แบบ WHERE pin == xxx เลย ทุกอย่างตรวจผ่าน Firebase Auth เท่านั้น)
+ */
 const handleLogin = async () => {
   error.value = ''
   try {
-    await authStore.login(email.value, password.value)
+    const input = email.value.trim()
+    const loginEmail = isEmailLike(input) ? input : await driversStore.resolveLoginEmail(input)
+    await authStore.login(loginEmail, password.value)
     const redirect = (route.query.redirect as string) || (authStore.role === 'DRIVER' ? '/driver-app' : '/')
     router.push(redirect)
   } catch (err: any) {
