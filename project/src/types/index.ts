@@ -43,6 +43,15 @@ export type BookingStatus =
  */
 export type BillingStatus = 'UNBILLED' | 'IN_BATCH' | 'HOLD' | 'INVOICED' | 'PAID'
 
+/**
+ * สถานะตรวจสอบ POD ของออฟฟิศ — เป็นอิสระจาก BookingStatus โดยเจตนา (เหมือน BillingStatus) ไม่ผูกกับสถานะงานขนส่ง
+ * ตั้งค่าเฉพาะตอนคนขับกด "ดำเนินการเสร็จสิ้น" ผ่านแอปคนขับเท่านั้น (ดู finishDriverJob ใน stores/booking.ts) —
+ * งานที่ออฟฟิศเป็นคนจบเอง (completeJob) ไม่ผ่านขั้นตอนนี้ ค่าจะเป็น undefined เสมอ (ถือว่าผ่านแล้วโดยปริยาย)
+ * PENDING_REVIEW: รอออฟฟิศตรวจสอบ POD — ห้ามสร้างใบวางบิลจนกว่าจะ APPROVED (ดู createBillingFromBookings)
+ * APPROVED / REJECTED: ออฟฟิศตรวจสอบแล้ว (ดู reviewPod ใน stores/booking.ts)
+ */
+export type PodReviewStatus = 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED'
+
 export interface DebtAdjustment {
   id: string
   label: string
@@ -202,6 +211,10 @@ export interface Booking {
   podImage?: string
   /** สถานะการเงิน เป็นอิสระจาก status (BookingStatus) โดยสิ้นเชิง — ค่าเริ่มต้น UNBILLED เสมอ เปลี่ยนได้เฉพาะผ่านหน้าใบวางบิล (addBookingsToBatch / issueInvoiceFromBatch) เท่านั้น */
   billingStatus?: BillingStatus
+  /** สถานะตรวจสอบ POD ของออฟฟิศ (ดู PodReviewStatus) — ไม่มีค่า = ไม่ผ่านขั้นตอนนี้ (งานที่ออฟฟิศจบเอง) หรือยังไม่จบงาน */
+  podReviewStatus?: PodReviewStatus
+  /** เหตุผลที่ออฟฟิศ REJECTED (ถ้ามี) ให้คนขับเห็นว่าต้องแก้อะไร */
+  podReviewNote?: string
   /** ค่าใช้จ่ายเพิ่มเติมที่เรียกเก็บลูกค้า เพิ่มได้ตอนตรวจสอบรอบบิล */
   extraCharges?: ExtraCharge[]
   /** รอบบิลที่งานนี้ถูกจัดเข้าไป (ถ้ามี) */

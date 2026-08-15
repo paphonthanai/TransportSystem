@@ -1,4 +1,4 @@
-import type { BookingStatus, BillingStatus } from '@/types'
+import type { BookingStatus, BillingStatus, PodReviewStatus } from '@/types'
 
 export const bookingStatusLabel: Record<BookingStatus, string> = {
   WAITING_DISPATCH: 'รอจัดรถ',
@@ -38,4 +38,16 @@ export const billingStatusClass: Record<BillingStatus, string> = {
   HOLD: 'bg-red-100 text-red-700',
   INVOICED: 'bg-purple-100 text-purple-700',
   PAID: 'bg-green-100 text-green-700',
+}
+
+export const podReviewStatusLabel: Record<PodReviewStatus, string> = {
+  PENDING_REVIEW: 'รอตรวจสอบ POD',
+  APPROVED: 'ตรวจสอบแล้ว',
+  REJECTED: 'ตีกลับ',
+}
+
+export const podReviewStatusClass: Record<PodReviewStatus, string> = {
+  PENDING_REVIEW: 'bg-amber-100 text-amber-700',
+  APPROVED: 'bg-green-100 text-green-700',
+  REJECTED: 'bg-red-100 text-red-700',
 }

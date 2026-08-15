@@ -417,8 +417,9 @@ const closeFinishJob = () => {
 const confirmFinishJob = () => {
   if (!finishTarget.value) return
   const bookingId = finishTarget.value.id
+  /** ส่งของสำเร็จแล้ว -> เปลี่ยนสถานะเป็น DELIVERED + PENDING_REVIEW เท่านั้น ห้ามสร้างใบวางบิลจากฝั่งคนขับ
+   *  ต้องรอออฟฟิศตรวจสอบ POD แล้วอนุมัติก่อน (ดู reviewPod ใน stores/booking.ts + CompletedJobsView.vue) */
   bookingStore.finishDriverJob(bookingId, finishOdometerAfter.value || undefined)
-  // Phase 2: เลิกสร้างใบวางบิลอัตโนมัติตอนจบงาน (Booking ต้องไม่เป็น Trigger ของ Billing) — ฝั่งออฟฟิศไปสร้างเองทีหลัง
   closeFinishJob()
   router.push('/driver-app')
 }

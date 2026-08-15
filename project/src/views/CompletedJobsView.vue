@@ -67,6 +67,7 @@
                 <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ส่งของสำเร็จ</th>
                 <th class="text-right px-4 py-3 font-semibold text-muted">ราคา</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">สถานะวางบิล</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">ตรวจสอบ POD</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">สถานะการจัดการ</th>
               </tr>
             </thead>
@@ -97,6 +98,23 @@
                   </span>
                 </td>
                 <td class="px-4 py-3">
+                  <div v-if="booking.podReviewStatus" class="space-y-1">
+                    <span :class="['text-xs font-semibold px-2 py-1 rounded-full inline-block', podReviewStatusClass[booking.podReviewStatus]]">
+                      {{ podReviewStatusLabel[booking.podReviewStatus] }}
+                    </span>
+                    <div v-if="booking.podReviewStatus === 'PENDING_REVIEW'" class="flex gap-1">
+                      <button @click="approvePod(booking)" class="btn-sm !border-green-200 !bg-green-50 !text-green-700" title="อนุมัติ">
+                        <span class="material-symbols-rounded text-base">check_circle</span>
+                      </button>
+                      <button @click="rejectPod(booking)" class="btn-sm !border-red-200 !bg-red-50 !text-red-700" title="ตีกลับ">
+                        <span class="material-symbols-rounded text-base">cancel</span>
+                      </button>
+                    </div>
+                    <div v-else-if="booking.podReviewNote" class="text-[11px] text-muted">{{ booking.podReviewNote }}</div>
+                  </div>
+                  <span v-else class="text-xs text-muted">-</span>
+                </td>
+                <td class="px-4 py-3">
                   <div class="flex flex-wrap items-center gap-1.5">
                     <button @click="router.push(`/job/${booking.id}`)" class="btn-sm" title="รายละเอียดงาน">
                       <span class="material-symbols-rounded text-base">visibility</span>
@@ -118,7 +136,7 @@
                 </td>
               </tr>
               <tr v-if="completedBookings.length === 0">
-                <td colspan="11" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับตัวกรอง</td>
+                <td colspan="12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับตัวกรอง</td>
               </tr>
             </tbody>
           </table>
@@ -139,10 +157,12 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCompletedJobs, useCompletedJobsFilters } from '@/composables/useCompletedJobs'
-import { billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
+import { useBookingStore } from '@/stores/booking'
+import { billingStatusLabel, billingStatusClass, podReviewStatusLabel, podReviewStatusClass } from '@/utils/bookingStatus'
 import type { Booking, BillingStatus } from '@/types'
 
 const router = useRouter()
+const bookingStore = useBookingStore()
 
 const filters = useCompletedJobsFilters()
 const billingStatusOptions: BillingStatus[] = ['UNBILLED', 'IN_BATCH', 'HOLD', 'INVOICED', 'PAID']
@@ -182,6 +202,17 @@ const clearFilters = () => {
 const podPreviewImage = ref<string | null>(null)
 const openPod = (booking: Booking) => {
   podPreviewImage.value = firstPodImage(booking) || null
+}
+
+/** ตรวจสอบ POD ที่คนขับส่งผ่านแอปแล้วอนุมัติ/ตีกลับ (ดู reviewPod ใน stores/booking.ts) — อนุมัติแล้วเท่านั้นถึงจะออกใบวางบิลได้ */
+const approvePod = (booking: Booking) => {
+  if (!confirm(`ยืนยันอนุมัติ POD ของงาน ${booking.docNo}? หลังอนุมัติจะสามารถออกใบวางบิลได้`)) return
+  bookingStore.reviewPod(booking.id, 'APPROVED')
+}
+const rejectPod = (booking: Booking) => {
+  const note = prompt(`เหตุผลที่ตีกลับ POD ของงาน ${booking.docNo} (ไม่บังคับ):`)
+  if (note === null) return
+  bookingStore.reviewPod(booking.id, 'REJECTED', note.trim() || undefined)
 }
 </script>
 
