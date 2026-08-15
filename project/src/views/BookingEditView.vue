@@ -27,6 +27,14 @@
           <input v-model="editForm.shipDate" type="date" class="input-field w-full" />
         </div>
         <div>
+          <label class="block text-xs font-semibold text-muted mb-1">วันที่ลงสินค้า <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
+          <input v-model="editForm.loadingDate" type="date" class="input-field w-full" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-muted mb-1">เวลาลงสินค้า <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
+          <input v-model="editForm.loadingTime" type="time" class="input-field w-full" />
+        </div>
+        <div>
           <label class="block text-xs font-semibold text-muted mb-1">วันที่กลับ</label>
           <input v-model="editForm.returnDate" type="date" class="input-field w-full" />
         </div>
@@ -294,6 +302,8 @@ const toDateInput = (d?: Date) => (d ? new Date(d).toISOString().slice(0, 10) : 
 const editForm = ref({
   po: '',
   shipDate: '',
+  loadingDate: '',
+  loadingTime: '',
   returnDate: '',
   shipmentNo: '',
   route: '',
@@ -318,6 +328,8 @@ watch(
     editForm.value = {
       po: booking.po || '',
       shipDate: toDateInput(booking.shipDate),
+      loadingDate: toDateInput(booking.loadingDate),
+      loadingTime: booking.loadingTime || '',
       returnDate: toDateInput(booking.returnDate),
       shipmentNo: booking.shipmentNo || '',
       route: booking.route || '',
@@ -450,6 +462,8 @@ const draftToItem = (draft: JobItemDraft, existingId?: string): JobItem => {
     tripFee: isMulti ? draft.tripFee : undefined,
     tripCount: isMulti ? draft.tripCount || 1 : undefined,
     extraProducts: draft.extraProducts.length ? draft.extraProducts : undefined,
+    loadingDate: draft.loadingDate ? new Date(draft.loadingDate) : undefined,
+    loadingTime: draft.loadingTime || undefined,
   }
 }
 
@@ -515,6 +529,8 @@ const confirmEditBooking = () => {
     items: editLineItems.value,
     po: f.po || undefined,
     shipDate: f.shipDate ? new Date(f.shipDate) : undefined,
+    loadingDate: f.loadingDate ? new Date(f.loadingDate) : undefined,
+    loadingTime: f.loadingTime,
     returnDate: f.returnDate ? new Date(f.returnDate) : undefined,
     shipmentNo: f.shipmentNo || undefined,
     route: f.route || undefined,

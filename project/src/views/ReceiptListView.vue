@@ -85,7 +85,7 @@
               <td class="px-3 py-3">
                 <div class="flex items-center justify-end gap-1.5">
                   <button
-                    v-if="doc.status === 'DRAFT'"
+                    v-if="doc.status === 'DRAFT' || !doc.sourceDocumentIds?.length"
                     @click="router.push(editRouteFor(doc))"
                     class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2"
                   >

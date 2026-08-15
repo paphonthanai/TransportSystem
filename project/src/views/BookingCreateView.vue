@@ -45,6 +45,14 @@
               <input v-model="header.shipDate" type="date" class="input-field w-full" />
             </div>
             <div>
+              <label class="field-label">วันที่ลงสินค้า <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
+              <input v-model="header.loadingDate" type="date" class="input-field w-full" />
+            </div>
+            <div>
+              <label class="field-label">เวลาลงสินค้า <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
+              <input v-model="header.loadingTime" type="time" class="input-field w-full" />
+            </div>
+            <div>
               <label class="field-label">ทะเบียนรถ <span class="font-normal text-[10px]">(กรอกทีหลังได้)</span></label>
               <input v-model="header.plate" list="headerVehicleOptions" placeholder="เช่น 82-4417 กรุงเทพ" class="input-field w-full" />
               <datalist id="headerVehicleOptions">
@@ -410,6 +418,8 @@ const sourceQuotationId = typeof prefill.quotationId === 'string' ? prefill.quot
 const defaultHeader = () => ({
   po: (prefill.po as string) || bookingStore.nextPoNo(),
   shipDate: (prefill.shipDate as string) || new Date().toISOString().slice(0, 10),
+  loadingDate: '',
+  loadingTime: '',
   jobDate: new Date().toISOString().slice(0, 10),
   returnDate: '',
   customer: (prefill.customer as string) || (isCements.value ? '' : fixedCustomer),
@@ -584,6 +594,8 @@ const draftToItem = (draft: JobItemDraft, existingId?: string): JobItem => {
     tripFee: isMulti ? draft.tripFee : undefined,
     tripCount: isMulti ? draft.tripCount || 1 : undefined,
     extraProducts: draft.extraProducts.length ? draft.extraProducts : undefined,
+    loadingDate: draft.loadingDate ? new Date(draft.loadingDate) : undefined,
+    loadingTime: draft.loadingTime || undefined,
   }
 }
 
@@ -646,6 +658,7 @@ const toolbarNotReady = () => window.alert('ฟีเจอร์นี้ยั
 const saveAllItems = () => {
   if (!canSave.value) return
   const shipDate = header.value.shipDate ? new Date(header.value.shipDate) : undefined
+  const loadingDate = header.value.loadingDate ? new Date(header.value.loadingDate) : undefined
   const returnDate = header.value.returnDate ? new Date(header.value.returnDate) : undefined
   const createdAt = header.value.jobDate ? new Date(header.value.jobDate) : undefined
   const selectedDriver = header.value.driverName ? findDriverByName(header.value.driverName) : undefined
@@ -656,6 +669,8 @@ const saveAllItems = () => {
     po: header.value.po || undefined,
     sourceDocumentId: sourceQuotationId,
     shipDate,
+    loadingDate,
+    loadingTime: header.value.loadingTime || undefined,
     returnDate,
     createdAt,
     shipmentNo: header.value.shipmentNo || undefined,
@@ -690,7 +705,7 @@ const saveAllItems = () => {
     contactId: header.value.contactId,
     items: [
       {
-        description: `${newBooking.docNo} · ${destinationSummary.value}`,
+        description: lineItems.value.map((i) => `${i.product} — ${i.siteName}`).join('\n'),
         qty: 1,
         unit: 'เที่ยว',
         unitPrice: resolvedTripFee.value,

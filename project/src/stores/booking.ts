@@ -323,6 +323,8 @@ export const useBookingStore = defineStore('booking', () => {
       items?: JobItem[]
       po?: string
       shipDate?: Date
+      loadingDate?: Date
+      loadingTime?: string
       returnDate?: Date
       shipmentNo?: string
       route?: string
@@ -341,6 +343,8 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.items !== undefined) booking.items = data.items
     if (data.po !== undefined) booking.po = data.po || undefined
     if (data.shipDate !== undefined) booking.shipDate = data.shipDate
+    if (data.loadingDate !== undefined) booking.loadingDate = data.loadingDate
+    if (data.loadingTime !== undefined) booking.loadingTime = data.loadingTime || undefined
     if (data.returnDate !== undefined) booking.returnDate = data.returnDate
     if (data.shipmentNo !== undefined) booking.shipmentNo = data.shipmentNo || undefined
     if (data.route !== undefined) booking.route = data.route || undefined

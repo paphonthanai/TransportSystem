@@ -31,7 +31,6 @@
           จบงาน{{ booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING' ? '' : ' (ข้ามขั้นตอน)' }}
         </button>
         <button
-          v-if="booking.status === 'WAITING_DISPATCH'"
           @click="fire('delete')"
           class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-red-700"
         >

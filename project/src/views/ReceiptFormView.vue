@@ -4,7 +4,8 @@
       <div class="flex items-end gap-3">
         <div>
           <label class="field-label">เลขที่เอกสาร</label>
-          <input v-model="documentNumber" class="input-field h-9 px-2 font-mono text-sm w-40" />
+          <input v-model="documentNumber" class="input-field h-9 px-2 font-mono text-sm w-40" :class="{ '!border-red-500': numberDuplicate }" />
+          <div v-if="numberDuplicate" class="text-[11px] text-red-500 mt-0.5">❌ เลขที่เอกสารนี้ถูกใช้แล้ว</div>
         </div>
         <div>
           <label class="field-label">วันที่รับชำระ</label>
@@ -301,10 +302,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentItem } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
+import { useDocumentNumberRegistryStore } from '@/stores/documentNumberRegistry'
 import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
 import { useInventoryStore } from '@/stores/inventory'
@@ -320,6 +322,7 @@ const route = useRoute()
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const numberRegistry = useDocumentNumberRegistryStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
 const inventoryStore = useInventoryStore()
@@ -328,7 +331,11 @@ const userStore = useUserStore()
 
 const editingId = typeof route.params.id === 'string' ? route.params.id : undefined
 const isEditMode = !!editingId
-const editingDoc = editingId ? salesDocumentsStore.documents.find((d) => d.id === editingId && d.type === 'RECEIPT') : undefined
+/** ต้องเป็น computed ไม่ใช่ const ธรรมดา — ตอนเข้าหน้านี้แบบ navigate ตรง (refresh/พิมพ์ URL/เปิดลิงก์ใหม่ ไม่ใช่กดจากลิสต์
+ *  ในแอปเดียวกัน) salesDocumentsStore.documents อาจยังโหลดจาก Firestore ไม่เสร็จตอน setup รันแบบ const ธรรมดาจะ
+ *  ได้ undefined ค้างตลอดไป ทำให้ฟอร์มไม่ prefill ข้อมูลเดิมเลย (เห็นเป็นฟอร์มว่างราวกับสร้างใหม่) ต้องรอ Pinia
+ *  reactive update แล้วคำนวณใหม่เมื่อข้อมูลมาถึงจริง */
+const editingDoc = computed(() => (editingId ? salesDocumentsStore.documents.find((d) => d.id === editingId && d.type === 'RECEIPT') : undefined))
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
@@ -428,7 +435,7 @@ const addRow = () => {
   rows.value.push({ description: '', qty: 1, unit: '', unitPrice: 0, discountMode: 'percent', discountPercent: 0, discountAmount: 0, vatRate: documentSettingsStore.settings.vatRate, whtRate: 0 })
 }
 
-if (!editingDoc) addRow()
+if (!isEditMode) addRow()
 
 const onProductSelected = (idx: number, productId: string) => {
   const row = rows.value[idx]
@@ -472,45 +479,55 @@ const startEditWht = () => {
   whtOverrideEditing.value = true
 }
 
-if (editingDoc) {
-  customerName.value = editingDoc.customer
-  customerAddress.value = editingDoc.customerAddress || ''
-  customerZipCode.value = editingDoc.customerZipCode || ''
-  customerTaxId.value = editingDoc.customerTaxId || ''
-  customerBranchName.value = editingDoc.customerBranchName || ''
-  contactId.value = editingDoc.contactId
-  dateStr.value = new Date(editingDoc.date).toISOString().slice(0, 10)
-  paymentMethod.value = editingDoc.paymentMethod || 'เงินสด'
-  salesperson.value = editingDoc.salesperson || authStore.userName
-  currencyCode.value = editingDoc.currencyCode || 'THB'
-  project.value = editingDoc.project || ''
-  reference.value = editingDoc.reference || ''
-  priceMode.value = editingDoc.priceMode || documentSettingsStore.settings.priceDisplay
-  description.value = editingDoc.description || ''
-  warehouse.value = editingDoc.warehouse || 'คลังสินค้า'
-  useESignature.value = editingDoc.useESignature ?? true
-  note.value = editingDoc.note || ''
-  internalNote.value = editingDoc.internalNote || ''
-  attachmentPreview.value = editingDoc.attachmentImage || null
-  if (editingDoc.whtAmount) whtOverride.value = editingDoc.whtAmount
-  rows.value = salesDocumentsStore.itemsForDocument(editingDoc.id).map((i) => ({
-    productId: i.productId,
-    description: i.description,
-    qty: i.qty,
-    unit: i.unit,
-    unitPrice: i.unitPrice,
-    discountMode: i.discountMode || 'percent',
-    discountPercent: i.discountPercent || 0,
-    discountAmount: i.discountAmount || 0,
-    vatRate: i.vatRate ?? documentSettingsStore.settings.vatRate,
-    whtRate: i.whtRate || 0,
-  }))
-}
+/** prefill ผ่าน watch (ไม่ใช่ if บล็อกที่รันครั้งเดียวตอน setup) เพื่อรองรับกรณี editingDoc ยังไม่มีค่าตอนแรก
+ *  (ดูคอมเมนต์ที่ประกาศ editingDoc ด้านบน) — prefilled กันไม่ให้ทับข้อมูลที่ผู้ใช้แก้ไปแล้วซ้ำ ถ้า Firestore realtime
+ *  sync ส่งอัปเดตมาอีกครั้งระหว่างที่ผู้ใช้กำลังกรอกฟอร์มอยู่ */
+let prefilled = false
+watch(
+  editingDoc,
+  (doc) => {
+    if (!doc || prefilled) return
+    prefilled = true
+    customerName.value = doc.customer
+    customerAddress.value = doc.customerAddress || ''
+    customerZipCode.value = doc.customerZipCode || ''
+    customerTaxId.value = doc.customerTaxId || ''
+    customerBranchName.value = doc.customerBranchName || ''
+    contactId.value = doc.contactId
+    dateStr.value = new Date(doc.date).toISOString().slice(0, 10)
+    paymentMethod.value = doc.paymentMethod || 'เงินสด'
+    salesperson.value = doc.salesperson || authStore.userName
+    currencyCode.value = doc.currencyCode || 'THB'
+    project.value = doc.project || ''
+    reference.value = doc.reference || ''
+    priceMode.value = doc.priceMode || documentSettingsStore.settings.priceDisplay
+    description.value = doc.description || ''
+    warehouse.value = doc.warehouse || 'คลังสินค้า'
+    useESignature.value = doc.useESignature ?? true
+    note.value = doc.note || ''
+    internalNote.value = doc.internalNote || ''
+    attachmentPreview.value = doc.attachmentImage || null
+    if (doc.whtAmount) whtOverride.value = doc.whtAmount
+    rows.value = salesDocumentsStore.itemsForDocument(doc.id).map((i) => ({
+      productId: i.productId,
+      description: i.description,
+      qty: i.qty,
+      unit: i.unit,
+      unitPrice: i.unitPrice,
+      discountMode: i.discountMode || 'percent',
+      discountPercent: i.discountPercent || 0,
+      discountAmount: i.discountAmount || 0,
+      vatRate: i.vatRate ?? documentSettingsStore.settings.vatRate,
+      whtRate: i.whtRate || 0,
+    }))
+  },
+  { immediate: true }
+)
 
 const previewNumber = computed(() => {
-  if (editingDoc) return editingDoc.number
+  if (editingDoc.value) return editingDoc.value.number
   const numbering = documentSettingsStore.settings.numbering.receipt
-  const seq = salesDocumentsStore.documents.filter((d) => d.type === 'RECEIPT').length + 1
+  const seq = numberRegistry.peekNextSequence('RECEIPT')
   const now = new Date()
   const yyyy = now.getFullYear()
   const mm = String(now.getMonth() + 1).padStart(2, '0')
@@ -518,10 +535,30 @@ const previewNumber = computed(() => {
   return `${numbering.prefix}${yyyy}${mm}${dd}${documentSettingsStore.padNumber(seq, numbering.padding)}`
 })
 
-/** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ */
+/** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ
+ *  previewNumber ตอนเปิดหน้าครั้งแรกอาจยังไม่ใช่เลขจริง เพราะ documentNumberRegistry โหลดจาก Firestore แบบ async
+ *  (ตอน setup ยังไม่มีข้อมูล seq ล่าสุด) จึงต้อง sync documentNumber ตาม previewNumber ต่อไปเรื่อยๆ จนกว่าจะโหลดเสร็จ
+ *  และผู้ใช้ยังไม่ได้พิมพ์ทับเอง (numberManuallyEdited) — พอโหลดเสร็จ (ค่า sequence จริงมาแล้ว) ก็จะอัปเดตให้เป็นเลขที่ถูกต้องอัตโนมัติ */
+const numberManuallyEdited = ref(false)
 const documentNumber = ref(previewNumber.value)
+watch(previewNumber, (val) => {
+  if (!numberManuallyEdited.value) documentNumber.value = val
+})
+watch(documentNumber, (val) => {
+  if (val !== previewNumber.value) numberManuallyEdited.value = true
+})
 
-const canSubmit = computed(() => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0))
+/** เลขที่เอกสารนี้เคยถูกใช้ไปแล้วหรือไม่ (เช็คทั้งเอกสารที่ยังอยู่และที่ถูกลบไปแล้ว) — ยกเว้นเลขเดิมของเอกสารที่กำลังแก้ไขอยู่นี้เอง */
+const numberDuplicate = computed(() => {
+  const n = documentNumber.value.trim()
+  if (!n) return false
+  if (editingDoc.value && n === editingDoc.value.number) return false
+  return numberRegistry.isNumberUsed(n)
+})
+
+const canSubmit = computed(
+  () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
+)
 
 const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
 
@@ -533,6 +570,10 @@ const currentId = ref<string | undefined>(editingId)
  *  "บันทึกเอกสาร" และปุ่มลัดในแถบเครื่องมือ (พิมพ์/แชร์/ดาวน์โหลด) ที่ต้องมีเอกสารจริงก่อนถึงจะทำงานได้ */
 const saveAndGetDoc = () => {
   if (!canSubmit.value) return null
+  if (numberDuplicate.value) {
+    alert('❌ เลขที่เอกสารนี้ถูกใช้แล้ว')
+    return null
+  }
   const items: Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>> = rows.value.map((r) => ({
     productId: r.productId,
     description: r.description || r.unit,
@@ -573,8 +614,16 @@ const saveAndGetDoc = () => {
     whtAmount: whtTotal.value,
     contactId: contactId.value,
   }
-  if (currentId.value) return salesDocumentsStore.updateReceiptManual(currentId.value, payload)
+  if (currentId.value) {
+    const updated = salesDocumentsStore.updateReceiptManual(currentId.value, payload)
+    if (!updated) alert('❌ เลขที่เอกสารนี้ถูกใช้แล้ว')
+    return updated
+  }
   const created = salesDocumentsStore.createReceiptManual(payload)
+  if (!created) {
+    alert('❌ เลขที่เอกสารนี้ถูกใช้แล้ว')
+    return null
+  }
   currentId.value = created.id
   return created
 }

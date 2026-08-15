@@ -255,7 +255,6 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
-import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useDriversStore } from '@/stores/drivers'
 import type { Booking, JobItem } from '@/types'
 import { bookingStatusLabel } from '@/utils/bookingStatus'
@@ -267,7 +266,6 @@ const props = defineProps<{ id: string }>()
 const router = useRouter()
 const bookingStore = useBookingStore()
 const authStore = useAuthStore()
-const salesDocumentsStore = useSalesDocumentsStore()
 const driversStore = useDriversStore()
 
 const isDriverRole = computed(() => authStore.role === 'DRIVER')
@@ -420,8 +418,7 @@ const confirmFinishJob = () => {
   if (!finishTarget.value) return
   const bookingId = finishTarget.value.id
   bookingStore.finishDriverJob(bookingId, finishOdometerAfter.value || undefined)
-  /** ส่งของสำเร็จแล้ว -> สร้างใบวางบิลอัตโนมัติทันที เหมือนฝั่งออฟฟิศใน BookingView.vue */
-  salesDocumentsStore.createBillingFromBookings([bookingId])
+  // Phase 2: เลิกสร้างใบวางบิลอัตโนมัติตอนจบงาน (Booking ต้องไม่เป็น Trigger ของ Billing) — ฝั่งออฟฟิศไปสร้างเองทีหลัง
   closeFinishJob()
   router.push('/driver-app')
 }

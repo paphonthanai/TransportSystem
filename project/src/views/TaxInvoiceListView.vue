@@ -27,6 +27,10 @@
           <span class="material-symbols-rounded text-base">link</span>
           ซิงก์ความสัมพันธ์ใบวางบิล
         </button>
+        <button @click="router.push('/tax-invoices/new-merged')" class="btn-secondary" title="รวมงานขนส่งหลายเที่ยวของลูกค้ารายเดียวกันเป็นใบแจ้งหนี้ฉบับเดียว">
+          <span class="material-symbols-rounded text-base">call_merge</span>
+          สร้างใบแจ้งหนี้รวม
+        </button>
         <button @click="router.push('/tax-invoices/new')" class="btn-primary">
           <span class="material-symbols-rounded text-base">add</span>
           สร้างใหม่

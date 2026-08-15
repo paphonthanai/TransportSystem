@@ -23,6 +23,28 @@
     <div v-if="!booking" class="card-lg text-center text-muted py-12">ไม่พบงาน</div>
 
     <template v-else>
+      <!-- Driver Tracking Timeline (สำหรับ Office ดูความคืบหน้า — ยังไม่มี GPS ใช้ BookingStatus ขับ Timeline ตรงๆ ไม่มี status ชุดใหม่) -->
+      <div class="card-lg no-print">
+        <div class="text-xs font-bold text-muted uppercase tracking-wide mb-3">ความคืบหน้างาน (Tracking)</div>
+        <div class="flex items-center overflow-x-auto pb-1">
+          <template v-for="(step, idx) in trackingSteps" :key="step.status">
+            <div class="flex flex-col items-center flex-shrink-0 min-w-[84px]">
+              <div
+                :class="[
+                  'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
+                  step.state === 'done' ? 'bg-green-600 text-white' : step.state === 'current' ? 'bg-primary text-white' : 'bg-surface-2 text-muted border border-border',
+                ]"
+              >
+                <span v-if="step.state === 'done'" class="material-symbols-rounded text-sm">check</span>
+                <span v-else>{{ idx + 1 }}</span>
+              </div>
+              <div :class="['text-[11px] text-center mt-1 leading-tight', step.state === 'upcoming' ? 'text-muted' : 'text-text font-medium']">{{ step.label }}</div>
+            </div>
+            <div v-if="idx < trackingSteps.length - 1" :class="['h-0.5 flex-1 min-w-[16px] mx-1', step.state === 'done' ? 'bg-green-600' : 'bg-border']"></div>
+          </template>
+        </div>
+      </div>
+
       <!-- Printable PO / Work Order Sheet -->
       <div id="print-area" class="print-sheet bg-white text-black rounded-xl shadow-default border border-border p-10 max-w-3xl mx-auto relative">
         <div class="corner-flag"></div>
@@ -390,7 +412,7 @@ import { bahtText } from '@/utils/companyInfo'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
 import { computeRowDiscountBaht, computeRowAmount, computeRowVat } from '@/utils/documentTotals'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
-import type { Booking } from '@/types'
+import type { Booking, BookingStatus } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -408,6 +430,22 @@ const isMulti = computed(() => (booking.value?.pricingMode ?? 'SINGLE_DESTINATIO
 const customer = computed(() => customerStore.lookupCustomer(booking.value?.customer || ''))
 const relatedBatchId = computed(() => booking.value?.batchId)
 const relatedInvoice = computed(() => bookingStore.documents.find((d) => booking.value && d.bookingIds.includes(booking.value.id)))
+
+/**
+ * Driver Tracking Timeline สำหรับ Office (Phase 1 ข้อ 5) — ยังไม่มี GPS ใช้ BookingStatus 9 สถานะเดิมขับ Timeline
+ * ตรงๆ ไม่สร้าง status ชุดใหม่เลย (WAITING_DISPATCH ไม่นับเป็นขั้นของ Timeline เพราะยังไม่ได้จ่ายงาน — Timeline
+ * เริ่มนับตั้งแต่ ASSIGNED เป็นต้นไปตามลำดับสถานะจริงใน stores/booking.ts BOOKING_STATUS_SEQUENCE)
+ */
+const TRACKING_STATUSES: BookingStatus[] = ['ASSIGNED', 'ACCEPTED', 'FUEL_RECEIVED', 'LOADING', 'LOADED', 'IN_TRANSIT', 'DELIVERING', 'DELIVERED']
+const trackingSteps = computed(() => {
+  const current = booking.value?.status
+  const currentIdx = current ? TRACKING_STATUSES.indexOf(current) : -1
+  return TRACKING_STATUSES.map((status, idx) => ({
+    status,
+    label: bookingStatusLabel[status],
+    state: idx < currentIdx ? 'done' : idx === currentIdx ? 'current' : 'upcoming',
+  }))
+})
 
 /** ยังไม่จัดคนขับ = ใบสั่งซื้อสินค้า (Purchase Order), จัดคนขับแล้ว = ใบสั่งงานขนส่ง (Work Order) */
 const isDispatched = computed(() => !!booking.value?.driverName)

@@ -135,6 +135,12 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN', 'ACCOUNTING'] },
       },
       {
+        path: 'tax-invoices/new-merged',
+        name: 'TaxInvoiceCreateFromBookings',
+        component: () => import('@/views/TaxInvoiceCreateFromBookingsView.vue'),
+        meta: { roles: ['ADMIN', 'ACCOUNTING'] },
+      },
+      {
         path: 'tax-invoices/:id/edit',
         name: 'TaxInvoiceEdit',
         component: () => import('@/views/TaxInvoiceFormView.vue'),

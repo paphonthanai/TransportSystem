@@ -7,6 +7,8 @@ import { useContactStore } from './contacts'
 import { salesDocumentRepository } from '@/repositories/salesDocumentRepository'
 import { salesDocumentItemRepository } from '@/repositories/salesDocumentItemRepository'
 import { computeRowAmount, computeRowDiscountBaht, computeRowVat } from '@/utils/documentTotals'
+import { sortBookingsForDocumentMerge } from '@/utils/bookingMergeSort'
+import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
 import type { Booking, BillingStatus } from '@/types'
 
 export type SalesDocumentType = 'QUOTATION' | 'SALES_ORDER' | 'BILLING' | 'TAX_INVOICE' | 'RECEIPT' | 'CASH_SALE' | 'PURCHASE_ORDER'
@@ -802,7 +804,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       const hasSalesOrder = documents.value.some((d) => d.type === 'SALES_ORDER' && d.bookingIds.includes(booking.id))
       if (hasSalesOrder) return
       const amount = booking.agreedPrice || booking.tripFee || 0
-      const destinationSummary = booking.items.map((i) => i.siteName).filter(Boolean).join(', ') || '-'
+      const productSiteLines = booking.items.map((i) => `${i.product} — ${i.siteName}`).join('\n') || '-'
       const salesOrder = createSalesOrderForBooking({
         bookingId: booking.id,
         customer: booking.customer,
@@ -810,7 +812,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         reference: booking.po,
         items: [
           {
-            description: `${booking.docNo} · ${destinationSummary}`,
+            description: productSiteLines,
             qty: 1,
             unit: 'เที่ยว',
             unitPrice: amount,
@@ -1158,18 +1160,23 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return doc
   }
 
-  /** สร้างใบเสร็จรับเงินแบบกรอกเอง — ใช้หน้าฟอร์มแบบเดียวกับ QuotationFormView.vue (ดู ReceiptFormView.vue) ถือว่าเก็บเงินแล้วทันทีตอนบันทึก */
-  function createReceiptManual(data: ManualDocumentFormData): SalesDocument {
+  /** สร้างใบเสร็จรับเงินแบบกรอกเอง — ใช้หน้าฟอร์มแบบเดียวกับ QuotationFormView.vue (ดู ReceiptFormView.vue) ถือว่าเก็บเงินแล้วทันทีตอนบันทึก
+   *  เลขที่เอกสารแก้ไขเองได้ (data.number) — ถ้าเลขนี้เคยถูกใช้มาแล้ว (ไม่ว่าเอกสารเดิมจะยังอยู่หรือถูกลบไปแล้วก็ตาม)
+   *  ปฏิเสธการสร้างทันที คืนค่า null ให้ผู้เรียกแสดง error (ดู documentNumberRegistry store) */
+  function createReceiptManual(data: ManualDocumentFormData): SalesDocument | null {
     const documentSettingsStore = useDocumentSettingsStore()
+    const numberRegistry = useDocumentNumberRegistryStore()
     const numbering = documentSettingsStore.settings.numbering.receipt
-    const seq = documents.value.filter((d) => d.type === 'RECEIPT').length + 1
+    const manualNumber = data.number?.trim()
+    if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
+    const seq = numberRegistry.nextSequence('RECEIPT')
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const now = new Date()
     const paidDate = data.date || now
     const receipt: SalesDocument = {
       id: genId('sdoc'),
       type: 'RECEIPT',
-      number: data.number?.trim() || generateDocNumber(numbering.prefix, seq, numbering.padding, paidDate),
+      number: manualNumber || generateDocNumber(numbering.prefix, seq, numbering.padding, paidDate),
       customer: data.customer,
       status: 'PAID',
       date: paidDate,
@@ -1202,18 +1209,30 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     Object.assign(receipt, resolveContactSnapshot(data.customer, data.contactId))
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, data.items)
+    numberRegistry.registerNumber(receipt.number)
     useBookingStore().addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
     return receipt
   }
 
-  /** แก้ไขใบเสร็จรับเงินที่กรอกเอง (เฉพาะตอนยังไม่เก็บเงินจริง — สถานะ DRAFT) แทนที่ field เอกสาร + รายการทั้งหมด ไม่เปลี่ยนเลขที่/สถานะ/bookingIds */
+  /** แก้ไขใบเสร็จรับเงินที่กรอกเอง แทนที่ field เอกสาร + รายการทั้งหมด (ไม่เปลี่ยน bookingIds)
+   *  ใบเสร็จที่กรอกเอง (ไม่มี sourceDocumentIds) createReceiptManual ตั้งสถานะ PAID ทันทีตอนสร้างเสมอ ไม่เคยผ่านสถานะ
+   *  DRAFT จริงๆ เลย (ถือว่าเก็บเงินแล้วทันทีตอนบันทึก) — ถ้าจำกัดแก้ไขได้เฉพาะ DRAFT เหมือนเดิม requirement "Admin
+   *  แก้เลขที่เอกสารได้ที่หน้า Edit" จะใช้งานไม่ได้จริงเลยสักครั้งเดียว จึงต้องอนุญาตแก้ไขได้ทั้ง DRAFT และ PAID สำหรับ
+   *  ใบเสร็จประเภทนี้โดยเฉพาะ — ใบเสร็จที่สร้างจากเอกสารต้นทาง (มี sourceDocumentIds, แก้ผ่าน updateReceiptFromSourceDocs
+   *  คนละฟังก์ชัน) ยังคงล็อกหลังจ่ายเงินเหมือนเดิมทุกประการ ไม่แตะ */
   function updateReceiptManual(id: string, data: ManualDocumentFormData): SalesDocument | null {
     const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
-    if (!doc || doc.status !== 'DRAFT') return null
+    if (!doc || doc.sourceDocumentIds?.length || (doc.status !== 'DRAFT' && doc.status !== 'PAID')) return null
+    const numberRegistry = useDocumentNumberRegistryStore()
+    const manualNumber = data.number?.trim()
+    if (manualNumber && manualNumber !== doc.number && numberRegistry.isNumberUsed(manualNumber)) return null
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     doc.customer = data.customer
     doc.amount = amount
-    if (data.number?.trim()) doc.number = data.number.trim()
+    if (manualNumber && manualNumber !== doc.number) {
+      doc.number = manualNumber
+      numberRegistry.registerNumber(manualNumber)
+    }
     if (data.date) doc.date = data.date
     doc.reference = data.reference
     doc.vatRate = data.vatRate
@@ -1246,7 +1265,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   /**
    * สร้างใบวางบิล (เดี่ยวหรือรวม) จากงานขนส่งที่ "ส่งเสร็จแล้ว" (DELIVERED) โดยตรง — ไม่ผ่านใบเสนอราคาเลย
    * ต้องเป็นลูกค้าเดียวกันทุกงาน และยังไม่เคยถูกวางบิลมาก่อน (billingStatus ยังเป็น UNBILLED) มิฉะนั้นคืนค่า null
-   * รายการต่อบรรทัด = 1 งานต่อ 1 บรรทัด เหมือน docRows ของ InvoiceDocumentView.vue ฝั่งเอกสารเดิม
+   * แสดงผลเป็นบรรทัดสรุปเดียว ("รายการขนส่งสินค้าห้วงระหว่างวันที่ ...") ไม่กาง Booking ทีละรายการเต็มเอกสาร
+   * (เหมือน createTaxInvoiceFromBookings) — Booking ยังเป็น Source of Truth เหมือนเดิม (bookingIds เก็บครบ trace ได้)
    */
   /** แถวคำนวณเงินของ 1 booking ป้อนเข้า computeRowDiscountBaht/computeRowAmount/computeRowVat (documentTotals.ts) ตัวเดียวกับที่
    *  BookingCreateView.vue/JobDocumentView.vue ใช้กับงานนี้เอง — ยอดก่อนส่วนลด = ค่าเที่ยว + extraCharges รวม (ยอดที่เรียกเก็บลูกค้าจริง),
@@ -1265,7 +1285,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function createBillingFromBookings(bookingIds: string[], overrides?: { customer?: string; reference?: string; contactId?: string }): SalesDocument | null {
     if (bookingIds.length === 0) return null
     const bookingStore = useBookingStore()
-    const targetBookings = bookingStore.bookings.filter((b) => bookingIds.includes(b.id))
+    const targetBookings = sortBookingsForDocumentMerge(bookingStore.bookings.filter((b) => bookingIds.includes(b.id)))
     if (targetBookings.length !== bookingIds.length) return null
     const sameCustomer = targetBookings.every((b) => b.customer === targetBookings[0].customer)
     const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED')
@@ -1283,11 +1303,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       return salesOrder?.number || b.docNo
     }
     const reference = overrides?.reference ?? targetBookings.map(referenceFor).join(', ')
-    const destinationLabel = (b: (typeof targetBookings)[number]) => {
-      if (!b.items.length) return '-'
-      const first = b.items[0].siteName
-      return b.items.length > 1 ? `${first} +${b.items.length - 1} ที่อื่น` : first
-    }
+    const dateFrom = targetBookings[0].shipDate || targetBookings[0].createdAt
+    const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].createdAt
     const discountTotal = Math.round(targetBookings.reduce((sum, b) => sum + computeRowDiscountBaht(bookingBillingRow(b)), 0))
     const amount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowAmount(bookingBillingRow(b)), 0))
     const vatAmount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowVat(bookingBillingRow(b)), 0))
@@ -1307,35 +1324,122 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       vatAmount,
       bookingIds: targetBookings.map((b) => b.id),
       label: `รายการวางบิล ${customer}`,
-      dateFrom: now,
-      dateTo: now,
+      dateFrom,
+      dateTo,
       reference,
       createdAt: now,
     }
     Object.assign(billing, resolveContactSnapshot(customer, overrides?.contactId))
     documents.value.unshift(billing)
-    addItemsToDocument(
-      billing.id,
-      targetBookings.map((b) => {
-        const row = bookingBillingRow(b)
-        return {
-          description: `${b.docNo} · ${destinationLabel(b)}`,
-          qty: 1,
-          unit: 'เที่ยว',
-          unitPrice: row.unitPrice,
-          amount: computeRowAmount(row),
-          discountMode: row.discountMode,
-          discountPercent: row.discountPercent,
-          discountAmount: row.discountAmount,
-          vatRate: row.vatRate,
-        }
-      })
-    )
+    /** บรรทัดสรุปเดียว "รายการขนส่งสินค้าห้วงระหว่างวันที่ ... " แทนที่การกาง 1 booking ต่อ 1 บรรทัดแบบเดิม (เหมือน
+     *  createTaxInvoiceFromBookings) — Booking ยังเป็น Source of Truth เหมือนเดิม (bookingIds เก็บ id งานจริงทุก
+     *  รายการไว้ครบ trace ย้อนกลับได้ ดู Source Chain บนเอกสาร) */
+    addItemsToDocument(billing.id, [
+      {
+        description: `รายการขนส่งสินค้าห้วงระหว่างวันที่ ${thaiDateRangeLabel(dateFrom, dateTo)}`,
+        qty: targetBookings.length,
+        unit: 'เที่ยว',
+        unitPrice: targetBookings.length ? Math.round(amount / targetBookings.length) : 0,
+        amount,
+        // ต้องใส่ vatRate ระดับบรรทัดด้วย ไม่ใช่แค่ระดับเอกสาร (เหตุผลเดียวกับ createTaxInvoiceFromBookings — ดูคอมเมนต์ที่นั่น)
+        vatRate,
+      },
+    ])
     targetBookings.forEach((b) => {
       b.billingStatus = 'IN_BATCH'
     })
     bookingStore.addLog('สร้างเอกสาร ' + billing.number, { docId: billing.id })
     return billing
+  }
+
+  /** ช่วงวันที่แบบไทยสั้นๆ สำหรับบรรทัดสรุปใบแจ้งหนี้รวม เช่น "01–15 สิงหาคม 2569" (เดือน/ปีเดียวกัน) หรือ
+   *  "28 ก.ค. – 3 ส.ค. 2569" (คนละเดือน) — ใช้แค่ประกอบข้อความ ไม่ใช่ค่าที่เก็บจริง */
+  function thaiDateRangeLabel(from: Date, to: Date): string {
+    const f = new Date(from)
+    const t = new Date(to)
+    const thaiYear = t.getFullYear() + 543
+    const sameMonth = f.getFullYear() === t.getFullYear() && f.getMonth() === t.getMonth()
+    if (sameMonth) {
+      const monthLabel = t.toLocaleDateString('th-TH', { month: 'long' })
+      return `${f.getDate()}–${t.getDate()} ${monthLabel} ${thaiYear}`
+    }
+    const fromLabel = f.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
+    const toLabel = t.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+    return `${fromLabel} – ${toLabel}`
+  }
+
+  /**
+   * สร้างใบแจ้งหนี้/ใบกำกับภาษีแบบรวมตรงจากงานขนส่งที่เลือก (Phase 3) — คู่กับ createBillingFromBookings แต่ต่างกันที่
+   * แสดงผลเป็นบรรทัดสรุปเดียว ("ค่าขนส่งสินค้า ช่วงวันที่ ... จำนวน N เที่ยว") ไม่กาง Booking ทีละรายการเต็มเอกสาร
+   * ตามสเปก — Booking ยังเป็น Source of Truth เหมือนเดิม (bookingIds เก็บ id งานจริงทุกรายการไว้ครบ trace ย้อนกลับได้)
+   * เรียงงานก่อนคำนวณด้วย sortBookingsForDocumentMerge ตัวเดียวกับใบวางบิล (Phase 2 ข้อ 4)
+   */
+  function createTaxInvoiceFromBookings(
+    bookingIds: string[],
+    overrides?: { customer?: string; reference?: string; contactId?: string; creditDays?: number }
+  ): SalesDocument | null {
+    if (bookingIds.length === 0) return null
+    const bookingStore = useBookingStore()
+    const targetBookings = sortBookingsForDocumentMerge(bookingStore.bookings.filter((b) => bookingIds.includes(b.id)))
+    if (targetBookings.length !== bookingIds.length) return null
+    const sameCustomer = targetBookings.every((b) => b.customer === targetBookings[0].customer)
+    const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED')
+    if (!sameCustomer || !allEligible) return null
+
+    const documentSettingsStore = useDocumentSettingsStore()
+    const numbering = documentSettingsStore.settings.numbering.invoice
+    const seq = bookingStore.documents.length + documents.value.filter((d) => d.type === 'TAX_INVOICE').length + 1
+    const customer = overrides?.customer?.trim() || targetBookings[0].customer
+    const discountTotal = Math.round(targetBookings.reduce((sum, b) => sum + computeRowDiscountBaht(bookingBillingRow(b)), 0))
+    const amount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowAmount(bookingBillingRow(b)), 0))
+    const vatAmount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowVat(bookingBillingRow(b)), 0))
+    const vatRates = new Set(targetBookings.map((b) => b.vatRate || 0))
+    const vatRate = vatRates.size === 1 ? targetBookings[0].vatRate : undefined
+    const issueDate = new Date()
+    const creditDays = overrides?.creditDays ?? 30
+    const dueDate = new Date(issueDate)
+    dueDate.setDate(dueDate.getDate() + creditDays)
+    const dateFrom = targetBookings[0].shipDate || targetBookings[0].createdAt
+    const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].createdAt
+    const reference = overrides?.reference ?? targetBookings.map((b) => b.docNo).join(', ')
+
+    const invoice: SalesDocument = {
+      id: genId('sdoc'),
+      type: 'TAX_INVOICE',
+      number: generateDocNumber(numbering.prefix, seq, numbering.padding, issueDate),
+      customer,
+      status: 'DRAFT',
+      date: issueDate,
+      amount,
+      discountTotal,
+      vatRate,
+      vatAmount,
+      bookingIds: targetBookings.map((b) => b.id),
+      creditDays,
+      dueDate,
+      reference,
+      createdAt: issueDate,
+    }
+    Object.assign(invoice, resolveContactSnapshot(customer, overrides?.contactId))
+    documents.value.unshift(invoice)
+    addItemsToDocument(invoice.id, [
+      {
+        description: `ค่าขนส่งสินค้า ช่วงวันที่ ${thaiDateRangeLabel(dateFrom, dateTo)}`,
+        qty: targetBookings.length,
+        unit: 'เที่ยว',
+        unitPrice: targetBookings.length ? Math.round(amount / targetBookings.length) : 0,
+        amount,
+        // ต้องใส่ vatRate ระดับบรรทัดด้วย ไม่ใช่แค่ระดับเอกสาร — หน้าพิมพ์เอกสารแยกยอด "มูลค่าที่ไม่มี/ยกเว้นภาษี" กับ
+        // "มูลค่าที่คำนวณภาษี" จาก vatRate ของแต่ละบรรทัดโดยตรง (ดู InvoiceDocumentView.vue exemptAmount/taxableAmount)
+        // ถ้าไม่ใส่ตรงนี้ บรรทัดสรุปนี้จะถูกนับเป็น "ยกเว้นภาษี" เต็มจำนวนทั้งที่ VAT ถูกคำนวณจริงแล้วระดับเอกสาร
+        vatRate,
+      },
+    ])
+    targetBookings.forEach((b) => {
+      b.billingStatus = 'INVOICED'
+    })
+    bookingStore.addLog('สร้างเอกสาร ' + invoice.number, { docId: invoice.id })
+    return invoice
   }
 
   /** ออกใบแจ้งหนี้/ใบกำกับภาษีจากใบวางบิลที่รอวางบิลอยู่ — คู่กับ createInvoiceFromQuotation แต่ต้นทางเป็น BILLING ไม่ใช่ QUOTATION */
@@ -1764,8 +1868,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (!sameCustomer || !allEligible) return null
     if (sourceDocsClaimedByOtherReceipts(sourceIds).length > 0) return null
     const documentSettingsStore = useDocumentSettingsStore()
+    const numberRegistry = useDocumentNumberRegistryStore()
     const numbering = documentSettingsStore.settings.numbering.receipt
-    const seq = documents.value.filter((d) => d.type === 'RECEIPT').length + 1
+    const seq = numberRegistry.nextSequence('RECEIPT')
     const customer = overrides?.customer?.trim() || targetDocs[0].customer
     const reference = overrides?.reference ?? targetDocs.map((d) => d.number).join(', ')
     const { amount, discountTotal, vatRate, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
@@ -1790,6 +1895,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     Object.assign(receipt, resolveContactSnapshot(customer, overrides?.contactId ?? targetDocs[0].contactId))
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, receiptItemRowsFromSourceDocs(targetDocs))
+    numberRegistry.registerNumber(receipt.number)
     if (sourceType === 'BILLING') {
       targetDocs.forEach((billing) => {
         billing.status = 'BILLED'
@@ -1959,6 +2065,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     syncBillingReadiness,
     deleteSalesOrder,
     createBillingFromBookings,
+    createTaxInvoiceFromBookings,
     backfillBillingVatFromBookings,
     createBillingManual,
     updateBillingManual,

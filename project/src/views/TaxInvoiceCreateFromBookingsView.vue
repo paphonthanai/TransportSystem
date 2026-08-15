@@ -2,14 +2,16 @@
   <div class="space-y-4 pb-10">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div>
-        <h2 class="text-lg font-bold text-text">สร้างใบวางบิลรวม</h2>
-        <div class="text-xs text-muted mt-0.5">เลือกงานขนส่งที่ส่งเสร็จแล้ว (DELIVERED) ของลูกค้ารายเดียวกัน เพื่อรวมออกเป็นใบวางบิล</div>
+        <h2 class="text-lg font-bold text-text">สร้างใบแจ้งหนี้/ใบกำกับภาษีรวม</h2>
+        <div class="text-xs text-muted mt-0.5">
+          เลือกงานขนส่งที่ส่งเสร็จแล้ว (DELIVERED) ของลูกค้ารายเดียวกัน เพื่อรวมออกเป็นใบแจ้งหนี้ฉบับเดียว — เอกสารจะแสดงยอดสรุปเป็นบรรทัดเดียว ไม่กางรายการ Booking ทีละงาน
+        </div>
       </div>
       <div class="flex items-center gap-2">
-        <button @click="router.push('/billing-notes')" class="btn-secondary">ยกเลิก</button>
+        <button @click="router.push('/tax-invoices')" class="btn-secondary">ยกเลิก</button>
         <button @click="submit" :disabled="!canSubmit" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
           <span class="material-symbols-rounded text-base">check</span>
-          สร้างใบวางบิล
+          สร้างใบแจ้งหนี้
         </button>
       </div>
     </div>
@@ -68,7 +70,9 @@
         </div>
         <div class="flex justify-end">
           <div class="text-sm">
-            <span class="text-muted">ยอดรวมที่เลือก:</span>
+            <span class="text-muted">จำนวนเที่ยวที่เลือก:</span>
+            <span class="font-bold text-text ml-1">{{ selectedIds.size }} เที่ยว</span>
+            <span class="text-muted ml-3">ยอดรวมที่เลือก:</span>
             <span class="font-bold text-primary ml-1">{{ formatBaht(selectedTotal) }}</span>
           </div>
         </div>
@@ -96,6 +100,8 @@ const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
 
+/** เกณฑ์เดียวกับใบวางบิลรวม (createBillingFromBookings) — DELIVERED + ยังไม่ถูกดึงเข้ารอบบิล/ออกเอกสารใดๆ เท่านั้น
+ *  ใบแจ้งหนี้รวมเส้นทางนี้ตัดตอนไปที่ TAX_INVOICE ตรงๆ ไม่ผ่านใบวางบิลก่อน (Booking ยังเป็น Source of Truth เหมือนเดิม) */
 const isUnbilledEligible = (b: Booking) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED'
 
 const eligibleCustomers = computed(() => [...new Set(bookingStore.bookings.filter(isUnbilledEligible).map((b) => b.customer))].sort())
@@ -149,9 +155,8 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 
 const submit = () => {
   if (!canSubmit.value) return
-  // ส่ง id ตามลำดับที่ sort ไว้แล้วใน eligibleBookings เสมอ (ไม่ใช่ลำดับที่ผู้ใช้ติ๊กเลือก) ให้รายการในเอกสารเรียงถูกต้องตาม Phase 2 ข้อ 4
   const orderedIds = eligibleBookings.value.filter((b) => selectedIds.value.has(b.id)).map((b) => b.id)
-  const result = salesDocumentsStore.createBillingFromBookings(orderedIds, { contactId: contactId.value })
+  const result = salesDocumentsStore.createTaxInvoiceFromBookings(orderedIds, { contactId: contactId.value })
   if (result) router.push(`/documents/${result.id}`)
 }
 </script>

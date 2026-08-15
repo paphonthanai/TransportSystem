@@ -8,7 +8,7 @@
       </button>
     </div>
 
-    <!-- Search + Ship Date Filter -->
+    <!-- Search -->
     <div class="flex gap-3 flex-wrap items-center">
       <div class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface border border-border flex-1 max-w-sm">
         <span class="material-symbols-rounded text-muted">search</span>
@@ -19,46 +19,31 @@
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
-      <div class="flex items-center gap-2">
-        <span class="material-symbols-rounded text-muted text-lg">calendar_month</span>
-        <input v-model="shipDateFilter" type="date" :disabled="showAllDates" class="input-field disabled:opacity-40" />
-      </div>
-      <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
-        <input v-model="showAllDates" type="checkbox" class="w-4 h-4" />
-        แสดงทุกวัน
-      </label>
     </div>
 
     <!-- In-progress Table -->
     <div>
       <div class="font-bold text-text mb-3">
         งานที่กำลังดำเนินการ ({{ inProgressBookings.length }})
-        <span class="font-normal text-xs text-muted">{{ dateFilterLabel }}</span>
       </div>
       <div class="card-lg overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ปลายทาง</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน' : 'สินค้า' }}</th>
-              <th class="text-right px-4 py-3 font-semibold text-muted">น้ำหนัก/จำนวน</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เขตอำเภอ</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เบอร์โทรหน้างาน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน/สินค้า' : 'สินค้า' }}</th>
               <th class="text-right px-4 py-3 font-semibold text-muted">น้ำมัน</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">ประเภทงาน</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">รถ / คนขับ</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ขนส่ง</th>
-              <th class="text-right px-4 py-3 font-semibold text-muted">ราคา</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ลงสินค้า</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เวลาลงสินค้า</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">สถานะ</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="booking in inProgressBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
-              <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
               <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
               <td class="px-4 py-3 font-semibold text-text">
                 {{ destinationLabel(booking) }}
@@ -70,20 +55,19 @@
                   ส่งแล้ว {{ deliveredItemCount(booking) }}/{{ booking.items.length }}
                 </span>
               </td>
-              <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
-              <td class="px-4 py-3 text-right text-text">{{ weightQtyLabel(booking) }}</td>
-              <td class="px-4 py-3 text-muted">{{ districtLabel(booking) }}</td>
-              <td class="px-4 py-3 text-muted">{{ sitePhoneLabel(booking) }}</td>
+              <td class="px-4 py-3 text-text">
+                {{ productLabel(booking) }}
+                <div class="text-xs text-muted">รวม {{ totalQtyLabel(booking) }}</div>
+              </td>
               <td class="px-4 py-3 text-right text-muted">{{ fuelLitersLabel(booking) }}</td>
-              <td class="px-4 py-3 text-muted">{{ jobTypeLabel(booking) }}</td>
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ booking.plate || '-' }}</div>
                 <div class="text-xs text-muted flex items-center gap-1">
                   {{ booking.driverName || '-' }}
                 </div>
               </td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.shipDate) }}</td>
-              <td class="px-4 py-3 text-right text-text font-semibold">{{ formatBaht(booking.agreedPrice || booking.tripFee) }}</td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap items-center gap-1">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
@@ -102,6 +86,10 @@
                     <span class="material-symbols-rounded text-base">sync_alt</span>
                     เปลี่ยนรถ / คนขับ
                   </button>
+                  <button v-if="booking.status === 'ASSIGNED'" @click="adminAcceptDispatch(booking)" class="btn-sm text-green-700" title="รับงานแทนคนขับ (ไม่ต้องรอกดในแอป)">
+                    <span class="material-symbols-rounded text-base">how_to_reg</span>
+                    ✓ คนขับตอบรับงาน
+                  </button>
                   <BookingActionMenu
                     :booking="booking"
                     @view="router.push(`/job/${booking.id}`)"
@@ -115,7 +103,7 @@
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
-              <td colspan="14" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="9" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -127,32 +115,25 @@
     <div>
       <div class="font-bold text-text mb-3">
         งานที่กำลังขนส่ง ({{ inTransitBookings.length }})
-        <span class="font-normal text-xs text-muted">{{ dateFilterLabel }}</span>
       </div>
       <div class="card-lg overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ปลายทาง</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน' : 'สินค้า' }}</th>
-              <th class="text-right px-4 py-3 font-semibold text-muted">น้ำหนัก/จำนวน</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เขตอำเภอ</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เบอร์โทรหน้างาน</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน/สินค้า' : 'สินค้า' }}</th>
               <th class="text-right px-4 py-3 font-semibold text-muted">น้ำมัน</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">ประเภทงาน</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">รถ / คนขับ</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ขนส่ง</th>
-              <th class="text-right px-4 py-3 font-semibold text-muted">ราคา</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ลงสินค้า</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เวลาลงสินค้า</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">สถานะ</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="booking in inTransitBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
-              <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
               <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
               <td class="px-4 py-3 font-semibold text-text">
                 {{ destinationLabel(booking) }}
@@ -164,12 +145,11 @@
                   ส่งแล้ว {{ deliveredItemCount(booking) }}/{{ booking.items.length }}
                 </span>
               </td>
-              <td class="px-4 py-3 text-text">{{ productLabel(booking) }}</td>
-              <td class="px-4 py-3 text-right text-text">{{ weightQtyLabel(booking) }}</td>
-              <td class="px-4 py-3 text-muted">{{ districtLabel(booking) }}</td>
-              <td class="px-4 py-3 text-muted">{{ sitePhoneLabel(booking) }}</td>
+              <td class="px-4 py-3 text-text">
+                {{ productLabel(booking) }}
+                <div class="text-xs text-muted">รวม {{ totalQtyLabel(booking) }}</div>
+              </td>
               <td class="px-4 py-3 text-right text-muted">{{ fuelLitersLabel(booking) }}</td>
-              <td class="px-4 py-3 text-muted">{{ jobTypeLabel(booking) }}</td>
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ booking.plate || '-' }}</div>
                 <div class="text-xs text-muted flex items-center gap-1">
@@ -182,8 +162,8 @@
                   </span>
                 </div>
               </td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.shipDate) }}</td>
-              <td class="px-4 py-3 text-right text-text font-semibold">{{ formatBaht(booking.agreedPrice || booking.tripFee) }}</td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-4 py-3">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
               </td>
@@ -206,7 +186,7 @@
               </td>
             </tr>
             <tr v-if="inTransitBookings.length === 0">
-              <td colspan="14" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="9" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -552,21 +532,6 @@ const driverOptionLabel = (name: string) => {
   return `${name} — กำลังวิ่งเที่ยวที่ ${tripNo} (${activeBooking.docNo})`
 }
 
-// --- กรองรายการงานตามวันที่ขนส่ง (shipDate) ค่าเริ่มต้นคือวันนี้ เพื่อรองรับการจองคิวเที่ยวถัดไปล่วงหน้าโดยไม่ปนกับงานวันอื่น ---
-const shipDateFilter = ref(new Date().toISOString().slice(0, 10))
-const showAllDates = ref(false)
-
-const matchesDateFilter = (b: Booking) => {
-  if (showAllDates.value || !shipDateFilter.value) return true
-  return isSameCalendarDay(bookingDayKey(b), new Date(shipDateFilter.value))
-}
-
-const dateFilterLabel = computed(() => {
-  if (showAllDates.value) return '(แสดงทุกวัน)'
-  if (!shipDateFilter.value) return ''
-  return `· ${new Date(shipDateFilter.value).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}`
-})
-
 const formatShortDate = (date?: Date) =>
   date ? new Date(date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
 
@@ -600,7 +565,6 @@ const inProgressBookings = computed(() => {
         b.status !== 'DELIVERED' &&
         b.status !== 'IN_TRANSIT' &&
         b.status !== 'DELIVERING' &&
-        matchesDateFilter(b) &&
         (!q || matchesSearch(b, q))
     )
     .sort((a, b) => {
@@ -611,10 +575,11 @@ const inProgressBookings = computed(() => {
 })
 
 // งานที่คนขับกำลังขนส่ง/กำลังส่งของอยู่ (เดิมเคยรวมอยู่ในตารางเดียวกับ "กำลังดำเนินการ" แยกออกมาให้เห็นชัดว่ากำลังวิ่งอยู่)
+// ไม่กรองตามวันที่ขนส่งอีกต่อไป (ดู Phase 1 ข้อ 3) — แสดงงานทั้งหมดในระบบ รวมงานล่วงหน้าและงานที่เสร็จแล้ว
 const inTransitBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return fleetBookings.value
-    .filter((b) => (b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') && matchesDateFilter(b) && (!q || matchesSearch(b, q)))
+    .filter((b) => (b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') && (!q || matchesSearch(b, q)))
     .sort((a, b) => new Date(b.transitStartedAt || 0).getTime() - new Date(a.transitStartedAt || 0).getTime())
 })
 
@@ -629,21 +594,16 @@ const destinationLabel = (booking: Booking) => {
   return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
 }
 
-const weightQtyLabel = (booking: Booking) => booking.items.map((i) => `${i.qty} ${i.unit}`).join(', ') || '-'
-
-const districtLabel = (booking: Booking) => {
-  const names = [...new Set(booking.items.map((i) => i.district).filter(Boolean))]
-  return names.length ? names.join(', ') : '-'
+/** รวมจำนวนสินค้าทั้งงาน แยกกลุ่มตามหน่วยนับ (Phase 1 ข้อ 2) — ใช้แสดงผลใน List เท่านั้น ไม่แตะ/ไม่ลบรายการ
+ *  สินค้าย่อยเดิม (M1/M2 ฯลฯ) ที่ยังต้องแสดงครบใน Booking Detail/Document เหมือนเดิม */
+const totalQtyLabel = (booking: Booking) => {
+  const byUnit = new Map<string, number>()
+  booking.items.forEach((i) => byUnit.set(i.unit, (byUnit.get(i.unit) || 0) + (i.qty || 0)))
+  const parts = [...byUnit.entries()].map(([unit, qty]) => `${qty} ${unit}`)
+  return parts.length ? parts.join(', ') : '-'
 }
-
-const sitePhoneLabel = (booking: Booking) => booking.items[0]?.sitePhone || '-'
 
 const fuelLitersLabel = (booking: Booking) => (booking.fuelLiters ? `${booking.fuelLiters} ล.` : '-')
-
-const jobTypeLabel = (booking: Booking) => {
-  const types = [...new Set(booking.items.map((i) => i.jobType).filter(Boolean))]
-  return types.length ? types.join(', ') : '-'
-}
 
 const deliveredItemCount = (booking: Booking) => booking.items.filter((i) => i.deliveryStatus === 'DELIVERED').length
 
@@ -831,8 +791,32 @@ const confirmDispatch = () => {
   dispatchTarget.value = null
 }
 
+/** งานฝั่ง Admin กด "✓ คนขับตอบรับงาน" แทนคนขับได้ทันที ไม่ต้องรอกดรับในแอปคนขับ (Phase 1 ข้อ 4)
+ *  ใช้ acceptDispatch เดิมตัวเดียวกับที่ Driver Mobile เรียก ไม่มี logic คำนวณใหม่ ไม่แตะ D1-D7 */
+const adminAcceptDispatch = (booking: Booking) => {
+  bookingStore.acceptDispatch(booking.id)
+}
+
+/**
+ * ลบ Booking (Phase 1 ข้อ 6) — ห้ามลบถ้ามีเอกสารบัญชี (Billing/Tax Invoice/Receipt/Sales Order) อ้างอิงงานนี้อยู่แล้ว
+ * (ห้ามลบ Sales Document อัตโนมัติ ตามสเปก) ต้องแจ้งเหตุผล+รายชื่อเอกสารที่บล็อกให้ Admin เห็นชัดเจนก่อน ถ้าปลอดภัย
+ * ให้ confirm ก่อนลบจริงเสมอ และคืนสต๊อกที่ตัดไปแล้ว (ถ้ามีรายการที่กดรับสินค้าไปแล้ว) ด้วย reverseDeliveryMovement
+ * ตัวเดียวกับที่ resetBookingStatus ใช้อยู่แล้ว (reuse ของเดิม ไม่สร้าง logic คืนสต๊อกใหม่)
+ */
 const deleteBooking = (booking: Booking) => {
-  if (!confirm(`ยืนยันลบงาน ${booking.docNo}? ไม่สามารถกู้คืนได้`)) return
+  const refs = salesDocumentsStore.documents.filter((d) => (d.bookingIds || []).includes(booking.id))
+  if (refs.length > 0) {
+    alert(
+      `ไม่สามารถลบงาน ${booking.docNo} ได้ เพราะมีเอกสารบัญชีอ้างอิงงานนี้อยู่แล้ว:\n` +
+        refs.map((d) => `- ${d.number} (${d.type})`).join('\n') +
+        `\n\nกรุณายกเลิก/ตรวจสอบเอกสารเหล่านี้ก่อน ระบบไม่ลบเอกสารบัญชีให้อัตโนมัติ`
+    )
+    return
+  }
+  const pickedItems = booking.items.filter((i) => i.pickupStatus === 'PICKED_UP')
+  const stockNote = pickedItems.length ? '\n\n(สต๊อกที่ตัดไปแล้วจะถูกคืนอัตโนมัติ)' : ''
+  if (!confirm(`ยืนยันลบงาน ${booking.docNo}? ไม่สามารถกู้คืนได้${stockNote}`)) return
+  if (pickedItems.length) inventoryStore.reverseDeliveryMovement(booking, pickedItems)
   bookingStore.deleteBooking(booking.id)
 }
 
@@ -886,9 +870,8 @@ const confirmComplete = () => {
     debtAdjustments.value.filter((d) => d.label || d.amount),
     completeOdometerAfter.value || undefined
   )
-  /** ส่งของสำเร็จแล้ว -> สร้างใบวางบิลอัตโนมัติทันที ไม่ต้องรอผู้ใช้กด "สร้างใบวางบิล" เอง
-   *  เรียก createBillingFromBookings ตัวเดียวกับที่ปุ่มสร้างใบวางบิลด้วยมือใช้อยู่แล้ว ไม่มี logic คำนวณใหม่ */
-  salesDocumentsStore.createBillingFromBookings([bookingId])
+  /** Phase 2: เลิกสร้างใบวางบิลอัตโนมัติตอนจบงาน — Booking ต้องไม่เป็น Trigger ของ Billing อีกต่อไป
+   *  ผู้ใช้ต้องไปสร้างใบวางบิลเองที่หน้า "ใบวางบิล" (รวมหลายงาน) หรือปุ่ม "ออกใบวางบิล" ที่หน้าใบสั่งสินค้า (เดี่ยว) */
   completeTarget.value = null
 }
 

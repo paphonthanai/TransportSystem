@@ -72,6 +72,14 @@
               <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทรหน้างาน (ไม่บังคับ)</label>
               <input v-model="draft.sitePhone" placeholder="เบอร์โทร" class="input-field w-full" />
             </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">วันที่ลงสินค้าจุดนี้ (ไม่บังคับ)</label>
+              <input v-model="draft.loadingDate" type="date" class="input-field w-full" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">เวลาลงสินค้าจุดนี้ (ไม่บังคับ)</label>
+              <input v-model="draft.loadingTime" type="time" class="input-field w-full" />
+            </div>
             <div class="md:col-span-2">
               <label class="block text-xs font-semibold text-muted mb-1">พิกัด/ลิงก์ Google Maps หน้างาน (ไม่บังคับ)</label>
               <input
@@ -204,6 +212,10 @@ export interface JobItemDraft {
   tripFee: number
   tripCount: number
   extraProducts: { product: string; qty: number; unit: string }[]
+  /** วันที่ลงสินค้าของจุดนี้ (ไม่บังคับ) — เก็บเป็น "YYYY-MM-DD" ในฟอร์ม แปลงเป็น Date ตอน save (ดู handleSave) */
+  loadingDate: string
+  /** เวลาลงสินค้าของจุดนี้ (ไม่บังคับ) รูปแบบ "HH:mm" */
+  loadingTime: string
 }
 
 const props = defineProps<{
@@ -245,6 +257,8 @@ const defaultDraft = (): JobItemDraft => ({
   tripFee: 0,
   tripCount: 1,
   extraProducts: [],
+  loadingDate: '',
+  loadingTime: '',
 })
 
 const draft = ref<JobItemDraft>(defaultDraft())
@@ -276,6 +290,8 @@ const seed = () => {
       tripFee: i.tripFee || 0,
       tripCount: i.tripCount || 1,
       extraProducts: (i.extraProducts || []).map((ep) => ({ ...ep })),
+      loadingDate: i.loadingDate ? new Date(i.loadingDate).toISOString().slice(0, 10) : '',
+      loadingTime: i.loadingTime || '',
     }
   } else {
     draft.value = defaultDraft()

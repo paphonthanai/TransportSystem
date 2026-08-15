@@ -152,7 +152,7 @@
               <tr>
                 <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">รายละเอียด</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-24">จำนวน</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-24">{{ qtyColumnLabel }}</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-24">{{ docMode === 'sales_order' ? 'ราคาต่อเที่ยว' : 'ราคาต่อหน่วย' }}</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-16">ส่วนลด</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-16">ภาษี</th>
@@ -167,8 +167,8 @@
                 @click="row.onClick && row.onClick()"
               >
                 <td class="border border-gray-400 px-2 py-1">{{ ridx + 1 }}</td>
-                <td class="border border-gray-400 px-2 py-1">{{ row.description }}</td>
-                <td class="border border-gray-400 px-2 py-1 text-right">{{ row.qty }} {{ row.unit }}</td>
+                <td class="border border-gray-400 px-2 py-1 whitespace-pre-line">{{ row.description }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right">{{ commonRowUnit ? row.qty : `${row.qty} ${row.unit}` }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.unitPrice) }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatDiscount(row) }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatPercent(row.vatRate) }}</td>
@@ -513,6 +513,20 @@ const docRows = computed<PrintRow[]>(() => {
 })
 
 const fillerRows = computed(() => Math.max(0, 4 - docRows.value.length))
+
+/**
+ * Phase 6 — เอาหน่วยออกจากทุกแถว ย้ายไปโชว์ที่หัวคอลัมน์แทน ("จำนวน (ตัน)") เฉพาะ Billing/ใบกำกับภาษี/ใบเสร็จ
+ * (เอกสารประเภทอื่น เช่น ใบเสนอราคา/ใบสั่งซื้อ ที่อาจมีสินค้าหลายหน่วยในเอกสารเดียวกัน ไม่แตะ ใช้รูปแบบเดิม)
+ * ถ้าทุกแถวใช้หน่วยเดียวกันจริง (กรณีปกติของ 3 เอกสารนี้) ค่อยย้ายหน่วยขึ้นหัวตาราง — ถ้าหน่วยไม่ตรงกันทุกแถว (กรณีหายาก
+ * ของใบเสร็จที่พิมพ์รายการเองหลายสินค้าคนละหน่วย) fallback กลับไปโชว์หน่วยต่อแถวเหมือนเดิม กันข้อมูลแสดงผลผิด
+ */
+const unitInHeaderDocModes: DocMode[] = ['billing', 'invoice', 'receipt']
+const commonRowUnit = computed(() => {
+  if (!unitInHeaderDocModes.includes(docMode.value)) return null
+  const units = new Set(docRows.value.map((r) => r.unit).filter(Boolean))
+  return units.size === 1 ? [...units][0] : null
+})
+const qtyColumnLabel = computed(() => (commonRowUnit.value ? `จำนวน (${commonRowUnit.value})` : 'จำนวน'))
 
 interface ReceiptSourceRow {
   number: string

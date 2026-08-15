@@ -57,8 +57,7 @@
           <tr>
             <th class="border border-gray-400 px-2 py-1 text-left w-10">ลำดับ</th>
             <th class="border border-gray-400 px-2 py-1 text-left">รายละเอียด</th>
-            <th class="border border-gray-400 px-2 py-1 text-right w-16">จำนวน</th>
-            <th class="border border-gray-400 px-2 py-1 text-left w-16">หน่วย</th>
+            <th class="border border-gray-400 px-2 py-1 text-right w-16">จำนวนเที่ยว (เที่ยว)</th>
             <th class="border border-gray-400 px-2 py-1 text-right w-28">จำนวนเงิน</th>
           </tr>
         </thead>
@@ -70,12 +69,10 @@
               <span class="text-xs text-gray-600">- {{ formatDate(booking.dispatchedAt || booking.createdAt) }}</span>
             </td>
             <td class="border border-gray-400 px-2 py-1 text-right">1</td>
-            <td class="border border-gray-400 px-2 py-1">เที่ยว</td>
             <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(bookingTotal(booking)) }}</td>
           </tr>
           <tr v-for="n in fillerRows" :key="'filler' + n">
             <td class="border border-gray-400 px-2 py-1 h-7">&nbsp;</td>
-            <td class="border border-gray-400 px-2 py-1"></td>
             <td class="border border-gray-400 px-2 py-1"></td>
             <td class="border border-gray-400 px-2 py-1"></td>
             <td class="border border-gray-400 px-2 py-1"></td>

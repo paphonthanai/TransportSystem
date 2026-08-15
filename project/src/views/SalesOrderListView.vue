@@ -243,12 +243,13 @@ const hasActiveBillingDoc = (booking: Booking) =>
   salesDocumentsStore.documents.some((d) => (d.type === 'BILLING' || d.type === 'TAX_INVOICE' || d.type === 'RECEIPT') && d.bookingIds.includes(booking.id))
 
 /** Dropdown สถานะงานขนส่งในตารางนี้ — ปัจจุบันมีแค่ทางลัดเดียวคือ "จบงาน" ข้ามทุกขั้นตอนไปเลย (ใช้ completeJob
- * ตัวเดียวกับปุ่ม "จบงาน (ข้ามขั้นตอน)" ในหน้ารายการงานขนส่ง) แล้วสร้างใบวางบิลอัตโนมัติทันที เหมือนปุ่มสร้างใบวางบิลด้วยมือ */
+ * ตัวเดียวกับปุ่ม "จบงาน (ข้ามขั้นตอน)" ในหน้ารายการงานขนส่ง)
+ * Phase 2: เลิกสร้างใบวางบิลอัตโนมัติหลังจบงาน — Booking ต้องไม่เป็น Trigger ของ Billing อีกต่อไป ผู้ใช้ต้องกด
+ * "ออกใบวางบิล" (CREATE_BILLING ด้านล่าง) หรือไปสร้างแบบรวมที่หน้าใบวางบิลเองแยกต่างหาก */
 const onStatusSelect = (booking: Booking, action: string) => {
   if (action === 'COMPLETE') {
-    if (!confirm(`ยืนยันจบงาน ${booking.docNo} และออกใบวางบิล?`)) return
+    if (!confirm(`ยืนยันจบงาน ${booking.docNo}?`)) return
     bookingStore.completeJob(booking.id, [], undefined)
-    salesDocumentsStore.createBillingFromBookings([booking.id])
     return
   }
   if (action === 'CREATE_BILLING') {
