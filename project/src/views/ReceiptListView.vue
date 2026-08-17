@@ -6,10 +6,23 @@
         <!-- ปุ่ม Sync (ซิงก์เอกสารที่ขาดหาย/ซิงก์ข้อมูลก่อนหน้า/ซิงก์ความสัมพันธ์เอกสารต้นทาง) ซ่อนจาก UI ตาม requirement — ฟังก์ชันเบื้องหลัง
              (syncMissingSalesOrders/syncBillingReadiness/syncReceiptReferences) ยังอยู่ครบ ไม่ได้ลบ ไม่มี auto-trigger ที่ไหน
              เรียกเฉพาะตอนกดปุ่มเหล่านี้เท่านั้น (ตรวจแล้วก่อนซ่อน) -->
-        <button @click="router.push('/receipts/new')" class="btn-primary">
-          <span class="material-symbols-rounded text-base">add</span>
-          สร้างใหม่
-        </button>
+        <div class="relative">
+          <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
+            <span class="material-symbols-rounded text-base">add</span>
+            สร้างใหม่
+            <span class="material-symbols-rounded text-base">expand_more</span>
+          </button>
+          <div v-if="createMenuOpen" v-click-outside="() => (createMenuOpen = false)" class="absolute right-0 top-full mt-1 w-52 bg-surface border border-border rounded-lg shadow-lg py-1 z-20">
+            <button @click="createMenuOpen = false; router.push('/receipts/new-from-bookings')" class="menu-item">
+              <span class="material-symbols-rounded text-base">call_merge</span>
+              ใบเสร็จรับเงิน (จากงานขนส่ง)
+            </button>
+            <button @click="createMenuOpen = false; router.push('/receipts/new-manual')" class="menu-item">
+              <span class="material-symbols-rounded text-base">payments</span>
+              รับเงินอื่นๆ
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -33,7 +46,7 @@
               <th class="text-left px-3 py-3 font-semibold text-muted">วันที่</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">ชื่อลูกค้า</th>
-              <th class="text-right px-3 py-3 font-semibold text-muted">จำนวนใบแจ้งหนี้</th>
+              <th class="text-right px-3 py-3 font-semibold text-muted">จำนวนงาน</th>
               <th class="text-right px-3 py-3 font-semibold text-muted">ยอดรวมสุทธิ</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานะ</th>
               <th class="px-3 py-3 w-10"></th>
@@ -49,7 +62,7 @@
                 </div>
               </td>
               <td class="px-3 py-3 font-semibold text-text">{{ doc.customer }}</td>
-              <td class="px-3 py-3 text-right text-muted">{{ doc.sourceDocumentIds?.length || '-' }}</td>
+              <td class="px-3 py-3 text-right text-muted">{{ doc.bookingIds.length || '-' }}</td>
               <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(doc.amount + (doc.vatAmount || 0)) }}</td>
               <td class="px-3 py-3">
                 <select
@@ -152,6 +165,18 @@ const documentSettingsStore = useDocumentSettingsStore()
 
 const statusFilter = ref<'all' | SalesDocumentStatus>('all')
 const search = ref('')
+const createMenuOpen = ref(false)
+const vClickOutside = {
+  mounted(el: HTMLElement & { _clickOutside?: (e: MouseEvent) => void }, binding: { value: () => void }) {
+    el._clickOutside = (e: MouseEvent) => {
+      if (!el.contains(e.target as Node)) binding.value()
+    }
+    document.addEventListener('click', el._clickOutside, true)
+  },
+  unmounted(el: HTMLElement & { _clickOutside?: (e: MouseEvent) => void }) {
+    if (el._clickOutside) document.removeEventListener('click', el._clickOutside, true)
+  },
+}
 
 const statusLabel: Partial<Record<SalesDocumentStatus, string>> = {
   DRAFT: 'รอดำเนินการ',
@@ -301,5 +326,9 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 
 .page-btn {
   @apply w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed;
+}
+
+.menu-item {
+  @apply w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-surface-2 cursor-pointer text-left;
 }
 </style>

@@ -1620,6 +1620,83 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   }
 
   /**
+   * สร้างใบเสร็จรับเงินแบบรวมตรงจากงานขนส่งที่เลือก — คู่กับ createBillingFromBookings/createTaxInvoiceFromBookings แต่ตัดตรงไปที่
+   * ใบเสร็จเลย (Booking → Receipt) ไม่ผ่านใบวางบิล/ใบแจ้งหนี้ก่อน — ใช้กับลูกค้าที่ไม่ต้องออกใบกำกับภาษี หรือกรณีรับเงินสดหน้างาน
+   * สถานะเริ่มต้นเป็น PAID ทันที (ไม่ผ่าน DRAFT) เพราะถือว่าเก็บเงินแล้วจริงตอนกดสร้าง (เหมือน createReceiptManual) —
+   * ใบเสร็จไม่ใช่ตัวกำหนดสถานะการชำระเงินของเอกสารอื่นอีกต่อไป (ดู recordTaxInvoicePayment ที่แยกออกมาต่างหากสำหรับใบแจ้งหนี้)
+   * เงื่อนไขเดียวกับใบวางบิล: ต้องผ่าน POD Review แล้ว ปิด billingStatus เป็น PAID ทันที กันไม่ให้ถูกดึงไปออกเอกสารอื่นซ้ำ
+   * (ใบเสร็จเป็นปลายทางสุดท้ายของ chain แล้ว ไม่มีเอกสารถัดไปอีก)
+   */
+  function createReceiptFromBookings(bookingIds: string[], overrides?: { customer?: string; reference?: string; contactId?: string }): SalesDocument | null {
+    if (bookingIds.length === 0) return null
+    const bookingStore = useBookingStore()
+    const targetBookings = sortBookingsForDocumentMerge(bookingStore.bookings.filter((b) => bookingIds.includes(b.id)))
+    if (targetBookings.length !== bookingIds.length) return null
+    const sameCustomer = targetBookings.every((b) => b.customer === targetBookings[0].customer)
+    const allPodApproved = targetBookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED')
+    if (!sameCustomer || !allEligible || !allPodApproved) return null
+
+    const documentSettingsStore = useDocumentSettingsStore()
+    const numberRegistry = useDocumentNumberRegistryStore()
+    const numbering = documentSettingsStore.settings.numbering.receipt
+    const seq = numberRegistry.nextSequence('RECEIPT')
+    const customer = overrides?.customer?.trim() || targetBookings[0].customer
+    const reference = overrides?.reference ?? targetBookings.map(bookingReferenceDoc).join(', ')
+    const dateFrom = targetBookings[0].shipDate || targetBookings[0].createdAt
+    const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].createdAt
+    const discountTotal = Math.round(targetBookings.reduce((sum, b) => sum + computeRowDiscountBaht(bookingBillingRow(b)), 0))
+    const amount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowAmount(bookingBillingRow(b)), 0))
+    const vatAmount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowVat(bookingBillingRow(b)), 0))
+    const vatRates = new Set(targetBookings.map((b) => b.vatRate || 0))
+    const vatRate = vatRates.size === 1 ? targetBookings[0].vatRate : undefined
+    const now = new Date()
+    const receipt: SalesDocument = {
+      id: genId('sdoc'),
+      type: 'RECEIPT',
+      number: generateDocNumber(numbering.prefix, seq, numbering.padding, now),
+      customer,
+      status: 'PAID',
+      date: now,
+      amount,
+      discountTotal,
+      vatRate,
+      vatAmount,
+      bookingIds: targetBookings.map((b) => b.id),
+      reference,
+      paidDate: now,
+      description: `รายการขนส่งสินค้าห้วงระหว่างวันที่ ${shortDateLabel(dateFrom)} - ${shortDateLabel(dateTo)} จำนวน ${targetBookings.length} เที่ยว`,
+      createdAt: now,
+    }
+    Object.assign(receipt, resolveContactSnapshot(customer, overrides?.contactId))
+    documents.value.unshift(receipt)
+    addItemsToDocument(
+      receipt.id,
+      targetBookings.map((b) => ({
+        description: tripDescription(b),
+        qty: 1,
+        unit: 'เที่ยว',
+        unitPrice: bookingBillingRow(b).unitPrice,
+        amount: computeRowAmount(bookingBillingRow(b)),
+        discountMode: b.discountMode,
+        discountPercent: b.discountPercent,
+        discountAmount: b.discountAmount,
+        vatRate: b.vatRate,
+        shipDate: b.shipDate,
+        plate: b.plate,
+        referenceDoc: bookingReferenceDoc(b),
+        deliveryNo: b.docNo,
+      }))
+    )
+    numberRegistry.registerNumber(receipt.number)
+    targetBookings.forEach((b) => {
+      b.billingStatus = 'PAID'
+    })
+    bookingStore.addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
+    return receipt
+  }
+
+  /**
    * Migration/Backfill: ซ่อมใบวางบิลเดิมที่สร้างจากงานขนส่ง (bookingIds ไม่ว่าง) ก่อนที่ createBillingFromBookings จะเริ่มคำนวณ
    * ส่วนลด/VAT จาก booking ต้นทาง (ของเดิมมี amount แบบไม่หักส่วนลด/ไม่มี vatAmount เลย) — Trace กลับไปยัง Booking ต้นทางด้วย
    * bookingIds ที่มีอยู่แล้ว ใช้ Booking เป็น source of truth คำนวณด้วย logic เดียวกับ createBillingFromBookings เป๊ะ
@@ -1850,16 +1927,34 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.status = 'SENT'
   }
 
-  /** Reset ใบแจ้งหนี้/ใบกำกับภาษีที่ส่งแล้วกลับเป็นร่าง — บล็อกถ้ามีใบเสร็จรับเงินออกจากใบนี้แล้ว (จะทำให้ใบเสร็จลอยไม่มีต้นทาง) */
+  /** Reset ใบแจ้งหนี้/ใบกำกับภาษีที่ส่งแล้วกลับเป็นร่าง — บล็อกถ้าชำระเงินแล้ว (recordTaxInvoicePayment) หรือมีใบเสร็จรับเงินออกจากใบนี้แล้ว (จะทำให้ใบเสร็จลอยไม่มีต้นทาง) */
   function resetTaxInvoice(id: string): { ok: boolean; message?: string } {
     const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
     if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
     if (doc.status === 'DRAFT') return { ok: false, message: 'เอกสารนี้อยู่สถานะร่างอยู่แล้ว' }
+    if (doc.status === 'PAID') return { ok: false, message: `ไม่สามารถ Reset ได้ เนื่องจากใบแจ้งหนี้ ${doc.number} ชำระเงินแล้ว` }
     const hasReceipt = documents.value.some((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).includes(id))
     if (hasReceipt) return { ok: false, message: `ไม่สามารถ Reset ได้ เนื่องจากมีใบเสร็จรับเงินที่ออกจากใบแจ้งหนี้ ${doc.number} แล้ว` }
     doc.status = 'DRAFT'
     useBookingStore().addLog(`Reset สถานะ ${doc.number} กลับเป็นร่าง`, { docId: doc.id })
     return { ok: true }
+  }
+
+  /** บันทึกการชำระเงินของใบแจ้งหนี้/ใบกำกับภาษีโดยตรง — กลไกเดียวที่เปลี่ยนสถานะใบแจ้งหนี้เป็น "ชำระแล้ว" (แยกออกจากใบเสร็จรับเงิน
+   * โดยเจตนา: ใบเสร็จเป็นแค่เอกสารพิมพ์ยืนยัน ไม่ใช่ตัวกำหนดสถานะการชำระเงินอีกต่อไป — ทำได้ทั้งตอนยังร่างอยู่หรือส่งลูกค้าไปแล้ว) */
+  function recordTaxInvoicePayment(
+    id: string,
+    payment: { paidDate?: Date; whtAmount?: number; paymentMethod?: string; note?: string }
+  ): SalesDocument | null {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
+    if (!doc || doc.status === 'PAID') return null
+    doc.status = 'PAID'
+    doc.paidDate = payment.paidDate || new Date()
+    if (payment.whtAmount !== undefined) doc.whtAmount = payment.whtAmount
+    doc.paymentMethod = payment.paymentMethod
+    doc.note = payment.note
+    useBookingStore().addLog(`บันทึกรับชำระ ${doc.number}`, { docId: doc.id })
+    return doc
   }
 
   /**
@@ -2211,6 +2306,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     cancelTaxInvoice,
     resetTaxInvoice,
     sendInvoice,
+    recordTaxInvoicePayment,
+    createReceiptFromBookings,
     createReceiptFromInvoices,
     updateReceiptFromInvoices,
     createReceiptFromBillingNotes,

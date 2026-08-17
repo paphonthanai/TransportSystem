@@ -160,6 +160,12 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN', 'ACCOUNTING'] },
       },
       {
+        path: 'receipts/new-from-bookings',
+        name: 'ReceiptCreateFromBookings',
+        component: () => import('@/views/ReceiptCreateFromBookingsView.vue'),
+        meta: { roles: ['ADMIN', 'ACCOUNTING'] },
+      },
+      {
         path: 'receipts/new-manual',
         name: 'ReceiptManualCreate',
         component: () => import('@/views/ReceiptFormView.vue'),

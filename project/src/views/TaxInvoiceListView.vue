@@ -120,6 +120,46 @@
       doc-type-label="ใบแจ้งหนี้/ใบกำกับภาษี"
       @close="shareTarget = null"
     />
+
+    <!-- บันทึกการชำระเงิน -->
+    <Teleport to="body">
+      <div v-if="paymentDoc" class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" @click.self="paymentDoc = null">
+        <div class="bg-surface rounded-xl shadow-xl w-full max-w-md p-5 space-y-4">
+          <h3 class="text-lg font-bold text-text">บันทึกการชำระเงิน</h3>
+          <div class="text-sm text-muted">
+            เลขที่เอกสาร: <span class="font-mono font-semibold text-text">{{ paymentDoc.number }}</span> ({{ paymentDoc.customer }})
+          </div>
+          <div>
+            <label class="field-label">วันที่รับชำระ</label>
+            <input type="date" v-model="paymentDate" class="input-field w-full" />
+          </div>
+          <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
+            <input type="checkbox" v-model="whtEnabled" class="w-4 h-4" />
+            หัก ณ ที่จ่าย
+          </label>
+          <div v-if="whtEnabled">
+            <label class="field-label">จำนวนเงินหัก ณ ที่จ่าย</label>
+            <input v-model.number="whtAmount" type="number" min="0" class="input-field w-full" />
+          </div>
+          <div>
+            <label class="field-label">วิธีการรับชำระ</label>
+            <select v-model="paymentMethod" class="input-field w-full">
+              <option value="เงินสด">เงินสด</option>
+              <option value="โอนเงิน">โอนเงิน</option>
+              <option value="เช็ค">เช็ค</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">หมายเหตุ</label>
+            <textarea v-model="paymentNote" rows="2" class="input-field w-full" />
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button @click="paymentDoc = null" class="btn-secondary">ยกเลิก</button>
+            <button @click="confirmPayment" class="btn-primary">บันทึก</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -218,14 +258,14 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
     return [
       { value: 'DRAFT', label: statusLabel.DRAFT! },
       { value: 'SEND', label: 'ส่งใบแจ้งหนี้' },
-      { value: 'CREATE_RECEIPT', label: 'สร้างใบเสร็จรับเงิน' },
+      { value: 'COLLECT', label: 'บันทึกการชำระเงิน' },
       { value: 'CANCEL', label: 'ยกเลิก' },
     ]
   }
   if (s === 'SENT') {
     return [
       { value: 'SENT', label: statusLabel.SENT! },
-      { value: 'CREATE_RECEIPT', label: 'สร้างใบเสร็จรับเงิน' },
+      { value: 'COLLECT', label: 'บันทึกการชำระเงิน' },
       { value: 'RESET', label: 'รีเซ็ต' },
     ]
   }
@@ -238,6 +278,34 @@ const statusDotClass = (status: SalesDocumentStatus) =>
 
 const shareTarget = ref<SalesDocument | null>(null)
 
+/** บันทึกการชำระเงิน — กลไกเดียวที่เปลี่ยนใบแจ้งหนี้เป็น "ชำระแล้ว" (แยกจากการสร้างใบเสร็จรับเงินโดยเจตนา ดู recordTaxInvoicePayment) */
+const paymentDoc = ref<SalesDocument | null>(null)
+const paymentDate = ref(new Date().toISOString().slice(0, 10))
+const whtEnabled = ref(false)
+const whtAmount = ref(0)
+const paymentMethod = ref('เงินสด')
+const paymentNote = ref('')
+
+const openPaymentModal = (doc: SalesDocument) => {
+  paymentDoc.value = doc
+  paymentDate.value = new Date().toISOString().slice(0, 10)
+  whtEnabled.value = false
+  whtAmount.value = 0
+  paymentMethod.value = 'เงินสด'
+  paymentNote.value = ''
+}
+
+const confirmPayment = () => {
+  if (!paymentDoc.value) return
+  salesDocumentsStore.recordTaxInvoicePayment(paymentDoc.value.id, {
+    paidDate: new Date(paymentDate.value),
+    whtAmount: whtEnabled.value ? whtAmount.value : undefined,
+    paymentMethod: paymentMethod.value,
+    note: paymentNote.value || undefined,
+  })
+  paymentDoc.value = null
+}
+
 const onStatusSelect = (doc: SalesDocument, action: string) => {
   switch (action) {
     case 'SEND':
@@ -245,8 +313,8 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
       salesDocumentsStore.sendInvoice(doc.id)
       shareTarget.value = doc
       break
-    case 'CREATE_RECEIPT':
-      router.push(`/receipts/select?customer=${encodeURIComponent(doc.customer)}&invoiceId=${doc.id}`)
+    case 'COLLECT':
+      openPaymentModal(doc)
       break
     case 'CANCEL':
       if (confirm(`ยืนยันยกเลิกใบแจ้งหนี้ ${doc.number}? งานขนส่ง/ใบวางบิลที่ผูกไว้จะกลับไปสถานะก่อนหน้า`)) salesDocumentsStore.cancelTaxInvoice(doc.id)
@@ -267,6 +335,10 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 </script>
 
 <style scoped>
+.field-label {
+  @apply block text-xs font-semibold text-muted mb-1;
+}
+
 .input-field {
   @apply h-10 px-3 border border-border rounded-lg bg-surface text-text text-sm font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:ring-opacity-20 transition-all;
 }
