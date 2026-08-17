@@ -60,12 +60,12 @@
             <td class="px-4 py-3 text-right">
               <button
                 v-if="driverIdFor(row.driver)"
-                @click="router.push({ path: `/settings/drivers/${driverIdFor(row.driver)}/print`, query: { period } })"
+                @click="router.push({ path: `/settings/drivers/${driverIdFor(row.driver)}`, query: { period } })"
                 class="btn-sm"
-                title="สร้างเอกสารรายได้"
+                title="เลือกงาน/สร้างเอกสารรายได้"
               >
                 <span class="material-symbols-rounded text-sm">receipt_long</span>
-                สร้างเอกสาร
+                เลือกงาน/สร้างเอกสาร
               </button>
               <span v-else class="text-xs text-muted" title="ไม่พบทะเบียนคนขับนี้ในสมุดรายชื่อ">-</span>
             </td>
@@ -111,22 +111,15 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useDriverPayroll } from '@/composables/useDriverPayroll'
-import { useDriversStore } from '@/stores/drivers'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
 
 /** พนักงานขับรถเป็นเจ้าของข้อมูลรายได้คนขับทั้งหมด ไม่ว่าจะขับรถบริษัทหรือรถร่วม/รถหุ้นส่วน — ไม่กรองตามประเภทรถ
  *  (ต่างจากเดิมที่กรองเฉพาะ 'รถบริษัท' ทำให้รายได้คนขับรถร่วมไปโผล่ปนอยู่ในหน้า "เงินเดือน · รถร่วม" แทน ซึ่งหน้านั้น
  *  ควรมีแต่ข้อมูลของ "รถ" เท่านั้น ดู PayrollVendorFleetView.vue) */
-const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, formatDate, formatBaht, exportSummary, exportDetail, setPaymentStatus } =
+const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, driverIdFor, formatDate, formatBaht, exportSummary, exportDetail, setPaymentStatus } =
   useDriverPayroll(() => true, 'พขร')
 
 const router = useRouter()
-const driversStore = useDriversStore()
-
-/** แถวในตารางนี้ผูกกับ "ชื่อคนขับ" (string) ไม่ใช่ id (ดู driverKeyFor ใน useDriverPayroll.ts) แต่ปุ่มสร้างเอกสารต้อง
- *  ไปหน้า /settings/drivers/:id/print ซึ่งต้องการ DriverRecord.id — resolve ชื่อ -> id จากทะเบียนคนขับตรงนี้
- *  ถ้าหาไม่เจอ (เช่น ชื่อคนขับเก่าที่ยังไม่มีทะเบียนคนขับผูกไว้) ซ่อนปุ่มไว้แทนการเดา/สร้าง id ปลอม */
-const driverIdFor = (driverName: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === driverName)?.id
 
 const selectDriverDetail = (driver: string) => {
   selectedDriver.value = driver

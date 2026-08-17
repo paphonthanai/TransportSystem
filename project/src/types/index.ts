@@ -199,6 +199,13 @@ export interface Booking {
    * ฯลฯ) — งานเก่าก่อนมี field นี้จะไม่มีค่า ต้องรันสคริปต์จับคู่ย้อนหลัง (ดู utils/driverIdMigration.ts) หรือจ่ายงาน
    * ใหม่อีกครั้งถึงจะได้ค่านี้ ทุกจุดที่ใช้ driverId ต้อง fallback ไปเทียบ driverName เดิมเสมอสำหรับงานที่ยังไม่มีค่านี้ */
   driverId?: string
+  /** Snapshot ชื่อ/นามสกุลคนขับ ณ ตอน dispatch งานนี้ — คนละหน้าที่กับ driverId โดยเจตนา: driverId ใช้ผูกบัญชี
+   * Login/Driver App เท่านั้น ส่วนชื่อ-นามสกุลตรงนี้คือข้อมูลที่ต้องใช้จริงตอนคำนวณเงินเดือน (ดู useDriverPayroll.ts)
+   * ห้ามไปจับคู่ driverId กับทะเบียนคนขับปัจจุบัน (DriverRecord) เพื่อหาชื่อมาคำนวณเงินเดือน เพราะชื่อในทะเบียนแก้ไขได้
+   * ภายหลัง จะทำให้เงินเดือนของงานเก่าคำนวณผิดถ้าคนขับถูกเปลี่ยนชื่อ — snapshot นี้ต้องคงชื่อ ณ ตอนเกิดรายการไว้ตลอดไป
+   * งานเก่าก่อนมี field นี้จะไม่มีค่า ต้อง backfill ย้อนหลัง (ดู utils/driverIdMigration.ts) จาก driverName เดิม */
+  driverFirstName?: string
+  driverLastName?: string
   /** เลขไมล์เริ่มต้น (กม.) ก่อนออกเที่ยวนี้ กรอกตอนจัดรถ ใช้คำนวณระยะทาง/อัตราสิ้นเปลืองน้ำมัน */
   odometerBefore?: number
   /** เลขไมล์สิ้นสุด (กม.) เมื่อกลับถึง กรอกตอนจบงาน */
@@ -221,6 +228,14 @@ export interface Booking {
   taxInvoiceDocId?: string
   /** งานนี้ถูกดึงเข้าใบเสร็จรับเงินรวมใดแล้ว (ถ้ามี) — เก็บ id ของ SalesDocument ประเภท RECEIPT กันสร้างซ้ำ ดู billingNoteDocId */
   receiptDocId?: string
+  /** งานนี้ถูกดึงเข้าเอกสารรายได้คนขับใดแล้ว (ถ้ามี) — เก็บ id ของ DriverPayrollDocument (stores/driverPayrollDocuments.ts)
+   *  กันสร้างเอกสารรายได้คนขับซ้ำสำหรับงานเดียวกัน เป็นอิสระจาก billingNoteDocId/taxInvoiceDocId/receiptDocId/vehicleIncomeDocId
+   *  โดยเจตนา (Booking → Driver Payroll แยกเส้นทางจากเอกสารขาย) */
+  driverPayrollDocId?: string
+  /** งานนี้ถูกดึงเข้าเอกสารรายได้รถร่วมใดแล้ว (ถ้ามี) — เก็บ id ของ VehicleIncomeDocument (stores/vehicleIncomeDocuments.ts)
+   *  กันสร้างซ้ำ ดู driverPayrollDocId — งานเดียวกันมี driverPayrollDocId "และ" vehicleIncomeDocId พร้อมกันได้ (คนขับกับรถ
+   *  เป็นคนละ Entity กัน) */
+  vehicleIncomeDocId?: string
   /** สถานะตรวจสอบ POD ของออฟฟิศ (ดู PodReviewStatus) — ไม่มีค่า = ไม่ผ่านขั้นตอนนี้ (งานที่ออฟฟิศจบเอง) หรือยังไม่จบงาน */
   podReviewStatus?: PodReviewStatus
   /** เหตุผลที่ออฟฟิศ REJECTED (ถ้ามี) ให้คนขับเห็นว่าต้องแก้อะไร */

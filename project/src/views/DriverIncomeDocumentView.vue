@@ -1,17 +1,17 @@
 <template>
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-3 no-print">
-      <button @click="router.push(`/settings/drivers/${props.id}`)" class="btn-secondary">
+      <button @click="router.back()" class="btn-secondary">
         <span class="material-symbols-rounded text-base">arrow_back</span>
         กลับ
       </button>
-      <button v-if="driver" @click="printDoc" class="btn-primary">
+      <button v-if="doc" @click="printDoc" class="btn-primary">
         <span class="material-symbols-rounded text-base">print</span>
         พิมพ์เอกสาร
       </button>
     </div>
 
-    <div v-if="!driver" class="card-lg text-center text-muted py-12">ไม่พบข้อมูลคนขับ</div>
+    <div v-if="!doc" class="card-lg text-center text-muted py-12">ไม่พบเอกสารรายได้คนขับนี้</div>
 
     <div v-else id="print-area">
       <div class="print-sheet bg-white text-black rounded-xl shadow-default border border-border p-8 max-w-3xl mx-auto relative">
@@ -35,14 +35,14 @@
         <!-- ข้อมูลคนขับ -->
         <div class="flex items-start justify-between mb-4 text-xs">
           <div>
-            <div class="font-bold text-sm bg-yellow-100 inline-block px-1">{{ driverName }}</div>
-            <div v-if="driver.phone" class="text-gray-700 mt-0.5">โทร. {{ driver.phone }}</div>
+            <div class="font-bold text-sm bg-yellow-100 inline-block px-1">{{ doc.driverName }}</div>
+            <div v-if="driver?.phone" class="text-gray-700 mt-0.5">โทร. {{ driver.phone }}</div>
           </div>
           <div class="text-right space-y-0.5">
-            <div>รหัสพนักงาน/รหัสคนขับ : <span class="font-semibold">{{ driver.code || '-' }}</span></div>
+            <div>รหัสพนักงาน/รหัสคนขับ : <span class="font-semibold">{{ driver?.code || '-' }}</span></div>
             <div>ช่วงวันที่ : <span class="font-semibold">{{ periodThaiLabel }}</span></div>
-            <div>เลขที่เอกสาร : <span class="font-semibold">-</span></div>
-            <div>วันที่ออกเอกสาร : <span class="font-semibold">{{ formatDate(new Date()) }}</span></div>
+            <div>เลขที่เอกสาร : <span class="font-semibold">{{ doc.number }}</span></div>
+            <div>วันที่ออกเอกสาร : <span class="font-semibold">{{ formatDate(doc.createdAt) }}</span></div>
           </div>
         </div>
 
@@ -66,7 +66,7 @@
               <td class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.income) }}</td>
             </tr>
             <tr v-if="rows.length === 0">
-              <td colspan="5" class="border border-gray-400 px-2 py-4 text-center text-gray-400">ไม่มีเที่ยวงานในรอบนี้</td>
+              <td colspan="5" class="border border-gray-400 px-2 py-4 text-center text-gray-400">ไม่มีเที่ยวงานในเอกสารนี้</td>
             </tr>
           </tbody>
         </table>
@@ -80,15 +80,15 @@
             </div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
               <span>รายได้จากเที่ยว (เบี้ยเลี้ยง)</span>
-              <span class="text-right tabular-nums">{{ formatBaht(totalIncome) }}</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.tripIncomeTotal) }}</span>
             </div>
-            <div v-for="a in additions" :key="a.id" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
-              <span>{{ a.type }}{{ a.label ? ` (${a.label})` : '' }}</span>
-              <span class="text-right tabular-nums">{{ formatBaht(a.amount) }}</span>
+            <div v-if="doc.additionTotal > 0" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+              <span>รายได้อื่นๆ (รวม)</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.additionTotal) }}</span>
             </div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 font-bold border-t border-gray-300 mt-1 pt-1">
               <span>รวมรายได้</span>
-              <span class="text-right tabular-nums">{{ formatBaht(totalIncome + additionTotal) }}</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.tripIncomeTotal + doc.additionTotal) }}</span>
             </div>
           </div>
           <div>
@@ -96,14 +96,14 @@
               <span>รายการหัก</span>
               <span>จำนวนเงิน</span>
             </div>
-            <div v-if="deductions.length === 0" class="text-gray-400 py-0.5">ไม่มีรายการหัก</div>
-            <div v-for="d in deductions" :key="d.id" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
-              <span>{{ d.type }}{{ d.label ? ` (${d.label})` : '' }}</span>
-              <span class="text-right tabular-nums">{{ formatBaht(d.amount) }}</span>
+            <div v-if="doc.deductionTotal === 0" class="text-gray-400 py-0.5">ไม่มีรายการหัก</div>
+            <div v-else class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+              <span>รายการหัก (รวม)</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.deductionTotal) }}</span>
             </div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 font-bold border-t border-gray-300 mt-1 pt-1">
               <span>รวมรายการหัก</span>
-              <span class="text-right tabular-nums">{{ formatBaht(deductionTotal) }}</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.deductionTotal) }}</span>
             </div>
           </div>
         </div>
@@ -112,23 +112,23 @@
         <div class="flex justify-between items-center mt-3 mb-6">
           <div class="text-xs">
             <div class="text-gray-600">จำนวนเงินเป็นตัวอักษร</div>
-            <div class="font-semibold">({{ bahtText(netIncome) }})</div>
+            <div class="font-semibold">({{ bahtText(doc.netIncome) }})</div>
           </div>
           <div class="flex items-center gap-3">
             <span class="font-bold">รายได้สุทธิ</span>
-            <span class="text-xl font-bold bg-yellow-100 px-3 py-1 rounded">{{ formatBaht(netIncome) }}</span>
+            <span class="text-xl font-bold bg-yellow-100 px-3 py-1 rounded">{{ formatBaht(doc.netIncome) }}</span>
           </div>
         </div>
         <div class="flex justify-end -mt-4 mb-6">
-          <span class="text-xs" :class="paymentStatus === 'PAID' ? 'text-green-700 font-semibold' : 'text-amber-700 font-semibold'">
-            สถานะจ่ายเงิน: {{ paymentStatus === 'PAID' ? 'จ่ายแล้ว' : 'รอจ่าย' }}
+          <span class="text-xs" :class="doc.paymentStatus === 'PAID' ? 'text-green-700 font-semibold' : 'text-amber-700 font-semibold'">
+            สถานะจ่ายเงิน: {{ doc.paymentStatus === 'PAID' ? `จ่ายแล้ว (${formatDate(doc.paidDate)})` : 'รอจ่าย' }}
           </span>
         </div>
 
         <!-- ลายเซ็น -->
         <div class="grid grid-cols-2 gap-8 text-sm mt-12">
           <div>
-            <div class="font-semibold mb-8">ในนาม {{ driverName }}</div>
+            <div class="font-semibold mb-8">ในนาม {{ doc.driverName }}</div>
             <div class="grid grid-cols-2 gap-4 text-center">
               <div class="border-t border-gray-500 pt-2">ผู้รับเงิน</div>
               <div class="border-t border-gray-500 pt-2">วันที่</div>
@@ -150,7 +150,7 @@
 
         <!-- Footer ข้อมูลการพิมพ์ -->
         <div class="flex justify-between text-[10px] text-gray-500 mt-8 pt-2 border-t border-gray-300">
-          <span>ข้อมูลคำนวณสดจากงานขนส่งที่ส่งสำเร็จ ณ เวลาที่พิมพ์</span>
+          <span>เอกสารเลขที่ {{ doc.number }} — ยอดคงที่ตามที่บันทึกไว้ ณ ตอนสร้างเอกสาร</span>
           <span>พิมพ์เมื่อ: {{ formatDateTime(new Date()) }} โดย {{ authStore.userName || '-' }}</span>
         </div>
       </div>
@@ -160,78 +160,47 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useDriversStore } from '@/stores/drivers'
 import { useBookingStore } from '@/stores/booking'
-import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
-import { useDriverPaymentsStore } from '@/stores/driverPayments'
+import { useDriverPayrollDocumentsStore } from '@/stores/driverPayrollDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useAuthStore } from '@/stores/auth'
 import { bahtText } from '@/utils/companyInfo'
 
 /**
- * เอกสารรายได้พนักงานขับรถ — ไม่มี Firestore record ของตัวเอง (ต่างจากใบจ่ายเงินเดือนเสมียนที่มี StaffSalaryRecord)
- * คำนวณสดจาก Booking + PayrollDeduction + DriverPaymentStatus ทุกครั้งที่เปิดหน้านี้ ใช้ logic เดียวกับ
- * DriverDetailView.vue เป๊ะ (ไม่สร้าง Calculation Engine ใหม่) เพื่อให้ตัวเลขตรงกับหน้ารายละเอียดคนขับเสมอ แม้ reload
- * ก็คำนวณใหม่จากข้อมูลต้นทางเดิม ไม่มีการ freeze ค่าไว้ ณ ตอนสร้าง — "สร้างเอกสาร" ในที่นี้คือนำทางมาหน้านี้เพื่อพิมพ์
+ * เอกสารรายได้พนักงานขับรถ — เวอร์ชันนี้เป็น viewer ของ DriverPayrollDocument ที่ persisted จริงแล้ว (สร้างจากการเลือกงาน
+ * เองที่ DriverDetailView.vue) ยอดเงินทั้งหมด (tripIncomeTotal/additionTotal/deductionTotal/netIncome) มาจาก Snapshot
+ * ณ ตอนสร้างเอกสารตรงๆ ไม่คำนวณสดใหม่ทุกครั้งที่เปิดหน้า (ต่างจากเวอร์ชันเดิมก่อนหน้านี้) — ตารางรายเที่ยวยัง lookup
+ * รายละเอียดการแสดงผล (วันที่/ปลายทาง) จาก Booking ตรงๆ เพราะข้อมูลเหล่านี้ไม่เปลี่ยนหลังงานส่งสำเร็จอยู่แล้ว
  */
-const props = defineProps<{ id: string }>()
-const route = useRoute()
+const props = defineProps<{ docId: string }>()
 const router = useRouter()
 const driversStore = useDriversStore()
 const bookingStore = useBookingStore()
-const deductionsStore = usePayrollDeductionsStore()
-const paymentsStore = useDriverPaymentsStore()
+const driverPayrollDocumentsStore = useDriverPayrollDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const authStore = useAuthStore()
 
-const driver = computed(() => driversStore.drivers.find((d) => d.id === props.id) || null)
-const driverName = computed(() => (driver.value ? driversStore.fullName(driver.value) : '-'))
-
-/** รอบเดือนมาจาก query ?period=YYYY-MM (ค.ศ.) ถ้าไม่ระบุ fallback เป็นเดือนปัจจุบัน — ตรงกับ input type=month ของ DriverDetailView.vue */
-function currentMonthValue(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-function toBEPeriodLabel(monthValue: string): string {
-  const [y, m] = monthValue.split('-')
-  return `${Number(y) + 543}-${m}`
-}
-function inPeriod(date: Date | undefined, monthValue: string): boolean {
-  if (!date) return false
-  const d = new Date(date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthValue
-}
-
-const period = computed(() => (typeof route.query.period === 'string' ? route.query.period : currentMonthValue()))
-const periodLabel = computed(() => toBEPeriodLabel(period.value))
+const doc = computed(() => driverPayrollDocumentsStore.documents.find((d) => d.id === props.docId) || null)
+const driver = computed(() => (doc.value ? driversStore.drivers.find((d) => d.id === doc.value!.driverId) : undefined))
 
 const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
 const periodThaiLabel = computed(() => {
-  const [y, m] = period.value.split('-')
+  if (!doc.value) return '-'
+  const [y, m] = doc.value.period.split('-')
   const monthIndex = Number(m) - 1
   return `${thaiMonths[monthIndex] || m} ${Number(y) + 543}`
 })
 
-/** จับคู่งานกับคนขับคนนี้เหมือน DriverDetailView.vue เป๊ะ: ใช้ driverId ก่อนถ้ามี ไม่มีค่อย fallback ไปเทียบ driverName */
 const rows = computed(() => {
-  if (!driver.value) return []
-  const fullName = driverName.value
-  return bookingStore.bookings
-    .filter((b) => b.status === 'DELIVERED')
-    .filter((b) => (driver.value!.id ? b.driverId === driver.value!.id || (!b.driverId && b.driverName === fullName) : b.driverName === fullName))
-    .filter((b) => inPeriod(b.shipDate || b.completedAt, period.value))
+  if (!doc.value) return []
+  return doc.value.bookingIds
+    .map((id) => bookingStore.bookings.find((b) => b.id === id))
+    .filter((b): b is NonNullable<typeof b> => !!b)
     .map((b) => ({ booking: b, income: b.finalAllowance ?? b.allowance ?? 0 }))
     .sort((a, b) => new Date(a.booking.shipDate || a.booking.completedAt || 0).getTime() - new Date(b.booking.shipDate || b.booking.completedAt || 0).getTime())
 })
-
-const totalIncome = computed(() => rows.value.reduce((sum, r) => sum + r.income, 0))
-const additions = computed(() => (driver.value ? deductionsStore.additionsFor(driverName.value, periodLabel.value) : []))
-const deductions = computed(() => (driver.value ? deductionsStore.deductionsFor(driverName.value, periodLabel.value) : []))
-const additionTotal = computed(() => additions.value.reduce((sum, a) => sum + a.amount, 0))
-const deductionTotal = computed(() => deductions.value.reduce((sum, d) => sum + d.amount, 0))
-const netIncome = computed(() => totalIncome.value + additionTotal.value - deductionTotal.value)
-const paymentStatus = computed(() => (driver.value ? paymentsStore.statusFor(driverName.value, periodLabel.value) : 'UNPAID'))
 
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {
   if (!booking.items.length) return '-'

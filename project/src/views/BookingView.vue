@@ -781,6 +781,8 @@ const confirmDispatch = () => {
   bookingStore.dispatchBooking(dispatchTarget.value.id, dispatchForm.value.plate, {
     driverName: dispatchForm.value.driverName || undefined,
     driverId: selectedDriver?.id,
+    driverFirstName: selectedDriver?.firstName,
+    driverLastName: selectedDriver?.lastName,
     odometerBefore: dispatchForm.value.odometerBefore,
   })
   // ปรับคนขับประจำของรถให้ตรงกับที่เลือกจ่ายงานจริง เพื่อให้ทุกหน้าที่ใช้รถเห็นคนขับล่าสุด

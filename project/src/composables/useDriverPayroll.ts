@@ -1,7 +1,6 @@
 import { ref, computed } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useVehiclesStore } from '@/stores/vehicles'
-import { useDriversStore } from '@/stores/drivers'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import { exportRowsToExcel } from '@/utils/exportExcel'
@@ -39,7 +38,6 @@ function destinationLabel(booking: Booking): string {
 export function useDriverPayroll(departmentFilter: (department: VehicleType | undefined) => boolean, exportPrefix: string) {
   const bookingStore = useBookingStore()
   const vehiclesStore = useVehiclesStore()
-  const driversStore = useDriversStore()
   const deductionsStore = usePayrollDeductionsStore()
   const paymentsStore = useDriverPaymentsStore()
 
@@ -53,19 +51,25 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
     booking.plate ? vehiclesStore.findByFullPlate(booking.plate)?.department : undefined
 
   /**
-   * ชื่อคนขับที่ใช้เป็น key จับกลุ่มรายได้/หา deduction/payment status — ถ้า booking มี driverId ให้ resolve เป็นชื่อ
-   * ปัจจุบันของคนขับคนนั้นเสมอ (driverId = canonical identity) กันปัญหาถ้าคนขับถูกแก้ชื่อภายหลัง งานเก่า (ชื่อเดิม) กับ
-   * งานใหม่ (ชื่อใหม่) จะได้ไม่แยกเป็นคนละแถว/คนละคนในสรุปนี้ ถ้า booking ไม่มี driverId (งานเก่าก่อนมี field นี้) fallback
-   * ไปใช้ driverName ที่บันทึกไว้ตรงๆ ตามเดิม — payrollDeductions/driverPayments เองก็ผูกกับ driverName (ไม่ใช่ id) อยู่แล้ว
-   * จึงต้อง resolve ชื่อให้นิ่งก่อนใช้เป็น key ร่วมกันทั้งหมด
+   * ชื่อคนขับที่ใช้เป็น key จับกลุ่มรายได้/หา deduction/payment status — อ่านจาก snapshot ที่บันทึกไว้บน Booking เอง
+   * ตรงๆ (driverFirstName/driverLastName ณ ตอน dispatch) ไม่ไป match driverId กับทะเบียนคนขับปัจจุบันเพื่อเอาชื่อ
+   * เพราะทะเบียนคนขับแก้ชื่อภายหลังได้ — ถ้าคำนวณเงินเดือนจากชื่อปัจจุบันของทะเบียน งานเก่าจะถูกคำนวณด้วยชื่อที่ไม่ตรงกับ
+   * ตอนเกิดรายการจริง (ดู Booking.driverFirstName ใน types/index.ts) งานเก่าก่อนมี snapshot fields นี้ (ยังไม่ backfill)
+   * fallback ไปใช้ driverName เดิมตรงๆ — payrollDeductions/driverPayments เองก็ผูกกับชื่อนี้ (ไม่ใช่ id) อยู่แล้ว จึงต้อง
+   * resolve ชื่อให้นิ่งก่อนใช้เป็น key ร่วมกันทั้งหมด
    */
   const driverKeyFor = (booking: Booking): string => {
-    if (booking.driverId) {
-      const driver = driversStore.drivers.find((d) => d.id === booking.driverId)
-      if (driver) return driversStore.fullName(driver)
+    if (booking.driverFirstName || booking.driverLastName) {
+      return `${booking.driverFirstName || ''} ${booking.driverLastName || ''}`.trim()
     }
     return booking.driverName as string
   }
+
+  /** driverId ของคนขับกลุ่มนี้ (ถ้ามี) — ดึงตรงจาก Booking.driverId ของงานใดงานหนึ่งในกลุ่มที่มีค่านี้อยู่แล้ว ไม่ match
+   *  ชื่อกับทะเบียนคนขับ — ใช้พาไปหน้าออกเอกสารรายได้ (ต้องมี DriverRecord.id จริง) งานเก่าที่ยังไม่มี driverId (ยัง
+   *  ไม่ backfill) จะไม่มีปุ่มนี้ให้ ต้อง backfill ก่อนถึงจะออกเอกสารได้ */
+  const driverIdFor = (driverKey: string): string | undefined =>
+    bookingsInScope.value.find((b) => driverKeyFor(b) === driverKey && b.driverId)?.driverId
 
   const bookingsInScope = computed(() =>
     bookingStore.bookings.filter(
@@ -156,6 +160,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
     driverOptions,
     summaryRows,
     detailRows,
+    driverIdFor,
     formatDate,
     formatBaht,
     exportSummary,

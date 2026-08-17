@@ -7,10 +7,6 @@
       </button>
       <h2 class="text-lg font-bold text-text flex-1">{{ driver ? driversStore.fullName(driver) : 'รายละเอียดพนักงานขับรถ' }}</h2>
       <input v-model="period" type="month" class="input-field" />
-      <button v-if="driver" @click="router.push({ path: `/settings/drivers/${driver.id}/print`, query: { period } })" class="btn-secondary">
-        <span class="material-symbols-rounded text-base">receipt_long</span>
-        สร้างเอกสารรายได้
-      </button>
     </div>
 
     <div v-if="!driver" class="card-lg text-center text-muted py-10">ไม่พบข้อมูลคนขับ</div>
@@ -77,10 +73,22 @@
       </div>
 
       <div class="card-lg overflow-x-auto">
-        <h3 class="font-semibold text-text mb-3">ประวัติงาน — รอบ {{ periodLabel }}</h3>
-        <table class="min-w-[900px] w-full text-sm border-separate border-spacing-0">
+        <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <h3 class="font-semibold text-text">ประวัติงาน — รอบ {{ periodLabel }}</h3>
+          <div v-if="selectedIds.size > 0" class="flex items-center gap-3 text-sm">
+            <span class="text-muted">เลือกแล้ว {{ selectedIds.size }} งาน • รวม <span class="font-bold text-primary">{{ formatBaht(selectedIncomeTotal) }}</span></span>
+            <button @click="createDocument" class="btn-primary">
+              <span class="material-symbols-rounded text-base">receipt_long</span>
+              สร้างเอกสาร
+            </button>
+          </div>
+        </div>
+        <table class="min-w-[960px] w-full text-sm border-separate border-spacing-0">
           <thead class="bg-surface-2 text-left text-xs text-muted">
             <tr>
+              <th class="px-3 py-2 w-8">
+                <input type="checkbox" :checked="allSelectableChecked" :disabled="selectableRows.length === 0" @change="toggleSelectAll" class="w-4 h-4" />
+              </th>
               <th class="px-3 py-2 font-semibold">เลขที่งาน</th>
               <th class="px-3 py-2 font-semibold">วันที่</th>
               <th class="px-3 py-2 font-semibold">รถ</th>
@@ -88,11 +96,21 @@
               <th class="px-3 py-2 font-semibold text-right">ค่าเที่ยว</th>
               <th class="px-3 py-2 font-semibold text-right">รายได้</th>
               <th class="px-3 py-2 font-semibold">สถานะงาน</th>
+              <th class="px-3 py-2 font-semibold">สถานะเอกสาร</th>
               <th class="px-3 py-2 font-semibold"></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.booking.id" class="border-t border-border hover:bg-surface-2 transition-colors">
+              <td class="px-3 py-2">
+                <input
+                  v-if="!row.booking.driverPayrollDocId"
+                  type="checkbox"
+                  :checked="selectedIds.has(row.booking.id)"
+                  @change="toggleSelect(row.booking.id)"
+                  class="w-4 h-4"
+                />
+              </td>
               <td class="px-3 py-2 font-mono text-text">{{ row.booking.docNo }}</td>
               <td class="px-3 py-2 text-muted">{{ formatDate(row.booking.shipDate || row.booking.completedAt) }}</td>
               <td class="px-3 py-2 text-muted">{{ row.booking.plate || '-' }}</td>
@@ -102,18 +120,62 @@
               <td class="px-3 py-2">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[row.booking.status]]">{{ bookingStatusLabel[row.booking.status] }}</span>
               </td>
+              <td class="px-3 py-2">
+                <span v-if="row.booking.driverPayrollDocId" class="text-xs font-semibold px-2 py-1 rounded-full bg-teal-100 text-teal-700">ออกเอกสารแล้ว</span>
+                <span v-else class="text-xs text-muted">-</span>
+              </td>
               <td class="px-3 py-2 text-right">
                 <RouterLink :to="`/job/${row.booking.id}`" class="text-primary hover:underline text-xs">ดูงาน</RouterLink>
               </td>
             </tr>
             <tr v-if="rows.length === 0">
-              <td colspan="8" class="px-3 py-8 text-center text-muted">ยังไม่มีงานในรอบนี้</td>
+              <td colspan="10" class="px-3 py-8 text-center text-muted">ยังไม่มีงานในรอบนี้</td>
             </tr>
           </tbody>
         </table>
         <div class="text-[11px] text-muted mt-2">
-          หมายเหตุ: สถานะการจ่ายเงิน (ด้านบน) เป็นสถานะระดับ "รอบเดือน" ต่อคนขับ ไม่ใช่ระดับงานแต่ละเที่ยว จึงไม่มีคอลัมน์นี้ในตารางประวัติงาน — และไม่มีผลต่อสถานะงาน (สถานะงาน) ของแต่ละแถวด้านบนเลย
+          หมายเหตุ: สถานะการจ่ายเงิน (ด้านบน) เป็นสถานะระดับ "รอบเดือน" ต่อคนขับ ไม่ใช่ระดับงานแต่ละเที่ยว จึงไม่มีผลต่อสถานะงาน (สถานะงาน) หรือสถานะเอกสาร (คอลัมน์ขวา) ของแต่ละแถวด้านบนเลย — สถานะเอกสารมาจากการเลือกงานสร้างเอกสารรายได้จริงต่างหาก
         </div>
+      </div>
+
+      <div class="card-lg overflow-x-auto">
+        <h3 class="font-semibold text-text mb-3">เอกสารที่ออกแล้ว</h3>
+        <table class="min-w-[700px] w-full text-sm border-separate border-spacing-0">
+          <thead class="bg-surface-2 text-left text-xs text-muted">
+            <tr>
+              <th class="px-3 py-2 font-semibold">เลขที่เอกสาร</th>
+              <th class="px-3 py-2 font-semibold">รอบ</th>
+              <th class="px-3 py-2 font-semibold text-right">จำนวนงาน</th>
+              <th class="px-3 py-2 font-semibold text-right">รายได้สุทธิ</th>
+              <th class="px-3 py-2 font-semibold">สถานะจ่าย</th>
+              <th class="px-3 py-2 font-semibold"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="doc in issuedDocuments" :key="doc.id" class="border-t border-border hover:bg-surface-2 transition-colors">
+              <td class="px-3 py-2 font-mono text-primary font-semibold">{{ doc.number }}</td>
+              <td class="px-3 py-2 text-muted">{{ doc.period }}</td>
+              <td class="px-3 py-2 text-right text-text">{{ doc.bookingIds.length }}</td>
+              <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(doc.netIncome) }}</td>
+              <td class="px-3 py-2">
+                <button
+                  v-if="doc.paymentStatus === 'UNPAID'"
+                  @click="markDocPaid(doc.id)"
+                  class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700 cursor-pointer hover:opacity-80"
+                >
+                  รอจ่าย · บันทึกจ่ายแล้ว
+                </button>
+                <span v-else class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">จ่ายแล้ว</span>
+              </td>
+              <td class="px-3 py-2 text-right">
+                <RouterLink :to="`/payroll/drivers/documents/${doc.id}`" class="text-primary hover:underline text-xs">ดู/พิมพ์</RouterLink>
+              </td>
+            </tr>
+            <tr v-if="issuedDocuments.length === 0">
+              <td colspan="6" class="px-3 py-8 text-center text-muted">ยังไม่เคยออกเอกสารรายได้ให้คนขับคนนี้</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" kind="ADDITION" />
@@ -124,23 +186,26 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useDriversStore } from '@/stores/drivers'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
+import { useDriverPayrollDocumentsStore } from '@/stores/driverPayrollDocuments'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import type { DriverPaymentStatusValue } from '@/types'
 
 const props = defineProps<{ id: string }>()
+const route = useRoute()
 const router = useRouter()
 const driversStore = useDriversStore()
 const vehiclesStore = useVehiclesStore()
 const bookingStore = useBookingStore()
 const deductionsStore = usePayrollDeductionsStore()
 const paymentsStore = useDriverPaymentsStore()
+const driverPayrollDocumentsStore = useDriverPayrollDocumentsStore()
 
 const driver = computed(() => driversStore.drivers.find((d) => d.id === props.id) || null)
 const assignedVehicleLabel = computed(() => {
@@ -163,7 +228,8 @@ function inPeriod(date: Date | undefined, monthValue: string): boolean {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthValue
 }
 
-const period = ref(currentMonthValue())
+/** รอบเดือนเริ่มต้นมาจาก query ?period=YYYY-MM ถ้ามี (เช่น เข้ามาจากหน้า /payroll/drivers ที่เลือกรอบไว้แล้ว) ไม่งั้น fallback เป็นเดือนปัจจุบัน */
+const period = ref(typeof route.query.period === 'string' ? route.query.period : currentMonthValue())
 const periodLabel = computed(() => toBEPeriodLabel(period.value))
 
 /**
@@ -207,6 +273,37 @@ const destinationLabel = (booking: { items: { siteName: string }[] }) => {
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
+
+/** เลือกงานเพื่อสร้างเอกสารรายได้ — งานที่ออกเอกสารไปแล้ว (driverPayrollDocId) เลือกซ้ำไม่ได้ ไม่มี checkbox ให้เลย */
+const selectedIds = ref<Set<string>>(new Set())
+const selectableRows = computed(() => rows.value.filter((r) => !r.booking.driverPayrollDocId))
+const allSelectableChecked = computed(() => selectableRows.value.length > 0 && selectableRows.value.every((r) => selectedIds.value.has(r.booking.id)))
+const toggleSelect = (id: string) => {
+  if (selectedIds.value.has(id)) selectedIds.value.delete(id)
+  else selectedIds.value.add(id)
+  selectedIds.value = new Set(selectedIds.value)
+}
+const toggleSelectAll = () => {
+  selectedIds.value = allSelectableChecked.value ? new Set() : new Set(selectableRows.value.map((r) => r.booking.id))
+}
+const selectedIncomeTotal = computed(() => rows.value.filter((r) => selectedIds.value.has(r.booking.id)).reduce((sum, r) => sum + r.income, 0))
+
+const createDocument = () => {
+  if (!driver.value || selectedIds.value.size === 0) return
+  const doc = driverPayrollDocumentsStore.createDriverPayrollDocument(driver.value.id, [...selectedIds.value], period.value)
+  if (!doc) {
+    alert('สร้างเอกสารไม่สำเร็จ — งานที่เลือกอาจถูกออกเอกสารไปแล้ว กรุณารีเฟรชหน้านี้แล้วลองใหม่')
+    return
+  }
+  selectedIds.value = new Set()
+  router.push(`/payroll/drivers/documents/${doc.id}`)
+}
+
+const issuedDocuments = computed(() => (driver.value ? driverPayrollDocumentsStore.documentsForDriver(driver.value.id) : []))
+const markDocPaid = (docId: string) => {
+  if (!confirm('ยืนยันบันทึกว่าจ่ายเงินเอกสารนี้แล้ว?')) return
+  driverPayrollDocumentsStore.recordPayment(docId)
+}
 </script>
 
 <style scoped>
@@ -216,6 +313,10 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 
 .btn-secondary {
   @apply h-10 px-3 rounded-lg border border-border bg-surface text-text font-medium text-sm flex items-center gap-2 cursor-pointer hover:bg-surface-2;
+}
+
+.btn-primary {
+  @apply h-9 px-3 rounded-lg border-0 bg-primary text-white font-semibold text-sm flex items-center gap-2 cursor-pointer transition-all hover:opacity-90 shadow-md;
 }
 
 .status-select {

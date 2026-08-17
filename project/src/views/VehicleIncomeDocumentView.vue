@@ -1,17 +1,17 @@
 <template>
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-3 no-print">
-      <button @click="router.push(`/payroll/vendor-fleet/${props.vehicleId}`)" class="btn-secondary">
+      <button @click="router.back()" class="btn-secondary">
         <span class="material-symbols-rounded text-base">arrow_back</span>
         กลับ
       </button>
-      <button v-if="vehicle" @click="printDoc" class="btn-primary">
+      <button v-if="doc" @click="printDoc" class="btn-primary">
         <span class="material-symbols-rounded text-base">print</span>
         พิมพ์เอกสาร
       </button>
     </div>
 
-    <div v-if="!vehicle" class="card-lg text-center text-muted py-12">ไม่พบข้อมูลรถคันนี้</div>
+    <div v-if="!doc" class="card-lg text-center text-muted py-12">ไม่พบเอกสารรายได้รถคันนี้</div>
 
     <div v-else id="print-area">
       <div class="print-sheet bg-white text-black rounded-xl shadow-default border border-border p-8 max-w-3xl mx-auto relative">
@@ -35,13 +35,13 @@
         <!-- ข้อมูลรถ -->
         <div class="flex items-start justify-between mb-4 text-xs">
           <div>
-            <div class="font-bold text-sm bg-yellow-100 inline-block px-1">{{ vehiclesStore.fullPlate(vehicle) }}</div>
-            <div class="text-gray-700 mt-0.5">{{ vehicle.department }}</div>
+            <div class="font-bold text-sm bg-yellow-100 inline-block px-1">{{ doc.plate }}</div>
+            <div v-if="vehicle" class="text-gray-700 mt-0.5">{{ vehicle.department }}</div>
           </div>
           <div class="text-right space-y-0.5">
             <div>ช่วงวันที่ : <span class="font-semibold">{{ periodThaiLabel }}</span></div>
-            <div>เลขที่เอกสาร : <span class="font-semibold">-</span></div>
-            <div>วันที่ออกเอกสาร : <span class="font-semibold">{{ formatDate(new Date()) }}</span></div>
+            <div>เลขที่เอกสาร : <span class="font-semibold">{{ doc.number }}</span></div>
+            <div>วันที่ออกเอกสาร : <span class="font-semibold">{{ formatDate(doc.createdAt) }}</span></div>
           </div>
         </div>
 
@@ -67,7 +67,7 @@
               <td class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.fuelCost) }}</td>
             </tr>
             <tr v-if="rows.length === 0">
-              <td colspan="6" class="border border-gray-400 px-2 py-4 text-center text-gray-400">ไม่มีงานของรถคันนี้ในรอบนี้</td>
+              <td colspan="6" class="border border-gray-400 px-2 py-4 text-center text-gray-400">ไม่มีงานในเอกสารนี้</td>
             </tr>
           </tbody>
         </table>
@@ -80,8 +80,8 @@
               <span>จำนวนเงิน</span>
             </div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
-              <span>รายได้จากงาน (รอบนี้)</span>
-              <span class="text-right tabular-nums">{{ formatBaht(totalTripFee) }}</span>
+              <span>รายได้จากงาน</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.tripIncomeTotal) }}</span>
             </div>
           </div>
           <div>
@@ -90,17 +90,16 @@
               <span>จำนวนเงิน</span>
             </div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
-              <span>ค่าน้ำมันที่ใช้ (รอบนี้)</span>
-              <span class="text-right tabular-nums">{{ formatBaht(totalFuelCost) }}</span>
+              <span>ค่าน้ำมันที่ใช้</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.fuelCostTotal) }}</span>
             </div>
-            <div v-if="vehicleExpenses.length === 0" class="text-gray-400 py-0.5">ไม่มีค่าใช้จ่ายประจำรถ</div>
-            <div v-for="e in vehicleExpenses" :key="e.id" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
-              <span>{{ e.expenseType }}{{ e.description ? ` (${e.description})` : '' }}</span>
-              <span class="text-right tabular-nums">{{ formatBaht(e.amount) }}</span>
+            <div v-if="doc.vehicleExpenseTotal > 0" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+              <span>ค่าใช้จ่ายประจำรถ (รวม)</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.vehicleExpenseTotal) }}</span>
             </div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 font-bold border-t border-gray-300 mt-1 pt-1">
               <span>รวมค่าใช้จ่าย</span>
-              <span class="text-right tabular-nums">{{ formatBaht(totalFuelCost + totalVehicleExpense) }}</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.fuelCostTotal + doc.vehicleExpenseTotal) }}</span>
             </div>
           </div>
         </div>
@@ -109,22 +108,23 @@
         <div class="flex justify-between items-center mt-3 mb-6">
           <div class="text-xs">
             <div class="text-gray-600">จำนวนเงินเป็นตัวอักษร</div>
-            <div class="font-semibold">({{ bahtText(netTotal) }})</div>
+            <div class="font-semibold">({{ bahtText(doc.netTotal) }})</div>
           </div>
           <div class="flex items-center gap-3">
             <span class="font-bold">ยอดสุทธิ</span>
-            <span class="text-xl font-bold bg-yellow-100 px-3 py-1 rounded">{{ formatBaht(netTotal) }}</span>
+            <span class="text-xl font-bold bg-yellow-100 px-3 py-1 rounded">{{ formatBaht(doc.netTotal) }}</span>
           </div>
         </div>
 
         <div class="text-[11px] text-gray-500 mb-6">
-          หมายเหตุ: ค่าใช้จ่ายประจำรถ (ประกัน/GPS/ค่างวด) เป็นยอดสะสมทั้งหมด ไม่กรองตามรอบเดือน — ไม่รวมรายได้/รายการหักของคนขับ (ดูเอกสารรายได้คนขับแยกต่างหาก)
+          หมายเหตุ: ยอดทั้งหมดในเอกสารนี้เป็น Snapshot ณ ตอนสร้างเอกสาร ไม่เปลี่ยนตามภายหลังแม้จะมีการแก้ไขค่าใช้จ่ายประจำรถเพิ่มเติม —
+          ไม่รวมรายได้/รายการหักของคนขับ (ดูเอกสารรายได้คนขับแยกต่างหาก)
         </div>
 
         <!-- ลายเซ็น -->
         <div class="grid grid-cols-2 gap-8 text-sm mt-12">
           <div>
-            <div class="font-semibold mb-8">ในนาม {{ vehiclesStore.fullPlate(vehicle) }}</div>
+            <div class="font-semibold mb-8">ในนาม {{ doc.plate }}</div>
             <div class="grid grid-cols-2 gap-4 text-center">
               <div class="border-t border-gray-500 pt-2">ผู้รับเงิน / เจ้าของรถ</div>
               <div class="border-t border-gray-500 pt-2">วันที่</div>
@@ -146,7 +146,7 @@
 
         <!-- Footer ข้อมูลการพิมพ์ -->
         <div class="flex justify-between text-[10px] text-gray-500 mt-8 pt-2 border-t border-gray-300">
-          <span>ข้อมูลคำนวณสดจากงานขนส่งที่ส่งสำเร็จ ณ เวลาที่พิมพ์</span>
+          <span>เอกสารเลขที่ {{ doc.number }} — ยอดคงที่ตามที่บันทึกไว้ ณ ตอนสร้างเอกสาร</span>
           <span>พิมพ์เมื่อ: {{ formatDateTime(new Date()) }} โดย {{ authStore.userName || '-' }}</span>
         </div>
       </div>
@@ -156,68 +156,49 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
-import { useVehicleExpensesStore } from '@/stores/vehicleExpenses'
+import { useVehicleIncomeDocumentsStore } from '@/stores/vehicleIncomeDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useAuthStore } from '@/stores/auth'
 import { bahtText } from '@/utils/companyInfo'
 
 /**
- * เอกสารรายได้รถร่วม/รถหุ้นส่วน — ไม่มี Firestore record ของตัวเอง คำนวณสดจาก Booking (Trace ตรงจาก Booking.plate)
- * + VehicleExpense ทุกครั้งที่เปิดหน้านี้ ใช้ logic เดียวกับ VendorFleetVehicleDetailView.vue เป๊ะ (ไม่สร้าง Calculation
- * Engine ใหม่) — ข้อมูลนี้เป็นของ "รถ" เท่านั้น ไม่รวมรายได้/รายการหักของคนขับ (ดู DriverIncomeDocumentView.vue แยกต่างหาก)
+ * เอกสารรายได้รถร่วม/รถหุ้นส่วน — เวอร์ชันนี้เป็น viewer ของ VehicleIncomeDocument ที่ persisted จริงแล้ว (สร้างจากการ
+ * เลือกงานเองที่ VendorFleetVehicleDetailView.vue) ยอดเงินทั้งหมดมาจาก Snapshot ณ ตอนสร้างเอกสารตรงๆ ไม่คำนวณสดใหม่
+ * ทุกครั้งที่เปิดหน้า (ต่างจากเวอร์ชันเดิมก่อนหน้านี้) — ตารางรายเที่ยวยัง lookup รายละเอียดการแสดงผล (วันที่/ปลายทาง)
+ * จาก Booking ตรงๆ เพราะข้อมูลเหล่านี้ไม่เปลี่ยนหลังงานส่งสำเร็จอยู่แล้ว
  */
-const props = defineProps<{ vehicleId: string }>()
-const route = useRoute()
+const props = defineProps<{ docId: string }>()
 const router = useRouter()
 const vehiclesStore = useVehiclesStore()
 const bookingStore = useBookingStore()
-const vehicleExpensesStore = useVehicleExpensesStore()
+const vehicleIncomeDocumentsStore = useVehicleIncomeDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const authStore = useAuthStore()
 
-const vehicle = computed(() => vehiclesStore.vehicles.find((v) => v.id === props.vehicleId) || null)
-
-function currentMonthValue(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-function inPeriod(date: Date | undefined, monthValue: string): boolean {
-  if (!date) return false
-  const d = new Date(date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthValue
-}
-
-const period = computed(() => (typeof route.query.period === 'string' ? route.query.period : currentMonthValue()))
+const doc = computed(() => vehicleIncomeDocumentsStore.documents.find((d) => d.id === props.docId) || null)
+const vehicle = computed(() => (doc.value ? vehiclesStore.vehicles.find((v) => v.id === doc.value!.vehicleId) : undefined))
 
 const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
 const periodThaiLabel = computed(() => {
-  const [y, m] = period.value.split('-')
+  if (!doc.value) return '-'
+  const [y, m] = doc.value.period.split('-')
   const monthIndex = Number(m) - 1
   return `${thaiMonths[monthIndex] || m} ${Number(y) + 543}`
 })
 
 const fuelCost = (booking: { fuelLiters?: number; fuelRate?: number }) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0))
 
-/** Trace ตรงจาก Booking.plate -> ทะเบียนรถคันนี้ เหมือน VendorFleetVehicleDetailView.vue เป๊ะ ไม่ผ่านคนขับปัจจุบันของรถ */
 const rows = computed(() => {
-  if (!vehicle.value) return []
-  const full = vehiclesStore.fullPlate(vehicle.value)
-  return bookingStore.bookings
-    .filter((b) => b.status === 'DELIVERED')
-    .filter((b) => b.plate === full || b.plate === vehicle.value!.plate)
-    .filter((b) => inPeriod(b.shipDate || b.completedAt, period.value))
+  if (!doc.value) return []
+  return doc.value.bookingIds
+    .map((id) => bookingStore.bookings.find((b) => b.id === id))
+    .filter((b): b is NonNullable<typeof b> => !!b)
     .map((b) => ({ booking: b, fuelCost: fuelCost(b) }))
     .sort((a, b) => new Date(a.booking.shipDate || a.booking.completedAt || 0).getTime() - new Date(b.booking.shipDate || b.booking.completedAt || 0).getTime())
 })
-
-const totalTripFee = computed(() => rows.value.reduce((sum, r) => sum + (r.booking.tripFee || 0), 0))
-const totalFuelCost = computed(() => rows.value.reduce((sum, r) => sum + r.fuelCost, 0))
-const vehicleExpenses = computed(() => (vehicle.value ? vehicleExpensesStore.expensesForVehicle(vehicle.value.id) : []))
-const totalVehicleExpense = computed(() => vehicleExpenses.value.reduce((sum, e) => sum + e.amount, 0))
-const netTotal = computed(() => totalTripFee.value - totalFuelCost.value - totalVehicleExpense.value)
 
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {
   if (!booking.items.length) return '-'

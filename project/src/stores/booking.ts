@@ -412,6 +412,8 @@ export const useBookingStore = defineStore('booking', () => {
     extra?: {
       driverName?: string
       driverId?: string
+      driverFirstName?: string
+      driverLastName?: string
       odometerBefore?: number
     }
   ) {
@@ -420,8 +422,12 @@ export const useBookingStore = defineStore('booking', () => {
     booking.plate = plate
     if (extra?.driverName) {
       booking.driverName = extra.driverName
-      // อัปเดต driverId คู่กันเสมอเมื่อเปลี่ยนชื่อคนขับ (แม้จะเป็น undefined เพราะจับคู่ไม่ได้) กันไม่ให้ driverId เก่าค้างชี้ไปคนขับคนละคนกับ driverName ปัจจุบัน
+      // อัปเดต driverId/driverFirstName/driverLastName คู่กันเสมอเมื่อเปลี่ยนชื่อคนขับ (แม้จะเป็น undefined เพราะจับคู่ไม่ได้)
+      // กันไม่ให้ข้อมูลคนขับเก่าค้างชี้ไปคนละคนกับ driverName ปัจจุบัน — driverFirstName/driverLastName คือ snapshot
+      // ที่ Payroll ต้องใช้จริง (ดู Booking.driverFirstName ใน types/index.ts) ไม่ใช่แค่ตัวช่วยจับคู่บัญชี login
       booking.driverId = extra.driverId
+      booking.driverFirstName = extra.driverFirstName
+      booking.driverLastName = extra.driverLastName
     }
     if (extra?.odometerBefore !== undefined) booking.odometerBefore = extra.odometerBefore
     // น้ำมันคำนวณและล็อกไว้ตั้งแต่ตอนสร้างงานแล้ว (จากจังหวัด/อำเภอของแต่ละปลายทาง) ตอนจัดรถจึงไม่ต้องกรอก/คำนวณซ้ำ
@@ -507,6 +513,8 @@ export const useBookingStore = defineStore('booking', () => {
     // sanitizeBooking() แปลง field ที่เป็น undefined เป็น deleteField() ให้แล้ว (ดู bookingRepository.ts) จึงเคลียร์ด้วย undefined ตรงๆ ได้จริง ไม่ค้างค่าเดิมใน Firestore
     booking.driverName = undefined
     booking.driverId = undefined
+    booking.driverFirstName = undefined
+    booking.driverLastName = undefined
     booking.dispatchedAt = undefined
     addLog(`คนขับไม่รับงาน ${booking.docNo} รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`, { bookingId: booking.id })
   }
@@ -645,6 +653,8 @@ export const useBookingStore = defineStore('booking', () => {
       booking.plate = ''
       booking.driverName = undefined
       booking.driverId = undefined
+      booking.driverFirstName = undefined
+      booking.driverLastName = undefined
       booking.dispatchedAt = undefined
       addLog(`ยกเลิกการจ่ายงาน ${booking.docNo} (คนขับไม่ตอบรับภายใน 15 นาที) รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`, { bookingId: booking.id })
     })

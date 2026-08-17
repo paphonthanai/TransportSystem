@@ -296,7 +296,7 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN', 'DISPATCHER'] },
       },
       {
-        path: 'settings/drivers/:id/print',
+        path: 'payroll/drivers/documents/:docId',
         name: 'DriverIncomeDocument',
         component: () => import('@/views/DriverIncomeDocumentView.vue'),
         props: true,
@@ -316,7 +316,7 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN'] },
       },
       {
-        path: 'payroll/vendor-fleet/:vehicleId/print',
+        path: 'payroll/vendor-fleet/documents/:docId',
         name: 'VehicleIncomeDocument',
         component: () => import('@/views/VehicleIncomeDocumentView.vue'),
         props: true,
