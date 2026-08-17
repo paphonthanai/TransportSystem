@@ -25,9 +25,9 @@
           <option value="">ทุกคนขับ</option>
           <option v-for="d in distinctDrivers" :key="d" :value="d">{{ d }}</option>
         </select>
-        <select v-model="filters.billingStatus" class="input-field w-40">
-          <option value="">ทุกสถานะวางบิล</option>
-          <option v-for="s in billingStatusOptions" :key="s" :value="s">{{ billingStatusLabel[s] }}</option>
+        <select v-model="filters.docClaim" class="input-field w-48">
+          <option value="">ทุกสถานะเอกสาร</option>
+          <option v-for="opt in docClaimOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
         </select>
         <input v-model="filters.site" type="text" placeholder="ค้นหาหน้างาน..." class="input-field w-40" />
         <select v-model="filters.district" class="input-field w-40">
@@ -66,7 +66,7 @@
                 <th class="text-left px-4 py-3 font-semibold text-muted">รถ / คนขับ</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ส่งของสำเร็จ</th>
                 <th class="text-right px-4 py-3 font-semibold text-muted">ราคา</th>
-                <th class="text-left px-4 py-3 font-semibold text-muted">สถานะวางบิล</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">สถานะเอกสาร</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ตรวจสอบ POD</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">สถานะการจัดการ</th>
               </tr>
@@ -93,9 +93,12 @@
                 <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.completedAt) }}</td>
                 <td class="px-4 py-3 text-right text-text font-semibold">{{ formatBaht(booking.agreedPrice || booking.tripFee) }}</td>
                 <td class="px-4 py-3">
-                  <span :class="['text-xs font-semibold px-2 py-1 rounded-full', billingStatusClass[booking.billingStatus || 'UNBILLED']]">
-                    {{ billingStatusLabel[booking.billingStatus || 'UNBILLED'] }}
-                  </span>
+                  <div class="flex flex-wrap gap-1">
+                    <span v-for="badge in documentClaimBadges(booking)" :key="badge.label" :class="['text-xs font-semibold px-2 py-1 rounded-full', badge.class]">
+                      {{ badge.label }}
+                    </span>
+                    <span v-if="documentClaimBadges(booking).length === 0" class="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-700">ยังไม่ดำเนินการ</span>
+                  </div>
                 </td>
                 <td class="px-4 py-3">
                   <div v-if="booking.podReviewStatus" class="space-y-1">
@@ -156,16 +159,24 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useCompletedJobs, useCompletedJobsFilters } from '@/composables/useCompletedJobs'
+import { useCompletedJobs, useCompletedJobsFilters, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
-import { billingStatusLabel, billingStatusClass, podReviewStatusLabel, podReviewStatusClass } from '@/utils/bookingStatus'
-import type { Booking, BillingStatus } from '@/types'
+import { documentClaimBadges, podReviewStatusLabel, podReviewStatusClass } from '@/utils/bookingStatus'
+import type { Booking } from '@/types'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
 
 const filters = useCompletedJobsFilters()
-const billingStatusOptions: BillingStatus[] = ['UNBILLED', 'IN_BATCH', 'HOLD', 'INVOICED', 'PAID']
+/** สถานะเอกสารทั้ง 3 ประเภทเป็นอิสระต่อกัน (ดู documentClaimBadges) — ตัวกรองนี้จึงเลือกได้ทีละ "ด้าน" (วางบิล/ใบแจ้งหนี้/ใบเสร็จ x ดำเนินการแล้ว/ยัง) ไม่ใช่ enum เดียวแบบเดิม */
+const docClaimOptions: { value: CompletedJobsDocClaimFilter; label: string }[] = [
+  { value: 'BILLING_PENDING', label: 'ยังไม่วางบิล' },
+  { value: 'BILLING_DONE', label: 'วางบิลแล้ว' },
+  { value: 'INVOICE_PENDING', label: 'ยังไม่ออกใบแจ้งหนี้' },
+  { value: 'INVOICE_DONE', label: 'ออกใบแจ้งหนี้แล้ว' },
+  { value: 'RECEIPT_PENDING', label: 'ยังไม่รับเงิน' },
+  { value: 'RECEIPT_DONE', label: 'รับเงินแล้ว' },
+]
 
 const {
   completedBookings,
@@ -188,7 +199,7 @@ const hasActiveDateOrPicks = computed(
       filters.value.dateTo ||
       filters.value.customer ||
       filters.value.driverName ||
-      filters.value.billingStatus ||
+      filters.value.docClaim ||
       filters.value.fleet ||
       filters.value.site ||
       filters.value.district
@@ -196,7 +207,7 @@ const hasActiveDateOrPicks = computed(
 )
 
 const clearFilters = () => {
-  filters.value = { fleet: undefined, search: filters.value.search, dateFrom: '', dateTo: '', customer: '', driverName: '', billingStatus: '', site: '', district: '' }
+  filters.value = { fleet: undefined, search: filters.value.search, dateFrom: '', dateTo: '', customer: '', driverName: '', docClaim: '', site: '', district: '' }
 }
 
 const podPreviewImage = ref<string | null>(null)

@@ -29,7 +29,7 @@
                 <th class="text-left px-4 py-3 font-semibold text-muted">รถ / คนขับ</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ส่งของสำเร็จ</th>
                 <th class="text-right px-4 py-3 font-semibold text-muted">ราคา</th>
-                <th class="text-left px-4 py-3 font-semibold text-muted">สถานะวางบิล</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">สถานะเอกสาร</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
               </tr>
             </thead>
@@ -50,9 +50,12 @@
                 <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.completedAt) }}</td>
                 <td class="px-4 py-3 text-right text-text font-semibold">{{ formatBaht(booking.agreedPrice || booking.tripFee) }}</td>
                 <td class="px-4 py-3">
-                  <span :class="['text-xs font-semibold px-2 py-1 rounded-full', billingStatusClass[booking.billingStatus || 'UNBILLED']]">
-                    {{ billingStatusLabel[booking.billingStatus || 'UNBILLED'] }}
-                  </span>
+                  <div class="flex flex-wrap gap-1">
+                    <span v-for="badge in documentClaimBadges(booking)" :key="badge.label" :class="['text-xs font-semibold px-2 py-1 rounded-full', badge.class]">
+                      {{ badge.label }}
+                    </span>
+                    <span v-if="documentClaimBadges(booking).length === 0" class="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-700">ยังไม่ดำเนินการ</span>
+                  </div>
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex flex-wrap items-center gap-1.5">
@@ -84,7 +87,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import type { BookingCategory } from '@/types'
-import { billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
+import { documentClaimBadges } from '@/utils/bookingStatus'
 import { useCompletedJobs, useCompletedJobsFilters } from '@/composables/useCompletedJobs'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 

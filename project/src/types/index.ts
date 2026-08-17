@@ -209,8 +209,18 @@ export interface Booking {
   finalAllowance?: number
   /** รูปหลักฐานการส่งมอบสินค้า (POD) ล่าสุด = ของปลายทางสุดท้ายที่ส่งสำเร็จ เก็บไว้ที่ระดับงานเพื่อความเข้ากันได้กับหน้าจอที่แสดง POD เดียว */
   podImage?: string
-  /** สถานะการเงิน เป็นอิสระจาก status (BookingStatus) โดยสิ้นเชิง — ค่าเริ่มต้น UNBILLED เสมอ เปลี่ยนได้เฉพาะผ่านหน้าใบวางบิล (addBookingsToBatch / issueInvoiceFromBatch) เท่านั้น */
+  /** สถานะการเงินจากระบบรอบบิลเดิม (batches/addBookingsToBatch/issueInvoiceFromBatch ใน stores/booking.ts) — คงไว้เพื่อความเข้ากันได้กับ
+   *  หน้า /billing (BillingView.vue) เดิมเท่านั้น ระบบเอกสารรวมปัจจุบัน (createBillingFromBookings/createTaxInvoiceFromBookings/
+   *  createReceiptFromBookings ใน stores/salesDocuments.ts) ไม่อ่าน/เขียน field นี้อีกต่อไป — ดู billingNoteDocId/taxInvoiceDocId/receiptDocId */
   billingStatus?: BillingStatus
+  /** งานนี้ถูกดึงเข้าใบวางบิลรวมใดแล้ว (ถ้ามี) — เก็บ id ของ SalesDocument ประเภท BILLING กันสร้างใบวางบิลซ้ำสำหรับงานเดียวกัน
+   *  เป็นอิสระจาก taxInvoiceDocId/receiptDocId โดยเจตนา (Booking → Billing / Booking → Tax Invoice / Booking → Receipt แยกเส้นทางกัน
+   *  ไม่ใช่ Billing → Tax Invoice → Receipt) งานหนึ่งจึงอยู่ในใบวางบิลรวม "และ" ใบแจ้งหนี้รวม "และ" ใบเสร็จรวม พร้อมกันได้ */
+  billingNoteDocId?: string
+  /** งานนี้ถูกดึงเข้าใบแจ้งหนี้/ใบกำกับภาษีรวมใดแล้ว (ถ้ามี) — เก็บ id ของ SalesDocument ประเภท TAX_INVOICE กันสร้างซ้ำ ดู billingNoteDocId */
+  taxInvoiceDocId?: string
+  /** งานนี้ถูกดึงเข้าใบเสร็จรับเงินรวมใดแล้ว (ถ้ามี) — เก็บ id ของ SalesDocument ประเภท RECEIPT กันสร้างซ้ำ ดู billingNoteDocId */
+  receiptDocId?: string
   /** สถานะตรวจสอบ POD ของออฟฟิศ (ดู PodReviewStatus) — ไม่มีค่า = ไม่ผ่านขั้นตอนนี้ (งานที่ออฟฟิศจบเอง) หรือยังไม่จบงาน */
   podReviewStatus?: PodReviewStatus
   /** เหตุผลที่ออฟฟิศ REJECTED (ถ้ามี) ให้คนขับเห็นว่าต้องแก้อะไร */

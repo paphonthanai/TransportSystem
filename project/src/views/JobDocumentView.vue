@@ -7,11 +7,8 @@
       </button>
       <div v-if="booking" class="flex items-center gap-2">
         <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
-        <span
-          v-if="booking.billingStatus"
-          :class="['text-xs font-semibold px-2 py-1 rounded-full', billingStatusClass[booking.billingStatus]]"
-        >
-          {{ billingStatusLabel[booking.billingStatus] }}
+        <span v-for="badge in documentClaimBadges(booking)" :key="badge.label" :class="['text-xs font-semibold px-2 py-1 rounded-full', badge.class]">
+          {{ badge.label }}
         </span>
         <button @click="printDoc" class="btn-primary">
           <span class="material-symbols-rounded text-base">print</span>
@@ -409,7 +406,7 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { bahtText } from '@/utils/companyInfo'
-import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
+import { bookingStatusLabel, bookingStatusClass, documentClaimBadges } from '@/utils/bookingStatus'
 import { computeRowDiscountBaht, computeRowAmount, computeRowVat } from '@/utils/documentTotals'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import type { Booking, BookingStatus } from '@/types'

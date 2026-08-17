@@ -40,6 +40,21 @@ export const billingStatusClass: Record<BillingStatus, string> = {
   PAID: 'bg-green-100 text-green-700',
 }
 
+export interface DocumentClaimBadge {
+  label: string
+  class: string
+}
+
+/** สถานะเอกสารรวมทั้ง 3 ประเภทของงานนี้ (ใบวางบิล/ใบแจ้งหนี้/ใบเสร็จ) เป็นอิสระต่อกันโดยเจตนา ไม่ใช่ progression เดียวแบบ billingStatus
+ *  เดิม (ระบบเก่า ดู Booking.billingStatus ใน types/index.ts) — งานหนึ่งอยู่ได้หลายป้ายพร้อมกัน คืนป้ายทั้งหมดที่ควรแสดง (0-3 ป้าย) */
+export function documentClaimBadges(booking: { billingNoteDocId?: string; taxInvoiceDocId?: string; receiptDocId?: string }): DocumentClaimBadge[] {
+  const badges: DocumentClaimBadge[] = []
+  if (booking.billingNoteDocId) badges.push({ label: 'วางบิลแล้ว', class: 'bg-blue-100 text-blue-700' })
+  if (booking.taxInvoiceDocId) badges.push({ label: 'ออกใบแจ้งหนี้แล้ว', class: 'bg-purple-100 text-purple-700' })
+  if (booking.receiptDocId) badges.push({ label: 'รับเงินแล้ว', class: 'bg-green-100 text-green-700' })
+  return badges
+}
+
 export const podReviewStatusLabel: Record<PodReviewStatus, string> = {
   PENDING_REVIEW: 'รอตรวจสอบ POD',
   APPROVED: 'ตรวจสอบแล้ว',

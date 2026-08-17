@@ -96,7 +96,8 @@ const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
 
-const isUnbilledEligible = (b: Booking) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED'
+/** เช็คเฉพาะ billingNoteDocId ของงาน เป็นอิสระจาก taxInvoiceDocId/receiptDocId — งานที่ออกใบแจ้งหนี้/ใบเสร็จรวมไปแล้วยังวางบิลรวมได้อีก */
+const isUnbilledEligible = (b: Booking) => b.status === 'DELIVERED' && !b.billingNoteDocId
 
 const eligibleCustomers = computed(() => [...new Set(bookingStore.bookings.filter(isUnbilledEligible).map((b) => b.customer))].sort())
 

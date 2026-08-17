@@ -1058,6 +1058,36 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return { checked: deliveredBookings.length, repaired }
   }
 
+  /**
+   * Migration ครั้งเดียว: ย้อนกลับไปตั้ง Booking.billingNoteDocId/taxInvoiceDocId/receiptDocId จากเอกสาร BILLING/TAX_INVOICE/
+   * RECEIPT ที่มีอยู่แล้วในระบบ (bookingIds ของแต่ละเอกสารเป็น source of truth) — จำเป็นเพราะก่อนหน้านี้ระบบใช้ Booking.billingStatus
+   * (enum เดียว) เป็นตัวกันสร้างเอกสารซ้ำร่วมกันทั้ง 3 ประเภท พอแยกเป็น field อิสระ 3 ตัว เอกสารเก่าที่สร้างไว้ก่อนหน้านี้จะไม่มีค่า
+   * ในฟิลด์ใหม่เลย ทำให้งานที่ถูกวางบิล/ออกใบแจ้งหนี้/รับเงินไปแล้วดูเหมือน "ยังไม่เคยทำ" และถูกดึงไปสร้างเอกสารประเภทเดิมซ้ำได้
+   * Idempotent: เอกสารที่ยกเลิกแล้วไม่นับ (ถูกลบออกจาก documents.value ไปแล้วโดยธรรมชาติ) ไม่เขียนทับ field ที่มีค่าอยู่แล้ว
+   */
+  function backfillDocumentClaimFields(): { checked: number; repaired: { bookingId: string; docNo: string; field: 'billingNoteDocId' | 'taxInvoiceDocId' | 'receiptDocId'; docNumber: string }[] } {
+    const bookingStore = useBookingStore()
+    const repaired: { bookingId: string; docNo: string; field: 'billingNoteDocId' | 'taxInvoiceDocId' | 'receiptDocId'; docNumber: string }[] = []
+    const fieldByType: Record<'BILLING' | 'TAX_INVOICE' | 'RECEIPT', 'billingNoteDocId' | 'taxInvoiceDocId' | 'receiptDocId'> = {
+      BILLING: 'billingNoteDocId',
+      TAX_INVOICE: 'taxInvoiceDocId',
+      RECEIPT: 'receiptDocId',
+    }
+    documents.value
+      .filter((d): d is SalesDocument & { type: 'BILLING' | 'TAX_INVOICE' | 'RECEIPT' } => d.type === 'BILLING' || d.type === 'TAX_INVOICE' || d.type === 'RECEIPT')
+      .forEach((d) => {
+        const field = fieldByType[d.type]
+        d.bookingIds.forEach((bid) => {
+          const b = bookingStore.bookings.find((bk) => bk.id === bid)
+          if (!b || b[field]) return
+          b[field] = d.id
+          repaired.push({ bookingId: b.id, docNo: b.docNo, field, docNumber: d.number })
+        })
+      })
+    if (repaired.length) bookingStore.addLog(`ซิงก์ความสัมพันธ์เอกสาร-งานขนส่ง (billingNoteDocId/taxInvoiceDocId/receiptDocId) ${repaired.length} รายการ`)
+    return { checked: documents.value.filter((d) => d.type === 'BILLING' || d.type === 'TAX_INVOICE' || d.type === 'RECEIPT').length, repaired }
+  }
+
   /** ลบระเบียนใบสั่งสินค้าออกจากรายการ (ไม่กระทบ Booking ที่ผูกอยู่ — งานขนส่งยังอยู่ตามปกติ) */
   function deleteSalesOrder(id: string) {
     const doc = documents.value.find((d) => d.id === id && d.type === 'SALES_ORDER')
@@ -1409,7 +1439,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
      *  PENDING_REVIEW/REJECTED อยู่ (ดู finishDriverJob/reviewPod ใน stores/booking.ts) งานที่ออฟฟิศจบเอง
      *  (completeJob) ไม่ผ่านขั้นตอนนี้ podReviewStatus จะเป็น undefined เสมอ ถือว่าผ่านแล้วโดยปริยาย */
     const allPodApproved = targetBookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
-    const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED')
+    /** เช็คเฉพาะว่า "ยังไม่เคยอยู่ในใบวางบิลรวมอื่น" (billingNoteDocId) เท่านั้น — เป็นอิสระจาก taxInvoiceDocId/receiptDocId โดยเจตนา
+     *  งานเดียวกันอยู่ในใบแจ้งหนี้รวม/ใบเสร็จรวมอื่นพร้อมกันได้ (Booking → Billing / Booking → Tax Invoice / Booking → Receipt แยกเส้นทางกัน) */
+    const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && !b.billingNoteDocId)
     if (!sameCustomer || !allEligible || !allPodApproved) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
@@ -1469,7 +1501,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       }))
     )
     targetBookings.forEach((b) => {
-      b.billingStatus = 'IN_BATCH'
+      b.billingNoteDocId = billing.id
     })
     bookingStore.addLog('สร้างเอกสาร ' + billing.number, { docId: billing.id })
     return billing
@@ -1490,7 +1522,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const targetBookings = sortBookingsForDocumentMerge(bookingStore.bookings.filter((b) => bookingIds.includes(b.id)))
     if (targetBookings.length !== bookingIds.length) return null
     const sameCustomer = targetBookings.every((b) => b.customer === targetBookings[0].customer)
-    const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED')
+    /** เช็คเฉพาะ taxInvoiceDocId ของตัวเอง เป็นอิสระจาก billingNoteDocId — งานที่อยู่ในใบวางบิลรวมแล้วยังออกใบแจ้งหนี้รวมตรงจาก
+     *  งานขนส่งได้อีก (ไม่ต้องผ่าน/แปลงจากใบวางบิลนั้นก่อน) ดู createBillingFromBookings */
+    const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && !b.taxInvoiceDocId)
     if (!sameCustomer || !allEligible) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
@@ -1553,7 +1587,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       }))
     )
     targetBookings.forEach((b) => {
-      b.billingStatus = 'INVOICED'
+      b.taxInvoiceDocId = invoice.id
     })
     bookingStore.addLog('สร้างเอกสาร ' + invoice.number, { docId: invoice.id })
     return invoice
@@ -1624,8 +1658,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    * ใบเสร็จเลย (Booking → Receipt) ไม่ผ่านใบวางบิล/ใบแจ้งหนี้ก่อน — ใช้กับลูกค้าที่ไม่ต้องออกใบกำกับภาษี หรือกรณีรับเงินสดหน้างาน
    * สถานะเริ่มต้นเป็น PAID ทันที (ไม่ผ่าน DRAFT) เพราะถือว่าเก็บเงินแล้วจริงตอนกดสร้าง (เหมือน createReceiptManual) —
    * ใบเสร็จไม่ใช่ตัวกำหนดสถานะการชำระเงินของเอกสารอื่นอีกต่อไป (ดู recordTaxInvoicePayment ที่แยกออกมาต่างหากสำหรับใบแจ้งหนี้)
-   * เงื่อนไขเดียวกับใบวางบิล: ต้องผ่าน POD Review แล้ว ปิด billingStatus เป็น PAID ทันที กันไม่ให้ถูกดึงไปออกเอกสารอื่นซ้ำ
-   * (ใบเสร็จเป็นปลายทางสุดท้ายของ chain แล้ว ไม่มีเอกสารถัดไปอีก)
+   * เงื่อนไขเดียวกับใบวางบิล: ต้องผ่าน POD Review แล้ว เช็คเฉพาะ receiptDocId ของตัวเอง เป็นอิสระจาก billingNoteDocId/taxInvoiceDocId
+   * (งานที่อยู่ในใบวางบิลรวม/ใบแจ้งหนี้รวมแล้วยังรับเงินตรงจากงานขนส่งได้อีก ไม่ต้องผ่าน/แปลงจากเอกสารนั้นก่อน) ปิด receiptDocId
+   * ทันทีกันไม่ให้ถูกดึงไปออกใบเสร็จซ้ำ
    */
   function createReceiptFromBookings(bookingIds: string[], overrides?: { customer?: string; reference?: string; contactId?: string }): SalesDocument | null {
     if (bookingIds.length === 0) return null
@@ -1634,7 +1669,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (targetBookings.length !== bookingIds.length) return null
     const sameCustomer = targetBookings.every((b) => b.customer === targetBookings[0].customer)
     const allPodApproved = targetBookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
-    const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED')
+    const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && !b.receiptDocId)
     if (!sameCustomer || !allEligible || !allPodApproved) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
@@ -1690,7 +1725,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     )
     numberRegistry.registerNumber(receipt.number)
     targetBookings.forEach((b) => {
-      b.billingStatus = 'PAID'
+      b.receiptDocId = receipt.id
     })
     bookingStore.addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
     return receipt
@@ -1904,7 +1939,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return report
   }
 
-  /** ยกเลิกใบวางบิลที่ยังไม่ออกใบแจ้งหนี้ — คืนสถานะการเงินของงานขนส่งที่ผูกอยู่กลับเป็น UNBILLED แล้วลบเอกสารทิ้ง */
+  /** ยกเลิกใบวางบิลที่ยังไม่ออกใบแจ้งหนี้ — คืนสถานะงานขนส่งที่ผูกอยู่กลับเป็นว่าง (billingNoteDocId) แล้วลบเอกสารทิ้ง
+   *  ไม่แตะ taxInvoiceDocId/receiptDocId ของงานเดียวกัน (เป็นอิสระต่อกัน) */
   function cancelBillingNote(id: string) {
     const doc = documents.value.find((d) => d.id === id && d.type === 'BILLING')
     if (!doc || doc.status !== 'BILLING_PENDING') return false
@@ -1912,7 +1948,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       const bookingStore = useBookingStore()
       doc.bookingIds.forEach((bid) => {
         const b = bookingStore.bookings.find((bk) => bk.id === bid)
-        if (b && b.billingStatus === 'IN_BATCH') b.billingStatus = 'UNBILLED'
+        if (b && b.billingNoteDocId === id) b.billingNoteDocId = undefined
       })
     }
     documents.value = documents.value.filter((d) => d.id !== id)
@@ -1984,7 +2020,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return { ok: true }
   }
 
-  /** ยกเลิกใบแจ้งหนี้/ใบกำกับภาษีที่ยังไม่ส่ง (DRAFT) — คืนสถานะการเงินของงานขนส่งที่ผูกอยู่กลับเป็น UNBILLED, คืนสถานะใบวางบิลต้นทาง (ถ้ามี) กลับเป็นรอออกใบแจ้งหนี้ แล้วลบเอกสารทิ้ง */
+  /** ยกเลิกใบแจ้งหนี้/ใบกำกับภาษีที่ยังไม่ส่ง (DRAFT) — คืนสถานะงานขนส่งที่ผูกอยู่กลับเป็นว่าง (taxInvoiceDocId), คืนสถานะใบวางบิลต้นทาง
+   *  (ถ้ามี — เฉพาะกรณีสร้างผ่านเส้นทางแปลงเดิม createInvoiceFromBilling) กลับเป็นรอออกใบแจ้งหนี้ แล้วลบเอกสารทิ้ง
+   *  ไม่แตะ billingNoteDocId/receiptDocId ของงานเดียวกัน (เป็นอิสระต่อกัน) */
   function cancelTaxInvoice(id: string) {
     const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
     if (!doc || doc.status !== 'DRAFT') return false
@@ -1992,7 +2030,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       const bookingStore = useBookingStore()
       doc.bookingIds.forEach((bid) => {
         const b = bookingStore.bookings.find((bk) => bk.id === bid)
-        if (b && b.billingStatus === 'INVOICED') b.billingStatus = 'UNBILLED'
+        if (b && b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
       })
     }
     if (doc.parentDocumentId) {
@@ -2292,6 +2330,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     repairTaxInvoiceReferences,
     repairReceiptReferences,
     syncBillingReadiness,
+    backfillDocumentClaimFields,
     deleteSalesOrder,
     createBillingFromBookings,
     createTaxInvoiceFromBookings,

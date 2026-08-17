@@ -3,6 +3,10 @@ import { useBookingStore } from '@/stores/booking'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import type { Booking, BookingCategory } from '@/types'
 
+/** สถานะเอกสารทั้ง 3 ประเภท (billingNoteDocId/taxInvoiceDocId/receiptDocId) เป็นอิสระต่อกันโดยเจตนา ไม่ใช่ enum เดียวแบบ
+ *  billingStatus เดิม — ตัวกรองนี้จึงเลือกกรองได้ทีละ "ด้าน" เท่านั้น (เช่น เฉพาะยังไม่วางบิล หรือเฉพาะออกใบแจ้งหนี้แล้ว) */
+export type CompletedJobsDocClaimFilter = '' | 'BILLING_PENDING' | 'BILLING_DONE' | 'INVOICE_PENDING' | 'INVOICE_DONE' | 'RECEIPT_PENDING' | 'RECEIPT_DONE'
+
 export interface CompletedJobsFilters {
   /** ไม่ระบุ = รวมทุกกองรถ */
   fleet?: BookingCategory
@@ -11,7 +15,7 @@ export interface CompletedJobsFilters {
   dateTo: string
   customer: string
   driverName: string
-  billingStatus: string
+  docClaim: CompletedJobsDocClaimFilter
   site: string
   district: string
 }
@@ -23,7 +27,7 @@ export const defaultCompletedJobsFilters = (fleet?: BookingCategory): CompletedJ
   dateTo: '',
   customer: '',
   driverName: '',
-  billingStatus: '',
+  docClaim: '',
   site: '',
   district: '',
 })
@@ -54,7 +58,24 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
       .filter((b) => !q || matchesSearch(b, q))
       .filter((b) => !f.customer || b.customer === f.customer)
       .filter((b) => !f.driverName || b.driverName === f.driverName)
-      .filter((b) => !f.billingStatus || (b.billingStatus || 'UNBILLED') === f.billingStatus)
+      .filter((b) => {
+        switch (f.docClaim) {
+          case 'BILLING_PENDING':
+            return !b.billingNoteDocId
+          case 'BILLING_DONE':
+            return !!b.billingNoteDocId
+          case 'INVOICE_PENDING':
+            return !b.taxInvoiceDocId
+          case 'INVOICE_DONE':
+            return !!b.taxInvoiceDocId
+          case 'RECEIPT_PENDING':
+            return !b.receiptDocId
+          case 'RECEIPT_DONE':
+            return !!b.receiptDocId
+          default:
+            return true
+        }
+      })
       .filter((b) => !f.site || b.items.some((i) => i.siteName.toLowerCase().includes(f.site.trim().toLowerCase())))
       .filter((b) => !f.district || b.items.some((i) => i.district.toLowerCase().includes(f.district.trim().toLowerCase())))
       .filter((b) => {

@@ -98,9 +98,9 @@ const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
 
-/** เกณฑ์เดียวกับใบวางบิลรวม/ใบแจ้งหนี้รวม (createBillingFromBookings/createTaxInvoiceFromBookings) — DELIVERED + ยังไม่ถูกดึงเข้า
- *  รอบบิล/ออกเอกสารใดๆ เท่านั้น — ใบเสร็จรวมเส้นทางนี้ตัดตอนไปที่ RECEIPT ตรงๆ ไม่ผ่านใบวางบิล/ใบแจ้งหนี้ก่อน */
-const isUnbilledEligible = (b: Booking) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED'
+/** เช็คเฉพาะ receiptDocId ของงาน เป็นอิสระจาก billingNoteDocId/taxInvoiceDocId — งานที่วางบิลรวม/ออกใบแจ้งหนี้รวมไปแล้วยังรับเงินรวม
+ *  ตรงจากงานขนส่งได้อีก ไม่ต้องผ่าน/แปลงจากใบวางบิล/ใบแจ้งหนี้ก่อน */
+const isUnbilledEligible = (b: Booking) => b.status === 'DELIVERED' && !b.receiptDocId
 
 const eligibleCustomers = computed(() => [...new Set(bookingStore.bookings.filter(isUnbilledEligible).map((b) => b.customer))].sort())
 
