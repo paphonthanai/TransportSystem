@@ -41,3 +41,8 @@ lerna-debug.log*
 .eslintcache
 .firebase/
 *.pem
+
+# Firebase Admin SDK service account keys — never commit
+*serviceAccount*.json
+*service-account*.json
+*firebase-adminsdk*.json

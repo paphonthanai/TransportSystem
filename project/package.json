@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
     "emulators": "firebase emulators:start",
-    "deploy": "vite build && firebase deploy --only hosting"
+    "deploy": "vite build && firebase deploy --only hosting",
+    "backfill:doc-claims:dry-run": "node scripts/backfillDocumentClaimFields.js --dry-run",
+    "backfill:doc-claims:apply": "node scripts/backfillDocumentClaimFields.js --apply"
   },
   "dependencies": {
     "axios": "^1.6.5",
@@ -26,6 +28,7 @@
     "@vitejs/plugin-vue": "^5.0.0",
     "autoprefixer": "^10.4.16",
     "daisyui": "^4.4.1",
+    "firebase-admin": "^14.2.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.3.0",
