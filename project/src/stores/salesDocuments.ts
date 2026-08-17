@@ -1405,8 +1405,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const targetBookings = sortBookingsForDocumentMerge(bookingStore.bookings.filter((b) => bookingIds.includes(b.id)))
     if (targetBookings.length !== bookingIds.length) return null
     const sameCustomer = targetBookings.every((b) => b.customer === targetBookings[0].customer)
+    /** งานที่จบผ่านแอปคนขับต้องผ่านการตรวจสอบ POD ของออฟฟิศ (APPROVED) ก่อนเสมอ — ห้ามสร้างใบวางบิลตอนยัง
+     *  PENDING_REVIEW/REJECTED อยู่ (ดู finishDriverJob/reviewPod ใน stores/booking.ts) งานที่ออฟฟิศจบเอง
+     *  (completeJob) ไม่ผ่านขั้นตอนนี้ podReviewStatus จะเป็น undefined เสมอ ถือว่าผ่านแล้วโดยปริยาย */
+    const allPodApproved = targetBookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
     const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && (b.billingStatus ?? 'UNBILLED') === 'UNBILLED')
-    if (!sameCustomer || !allEligible) return null
+    if (!sameCustomer || !allEligible || !allPodApproved) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.billingList

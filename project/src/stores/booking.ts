@@ -720,7 +720,22 @@ export const useBookingStore = defineStore('booking', () => {
     booking.finalAllowance = booking.finalAllowance ?? booking.allowance
     booking.status = 'DELIVERED'
     booking.completedAt = new Date()
-    addLog(`จบงาน ${booking.docNo} (คนขับยืนยันดำเนินการเสร็จสิ้น)`, { bookingId: booking.id })
+    // งานที่จบผ่านแอปคนขับต้องรอออฟฟิศตรวจสอบ POD ก่อนเสมอ ห้ามสร้างใบวางบิลจนกว่าจะ APPROVED (ดู reviewPod ด้านล่าง + createBillingFromBookings)
+    booking.podReviewStatus = 'PENDING_REVIEW'
+    booking.podReviewNote = undefined
+    addLog(`จบงาน ${booking.docNo} (คนขับยืนยันดำเนินการเสร็จสิ้น) — รอออฟฟิศตรวจสอบ POD`, { bookingId: booking.id })
+  }
+
+  /**
+   * ออฟฟิศตรวจสอบ POD ของงานที่คนขับจบงานผ่านแอป (PENDING_REVIEW) แล้วอนุมัติ/ตีกลับ
+   * ต้อง APPROVED ก่อนถึงจะสร้างใบวางบิลได้ (ดู createBillingFromBookings ใน salesDocuments.ts)
+   */
+  function reviewPod(bookingId: string, decision: 'APPROVED' | 'REJECTED', note?: string) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
+    if (!booking || booking.podReviewStatus !== 'PENDING_REVIEW') return
+    booking.podReviewStatus = decision
+    booking.podReviewNote = note || undefined
+    addLog(`${decision === 'APPROVED' ? 'อนุมัติ' : 'ตีกลับ'} POD งาน ${booking.docNo}${note ? `: ${note}` : ''}`, { bookingId: booking.id })
   }
 
   /**
@@ -950,6 +965,7 @@ export const useBookingStore = defineStore('booking', () => {
     deliverJobItem,
     finishDriverJob,
     stripDateSuffixFromSiteNames,
+    reviewPod,
     bookingsInBatch,
     addBookingsToBatch,
     updateBatch,
