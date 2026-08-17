@@ -8,6 +8,7 @@ import { salesDocumentRepository } from '@/repositories/salesDocumentRepository'
 import { salesDocumentItemRepository } from '@/repositories/salesDocumentItemRepository'
 import { computeRowAmount, computeRowDiscountBaht, computeRowVat } from '@/utils/documentTotals'
 import { sortBookingsForDocumentMerge } from '@/utils/bookingMergeSort'
+import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
 import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
 import type { Booking, BillingStatus } from '@/types'
 
@@ -146,6 +147,13 @@ export interface SalesDocumentItem {
   /** อัตราภาษีหัก ณ ที่จ่าย (%) ของรายการนี้ ไม่มีค่า/0 = ไม่หัก */
   whtRate?: number
   sortOrder: number
+  /** ฟิลด์ต่อไปนี้มีเฉพาะรายการที่มาจากงานขนส่ง (Billing/Tax Invoice ที่สร้างจาก Booking โดยตรง) ใช้แสดงตารางแบบราย
+   *  เที่ยวบนเอกสารพิมพ์ ให้ตรงกับฟอร์แมตเอกสารจริงของบริษัท (คอลัมน์ วันที่ส่ง/ทะเบียนรถ/อ้างถึงเอกสาร/ใบขนส่ง) —
+   *  เอกสารที่กรอกเอง/มาจากใบเสนอราคาจะไม่มีค่าเหล่านี้ (undefined) และตกกลับไปใช้ตารางแบบเดิม */
+  shipDate?: Date
+  plate?: string
+  referenceDoc?: string
+  deliveryNo?: string
 }
 
 /** ค่าที่แก้ไขได้ก่อนสร้างจริง ตอนแปลงใบเสนอราคาเป็นเอกสารอื่น (ดูหน้า QuotationConvertView.vue) */
@@ -804,7 +812,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       const hasSalesOrder = documents.value.some((d) => d.type === 'SALES_ORDER' && d.bookingIds.includes(booking.id))
       if (hasSalesOrder) return
       const amount = booking.agreedPrice || booking.tripFee || 0
-      const productSiteLines = booking.items.map((i) => `${i.product} — ${i.siteName}`).join('\n') || '-'
       const salesOrder = createSalesOrderForBooking({
         bookingId: booking.id,
         customer: booking.customer,
@@ -812,7 +819,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         reference: booking.po,
         items: [
           {
-            description: productSiteLines,
+            description: salesOrderLineDescription(booking.items),
             qty: 1,
             unit: 'เที่ยว',
             unitPrice: amount,
@@ -828,6 +835,89 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       created++
     })
     return created
+  }
+
+  /**
+   * ซ่อมข้อความรายการ (description) + ฟิลด์รายเที่ยว (shipDate/plate/referenceDoc/deliveryNo) ของใบสั่งสินค้า/ใบวางบิล/
+   * ใบแจ้งหนี้ที่สร้างจากงานขนส่งไว้ก่อนรอบปรับฟอร์แมตล่าสุด (มีทั้งฟอร์แมตเก่าสุด "docNo · ปลายทาง - วันที่" และ
+   * ฟอร์แมตกลาง "ค่าขนส่ง ปลายทาง ( สินค้า )" ที่มีวันที่/คำนำหน้าปนอยู่ในข้อความ ไม่ตรงกับ Requirement ปัจจุบันที่ต้องการ
+   * แค่ "ปลายทาง — สินค้า" ไม่มีวันที่) — คำนวณข้อความใหม่จาก Booking ต้นทางจริงเสมอ (ผ่าน bookingIds ที่เอกสารเก็บไว้
+   * อยู่แล้ว) ไม่เดา ไม่สร้างข้อมูลใหม่ ใช้ tripDescription/salesOrderLineDescription ตัวเดียวกับที่สร้างเอกสารใหม่ทุกวันนี้
+   *
+   * ข้าม (ไม่แตะ) เอกสารที่จำนวนรายการไม่ตรงกับจำนวน Booking ที่ผูกไว้ — กรณีนี้คือใบวางบิล/ใบแจ้งหนี้รวมฟอร์แมตเก่าที่สุด
+   * ที่กระชับเหลือ 1 บรรทัดสรุปสำหรับหลาย Booking (เช่น "รายการขนส่งสินค้าห้วงระหว่างวันที่...") การแยกกลับเป็นหลายบรรทัด
+   * ต้องเปลี่ยนโครงสร้างเอกสาร (จำนวนแถว) ซึ่งเป็นคนละเรื่องกับการซ่อมข้อความ จึงข้ามไปอย่างปลอดภัยแทนการเดาโครงสร้างใหม่
+   *
+   * Idempotent: รันซ้ำได้เสมอ ไม่มีผลข้างเคียง — ข้อความ/ฟิลด์ที่ตรงกับของใหม่อยู่แล้วจะไม่ถูกนับว่า "แก้"
+   */
+  function backfillBookingItemDescriptions(): {
+    notReady?: boolean
+    checked: number
+    updated: number
+    skipped: { documentNumber: string; reason: string }[]
+  } {
+    const bookingStore = useBookingStore()
+    const candidates = documents.value.filter(
+      (d) => (d.type === 'SALES_ORDER' || d.type === 'BILLING' || d.type === 'TAX_INVOICE') && d.bookingIds.length > 0
+    )
+    const report = { checked: 0, updated: 0, skipped: [] as { documentNumber: string; reason: string }[] }
+    /** bookingStore โหลดจาก Firestore แบบ async แยกอิสระจาก salesDocumentsStore — ถ้าเพิ่งเข้าหน้ามาสดๆ (hard reload)
+     *  แล้วเรียกฟังก์ชันนี้ทันที bookings อาจยังว่างเปล่าอยู่ ทำให้ทุกใบดูเหมือน "หา Booking ต้นทางไม่ครบ" ทั้งที่จริงๆ
+     *  มี booking อยู่ครบ (เหมือน backfillBillingVatFromBookings ด้านล่าง) — กันเข้าใจผิด ไม่ตรวจ/ไม่แก้อะไรเลยถ้ายังไม่พร้อม */
+    if (candidates.length > 0 && bookingStore.bookings.length === 0) {
+      return { ...report, notReady: true }
+    }
+
+    candidates.forEach((doc) => {
+      const docItems = itemsForDocument(doc.id)
+      if (docItems.length !== doc.bookingIds.length) {
+        report.skipped.push({ documentNumber: doc.number, reason: 'จำนวนรายการไม่ตรงกับจำนวนงานขนส่ง (ฟอร์แมตสรุปเดียวเก่า) ข้ามเพื่อความปลอดภัย' })
+        return
+      }
+      const targetBookings = doc.bookingIds.map((id) => bookingStore.bookings.find((b) => b.id === id))
+      if (targetBookings.some((b) => !b)) {
+        report.skipped.push({ documentNumber: doc.number, reason: 'หา Booking ต้นทางไม่ครบ (บางงานถูกลบไปแล้ว)' })
+        return
+      }
+      report.checked++
+      let changed = false
+      docItems.forEach((item, idx) => {
+        const booking = targetBookings[idx] as Booking
+        if (doc.type === 'SALES_ORDER') {
+          const newDesc = salesOrderLineDescription(booking.items)
+          if (item.description !== newDesc) {
+            item.description = newDesc
+            changed = true
+          }
+        } else {
+          const newDesc = tripDescription(booking)
+          if (item.description !== newDesc) {
+            item.description = newDesc
+            changed = true
+          }
+          if (item.shipDate === undefined && booking.shipDate) {
+            item.shipDate = booking.shipDate
+            changed = true
+          }
+          if (item.plate === undefined && booking.plate) {
+            item.plate = booking.plate
+            changed = true
+          }
+          if (item.referenceDoc === undefined) {
+            item.referenceDoc = bookingReferenceDoc(booking)
+            changed = true
+          }
+          if (item.deliveryNo === undefined) {
+            item.deliveryNo = booking.docNo
+            changed = true
+          }
+        }
+      })
+      if (changed) report.updated++
+    })
+
+    if (report.updated) bookingStore.addLog(`ซ่อมข้อความรายการเอกสารเก่า ${report.updated} ใบ (ตามฟอร์แมตล่าสุด)`)
+    return report
   }
 
   /**
@@ -1265,7 +1355,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   /**
    * สร้างใบวางบิล (เดี่ยวหรือรวม) จากงานขนส่งที่ "ส่งเสร็จแล้ว" (DELIVERED) โดยตรง — ไม่ผ่านใบเสนอราคาเลย
    * ต้องเป็นลูกค้าเดียวกันทุกงาน และยังไม่เคยถูกวางบิลมาก่อน (billingStatus ยังเป็น UNBILLED) มิฉะนั้นคืนค่า null
-   * แสดงผลเป็นบรรทัดสรุปเดียว ("รายการขนส่งสินค้าห้วงระหว่างวันที่ ...") ไม่กาง Booking ทีละรายการเต็มเอกสาร
+   * แสดงผลเป็นตารางราย 1 บรรทัดต่อ 1 เที่ยว ให้ตรงกับฟอร์แมตเอกสารวางบิลจริงของบริษัท (ดู tripDescription/bookingReferenceDoc)
    * (เหมือน createTaxInvoiceFromBookings) — Booking ยังเป็น Source of Truth เหมือนเดิม (bookingIds เก็บครบ trace ได้)
    */
   /** แถวคำนวณเงินของ 1 booking ป้อนเข้า computeRowDiscountBaht/computeRowAmount/computeRowVat (documentTotals.ts) ตัวเดียวกับที่
@@ -1282,6 +1372,33 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
   }
 
+  /** ใช้เลขที่เอกสารใบสั่งสินค้าต้นทาง (booking.sourceDocumentId) เป็นเลขที่อ้างอิง ไม่ใช่ docNo ของ Booking ตรงๆ —
+   *  เพื่อให้ "เลขที่อ้างอิงเอกสาร" ที่พิมพ์บนใบวางบิล/ใบแจ้งหนี้ ชี้กลับไปเอกสารขั้นก่อนหน้าจริงๆ ตาม Document Flow
+   *  ถ้างานไหนไม่มีใบสั่งสินค้าผูกอยู่ (เช่นยังไม่ได้ซิงก์) ใช้ docNo เป็น fallback เหมือนเดิม */
+  function bookingReferenceDoc(b: Booking): string {
+    const salesOrder = b.sourceDocumentId ? documents.value.find((d) => d.type === 'SALES_ORDER' && d.id === b.sourceDocumentId) : undefined
+    return salesOrder?.number || b.docNo
+  }
+
+  /** คำอธิบายราย 1 เที่ยว รูปแบบ "{ปลายทาง} — {สินค้า}" ตาม Requirement ล่าสุด (เช่น "หน้างาน A — M1") ไม่มีคำนำหน้า/
+   *  วงเล็บ/วันที่ในข้อความ — หลายปลายทางในงานเดียวย่อเป็น "+N ที่อื่น" เหมือนที่อื่นในระบบ */
+  function tripDescription(b: Booking): string {
+    if (!b.items.length) return '-'
+    const dest = b.items.length > 1 ? `${b.items[0].siteName} +${b.items.length - 1} ที่อื่น` : b.items[0].siteName
+    const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+    return products ? `${dest} — ${products}` : dest
+  }
+
+  /** วันที่แบบย่อ วว/ดด/ปป (พ.ศ. 2 หลัก) ใช้ประกอบ "รายละเอียดเอกสาร" ของใบวางบิล/ใบแจ้งหนี้รวม เช่น "14/08/69" —
+   *  รูปแบบเดียวกับ formatDateShort ใน InvoiceDocumentView.vue (คอลัมน์วันที่ส่งในตารางรายเที่ยว) */
+  function shortDateLabel(date: Date): string {
+    const d = new Date(date)
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const yy = String((d.getFullYear() + 543) % 100).padStart(2, '0')
+    return `${dd}/${mm}/${yy}`
+  }
+
   function createBillingFromBookings(bookingIds: string[], overrides?: { customer?: string; reference?: string; contactId?: string }): SalesDocument | null {
     if (bookingIds.length === 0) return null
     const bookingStore = useBookingStore()
@@ -1295,14 +1412,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const numbering = documentSettingsStore.settings.numbering.billingList
     const seq = bookingStore.batches.length + documents.value.filter((d) => d.type === 'BILLING').length + 1
     const customer = overrides?.customer?.trim() || targetBookings[0].customer
-    /** ใช้เลขที่เอกสารใบสั่งสินค้าต้นทาง (booking.sourceDocumentId) เป็นเลขที่อ้างอิง ไม่ใช่ docNo ของ Booking ตรงๆ —
-     *  เพื่อให้ "เลขที่อ้างอิงเอกสาร" ที่พิมพ์บนใบวางบิล ชี้กลับไปเอกสารขั้นก่อนหน้าจริงๆ ตาม Document Flow
-     *  ถ้างานไหนไม่มีใบสั่งสินค้าผูกอยู่ (เช่นยังไม่ได้ซิงก์) ใช้ docNo เป็น fallback เหมือนเดิม */
-    const referenceFor = (b: (typeof targetBookings)[number]) => {
-      const salesOrder = b.sourceDocumentId ? documents.value.find((d) => d.type === 'SALES_ORDER' && d.id === b.sourceDocumentId) : undefined
-      return salesOrder?.number || b.docNo
-    }
-    const reference = overrides?.reference ?? targetBookings.map(referenceFor).join(', ')
+    const reference = overrides?.reference ?? targetBookings.map(bookingReferenceDoc).join(', ')
     const dateFrom = targetBookings[0].shipDate || targetBookings[0].createdAt
     const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].createdAt
     const discountTotal = Math.round(targetBookings.reduce((sum, b) => sum + computeRowDiscountBaht(bookingBillingRow(b)), 0))
@@ -1327,24 +1437,33 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       dateFrom,
       dateTo,
       reference,
+      /** รายละเอียดเอกสารระดับหัว (แยกจากตารางรายเที่ยวด้านล่าง) — สรุปห้วงวันที่ + จำนวนเที่ยวของ Booking ที่เลือกจริง */
+      description: `รายการขนส่งสินค้าห้วงระหว่างวันที่ ${shortDateLabel(dateFrom)} - ${shortDateLabel(dateTo)} จำนวน ${targetBookings.length} เที่ยว`,
       createdAt: now,
     }
     Object.assign(billing, resolveContactSnapshot(customer, overrides?.contactId))
     documents.value.unshift(billing)
-    /** บรรทัดสรุปเดียว "รายการขนส่งสินค้าห้วงระหว่างวันที่ ... " แทนที่การกาง 1 booking ต่อ 1 บรรทัดแบบเดิม (เหมือน
-     *  createTaxInvoiceFromBookings) — Booking ยังเป็น Source of Truth เหมือนเดิม (bookingIds เก็บ id งานจริงทุก
-     *  รายการไว้ครบ trace ย้อนกลับได้ ดู Source Chain บนเอกสาร) */
-    addItemsToDocument(billing.id, [
-      {
-        description: `รายการขนส่งสินค้าห้วงระหว่างวันที่ ${thaiDateRangeLabel(dateFrom, dateTo)}`,
-        qty: targetBookings.length,
+    /** ตารางรายการแบบราย 1 บรรทัดต่อ 1 เที่ยว (ไม่ใช่บรรทัดสรุปเดียวแบบเดิม) ให้ตรงกับฟอร์แมตเอกสารวางบิลจริงของบริษัท
+     *  (อ้างอิงเอกสารตัวอย่างที่แนบมา — คอลัมน์ #/วันที่ส่ง/ทะเบียนรถ/อ้างถึงเอกสาร/ใบขนส่ง/รายการ/จำนวน/หน่วยละ/จำนวนเงิน)
+     *  Booking ยังเป็น Source of Truth เหมือนเดิม (bookingIds เก็บ id งานจริงทุกรายการไว้ครบ trace ย้อนกลับได้) */
+    addItemsToDocument(
+      billing.id,
+      targetBookings.map((b) => ({
+        description: tripDescription(b),
+        qty: 1,
         unit: 'เที่ยว',
-        unitPrice: targetBookings.length ? Math.round(amount / targetBookings.length) : 0,
-        amount,
-        // ต้องใส่ vatRate ระดับบรรทัดด้วย ไม่ใช่แค่ระดับเอกสาร (เหตุผลเดียวกับ createTaxInvoiceFromBookings — ดูคอมเมนต์ที่นั่น)
-        vatRate,
-      },
-    ])
+        unitPrice: bookingBillingRow(b).unitPrice,
+        amount: computeRowAmount(bookingBillingRow(b)),
+        discountMode: b.discountMode,
+        discountPercent: b.discountPercent,
+        discountAmount: b.discountAmount,
+        vatRate: b.vatRate,
+        shipDate: b.shipDate,
+        plate: b.plate,
+        referenceDoc: bookingReferenceDoc(b),
+        deliveryNo: b.docNo,
+      }))
+    )
     targetBookings.forEach((b) => {
       b.billingStatus = 'IN_BATCH'
     })
@@ -1352,26 +1471,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return billing
   }
 
-  /** ช่วงวันที่แบบไทยสั้นๆ สำหรับบรรทัดสรุปใบแจ้งหนี้รวม เช่น "01–15 สิงหาคม 2569" (เดือน/ปีเดียวกัน) หรือ
-   *  "28 ก.ค. – 3 ส.ค. 2569" (คนละเดือน) — ใช้แค่ประกอบข้อความ ไม่ใช่ค่าที่เก็บจริง */
-  function thaiDateRangeLabel(from: Date, to: Date): string {
-    const f = new Date(from)
-    const t = new Date(to)
-    const thaiYear = t.getFullYear() + 543
-    const sameMonth = f.getFullYear() === t.getFullYear() && f.getMonth() === t.getMonth()
-    if (sameMonth) {
-      const monthLabel = t.toLocaleDateString('th-TH', { month: 'long' })
-      return `${f.getDate()}–${t.getDate()} ${monthLabel} ${thaiYear}`
-    }
-    const fromLabel = f.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
-    const toLabel = t.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
-    return `${fromLabel} – ${toLabel}`
-  }
-
   /**
    * สร้างใบแจ้งหนี้/ใบกำกับภาษีแบบรวมตรงจากงานขนส่งที่เลือก (Phase 3) — คู่กับ createBillingFromBookings แต่ต่างกันที่
-   * แสดงผลเป็นบรรทัดสรุปเดียว ("ค่าขนส่งสินค้า ช่วงวันที่ ... จำนวน N เที่ยว") ไม่กาง Booking ทีละรายการเต็มเอกสาร
-   * ตามสเปก — Booking ยังเป็น Source of Truth เหมือนเดิม (bookingIds เก็บ id งานจริงทุกรายการไว้ครบ trace ย้อนกลับได้)
+   * เป็นใบแจ้งหนี้ (มี dueDate/creditDays) — แสดงผลเป็นตารางราย 1 บรรทัดต่อ 1 เที่ยวเหมือนใบวางบิล ให้ตรงกับเอกสาร
+   * ตัวอย่างจริงที่แนบมา — Booking ยังเป็น Source of Truth เหมือนเดิม (bookingIds เก็บ id งานจริงทุกรายการไว้ครบ trace ย้อนกลับได้)
    * เรียงงานก่อนคำนวณด้วย sortBookingsForDocumentMerge ตัวเดียวกับใบวางบิล (Phase 2 ข้อ 4)
    */
   function createTaxInvoiceFromBookings(
@@ -1399,9 +1502,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const creditDays = overrides?.creditDays ?? 30
     const dueDate = new Date(issueDate)
     dueDate.setDate(dueDate.getDate() + creditDays)
+    const reference = overrides?.reference ?? targetBookings.map(bookingReferenceDoc).join(', ')
     const dateFrom = targetBookings[0].shipDate || targetBookings[0].createdAt
     const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].createdAt
-    const reference = overrides?.reference ?? targetBookings.map((b) => b.docNo).join(', ')
 
     const invoice: SalesDocument = {
       id: genId('sdoc'),
@@ -1418,23 +1521,33 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       creditDays,
       dueDate,
       reference,
+      /** รายละเอียดเอกสารระดับหัว (แยกจากตารางรายเที่ยวด้านล่าง) — สรุปห้วงวันที่ + จำนวนเที่ยวของ Booking ที่เลือกจริง */
+      description: `รายการขนส่งสินค้าห้วงระหว่างวันที่ ${shortDateLabel(dateFrom)} - ${shortDateLabel(dateTo)} จำนวน ${targetBookings.length} เที่ยว`,
       createdAt: issueDate,
     }
     Object.assign(invoice, resolveContactSnapshot(customer, overrides?.contactId))
     documents.value.unshift(invoice)
-    addItemsToDocument(invoice.id, [
-      {
-        description: `ค่าขนส่งสินค้า ช่วงวันที่ ${thaiDateRangeLabel(dateFrom, dateTo)}`,
-        qty: targetBookings.length,
+    /** ตารางรายการแบบราย 1 บรรทัดต่อ 1 เที่ยว (เหมือน createBillingFromBookings) ให้ตรงกับฟอร์แมตเอกสารจริงของบริษัท
+     *  แต่ละบรรทัดต้องใส่ vatRate เองด้วย ไม่ใช่แค่ระดับเอกสาร — หน้าพิมพ์เอกสารแยกยอด "มูลค่าที่ไม่มี/ยกเว้นภาษี" กับ
+     *  "มูลค่าที่คำนวณภาษี" จาก vatRate ของแต่ละบรรทัดโดยตรง (ดู InvoiceDocumentView.vue exemptAmount/taxableAmount) */
+    addItemsToDocument(
+      invoice.id,
+      targetBookings.map((b) => ({
+        description: tripDescription(b),
+        qty: 1,
         unit: 'เที่ยว',
-        unitPrice: targetBookings.length ? Math.round(amount / targetBookings.length) : 0,
-        amount,
-        // ต้องใส่ vatRate ระดับบรรทัดด้วย ไม่ใช่แค่ระดับเอกสาร — หน้าพิมพ์เอกสารแยกยอด "มูลค่าที่ไม่มี/ยกเว้นภาษี" กับ
-        // "มูลค่าที่คำนวณภาษี" จาก vatRate ของแต่ละบรรทัดโดยตรง (ดู InvoiceDocumentView.vue exemptAmount/taxableAmount)
-        // ถ้าไม่ใส่ตรงนี้ บรรทัดสรุปนี้จะถูกนับเป็น "ยกเว้นภาษี" เต็มจำนวนทั้งที่ VAT ถูกคำนวณจริงแล้วระดับเอกสาร
-        vatRate,
-      },
-    ])
+        unitPrice: bookingBillingRow(b).unitPrice,
+        amount: computeRowAmount(bookingBillingRow(b)),
+        discountMode: b.discountMode,
+        discountPercent: b.discountPercent,
+        discountAmount: b.discountAmount,
+        vatRate: b.vatRate,
+        shipDate: b.shipDate,
+        plate: b.plate,
+        referenceDoc: bookingReferenceDoc(b),
+        deliveryNo: b.docNo,
+      }))
+    )
     targetBookings.forEach((b) => {
       b.billingStatus = 'INVOICED'
     })
@@ -1831,16 +1944,32 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return { amount, discountTotal, vatRate, vatAmount, whtAmount, bookingIds, warnings }
   }
 
+  /**
+   * แตกรายการใบเสร็จเป็นราย 1 บรรทัดต่อ 1 เที่ยว (ไม่ใช่ 1 บรรทัดต่อ 1 เอกสารต้นทางแบบเดิม) โดยคัดลอกรายการจริงของ
+   * เอกสารต้นทาง (Billing/Tax Invoice) มาตรงๆ ผ่าน itemsForDocument — รายการที่มี shipDate/plate/referenceDoc/
+   * deliveryNo อยู่แล้ว (สร้างจากงานขนส่งโดยตรง) จะติดมาด้วยเป๊ะ ทำให้ใบเสร็จใช้ตารางรายเที่ยวแบบเดียวกับใบวางบิลได้จริง
+   * (ไม่ใช่แค่โครงสร้างโค้ดรองรับเฉยๆ) — ยอดรวม/VAT/ส่วนลด/หัก ณ ที่จ่ายระดับเอกสารยังคงคำนวณจาก buildReceiptTotalsFromSourceDocs
+   * เหมือนเดิมทุกประการ (อิงจากฟิลด์ระดับเอกสารของต้นทาง ไม่ได้อิงจากผลรวมรายการพวกนี้) ไม่กระทบกัน
+   * เอกสารต้นทางที่ไม่มีรายการเลย (กรณีข้อมูลผิดปกติ) fallback เป็นบรรทัดสรุป 1 บรรทัดแบบเดิม กันใบเสร็จว่างเปล่า
+   */
   function receiptItemRowsFromSourceDocs(targetDocs: SalesDocument[]): Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>> {
-    return targetDocs.map((d) => ({
-      description: `${d.type === 'BILLING' ? 'ใบวางบิล' : 'ใบแจ้งหนี้'} ${d.number}`,
-      qty: 1,
-      unit: 'รายการ',
-      unitPrice: d.amount,
-      amount: d.amount,
-      vatRate: d.amount ? Math.round(((d.vatAmount || 0) / d.amount) * 10000) / 100 : 0,
-      whtRate: d.amount ? Math.round(((d.whtAmount || 0) / d.amount) * 10000) / 100 : 0,
-    }))
+    return targetDocs.flatMap((d) => {
+      const sourceItems = itemsForDocument(d.id)
+      if (sourceItems.length === 0) {
+        return [
+          {
+            description: `${d.type === 'BILLING' ? 'ใบวางบิล' : 'ใบแจ้งหนี้'} ${d.number}`,
+            qty: 1,
+            unit: 'รายการ',
+            unitPrice: d.amount,
+            amount: d.amount,
+            vatRate: d.amount ? Math.round(((d.vatAmount || 0) / d.amount) * 10000) / 100 : 0,
+            whtRate: d.amount ? Math.round(((d.whtAmount || 0) / d.amount) * 10000) / 100 : 0,
+          },
+        ]
+      }
+      return sourceItems.map(({ id, documentId, sortOrder, ...rest }) => rest)
+    })
   }
 
   /** เอกสารสถานะ "ยังเรียกเก็บได้อยู่" ตามชนิด — ใบแจ้งหนี้คือยังไม่ PAID, ใบวางบิลคือยังไม่ถูกแปลงไปเป็นใบแจ้งหนี้/ใบเสร็จอื่น (BILLING_PENDING เท่านั้น) */
@@ -2059,6 +2188,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     convertQuotationToPurchaseOrder,
     createSalesOrderForBooking,
     backfillMissingSalesOrders,
+    backfillBookingItemDescriptions,
     repairSalesOrderVat,
     repairTaxInvoiceReferences,
     repairReceiptReferences,

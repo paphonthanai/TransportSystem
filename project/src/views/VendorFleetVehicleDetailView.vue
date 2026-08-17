@@ -7,6 +7,10 @@
       </button>
       <h2 class="text-lg font-bold text-text flex-1">{{ vehicle ? vehiclesStore.fullPlate(vehicle) : 'รายละเอียดรถร่วม' }}</h2>
       <input v-model="period" type="month" class="input-field" />
+      <button v-if="vehicle" @click="router.push({ path: `/payroll/vendor-fleet/${vehicle.id}/print`, query: { period } })" class="btn-secondary">
+        <span class="material-symbols-rounded text-base">receipt_long</span>
+        สร้างเอกสารรายได้รถ
+      </button>
     </div>
 
     <div v-if="!vehicle" class="card-lg text-center text-muted py-10">ไม่พบข้อมูลรถคันนี้</div>

@@ -723,6 +723,30 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`จบงาน ${booking.docNo} (คนขับยืนยันดำเนินการเสร็จสิ้น)`, { bookingId: booking.id })
   }
 
+  /**
+   * ซ่อมข้อมูลเก่า: ตัดวันที่/เวลาที่ปนอยู่ท้ายชื่อหน้างาน (siteName) ออก — เกิดจากข้อมูลทดสอบ Regression ยุคแรกๆ ที่พิมพ์
+   * วันที่/เวลากำกับต่อท้ายชื่อไว้ตรงๆ เช่น "Site A (14/08 08:00)" หรือ "Site D (20/08)" ทำให้เอกสารที่พิมพ์ชื่อหน้างาน
+   * (ใบสั่งสินค้า/ใบวางบิล/ใบแจ้งหนี้) มีวันที่ปนอยู่ในข้อความรายการทั้งที่ Requirement ปัจจุบันไม่ต้องการให้มี
+   * ตัด Pattern เฉพาะ "(D/M)" หรือ "(D/M H:mm)" ท้ายชื่อเท่านั้น (regex เจาะจง ไม่ตัดวงเล็บอื่นที่ไม่ใช่รูปแบบวันที่ เช่น
+   * "คลังสินค้า (สาขา 2)" จะไม่โดนตัด) — ไม่แตะชื่อหน้างานที่ไม่มี pattern นี้เลย ไม่เดา ไม่สร้างชื่อใหม่
+   * หลังรันควรตามด้วย salesDocumentsStore.backfillBookingItemDescriptions() เพื่อให้เอกสารที่เคยพิมพ์ชื่อนี้ไปแล้ว
+   * (ก่อนรอบซ่อมนี้) อัปเดตข้อความให้ตรงกับชื่อหน้างานที่สะอาดแล้วด้วย — Idempotent รันซ้ำได้ปลอดภัย
+   */
+  function stripDateSuffixFromSiteNames(): { checkedBookings: number; updatedItems: number } {
+    const dateSuffixPattern = /\s*\(\d{1,2}\/\d{1,2}(?:\s+\d{1,2}:\d{2})?\)\s*$/
+    let updatedItems = 0
+    bookings.value.forEach((booking) => {
+      booking.items.forEach((item) => {
+        if (dateSuffixPattern.test(item.siteName)) {
+          item.siteName = item.siteName.replace(dateSuffixPattern, '').trim()
+          updatedItems++
+        }
+      })
+    })
+    if (updatedItems) addLog(`ซ่อมชื่อหน้างานที่มีวันที่/เวลาปนอยู่ ${updatedItems} รายการ`)
+    return { checkedBookings: bookings.value.length, updatedItems }
+  }
+
   // --- Billing batch flow ---
   // หมายเหตุ: รอบบิลไม่ถูกสร้าง/เติมงานอัตโนมัติอีกต่อไป — ผู้ใช้ต้องเลือกงาน UNBILLED เองที่หน้าใบวางบิลแล้วกด "รวมเข้ารอบบิล" (ดู addBookingsToBatch)
 
@@ -925,6 +949,7 @@ export const useBookingStore = defineStore('booking', () => {
     completeJob,
     deliverJobItem,
     finishDriverJob,
+    stripDateSuffixFromSiteNames,
     bookingsInBatch,
     addBookingsToBatch,
     updateBatch,

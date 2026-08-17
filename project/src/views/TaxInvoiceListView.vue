@@ -3,38 +3,26 @@
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xs text-muted">ใบแจ้งหนี้/ใบกำกับภาษี &gt; {{ statusFilterLabel }}</div>
       <div class="flex items-center gap-2">
-        <button
-          @click="syncMissingSalesOrders"
-          class="btn-secondary"
-          title="สร้างใบสั่งสินค้าให้กับงานขนส่งที่ยังไม่มีใบสั่งสินค้าผูกอยู่ — เอกสารขั้นก่อนหน้าต้องครบก่อนออกใบแจ้งหนี้/ใบกำกับภาษีได้"
-        >
-          <span class="material-symbols-rounded text-base">sync</span>
-          ซิงก์เอกสารที่ขาดหาย
-        </button>
-        <button
-          @click="syncBillingReadiness"
-          class="btn-secondary"
-          title="ซ่อมสถานะวางบิลที่ค้างจากระบบเดิม ให้งานที่ส่งของสำเร็จแล้วสามารถเดินเอกสารต่อได้ตามปกติ โดยไม่ต้อง Reset งาน"
-        >
-          <span class="material-symbols-rounded text-base">sync_alt</span>
-          ซิงก์ข้อมูล/เอกสารก่อนหน้า
-        </button>
-        <button
-          @click="syncInvoiceReferences"
-          class="btn-secondary"
-          title="ซ่อมความสัมพันธ์ใบวางบิล → ใบแจ้งหนี้/ใบกำกับภาษี — เติม reference ที่ขาดโดยจับคู่กับเลขที่ใบวางบิลต้นทางที่บันทึกไว้"
-        >
-          <span class="material-symbols-rounded text-base">link</span>
-          ซิงก์ความสัมพันธ์ใบวางบิล
-        </button>
-        <button @click="router.push('/tax-invoices/new-merged')" class="btn-secondary" title="รวมงานขนส่งหลายเที่ยวของลูกค้ารายเดียวกันเป็นใบแจ้งหนี้ฉบับเดียว">
-          <span class="material-symbols-rounded text-base">call_merge</span>
-          สร้างใบแจ้งหนี้รวม
-        </button>
-        <button @click="router.push('/tax-invoices/new')" class="btn-primary">
-          <span class="material-symbols-rounded text-base">add</span>
-          สร้างใหม่
-        </button>
+        <!-- ปุ่ม Sync (ซิงก์เอกสารที่ขาดหาย/ซิงก์ข้อมูลก่อนหน้า/ซิงก์ความสัมพันธ์ใบวางบิล) ซ่อนจาก UI ตาม requirement — ฟังก์ชันเบื้องหลัง
+             (syncMissingSalesOrders/syncBillingReadiness/syncInvoiceReferences) ยังอยู่ครบ ไม่ได้ลบ ไม่มี auto-trigger ที่ไหน
+             เรียกเฉพาะตอนกดปุ่มเหล่านี้เท่านั้น (ตรวจแล้วก่อนซ่อน) -->
+        <div class="relative">
+          <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
+            <span class="material-symbols-rounded text-base">add</span>
+            สร้างใบแจ้งหนี้
+            <span class="material-symbols-rounded text-base">expand_more</span>
+          </button>
+          <div v-if="createMenuOpen" v-click-outside="() => (createMenuOpen = false)" class="absolute right-0 top-full mt-1 w-52 bg-surface border border-border rounded-lg shadow-lg py-1 z-20">
+            <button @click="createMenuOpen = false; router.push('/tax-invoices/new')" class="menu-item">
+              <span class="material-symbols-rounded text-base">description</span>
+              สร้างใบแจ้งหนี้
+            </button>
+            <button @click="createMenuOpen = false; router.push('/tax-invoices/new-merged')" class="menu-item">
+              <span class="material-symbols-rounded text-base">call_merge</span>
+              สร้างใบแจ้งหนี้รวม
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -191,6 +179,20 @@ const syncInvoiceReferences = () => {
   alert(lines.join('\n'))
 }
 
+/** เมนูเลือก "สร้างใบแจ้งหนี้" (เดี่ยว) / "สร้างใบแจ้งหนี้รวม" — รวมปุ่มสร้างเป็นกลุ่มเดียว (เหมือน BillingListView.vue) */
+const createMenuOpen = ref(false)
+const vClickOutside = {
+  mounted(el: HTMLElement & { _clickOutside?: (e: MouseEvent) => void }, binding: { value: () => void }) {
+    el._clickOutside = (e: MouseEvent) => {
+      if (!el.contains(e.target as Node)) binding.value()
+    }
+    document.addEventListener('click', el._clickOutside, true)
+  },
+  unmounted(el: HTMLElement & { _clickOutside?: (e: MouseEvent) => void }) {
+    if (el._clickOutside) document.removeEventListener('click', el._clickOutside, true)
+  },
+}
+
 const allInvoices = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE'))
 
 const filteredDocs = computed(() =>
@@ -287,5 +289,9 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 
 .page-btn {
   @apply w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed;
+}
+
+.menu-item {
+  @apply w-full flex items-center gap-2 px-3 py-2 text-sm text-text hover:bg-surface-2 cursor-pointer text-left;
 }
 </style>

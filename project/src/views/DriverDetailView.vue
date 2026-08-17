@@ -7,6 +7,10 @@
       </button>
       <h2 class="text-lg font-bold text-text flex-1">{{ driver ? driversStore.fullName(driver) : 'รายละเอียดพนักงานขับรถ' }}</h2>
       <input v-model="period" type="month" class="input-field" />
+      <button v-if="driver" @click="router.push({ path: `/settings/drivers/${driver.id}/print`, query: { period } })" class="btn-secondary">
+        <span class="material-symbols-rounded text-base">receipt_long</span>
+        สร้างเอกสารรายได้
+      </button>
     </div>
 
     <div v-if="!driver" class="card-lg text-center text-muted py-10">ไม่พบข้อมูลคนขับ</div>

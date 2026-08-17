@@ -11,7 +11,6 @@
       </button>
       <div>
         <div class="font-bold text-text text-lg">แก้ไขงาน {{ target.docNo }}</div>
-        <div class="text-xs text-muted">แก้ไขได้ทุกสถานะงาน ไม่จำกัดสิทธิ์ ใช้ฟอร์มเดียวกับตอนสร้างงาน</div>
       </div>
     </div>
 

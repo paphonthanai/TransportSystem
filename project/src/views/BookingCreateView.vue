@@ -347,6 +347,7 @@ import { parseGpsInput } from '@/utils/gps'
 import JobItemEditorModal, { type JobItemDraft } from '@/components/booking/JobItemEditorModal.vue'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import { computeRowAmount, computeRowVat, computeRowDiscountBaht } from '@/utils/documentTotals'
+import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
 
 const props = defineProps<{ fleet: BookingCategory }>()
 
@@ -705,7 +706,7 @@ const saveAllItems = () => {
     contactId: header.value.contactId,
     items: [
       {
-        description: lineItems.value.map((i) => `${i.product} — ${i.siteName}`).join('\n'),
+        description: salesOrderLineDescription(lineItems.value),
         qty: 1,
         unit: 'เที่ยว',
         unitPrice: resolvedTripFee.value,

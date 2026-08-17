@@ -33,6 +33,7 @@
             <th class="px-4 py-3 font-semibold text-right">รายการหักรวม</th>
             <th class="px-4 py-3 font-semibold text-right">รายได้สุทธิ</th>
             <th class="px-4 py-3 font-semibold">สถานะจ่าย</th>
+            <th class="px-4 py-3 font-semibold"></th>
           </tr>
         </thead>
         <tbody>
@@ -56,9 +57,21 @@
                 <option value="PAID">จ่ายแล้ว</option>
               </select>
             </td>
+            <td class="px-4 py-3 text-right">
+              <button
+                v-if="driverIdFor(row.driver)"
+                @click="router.push({ path: `/settings/drivers/${driverIdFor(row.driver)}/print`, query: { period } })"
+                class="btn-sm"
+                title="สร้างเอกสารรายได้"
+              >
+                <span class="material-symbols-rounded text-sm">receipt_long</span>
+                สร้างเอกสาร
+              </button>
+              <span v-else class="text-xs text-muted" title="ไม่พบทะเบียนคนขับนี้ในสมุดรายชื่อ">-</span>
+            </td>
           </tr>
           <tr v-if="summaryRows.length === 0">
-            <td colspan="8" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่จบแล้วในรอบนี้</td>
+            <td colspan="9" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่จบแล้วในรอบนี้</td>
           </tr>
         </tbody>
       </table>
@@ -96,7 +109,9 @@
 </template>
 
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { useDriverPayroll } from '@/composables/useDriverPayroll'
+import { useDriversStore } from '@/stores/drivers'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
 
 /** พนักงานขับรถเป็นเจ้าของข้อมูลรายได้คนขับทั้งหมด ไม่ว่าจะขับรถบริษัทหรือรถร่วม/รถหุ้นส่วน — ไม่กรองตามประเภทรถ
@@ -104,6 +119,14 @@ import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vu
  *  ควรมีแต่ข้อมูลของ "รถ" เท่านั้น ดู PayrollVendorFleetView.vue) */
 const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, formatDate, formatBaht, exportSummary, exportDetail, setPaymentStatus } =
   useDriverPayroll(() => true, 'พขร')
+
+const router = useRouter()
+const driversStore = useDriversStore()
+
+/** แถวในตารางนี้ผูกกับ "ชื่อคนขับ" (string) ไม่ใช่ id (ดู driverKeyFor ใน useDriverPayroll.ts) แต่ปุ่มสร้างเอกสารต้อง
+ *  ไปหน้า /settings/drivers/:id/print ซึ่งต้องการ DriverRecord.id — resolve ชื่อ -> id จากทะเบียนคนขับตรงนี้
+ *  ถ้าหาไม่เจอ (เช่น ชื่อคนขับเก่าที่ยังไม่มีทะเบียนคนขับผูกไว้) ซ่อนปุ่มไว้แทนการเดา/สร้าง id ปลอม */
+const driverIdFor = (driverName: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === driverName)?.id
 
 const selectDriverDetail = (driver: string) => {
   selectedDriver.value = driver
@@ -130,6 +153,10 @@ const selectDriverDetail = (driver: string) => {
 
 .status-select {
   @apply h-8 px-2 rounded-full border-0 text-xs font-semibold cursor-pointer focus:outline-none;
+}
+
+.btn-sm {
+  @apply h-8 px-3 rounded-lg border border-border bg-surface text-text font-medium text-xs inline-flex items-center gap-1.5 cursor-pointer hover:bg-surface-2;
 }
 
 .card-lg {

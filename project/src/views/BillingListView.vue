@@ -3,30 +3,9 @@
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xs text-muted">ใบวางบิล &gt; {{ statusFilterLabel }}</div>
       <div class="flex items-center gap-2">
-        <button
-          @click="syncMissingSalesOrders"
-          class="btn-secondary"
-          title="สร้างใบสั่งสินค้าให้กับงานขนส่งที่ยังไม่มีใบสั่งสินค้าผูกอยู่ — ใบวางบิลต้องอาศัยใบสั่งสินค้าต้นทางเสมอ"
-        >
-          <span class="material-symbols-rounded text-base">sync</span>
-          ซิงก์เอกสารที่ขาดหาย
-        </button>
-        <button
-          @click="syncBillingReadiness"
-          class="btn-secondary"
-          title="ซ่อมสถานะวางบิลที่ค้างจากระบบเดิม ให้งานที่ส่งของสำเร็จแล้วสามารถสร้างใบวางบิลต่อได้ตามปกติ โดยไม่ต้อง Reset งาน"
-        >
-          <span class="material-symbols-rounded text-base">sync_alt</span>
-          ซิงก์ข้อมูล/เอกสารก่อนหน้า
-        </button>
-        <button
-          @click="runVatBackfill"
-          class="btn-secondary"
-          title="คำนวณยอดก่อนส่วนลด/ส่วนลด/VAT ของใบวางบิลที่สร้างจากงานขนส่งใหม่ตามข้อมูลของงานขนส่งต้นทาง (เผื่อกรณีสร้างไว้ก่อนระบบรองรับ VAT ต่องาน)"
-        >
-          <span class="material-symbols-rounded text-base">sync</span>
-          ซิงก์ยอด VAT/ส่วนลดจากงานขนส่ง
-        </button>
+        <!-- ปุ่ม Sync (ซิงก์เอกสารที่ขาดหาย/ซิงก์ข้อมูลก่อนหน้า/ซิงก์ยอด VAT) ซ่อนจาก UI ตาม requirement — ฟังก์ชันเบื้องหลัง
+             (syncMissingSalesOrders/syncBillingReadiness/runVatBackfill) ยังอยู่ครบ ไม่ได้ลบ ไม่มี auto-trigger ที่ไหน
+             เรียกเฉพาะตอนกดปุ่มเหล่านี้เท่านั้น (ตรวจแล้วก่อนซ่อน) -->
         <div class="relative">
         <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
           <span class="material-symbols-rounded text-base">add</span>

@@ -59,7 +59,7 @@
                 </div>
               </div>
               <div>
-                <div class="text-xs font-bold text-primary mb-0.5">ลูกค้า</div>
+                <div class="text-xs font-bold text-primary mb-0.5">{{ docMode === 'billing' ? 'เรียกเก็บเงิน' : 'ลูกค้า' }}</div>
                 <div class="font-bold text-sm">{{ activeDoc?.customer }}</div>
                 <div class="text-xs leading-relaxed text-gray-700">{{ customer.address }}{{ customer.zipCode ? ' ' + customer.zipCode : '' }}</div>
                 <div class="text-xs text-gray-700">เลขประจำตัวผู้เสียภาษี {{ customer.taxId || '-' }}</div>
@@ -112,8 +112,58 @@
             </div>
           </div>
 
-          <!-- ใบเสร็จที่อ้างอิงใบแจ้งหนี้ต้นทาง (sourceDocumentIds) แสดงเป็นตารางรายการใบแจ้งหนี้ ไม่ใช่ตารางสินค้าทั่วไป -->
-          <table v-if="receiptSourceRows.length" class="w-full text-sm border border-gray-400 mb-4">
+          <!-- รายละเอียดเอกสาร (คำอธิบายสรุประดับเอกสาร) — เช่น "รายการขนส่งสินค้าห้วงระหว่างวันที่ ... จำนวน N เที่ยว"
+               สำหรับใบวางบิล/ใบแจ้งหนี้รวม แยกจากตารางรายการรายเที่ยวด้านล่าง เอกสารที่ไม่มีค่านี้ไม่แสดงส่วนนี้เลย -->
+          <div v-if="activeDoc?.description" class="text-sm font-medium mb-3">{{ activeDoc.description }}</div>
+
+          <!-- ตารางรายเที่ยว — ใบวางบิล/ใบแจ้งหนี้/ใบเสร็จที่มีรายการมาจากงานขนส่งโดยตรง (รวมใบเสร็จที่แตกรายการจากเอกสาร
+               ต้นทางแล้ว ดู receiptItemRowsFromSourceDocs) ให้ตรงกับฟอร์แมตเอกสารจริงของบริษัท เช็คก่อนตารางอ้างอิงเอกสาร
+               ต้นทางด้านล่าง เพื่อให้ใบเสร็จที่มีข้อมูลเที่ยวจริงแสดง table structure เดียวกับใบวางบิลเป๊ะ -->
+          <table v-if="hasTripColumns" class="w-full text-sm border border-gray-400 mb-4">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
+                <th class="border border-gray-400 px-2 py-1 text-left w-20">วันที่ส่ง</th>
+                <th class="border border-gray-400 px-2 py-1 text-left w-20">ทะเบียนรถ</th>
+                <th class="border border-gray-400 px-2 py-1 text-left w-28">อ้างถึงเอกสาร</th>
+                <th class="border border-gray-400 px-2 py-1 text-left w-28">ใบขนส่ง</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">รายการ</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-16">{{ qtyColumnLabel }}</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-24">จำนวนเงิน</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(row, ridx) in docRows"
+                :key="ridx"
+                :class="row.onClick ? 'cursor-pointer hover:bg-gray-50' : ''"
+                @click="row.onClick && row.onClick()"
+              >
+                <td class="border border-gray-400 px-2 py-1">{{ ridx + 1 }}</td>
+                <td class="border border-gray-400 px-2 py-1">{{ row.shipDate ? formatDateShort(row.shipDate) : '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1">{{ row.plate || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1">{{ row.referenceDoc || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1">{{ row.deliveryNo || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1 whitespace-pre-line">{{ row.description }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right">{{ commonRowUnit ? row.qty : `${row.qty} ${row.unit}` }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
+              </tr>
+              <tr v-for="n in fillerRows" :key="'filler' + n">
+                <td class="border border-gray-400 px-2 py-1 h-7">&nbsp;</td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- ใบเสร็จรุ่นเก่าที่อ้างอิงใบแจ้งหนี้/ใบวางบิลต้นทาง (sourceDocumentIds) แต่รายการยังเป็นฟอร์แมตสรุป 1 บรรทัด/
+               เอกสาร (ไม่มีข้อมูลเที่ยว) — แสดงตารางอ้างอิงเอกสารต้นทางแบบเดิมไว้เป็น fallback -->
+          <table v-else-if="receiptSourceRows.length" class="w-full text-sm border border-gray-400 mb-4">
             <thead class="bg-gray-100">
               <tr>
                 <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
@@ -440,6 +490,7 @@ const activeDoc = computed(() => {
       creditDays: d.creditDays,
       dueDate: d.dueDate,
       reference: d.reference,
+      description: d.description,
       amount: d.amount,
       vatRate: d.vatRate,
       vatAmount: d.vatAmount,
@@ -470,6 +521,12 @@ interface PrintRow {
   discountAmount?: number
   vatRate?: number
   onClick?: () => void
+  /** มีเฉพาะรายการที่มาจากงานขนส่งโดยตรง (Billing/Tax Invoice ที่สร้างจาก Booking) — ใช้แสดงตารางแบบรายเที่ยว
+   *  ให้ตรงกับฟอร์แมตเอกสารจริงของบริษัท ดู tripColumnRows ด้านล่าง */
+  shipDate?: Date
+  plate?: string
+  referenceDoc?: string
+  deliveryNo?: string
 }
 
 const destinationLabel = (booking: Booking) => {
@@ -507,10 +564,26 @@ const docRows = computed<PrintRow[]>(() => {
       discountPercent: item.discountPercent,
       discountAmount: item.discountAmount,
       vatRate: item.vatRate,
+      shipDate: item.shipDate,
+      plate: item.plate,
+      referenceDoc: item.referenceDoc,
+      deliveryNo: item.deliveryNo,
     }))
   }
   return []
 })
+
+/** ตารางแบบรายเที่ยว (คอลัมน์ วันที่ส่ง/ทะเบียนรถ/อ้างถึงเอกสาร/ใบขนส่ง) ใช้กับใบวางบิล/ใบแจ้งหนี้/ใบเสร็จที่มีรายการ
+ *  มาจากงานขนส่งโดยตรง (รายการมี shipDate/plate/deliveryNo ติดมาด้วย) — ให้ทั้ง 3 เอกสารใช้ table structure/column
+ *  structure เดียวกันเป๊ะ (ใบเสร็จรวมอยู่ด้วยเพื่อความเสมอภาคของ layout แม้ปัจจุบันใบเสร็จจะยังไม่มีรายการที่มีฟิลด์
+ *  พวกนี้จริงๆ ก็ตาม — ดู receiptItemRowsFromSourceDocs ใน salesDocuments.ts) เอกสารกรอกเอง/จากใบเสนอราคา (ไม่มีข้อมูล
+ *  เที่ยวรถ) ยังคงใช้ตารางแบบเดิม (รายละเอียด/ส่วนลด/ภาษี) เหมือนเดิมทุกประการ */
+const hasTripColumns = computed(
+  () =>
+    (docMode.value === 'billing' || docMode.value === 'invoice' || docMode.value === 'receipt') &&
+    docRows.value.length > 0 &&
+    docRows.value.every((r) => r.shipDate || r.plate || r.deliveryNo)
+)
 
 const fillerRows = computed(() => Math.max(0, 4 - docRows.value.length))
 
@@ -615,6 +688,16 @@ const docNote = computed(() => {
 const formatBaht = (value: number) =>
   `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-')
+/** วันที่ส่งในตารางรายเที่ยว ใช้รูปแบบย่อ วว/ดด/ปป (พ.ศ. 2 หลัก) เช่น "14/08/69" ตาม Requirement ล่าสุด — คนละรูปแบบ
+ *  กับ formatDate (เต็ม) ที่ใช้กับวันที่หัวเอกสาร/ครบกำหนด ซึ่งยังคงรูปแบบเดิมไว้ */
+const formatDateShort = (date?: Date) => {
+  if (!date) return '-'
+  const d = new Date(date)
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const yy = String((d.getFullYear() + 543) % 100).padStart(2, '0')
+  return `${dd}/${mm}/${yy}`
+}
 const formatPercent = (value?: number) => (value === undefined ? '-' : `${value}%`)
 const formatDiscount = (row: PrintRow) =>
   row.discountMode === 'fixed' ? (row.discountAmount ? formatBaht(row.discountAmount) : '-') : formatPercent(row.discountPercent)

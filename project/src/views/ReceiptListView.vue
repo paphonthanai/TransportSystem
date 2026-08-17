@@ -3,30 +3,9 @@
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xs text-muted">ใบเสร็จรับเงิน &gt; {{ statusFilterLabel }}</div>
       <div class="flex items-center gap-2">
-        <button
-          @click="syncMissingSalesOrders"
-          class="btn-secondary"
-          title="สร้างใบสั่งสินค้าให้กับงานขนส่งที่ยังไม่มีใบสั่งสินค้าผูกอยู่ — เอกสารขั้นก่อนหน้าต้องครบก่อนออกใบเสร็จได้"
-        >
-          <span class="material-symbols-rounded text-base">sync</span>
-          ซิงก์เอกสารที่ขาดหาย
-        </button>
-        <button
-          @click="syncBillingReadiness"
-          class="btn-secondary"
-          title="ซ่อมสถานะวางบิลที่ค้างจากระบบเดิม ให้งานที่ส่งของสำเร็จแล้วสามารถเดินเอกสารต่อได้ตามปกติ โดยไม่ต้อง Reset งาน"
-        >
-          <span class="material-symbols-rounded text-base">sync_alt</span>
-          ซิงก์ข้อมูล/เอกสารก่อนหน้า
-        </button>
-        <button
-          @click="syncReceiptReferences"
-          class="btn-secondary"
-          title="ซ่อมความสัมพันธ์ใบแจ้งหนี้/ใบวางบิล → ใบเสร็จ — เติม reference ที่ขาดโดยจับคู่กับเลขที่เอกสารต้นทางที่บันทึกไว้"
-        >
-          <span class="material-symbols-rounded text-base">link</span>
-          ซิงก์ความสัมพันธ์เอกสารต้นทาง
-        </button>
+        <!-- ปุ่ม Sync (ซิงก์เอกสารที่ขาดหาย/ซิงก์ข้อมูลก่อนหน้า/ซิงก์ความสัมพันธ์เอกสารต้นทาง) ซ่อนจาก UI ตาม requirement — ฟังก์ชันเบื้องหลัง
+             (syncMissingSalesOrders/syncBillingReadiness/syncReceiptReferences) ยังอยู่ครบ ไม่ได้ลบ ไม่มี auto-trigger ที่ไหน
+             เรียกเฉพาะตอนกดปุ่มเหล่านี้เท่านั้น (ตรวจแล้วก่อนซ่อน) -->
         <button @click="router.push('/receipts/new')" class="btn-primary">
           <span class="material-symbols-rounded text-base">add</span>
           สร้างใหม่

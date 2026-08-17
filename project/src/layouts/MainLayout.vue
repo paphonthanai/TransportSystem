@@ -206,7 +206,9 @@ const getScreenTitle = () => {
   }
   if (currentRoute.path.startsWith('/documents/')) return 'เอกสารขาย · พิมพ์เอกสาร'
   if (currentRoute.path.startsWith('/job/')) return 'รายละเอียดงาน'
+  if (currentRoute.path.startsWith('/settings/drivers/') && currentRoute.path.endsWith('/print')) return 'พนักงานขับรถ · พิมพ์เอกสารรายได้'
   if (currentRoute.path.startsWith('/settings/drivers/')) return 'รายละเอียดพนักงานขับรถ'
+  if (currentRoute.path.startsWith('/payroll/vendor-fleet/') && currentRoute.path.endsWith('/print')) return 'รถร่วม · พิมพ์เอกสารรายได้'
   if (currentRoute.path.startsWith('/payroll/vendor-fleet/')) return 'รายละเอียดรถร่วม'
   if (currentRoute.path === '/payroll/staff/new') return 'เงินเดือน · สร้างเงินเดือน'
   if (currentRoute.path.startsWith('/payroll/staff/') && currentRoute.path.endsWith('/edit')) return 'เงินเดือน · แก้ไขเงินเดือน'

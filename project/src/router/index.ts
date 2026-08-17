@@ -290,6 +290,13 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN', 'DISPATCHER'] },
       },
       {
+        path: 'settings/drivers/:id/print',
+        name: 'DriverIncomeDocument',
+        component: () => import('@/views/DriverIncomeDocumentView.vue'),
+        props: true,
+        meta: { roles: ['ADMIN', 'DISPATCHER'] },
+      },
+      {
         path: 'payroll/vendor-fleet',
         name: 'PayrollVendorFleet',
         component: () => import('@/views/PayrollVendorFleetView.vue'),
@@ -299,6 +306,13 @@ const routes: RouteRecordRaw[] = [
         path: 'payroll/vendor-fleet/:vehicleId',
         name: 'VendorFleetVehicleDetail',
         component: () => import('@/views/VendorFleetVehicleDetailView.vue'),
+        props: true,
+        meta: { roles: ['ADMIN'] },
+      },
+      {
+        path: 'payroll/vendor-fleet/:vehicleId/print',
+        name: 'VehicleIncomeDocument',
+        component: () => import('@/views/VehicleIncomeDocumentView.vue'),
         props: true,
         meta: { roles: ['ADMIN'] },
       },

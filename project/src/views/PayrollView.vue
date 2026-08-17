@@ -14,6 +14,10 @@
     </div>
 
     <div v-if="staffSalaryStore.loading || staffStore.loading" class="card-lg text-center text-muted py-10">กำลังโหลดข้อมูล...</div>
+    <div v-else-if="staffPool.length === 0" class="card-lg text-center text-muted py-10 space-y-2">
+      <div>ยังไม่มีข้อมูลเสมียนในระบบ — ต้องเพิ่มพนักงานในทะเบียนเสมียนก่อน จึงจะสร้างเงินเดือนได้</div>
+      <button @click="router.push('/settings/staff')" class="btn-sm">ไปหน้าทะเบียนเสมียน</button>
+    </div>
     <div v-else class="card-lg overflow-x-auto">
       <table class="min-w-[760px] w-full text-sm border-separate border-spacing-0">
         <thead class="bg-surface-2 text-left text-xs text-muted">
