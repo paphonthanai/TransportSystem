@@ -206,6 +206,9 @@ export interface ManualDocumentFormData {
   sourceQuotationId?: string
   /** TAX_INVOICE ที่กรอกฟอร์มนี้โดยดึงข้อมูลมาจากใบวางบิล — ใช้ผูก parentDocumentId, สำเนา bookingIds และปิดสถานะใบวางบิลต้นทางเป็น BILLED */
   sourceBillingId?: string
+  /** งานขนส่งเฉพาะกลุ่มที่ต้องการ claim จากใบวางบิลต้นทาง (sourceBillingId) — ใช้ตอนใบวางบิลมีสินค้าหลาย Feed แล้วต้อง
+   *  แยกออกใบแจ้งหนี้ทีละ Feed (ดู BillingListView.vue) ไม่ระบุ = claim ทั้งหมดของใบวางบิลต้นทางเหมือนพฤติกรรมเดิม */
+  bookingIds?: string[]
   /** ผู้ติดต่อของลูกค้าที่ผู้ใช้เลือกในฟอร์ม (ContactRecord.id) — ถ้าไม่ส่งมา จะ fallback ไปใช้ Primary Contact ของลูกค้ารายนั้นแทน (ดู resolveContactSnapshot) */
   contactId?: string
 }
@@ -391,21 +394,25 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (data.sourceBillingId) {
       const billing = documents.value.find((d) => d.id === data.sourceBillingId && d.type === 'BILLING')
       if (billing) {
+        /** เฉพาะงานขนส่งที่ระบุมาจริง (data.bookingIds) ไม่ใช่ทั้งหมดของใบวางบิลเสมอไป — ใบวางบิลที่มีสินค้าหลาย Feed
+         *  ต้องแยกออกใบแจ้งหนี้ทีละ Feed ทีละครั้ง (ดู BillingListView.vue) ไม่ระบุมา = claim ทั้งหมดเหมือนพฤติกรรมเดิม */
+        const claimedBookingIds = data.bookingIds && data.bookingIds.length ? data.bookingIds : billing.bookingIds
         doc.parentDocumentId = billing.id
-        doc.bookingIds = billing.bookingIds
-        billing.status = 'BILLED'
+        doc.bookingIds = claimedBookingIds
         billing.convertedToDocumentIds = [...(billing.convertedToDocumentIds || []), doc.id]
         /** claim งานขนส่งที่ผูกกับใบวางบิลนี้ด้วย taxInvoiceDocId (เหมือน createInvoiceFromBilling) — ห้ามเขียน
          *  b.billingStatus แบบเดิม เพราะเป็นฟิลด์เก่าที่ไม่มีความหมายแล้วหลัง redesign เป็นระบบ claim field
          *  (ดู createBillingFromBookings/createInvoiceFromBilling) การเช็คว่างานเหล่านี้ยังไม่ถูก claim ไปแล้ว
          *  ต้องทำก่อนสร้างเอกสารจริง ดู eligibility guard ใน createTaxInvoiceManual */
-        if (billing.bookingIds.length) {
-          const bookingStore = useBookingStore()
-          billing.bookingIds.forEach((bid) => {
-            const b = bookingStore.bookings.find((bk) => bk.id === bid)
-            if (b) b.taxInvoiceDocId = doc.id
-          })
-        }
+        const bookingStore = useBookingStore()
+        claimedBookingIds.forEach((bid) => {
+          const b = bookingStore.bookings.find((bk) => bk.id === bid)
+          if (b) b.taxInvoiceDocId = doc.id
+        })
+        /** ใบวางบิลปิดเป็น BILLED ก็ต่อเมื่องานขนส่งทุกรายการของใบวางบิลนี้ถูก claim ครบแล้วเท่านั้น (อาจถูก claim ไปคนละ
+         *  ใบแจ้งหนี้ต่อ Feed) ถ้ายังไม่ครบ คงสถานะ BILLING_PENDING ไว้ เพื่อให้ยังกด "สร้างใบกำกับภาษี" ต่อ Feed ที่เหลือได้ */
+        const allClaimed = billing.bookingIds.every((bid) => bookingStore.bookings.find((bk) => bk.id === bid)?.taxInvoiceDocId)
+        if (allClaimed) billing.status = 'BILLED'
       }
     }
   }
@@ -1202,7 +1209,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (data.sourceBillingId) {
       const billing = documents.value.find((d) => d.id === data.sourceBillingId && d.type === 'BILLING')
       if (!billing || billing.status !== 'BILLING_PENDING') return null
-      const linkedBookings = billing.bookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid))
+      /** เช็คเฉพาะกลุ่มงานขนส่งที่ระบุมาจริง (data.bookingIds) ไม่ใช่ทั้งหมดของใบวางบิลเสมอไป — รองรับกรณีใบวางบิลมีสินค้า
+       *  หลาย Feed ที่ต้องแยกออกใบแจ้งหนี้ทีละ Feed (Feed อื่นที่ถูก claim ไปแล้วจากรอบก่อนหน้าไม่ควรมาบล็อครอบนี้) */
+      const targetBookingIds = data.bookingIds && data.bookingIds.length ? data.bookingIds : billing.bookingIds
+      const linkedBookings = targetBookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid))
       if (linkedBookings.some((b) => !b || b.taxInvoiceDocId)) return null
     }
     const numbering = documentSettingsStore.settings.numbering.invoice

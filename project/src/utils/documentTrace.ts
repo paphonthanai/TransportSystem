@@ -19,23 +19,28 @@ export interface DocumentTraceResult {
  * ID ใดๆ เชื่อมตรงจาก Billing กลับไปยัง Sales Order เลย (Billing เก็บแค่ bookingIds) — เชื่อมได้ทางเดียวคือผ่าน
  * Booking ร่วมกัน (Booking.sourceDocumentId ชี้กลับไปยัง Sales Order) จึงต้อง Trace ผ่าน Booking เป็นตัวกลางเสมอ
  * สำหรับเส้นทางนี้ — ไม่ใช่การเดา เพราะ Booking.sourceDocumentId เป็น Reference จริงที่บันทึกไว้ตอนสร้างงาน
+ *
+ * ใบวางบิลหนึ่งใบอาจถูกแยกออกใบแจ้งหนี้ได้มากกว่า 1 ใบ (สินค้าหลาย Feed ต้องแยกออกคนละใบ ดู BillingListView.vue) และ
+ * ใบแจ้งหนี้แต่ละใบอาจมีใบเสร็จของตัวเอง — ตอน Trace จากใบวางบิลจึงต้องเก็บ "ทุกใบ" ที่พบ ไม่ใช่ใบแรกที่เจอ (.find) เท่านั้น
+ * ไม่งั้นเอกสารปลายทางที่ออกไปแล้วบางใบจะหายไปจากพาแนล Source Chain ที่แสดงบนหน้าใบวางบิลต้นทาง
  */
 export function traceDocumentChain(doc: SalesDocument, documents: SalesDocument[], bookings: Booking[]): DocumentTraceResult {
   const byId = (id?: string) => (id ? documents.find((d) => d.id === id) : undefined)
 
   let billing: SalesDocument | undefined
-  let taxInvoice: SalesDocument | undefined
-  let receipt: SalesDocument | undefined
+  let taxInvoices: SalesDocument[] = []
+  let receipts: SalesDocument[] = []
   let salesOrderSelf: SalesDocument | undefined
 
   if (doc.type === 'RECEIPT') {
-    receipt = doc
-    taxInvoice = documents.find((d) => d.type === 'TAX_INVOICE' && (doc.sourceDocumentIds || []).includes(d.id))
+    receipts = [doc]
+    const taxInvoice = documents.find((d) => d.type === 'TAX_INVOICE' && (doc.sourceDocumentIds || []).includes(d.id))
+    if (taxInvoice) taxInvoices = [taxInvoice]
     billing = taxInvoice ? byId(taxInvoice.parentDocumentId) : documents.find((d) => d.type === 'BILLING' && (doc.sourceDocumentIds || []).includes(d.id))
   } else if (doc.type === 'TAX_INVOICE') {
-    taxInvoice = doc
+    taxInvoices = [doc]
     billing = byId(doc.parentDocumentId)
-    receipt = documents.find((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).includes(doc.id))
+    receipts = documents.filter((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).includes(doc.id))
   } else if (doc.type === 'BILLING') {
     billing = doc
   } else if (doc.type === 'SALES_ORDER') {
@@ -49,23 +54,28 @@ export function traceDocumentChain(doc: SalesDocument, documents: SalesDocument[
     billing = documents.find((d) => d.type === 'BILLING' && (d.bookingIds || []).some((id) => soBookingIds.has(id)))
   }
 
-  // ต่อจาก Billing (ไม่ว่าจะเป็นจุดเริ่มต้นเอง หรือเดินหน้ามาจาก Sales Order ข้างบน) ไปยัง Tax Invoice/Receipt ต่อด้วย Reference จริงเสมอ
-  if (billing && !taxInvoice) {
-    taxInvoice = documents.find((d) => d.type === 'TAX_INVOICE' && d.parentDocumentId === billing!.id)
+  // ต่อจาก Billing (ไม่ว่าจะเป็นจุดเริ่มต้นเอง หรือเดินหน้ามาจาก Sales Order ข้างบน) ไปยัง Tax Invoice/Receipt ทุกใบที่พบ
+  if (billing && taxInvoices.length === 0) {
+    taxInvoices = documents.filter((d) => d.type === 'TAX_INVOICE' && d.parentDocumentId === billing!.id)
   }
-  if (billing && !receipt) {
-    receipt =
-      documents.find((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).includes(billing!.id)) ||
-      (taxInvoice ? documents.find((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).includes(taxInvoice!.id)) : undefined)
+  if (billing && receipts.length === 0) {
+    const directFromBilling = documents.filter((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).includes(billing!.id))
+    const viaTaxInvoices = taxInvoices.flatMap((ti) => documents.filter((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).includes(ti.id)))
+    receipts = [...directFromBilling, ...viaTaxInvoices]
   }
 
-  // Booking ที่เกี่ยวข้อง — รวม bookingIds จากทุกเอกสารในสายที่เจอ (ปกติจะเป็นชุดเดียวกัน เพราะเอกสารต่อเนื่องกันมาจาก Booking เดียวกันเสมอ)
-  const bookingIds = new Set<string>([
-    ...(doc.bookingIds || []),
-    ...(billing?.bookingIds || []),
-    ...(taxInvoice?.bookingIds || []),
-    ...(receipt?.bookingIds || []),
-  ])
+  /** Booking ที่เกี่ยวข้อง — ถ้ากำลังดูใบวางบิลเองให้โชว์ทุกงานของใบวางบิลนั้นครบ (เป็นเอกสารต้นทางจริง) ถ้ากำลังดูเอกสาร
+   *  ปลายทาง (ใบแจ้งหนี้/ใบเสร็จ) ให้ใช้ bookingIds ของเอกสารปลายทางที่เจาะจงที่สุดเท่านั้น (Receipt > Tax Invoice) ไม่ใช่
+   *  ของใบวางบิลทั้งใบ เพราะใบวางบิลที่มีสินค้าหลาย Feed ถูกแยกออกใบแจ้งหนี้หลายใบ แต่ละใบมีแค่ส่วนของตัวเอง */
+  const bookingIds = new Set<string>(
+    doc.type === 'BILLING'
+      ? billing?.bookingIds || []
+      : receipts.length
+        ? receipts.flatMap((r) => r.bookingIds)
+        : taxInvoices.length
+          ? taxInvoices.flatMap((t) => t.bookingIds)
+          : billing?.bookingIds || doc.bookingIds || []
+  )
   const chainBookings = bookings.filter((b) => bookingIds.has(b.id))
 
   // Sales Order เชื่อมผ่าน Booking.sourceDocumentId (Reference จริง) — ไม่มี doc-to-doc id ตรงจาก Billing/TaxInvoice/Receipt กลับไปยัง Sales Order เลย
@@ -76,8 +86,8 @@ export function traceDocumentChain(doc: SalesDocument, documents: SalesDocument[
   return {
     salesOrders,
     billingNotes: billing ? [billing] : [],
-    taxInvoices: taxInvoice ? [taxInvoice] : [],
-    receipts: receipt ? [receipt] : [],
+    taxInvoices,
+    receipts,
     bookings: chainBookings,
   }
 }

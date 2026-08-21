@@ -359,6 +359,9 @@ const sourceQuotationId = ref(prefill?.sourceType === 'QUOTATION' ? prefill.sour
 const sourceBillingId = ref(prefill?.sourceType === 'BILLING' ? prefill.sourceId : undefined)
 const sourceType = ref(prefill?.sourceType)
 const sourceNumber = ref(prefill?.sourceNumber)
+/** งานขนส่งเฉพาะกลุ่ม (Feed) ที่ต้อง claim จากใบวางบิลต้นทาง — ใบวางบิลที่มีสินค้าหลาย Feed จะส่งมาแค่งานของ Feed เดียว
+ *  ต่อครั้ง (ดู BillingListView.vue) ไม่ระบุมา = claim ทั้งหมดของใบวางบิลเหมือนพฤติกรรมเดิม */
+const sourceBookingIds = ref(prefill?.bookingIds)
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
@@ -450,6 +453,12 @@ type Row = {
   discountAmount: number
   vatRate: number
   whtRate: number
+  /** มีเฉพาะรายการที่มาจากงานขนส่งโดยตรง (ใบวางบิล/ใบเสนอราคาที่มาจาก Booking) — ไม่มีช่องแก้ไขในฟอร์มนี้ (ผู้ใช้ไม่เห็น/ไม่แก้)
+   *  แต่ต้อง "ผ่าน" ไปกับแถวเสมอ ไม่งั้นหน้าพิมพ์เอกสาร (InvoiceDocumentView.vue) จะจับกลุ่ม Feed/ห้วงวันที่ไม่ได้ ดู feedForItem */
+  shipDate?: Date
+  plate?: string
+  referenceDoc?: string
+  deliveryNo?: string
 }
 
 const whtOptions = [
@@ -479,6 +488,10 @@ const rows = ref<Row[]>(
         discountAmount: i.discountAmount || 0,
         vatRate: i.vatRate ?? documentSettingsStore.settings.vatRate,
         whtRate: i.whtRate || 0,
+        shipDate: i.shipDate,
+        plate: i.plate,
+        referenceDoc: i.referenceDoc,
+        deliveryNo: i.deliveryNo,
       }))
     : []
 )
@@ -565,6 +578,10 @@ if (editingDoc) {
     discountAmount: i.discountAmount || 0,
     vatRate: i.vatRate ?? documentSettingsStore.settings.vatRate,
     whtRate: i.whtRate || 0,
+    shipDate: i.shipDate,
+    plate: i.plate,
+    referenceDoc: i.referenceDoc,
+    deliveryNo: i.deliveryNo,
   }))
 }
 
@@ -620,6 +637,10 @@ const saveAndGetDoc = () => {
     vatRate: r.vatRate,
     whtRate: r.whtRate,
     amount: rowAmount(r),
+    shipDate: r.shipDate,
+    plate: r.plate,
+    referenceDoc: r.referenceDoc,
+    deliveryNo: r.deliveryNo,
   }))
   const payload = {
     customer: customerName.value.trim(),
@@ -649,6 +670,7 @@ const saveAndGetDoc = () => {
     whtAmount: whtTotal.value,
     sourceQuotationId: sourceQuotationId.value,
     sourceBillingId: sourceBillingId.value,
+    bookingIds: sourceBookingIds.value,
     contactId: contactId.value,
   }
   if (currentId.value) return salesDocumentsStore.updateTaxInvoiceManual(currentId.value, payload)

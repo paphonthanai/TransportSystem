@@ -640,16 +640,78 @@ const docRows = computed<PrintRow[]>(() => {
  *  ต่อเอกสารแทน (ดู aggregatedSummaryRow) มีแค่ใบวางบิลเท่านั้นที่แสดงตารางแบบรายเที่ยวจริง */
 const hasTripColumns = computed(() => docMode.value === 'billing' && docRows.value.length > 0 && docRows.value.every((r) => r.shipDate || r.plate || r.deliveryNo))
 
-/** ใบกำกับภาษี/ใบเสร็จรับเงินที่มาจากงานขนส่ง (มี bookingIds + คำอธิบายสรุประดับเอกสารที่สร้างไว้แล้ว เช่น "รายการขนส่ง
- *  สินค้าห้วงระหว่างวันที่...") ให้ยุบรายการทั้งหมดเหลือบรรทัดสรุปบรรทัดเดียว (จำนวน 1, ราคาต่อหน่วย = ยอดรวมทั้งเอกสาร)
- *  ตรงกับฟอร์แมตเอกสารจริงของบริษัท (ดูภาพอ้างอิง) — เอกสารที่กรอกเอง/จากใบเสนอราคา (ไม่มี bookingIds/description แบบนี้)
- *  ยังคงแสดงรายการจริงตามที่กรอกไว้ทุกบรรทัดเหมือนเดิม ไม่ยุบ */
+/** วันที่แบบ วว/ดด/ปปปป (พ.ศ. เต็ม 4 หลัก) ใช้เฉพาะบรรทัด "งวดวันที่..." ที่ generate สดตอนแสดงผล (ดู feedGroupedRows)
+ *  คนละรูปแบบกับ formatDateShort (พ.ศ. 2 หลัก ใช้กับคอลัมน์วันที่ส่งในตารางรายเที่ยวของใบวางบิล) โดยเจตนา */
+const formatDateSlashFullYear = (date: Date) => {
+  const d = new Date(date)
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  return `${dd}/${mm}/${d.getFullYear() + 543}`
+}
+
+/** "Feed" ของรายการหนึ่งแถว = สินค้าที่ขนจริงของงานขนส่งต้นทาง หาโดย join กลับไปที่ Booking ผ่าน deliveryNo (=booking.docNo
+ *  เสมอ ดู createBillingFromBookings/createTaxInvoiceFromBookings) ไม่ใช้ productId/description เพราะรายการที่กรอกเอง/
+ *  แก้ไขในฟอร์มอาจไม่ตรงกับ Booking จริงแล้ว — หา Booking ไม่เจอ (เช่น รายการกรอกเอง ไม่มี deliveryNo) ถือว่าไม่ทราบ Feed */
+const feedForRow = (row: PrintRow): string => {
+  if (!row.deliveryNo) return ''
+  const booking = bookingStore.bookings.find((b) => b.docNo === row.deliveryNo)
+  if (!booking || !booking.items.length) return ''
+  return [...new Set(booking.items.map((i) => i.product).filter(Boolean))].join(' + ')
+}
+
+/**
+ * ใบกำกับภาษี/ใบเสร็จรับเงินที่มาจากงานขนส่ง: จัดกลุ่มรายการตาม Feed (สินค้า) แล้วยุบแต่ละกลุ่มเหลือบรรทัดเดียว
+ * "ค่าขนส่ง [Feed] งวดวันที่ [เริ่มต้น] - [สิ้นสุด]" ตรงกับฟอร์แมตเอกสารจริงของบริษัท — Generate สดจากรายการต้นทางตอนแสดงผล
+ * ทุกครั้ง ไม่มีการเก็บข้อความนี้ซ้ำใน Firestore (ห้ามเพิ่ม field ใหม่) ตามหลักการที่ใบวางบิลออกใบแจ้งหนี้ให้แล้วจะมีแค่ Feed
+ * เดียวต่อเอกสารเสมอ (แยกออกใบแจ้งหนี้ทีละ Feed ตอนสร้าง ดู BillingListView.vue) จึงมักได้แค่ 1 กลุ่ม/1 บรรทัด — เก็บ logic
+ * แบบ "หลายกลุ่ม" ไว้เป็น fallback ให้เอกสารเก่าที่ยังไม่ผ่านการแยก Feed แสดงผลถูกต้องด้วย ไม่ใช่ปัดตกทั้งเอกสาร
+ * หา Feed ไม่ได้แม้แต่แถวเดียว (เช่น เอกสารกรอกเอง/จากใบเสนอราคา ไม่มี Booking ผูกอยู่) → คืนอาเรย์ว่าง ให้ printRows ไป fallback ที่ docRows ตรงๆ
+ */
+const feedGroupedRows = computed<PrintRow[]>(() => {
+  if (docMode.value !== 'invoice' && docMode.value !== 'receipt') return []
+  if (docRows.value.length === 0) return []
+  const withFeed = docRows.value.map((row) => ({ row, feed: feedForRow(row) }))
+  if (withFeed.some(({ feed }) => !feed)) return []
+  const order: string[] = []
+  const groups = new Map<string, PrintRow[]>()
+  withFeed.forEach(({ row, feed }) => {
+    if (!groups.has(feed)) {
+      groups.set(feed, [])
+      order.push(feed)
+    }
+    groups.get(feed)!.push(row)
+  })
+  return order.map((feed) => {
+    const rows = groups.get(feed)!
+    const dates = rows
+      .map((r) => r.shipDate)
+      .filter((d): d is Date => !!d)
+      .sort((a, b) => a.getTime() - b.getTime())
+    const start = dates[0]
+    const end = dates[dates.length - 1]
+    const dateLabel = start ? (end && end.toDateString() !== start.toDateString() ? `${formatDateSlashFullYear(start)} - ${formatDateSlashFullYear(end)}` : formatDateSlashFullYear(start)) : ''
+    const qty = rows.length
+    const amount = Math.round(rows.reduce((sum, r) => sum + r.amount, 0))
+    /** ราคาต่อหน่วย = ราคาจริงถ้าทุกเที่ยวในกลุ่มเดียวกันเท่ากันหมด (กรณีปกติ) ไม่งั้นเฉลี่ยจาก amount/qty (กรณีราคาไม่เท่ากัน
+     *  ในบางเที่ยว) — คงค่า "จำนวน × ราคาต่อหน่วย = ยอดรวม" ให้ตรงเป๊ะเมื่อราคาสม่ำเสมอ (กรณีส่วนใหญ่) */
+    const uniquePrices = new Set(rows.map((r) => r.unitPrice))
+    const unitPrice = uniquePrices.size === 1 ? rows[0].unitPrice : Math.round(amount / qty)
+    return { description: `ค่าขนส่ง ${feed} งวดวันที่ ${dateLabel}`, qty, unit: 'เที่ยว', unitPrice, amount }
+  })
+})
+
+/** เอกสารเก่าที่ยังไม่มีข้อมูล deliveryNo ให้จับกลุ่ม Feed ได้ (สร้างก่อนแก้บั๊กนี้) — fallback เป็นบรรทัดสรุปเดียวแบบเดิม
+ *  จากคำอธิบายที่เก็บไว้ตอนสร้างเอกสาร (newDoc.description) เพื่อไม่ให้เอกสารเก่าที่ออกไปแล้วแสดงผลว่างเปล่า/ผิดเพี้ยน */
 const aggregatedSummaryRow = computed<PrintRow | null>(() => {
   if (docMode.value !== 'invoice' && docMode.value !== 'receipt') return null
   if (!newDoc.value || !newDoc.value.bookingIds.length || !newDoc.value.description) return null
   return { description: newDoc.value.description, qty: 1, unit: '', unitPrice: subtotal.value, amount: subtotal.value }
 })
-const printRows = computed<PrintRow[]>(() => (aggregatedSummaryRow.value ? [aggregatedSummaryRow.value] : docRows.value))
+const printRows = computed<PrintRow[]>(() => {
+  if (feedGroupedRows.value.length > 0) return feedGroupedRows.value
+  if (aggregatedSummaryRow.value) return [aggregatedSummaryRow.value]
+  return docRows.value
+})
 
 const fillerRows = computed(() => Math.max(0, 4 - (hasTripColumns.value ? docRows.value.length : printRows.value.length)))
 

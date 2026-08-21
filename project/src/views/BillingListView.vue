@@ -120,13 +120,15 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
 import { useDocumentPrefillStore, type DocumentPrefillPayload } from '@/stores/documentPrefill'
 import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
+import type { Booking } from '@/types'
 
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
-/** ต้อง instantiate ตั้งแต่หน้านี้โหลด (แม้ไม่ได้ใช้แสดงผลตรงๆ) เพื่อให้ bookingStore เริ่มดึงข้อมูลจาก Firestore ล่วงหน้า
- *  ก่อนผู้ใช้จะกด "สร้างใบกำกับภาษี" — ถ้าไม่เรียกไว้ก่อน createInvoiceFromBilling จะเป็นจุดแรกที่เรียก useBookingStore()
- *  ทำให้ bookingStore.bookings ยังว่างเปล่าตอนกดปุ่มจริง (เพิ่งเริ่ม fetch ตอนนั้นพอดี) */
-useBookingStore()
+/** ต้อง instantiate ตั้งแต่หน้านี้โหลด (แม้ไม่ได้ใช้แสดงผลตรงๆ ตอน mount) เพื่อให้ bookingStore เริ่มดึงข้อมูลจาก Firestore
+ *  ล่วงหน้าก่อนผู้ใช้จะกด "สร้างใบกำกับภาษี" — ถ้าไม่เรียกไว้ก่อน createTaxInvoiceManual จะเป็นจุดแรกที่เรียก useBookingStore()
+ *  ทำให้ bookingStore.bookings ยังว่างเปล่าตอนกดปุ่มจริง (เพิ่งเริ่ม fetch ตอนนั้นพอดี) — ตอนนี้ยังใช้แสดงผลตรงๆ ด้วย
+ *  (จัดกลุ่ม Feed ก่อนกด "สร้างใบกำกับภาษี") */
+const bookingStore = useBookingStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const documentPrefillStore = useDocumentPrefillStore()
 
@@ -252,15 +254,38 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
 const statusDotClass = (status: SalesDocumentStatus) =>
   ({ BILLING_PENDING: 'bg-amber-500', BILLED: 'bg-blue-500' })[status as 'BILLING_PENDING' | 'BILLED'] || 'bg-gray-400'
 
+/** "Feed" ของงานขนส่งหนึ่งงาน = สินค้าที่ขนจริง (รวมชื่อไม่ซ้ำถ้ามีหลายรายการในงานเดียว) ใช้ตัวเดียวกับ tripDescription
+ *  ในฝั่ง store (stores/salesDocuments.ts) เพื่อให้ "Feed" ที่ใช้แบ่งเอกสารตรงกับคำที่ปรากฏในคำอธิบายรายการเป๊ะ */
+const feedForBooking = (b: Booking): string => [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ') || '-'
+
+/** จัดกลุ่มงานขนส่งของใบวางบิลนี้ตาม Feed — เฉพาะงานที่ยังไม่ถูก claim ไปออกใบแจ้งหนี้อื่น (taxInvoiceDocId) เท่านั้น
+ *  (งานที่ถูก claim ไปแล้วจากรอบก่อนหน้า ถือว่าออกใบแจ้งหนี้ของ Feed นั้นไปแล้ว ไม่ต้องเสนอให้เลือกอีก) */
+const unclaimedFeedGroups = (doc: SalesDocument): Array<{ feed: string; bookingIds: string[] }> => {
+  const groups = new Map<string, string[]>()
+  doc.bookingIds.forEach((bid) => {
+    const b = bookingStore.bookings.find((bk) => bk.id === bid)
+    if (!b || b.taxInvoiceDocId) return
+    const feed = feedForBooking(b)
+    if (!groups.has(feed)) groups.set(feed, [])
+    groups.get(feed)!.push(bid)
+  })
+  return [...groups.entries()].map(([feed, bookingIds]) => ({ feed, bookingIds }))
+}
+
 /** ส่งข้อมูลใบวางบิลผ่าน documentPrefillStore ไปเติมในหน้า "สร้างใบแจ้งหนี้" จริง (/tax-invoices/new) โดยตรง
  *  แบบเดียวกับที่ QuotationListView.vue ทำกับใบเสนอราคา (buildPrefillFromQuotation) — ไม่สร้างเอกสาร/claim booking
- *  ที่นี่ ผู้ใช้ต้องกด "บันทึกเอกสาร" ในหน้านั้นเองก่อน (ดู createTaxInvoiceManual → linkManualDocToSource) */
-const buildPrefillFromBilling = (doc: SalesDocument): DocumentPrefillPayload => ({
+ *  ที่นี่ ผู้ใช้ต้องกด "บันทึกเอกสาร" ในหน้านั้นเองก่อน (ดู createTaxInvoiceManual → linkManualDocToSource)
+ *  targetBookingIds ระบุมา = เติมเฉพาะรายการของ Feed นั้น (ใบวางบิลมีหลาย Feed ต้องแยกออกใบแจ้งหนี้ทีละใบ ดู onStatusSelect) */
+const buildPrefillFromBilling = (doc: SalesDocument, targetBookingIds?: string[]): DocumentPrefillPayload => ({
   sourceType: 'BILLING',
   sourceId: doc.id,
   sourceNumber: doc.number,
   customer: doc.customer,
-  items: salesDocumentsStore.itemsForDocument(doc.id).map(({ id, documentId, sortOrder, ...rest }) => rest),
+  items: salesDocumentsStore
+    .itemsForDocument(doc.id)
+    .filter((i) => !targetBookingIds || targetBookingIds.some((bid) => bookingStore.bookings.find((bk) => bk.id === bid)?.docNo === i.deliveryNo))
+    .map(({ id, documentId, sortOrder, ...rest }) => rest),
+  bookingIds: targetBookingIds,
   reference: doc.number,
   creditDays: doc.creditDays,
   customerAddress: doc.customerAddress,
@@ -284,10 +309,25 @@ const buildPrefillFromBilling = (doc: SalesDocument): DocumentPrefillPayload => 
 
 const onStatusSelect = (doc: SalesDocument, action: string) => {
   switch (action) {
-    case 'CREATE_INVOICE':
-      documentPrefillStore.setPrefill(buildPrefillFromBilling(doc))
+    case 'CREATE_INVOICE': {
+      /** ใบวางบิลที่มีสินค้าหลาย Feed (เช่น Cement + Ceramic) ต้องแยกออกใบแจ้งหนี้คนละใบต่อ Feed ห้ามรวมหลาย Feed ไว้ใน
+       *  ใบแจ้งหนี้เดียว — เติมข้อมูลของ Feed แรกที่ยังไม่ได้ออกใบแจ้งหนี้ก่อน กดซ้ำอีกครั้งภายหลังเพื่อออก Feed ที่เหลือ
+       *  (ใบวางบิลจะคงสถานะ "รอวางบิล" อยู่จนกว่าทุก Feed จะถูกออกใบแจ้งหนี้ครบ ดู linkManualDocToSource) */
+      const groups = unclaimedFeedGroups(doc)
+      if (groups.length === 0) {
+        alert('งานขนส่งทั้งหมดในใบวางบิลนี้ถูกดึงไปออกใบแจ้งหนี้แล้ว')
+        break
+      }
+      if (groups.length > 1) {
+        const summary = groups.map((g) => `- ${g.feed} (${g.bookingIds.length} เที่ยว)`).join('\n')
+        alert(`ใบวางบิลนี้มีสินค้าหลายประเภท ระบบจะสร้างใบแจ้งหนี้แยกทีละประเภท เริ่มจาก "${groups[0].feed}" ก่อน:\n${summary}\n\nสร้างครบชุดนี้แล้วกด "สร้างใบกำกับภาษี" ซ้ำเพื่อออกประเภทที่เหลือ`)
+      }
+      /** ระบุ bookingIds ของกลุ่มที่ยังไม่ได้ claim เสมอ (ไม่ว่าจะเหลือ Feed เดียวหรือหลาย Feed) — ห้ามส่ง undefined เมื่อเหลือ
+       *  Feed เดียว เพราะ undefined หมายถึง "ทั้งใบวางบิล" ซึ่งรวมงานของ Feed อื่นที่ถูก claim ไปแล้วจากรอบก่อนหน้าปนมาด้วย */
+      documentPrefillStore.setPrefill(buildPrefillFromBilling(doc, groups[0].bookingIds))
       router.push('/tax-invoices/new')
       break
+    }
     case 'CANCEL':
       if (confirm(`ยืนยันยกเลิกใบวางบิล ${doc.number}? งานขนส่งที่ผูกไว้จะกลับไปรอวางบิลใหม่`)) salesDocumentsStore.cancelBillingNote(doc.id)
       break
