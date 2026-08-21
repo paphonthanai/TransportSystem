@@ -1597,8 +1597,16 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function createInvoiceFromBilling(id: string, overrides?: QuotationConvertOverrides): SalesDocument | null {
     const doc = documents.value.find((d) => d.id === id && d.type === 'BILLING')
     if (!doc || doc.status !== 'BILLING_PENDING') return null
-    const documentSettingsStore = useDocumentSettingsStore()
     const bookingStore = useBookingStore()
+    /** ต้องหางานขนส่งทุกรายการของใบวางบิลนี้เจอครบก่อน ถ้าเจอไม่ครบ (เช่น bookingStore ยังโหลดจาก Firestore ไม่เสร็จ
+     *  พอดีตอนกดปุ่ม) ต้องล้มเหลวไปเลย ไม่ใช่สร้างใบแจ้งหนี้สำเร็จแต่ข้าม taxInvoiceDocId เงียบๆ (จะกลายเป็นงานที่ถูกดึง
+     *  ไปออกใบแจ้งหนี้แล้วจริง แต่ระบบไม่รู้ ถูกดึงไปออกซ้ำได้อีก) — เช็ค taxInvoiceDocId ของงานที่ผูกกับใบวางบิลนี้
+     *  เป็นอิสระจาก billingNoteDocId (ดู createBillingFromBookings) กันไม่ให้งานที่ถูกดึงไปออกใบแจ้งหนี้รวมตรงจากงานขนส่ง
+     *  ไปแล้ว (เส้นทางอื่น) ถูกแปลงซ้ำอีกทีจากใบวางบิลนี้ */
+    const linkedBookings = doc.bookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid))
+    if (linkedBookings.some((b) => !b)) return null
+    if (linkedBookings.some((b) => b!.taxInvoiceDocId)) return null
+    const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.invoice
     const seq = bookingStore.documents.length + documents.value.filter((d) => d.type === 'TAX_INVOICE').length + 1
     const { customer, reference, itemRows, amount } = resolveConvertInputs(doc, overrides)
@@ -1642,13 +1650,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     addItemsToDocument(invoice.id, itemRows)
     doc.status = 'BILLED'
     doc.convertedToDocumentIds = [...(doc.convertedToDocumentIds || []), invoice.id]
-    if (doc.bookingIds.length) {
-      const bookingStore2 = useBookingStore()
-      doc.bookingIds.forEach((bid) => {
-        const b = bookingStore2.bookings.find((bk) => bk.id === bid)
-        if (b) b.billingStatus = 'INVOICED'
-      })
-    }
+    linkedBookings.forEach((b) => {
+      b!.taxInvoiceDocId = invoice.id
+    })
     bookingStore.addLog('สร้างเอกสาร ' + invoice.number, { docId: invoice.id })
     return invoice
   }
@@ -2109,17 +2113,23 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     })
   }
 
-  /** เอกสารสถานะ "ยังเรียกเก็บได้อยู่" ตามชนิด — ใบแจ้งหนี้คือยังไม่ PAID, ใบวางบิลคือยังไม่ถูกแปลงไปเป็นใบแจ้งหนี้/ใบเสร็จอื่น (BILLING_PENDING เท่านั้น) */
+  /** เอกสารสถานะ "ใช้อ้างอิงสร้างใบเสร็จได้" ตามชนิด — ใบแจ้งหนี้ต้องชำระแล้ว (PAID) เท่านั้น (ใบเสร็จเป็นแค่เอกสารพิมพ์ยืนยัน
+   *  ไม่ใช่ตัวกำหนดสถานะการชำระเงินอีกต่อไป ดู recordTaxInvoicePayment) ส่วนใบวางบิลคือยังไม่ถูกแปลงไปเป็นใบแจ้งหนี้/ใบเสร็จอื่น
+   *  (BILLING_PENDING เท่านั้น — เส้นทางนี้ไม่มีสถานะ PAID ของตัวเองจึงยังคงพฤติกรรมเดิม) */
   const isSourceDocEligible = (d: SalesDocument, sourceType: ReceiptSourceType) =>
-    sourceType === 'TAX_INVOICE' ? d.status !== 'PAID' : d.status === 'BILLING_PENDING'
+    sourceType === 'TAX_INVOICE' ? d.status === 'PAID' : d.status === 'BILLING_PENDING'
 
   /**
    * สร้างใบเสร็จรับเงิน (เดี่ยวหรือรวม) จากเอกสารต้นทางชนิดเดียวกันของลูกค้ารายเดียวกัน — รายการต่อบรรทัด = 1 เอกสารต้นทาง
-   * ต่อ 1 บรรทัด สถานะเริ่มต้นเป็น DRAFT (แสดงผลเป็น "รอดำเนินการ") จนกว่าจะกด "เก็บเงิน" ผ่าน recordReceiptPayment
-   * sourceType = 'TAX_INVOICE': เส้นทางเดิม (ผ่านใบแจ้งหนี้) — sourceType = 'BILLING': เส้นทางใหม่ ข้ามใบแจ้งหนี้ไปเลย
-   * (Booking → Sales Order → Billing Note → Receipt) — ตอนสำเร็จจะปิดสถานะใบวางบิลต้นทางเป็น BILLED เหมือน createInvoiceFromBilling
-   * ทำ เพื่อกันไม่ให้ใบวางบิลใบเดียวกันถูกนำไปออกทั้งใบแจ้งหนี้ปกติ "และ" ใบเสร็จตรงพร้อมกัน (เงินก้อนเดียวกันถูกเรียกเก็บซ้ำ)
+   * ต่อ 1 บรรทัด
+   * sourceType = 'TAX_INVOICE': อ้างอิงใบแจ้งหนี้ที่ชำระแล้ว (PAID) เท่านั้น — เงินเก็บไปแล้วจริงตอนใบแจ้งหนี้ถูกบันทึกจ่าย
+   * (recordTaxInvoicePayment) ใบเสร็จนี้จึงเป็นแค่เอกสารพิมพ์ยืนยัน สร้างเป็นสถานะ PAID ทันทีเหมือน createReceiptFromBookings/
+   * createReceiptManual ไม่ผ่าน DRAFT อีกต่อไป — sourceType = 'BILLING': เส้นทางเดิม ข้ามใบแจ้งหนี้ไปเลย (Booking → Sales
+   * Order → Billing Note → Receipt) ยังคงสถานะเริ่มต้น DRAFT ตามเดิม (เส้นทางนี้ไม่มีจุดไหนเรียกจาก UI แล้ว แต่คงพฤติกรรม
+   * เดิมไว้เผื่อนำกลับมาใช้ในอนาคต) — ตอนสำเร็จจะปิดสถานะใบวางบิลต้นทางเป็น BILLED เหมือน createInvoiceFromBilling ทำ
    * ยอด/ภาษี/ส่วนลด/หัก ณ ที่จ่าย ดึงจากเอกสารต้นทางตรงๆ (ดู buildReceiptTotalsFromSourceDocs) ไม่คำนวณเปอร์เซ็นต์ใหม่เอง
+   * เช็คเพิ่มว่างานขนส่งที่ผูกกับเอกสารต้นทางยังไม่มี receiptDocId (เป็นอิสระจาก sourceDocsClaimedByOtherReceipts ที่เช็ค
+   * ระดับเอกสาร — กันกรณีงานเดียวกันถูกดึงไปออกใบเสร็จตรงจากงานขนส่ง (createReceiptFromBookings) ไปแล้วซ้ำอีกทาง)
    */
   function createReceiptFromSourceDocs(
     sourceIds: string[],
@@ -2140,13 +2150,20 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const customer = overrides?.customer?.trim() || targetDocs[0].customer
     const reference = overrides?.reference ?? targetDocs.map((d) => d.number).join(', ')
     const { amount, discountTotal, vatRate, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
+    const bookingStore = useBookingStore()
+    /** ต้องหางานขนส่งทุกรายการเจอครบก่อน ถ้าเจอไม่ครบ (เช่น bookingStore ยังโหลดจาก Firestore ไม่เสร็จพอดีตอนกดปุ่ม)
+     *  ต้องล้มเหลวไปเลย ไม่ใช่สร้างใบเสร็จสำเร็จแต่ข้าม receiptDocId เงียบๆ (ดู createInvoiceFromBilling ปัญหาเดียวกัน) */
+    const linkedBookings = bookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid))
+    if (linkedBookings.some((b) => !b)) return null
+    if (linkedBookings.some((b) => b!.receiptDocId)) return null
     const now = new Date()
+    const isFromPaidInvoice = sourceType === 'TAX_INVOICE'
     const receipt: SalesDocument = {
       id: genId('sdoc'),
       type: 'RECEIPT',
       number: generateDocNumber(numbering.prefix, seq, numbering.padding, now),
       customer,
-      status: 'DRAFT',
+      status: isFromPaidInvoice ? 'PAID' : 'DRAFT',
       date: now,
       amount,
       bookingIds,
@@ -2156,6 +2173,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       vatRate,
       vatAmount,
       whtAmount,
+      paidDate: isFromPaidInvoice ? now : undefined,
       createdAt: now,
     }
     Object.assign(receipt, resolveContactSnapshot(customer, overrides?.contactId ?? targetDocs[0].contactId))
@@ -2168,7 +2186,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         billing.convertedToDocumentIds = [...(billing.convertedToDocumentIds || []), receipt.id]
       })
     }
-    useBookingStore().addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
+    linkedBookings.forEach((b) => {
+      b!.receiptDocId = receipt.id
+    })
+    bookingStore.addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
     return { doc: receipt, warnings }
   }
 
@@ -2274,8 +2295,37 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         billing.convertedToDocumentIds = (billing.convertedToDocumentIds || []).filter((cid) => cid !== doc.id)
       }
     })
+    const bookingStore = useBookingStore()
+    doc.bookingIds.forEach((bid) => {
+      const b = bookingStore.bookings.find((bk) => bk.id === bid)
+      if (b && b.receiptDocId === id) b.receiptDocId = undefined
+    })
     documents.value = documents.value.filter((d) => d.id !== id)
     items.value = items.value.filter((i) => i.documentId !== id)
+    return true
+  }
+
+  /**
+   * ลบใบเสร็จรับเงิน ไม่ว่าจะสถานะใดก็ตาม (DRAFT หรือ PAID) — ต่างจาก cancelReceipt ที่ทำได้เฉพาะตอนยังไม่จ่ายเงิน (DRAFT)
+   * เท่านั้น: ตั้งแต่ createReceiptFromBookings/createReceiptManual เปลี่ยนมาสร้างใบเสร็จเป็น PAID ทันทีเสมอ (ไม่ผ่าน DRAFT
+   * จริงๆ อีกแล้ว) ทำให้ cancelReceipt ใช้ลบใบเสร็จที่สร้างใหม่ไม่ได้เลยสักใบ — ฟังก์ชันนี้จึงไม่เช็คสถานะ ลบได้เสมอ
+   *
+   * เจตนา: ความสัมพันธ์เป็น Billing Note → Tax Invoice → Receipt ทางเดียว (ไม่ใช่ cascade ย้อนกลับ) — ลบใบเสร็จแล้ว
+   * "ต้อง" ไม่ไปลบ/แก้ไขสถานะใบแจ้งหนี้หรือใบวางบิลต้นทางเลย (ต่างจาก cancelReceipt เดิมที่คืนสถานะใบวางบิลกลับ
+   * BILLING_PENDING โดยเจตนา เพราะออกแบบไว้สำหรับยกเลิกก่อนจ่ายเงินเท่านั้น) สิ่งเดียวที่คืนค่าคือ Booking.receiptDocId
+   * ของงานที่ผูกอยู่ (กันไม่ให้ค้างชี้ไปใบเสร็จที่ไม่มีอยู่จริงแล้ว และให้งานเหล่านั้นถูกดึงไปออกใบเสร็จใหม่ได้อีก)
+   */
+  function deleteReceipt(id: string): boolean {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
+    if (!doc) return false
+    const bookingStore = useBookingStore()
+    doc.bookingIds.forEach((bid) => {
+      const b = bookingStore.bookings.find((bk) => bk.id === bid)
+      if (b && b.receiptDocId === id) b.receiptDocId = undefined
+    })
+    documents.value = documents.value.filter((d) => d.id !== id)
+    items.value = items.value.filter((i) => i.documentId !== id)
+    bookingStore.addLog('ลบเอกสาร ' + doc.number, { docId: id })
     return true
   }
 
@@ -2359,6 +2409,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     updateReceiptManual,
     recordReceiptPayment,
     cancelReceipt,
+    deleteReceipt,
     createCashSale,
   }
 })

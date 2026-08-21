@@ -168,12 +168,16 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useBookingStore } from '@/stores/booking'
 import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
+/** ต้อง instantiate ตั้งแต่หน้านี้โหลด (แม้ไม่ได้ใช้แสดงผลตรงๆ) เพื่อให้ bookingStore เริ่มดึงข้อมูลจาก Firestore ล่วงหน้า
+ *  ก่อนผู้ใช้จะกด "สร้างใบเสร็จรับเงิน" — ดูเหตุผลเดียวกันใน BillingListView.vue */
+useBookingStore()
 
 const statusFilter = ref<'all' | SalesDocumentStatus>('all')
 const search = ref('')
@@ -269,7 +273,14 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
       { value: 'RESET', label: 'รีเซ็ต' },
     ]
   }
-  if (s === 'PAID') return [{ value: 'PAID', label: statusLabel.PAID! }]
+  if (s === 'PAID') {
+    const options: ActionOption[] = [{ value: 'PAID', label: statusLabel.PAID! }]
+    /** ซ่อนตัวเลือกนี้ถ้ามีใบเสร็จรับเงินอ้างอิงใบแจ้งหนี้นี้ไปแล้ว (กันสร้างซ้ำ) ดู sourceDocsClaimedByOtherReceipts */
+    if (salesDocumentsStore.sourceDocsClaimedByOtherReceipts([doc.id]).length === 0) {
+      options.push({ value: 'CREATE_RECEIPT', label: 'สร้างใบเสร็จรับเงิน' })
+    }
+    return options
+  }
   return [{ value: s, label: s }]
 }
 
@@ -316,6 +327,12 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
     case 'COLLECT':
       openPaymentModal(doc)
       break
+    case 'CREATE_RECEIPT': {
+      const result = salesDocumentsStore.createReceiptFromSourceDocs([doc.id], 'TAX_INVOICE')
+      if (result) router.push(`/documents/${result.doc.id}`)
+      else alert('สร้างใบเสร็จรับเงินไม่สำเร็จ — งานขนส่งที่ผูกกับใบแจ้งหนี้นี้บางรายการอาจถูกดึงไปออกใบเสร็จอื่นไปแล้ว')
+      break
+    }
     case 'CANCEL':
       if (confirm(`ยืนยันยกเลิกใบแจ้งหนี้ ${doc.number}? งานขนส่ง/ใบวางบิลที่ผูกไว้จะกลับไปสถานะก่อนหน้า`)) salesDocumentsStore.cancelTaxInvoice(doc.id)
       break

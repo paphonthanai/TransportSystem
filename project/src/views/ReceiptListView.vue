@@ -246,7 +246,12 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
       { value: 'CANCEL', label: 'ยกเลิก' },
     ]
   }
-  if (s === 'PAID') return [{ value: 'PAID', label: statusLabel.PAID! }]
+  if (s === 'PAID') {
+    return [
+      { value: 'PAID', label: statusLabel.PAID! },
+      { value: 'DELETE', label: 'ลบ' },
+    ]
+  }
   return [{ value: s, label: s }]
 }
 
@@ -289,6 +294,10 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
       break
     case 'CANCEL':
       if (confirm(`ยืนยันยกเลิกใบเสร็จรับเงิน ${doc.number}?`)) salesDocumentsStore.cancelReceipt(doc.id)
+      break
+    case 'DELETE':
+      if (confirm(`ยืนยันลบใบเสร็จรับเงิน ${doc.number}? งานขนส่งที่ผูกอยู่จะกลับมาเลือกออกใบเสร็จใหม่ได้อีกครั้ง (ไม่กระทบใบแจ้งหนี้/ใบวางบิลต้นทาง)`))
+        salesDocumentsStore.deleteReceipt(doc.id)
       break
     default:
       break

@@ -117,10 +117,15 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useBookingStore } from '@/stores/booking'
 import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
 
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
+/** ต้อง instantiate ตั้งแต่หน้านี้โหลด (แม้ไม่ได้ใช้แสดงผลตรงๆ) เพื่อให้ bookingStore เริ่มดึงข้อมูลจาก Firestore ล่วงหน้า
+ *  ก่อนผู้ใช้จะกด "สร้างใบกำกับภาษี" — ถ้าไม่เรียกไว้ก่อน createInvoiceFromBilling จะเป็นจุดแรกที่เรียก useBookingStore()
+ *  ทำให้ bookingStore.bookings ยังว่างเปล่าตอนกดปุ่มจริง (เพิ่งเริ่ม fetch ตอนนั้นพอดี) */
+useBookingStore()
 const documentSettingsStore = useDocumentSettingsStore()
 
 const statusFilter = ref<'all' | SalesDocumentStatus>('all')
@@ -229,6 +234,7 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
   if (s === 'BILLING_PENDING') {
     return [
       { value: 'BILLING_PENDING', label: statusLabel.BILLING_PENDING! },
+      { value: 'CREATE_INVOICE', label: 'สร้างใบกำกับภาษี' },
       { value: 'CANCEL', label: 'ยกเลิก' },
     ]
   }
@@ -246,6 +252,12 @@ const statusDotClass = (status: SalesDocumentStatus) =>
 
 const onStatusSelect = (doc: SalesDocument, action: string) => {
   switch (action) {
+    case 'CREATE_INVOICE': {
+      const invoice = salesDocumentsStore.createInvoiceFromBilling(doc.id)
+      if (invoice) router.push(`/documents/${invoice.id}`)
+      else alert('สร้างใบกำกับภาษีไม่สำเร็จ — งานขนส่งที่ผูกกับใบวางบิลนี้บางรายการอาจถูกดึงไปออกใบแจ้งหนี้อื่นไปแล้ว')
+      break
+    }
     case 'CANCEL':
       if (confirm(`ยืนยันยกเลิกใบวางบิล ${doc.number}? งานขนส่งที่ผูกไว้จะกลับไปรอวางบิลใหม่`)) salesDocumentsStore.cancelBillingNote(doc.id)
       break
