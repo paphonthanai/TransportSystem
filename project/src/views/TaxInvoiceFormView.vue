@@ -327,6 +327,7 @@ import { useContactStore } from '@/stores/contacts'
 import { useInventoryStore } from '@/stores/inventory'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/users'
+import { useBookingStore } from '@/stores/booking'
 import { useDocumentPrefillStore } from '@/stores/documentPrefill'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
@@ -344,6 +345,9 @@ const inventoryStore = useInventoryStore()
 const authStore = useAuthStore()
 const userStore = useUserStore()
 const documentPrefillStore = useDocumentPrefillStore()
+/** instantiate ตั้งแต่หน้านี้โหลด เผื่อผู้ใช้เข้าหน้านี้มาจากดรอปดาวน์ "สร้างใบกำกับภาษี" ของใบวางบิลแล้วกด "บันทึกเอกสาร"
+ *  เร็วมาก — createTaxInvoiceManual ต้องหา booking ที่ผูกกับใบวางบิลต้นทางเจอครบก่อนจึงจะ claim ได้ (ดู BillingListView.vue) */
+useBookingStore()
 
 const editingId = typeof route.params.id === 'string' ? route.params.id : undefined
 const isEditMode = !!editingId
@@ -649,6 +653,10 @@ const saveAndGetDoc = () => {
   }
   if (currentId.value) return salesDocumentsStore.updateTaxInvoiceManual(currentId.value, payload)
   const created = salesDocumentsStore.createTaxInvoiceManual(payload)
+  if (!created) {
+    alert('สร้างใบแจ้งหนี้ไม่สำเร็จ — ใบวางบิลต้นทางอาจถูกออกใบแจ้งหนี้ไปแล้ว หรืองานขนส่งที่ผูกอยู่บางรายการถูกดึงไปออกใบแจ้งหนี้อื่นไปแล้ว')
+    return null
+  }
   currentId.value = created.id
   return created
 }

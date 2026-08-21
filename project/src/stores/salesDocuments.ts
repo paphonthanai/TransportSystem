@@ -64,8 +64,12 @@ export interface SalesDocument {
   creditDays?: number
   dueDate?: Date
   paidDate?: Date
-  /** RECEIPT เท่านั้น: วิธีการรับชำระที่บันทึกตอนกด "เก็บเงิน" เช่น เงินสด/โอนเงิน */
+  /** RECEIPT + TAX_INVOICE: วิธีการรับชำระที่บันทึกตอนกด "เก็บเงิน"/"บันทึกการชำระเงิน" เช่น เงินสด/โอนเงิน/เช็ค */
   paymentMethod?: string
+  /** TAX_INVOICE เท่านั้น: ชื่อธนาคารที่บันทึกตอน "บันทึกการชำระเงิน" — มีความหมายเฉพาะตอน paymentMethod เป็นโอนเงิน/เช็ค */
+  paymentBankName?: string
+  /** TAX_INVOICE เท่านั้น: เลขที่รายการโอน/เลขที่เช็ค ที่บันทึกตอน "บันทึกการชำระเงิน" */
+  paymentReference?: string
   /** BILLING เท่านั้น คงค่าเดิมจาก BillingBatch */
   label?: string
   dateFrom?: Date
@@ -391,11 +395,15 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         doc.bookingIds = billing.bookingIds
         billing.status = 'BILLED'
         billing.convertedToDocumentIds = [...(billing.convertedToDocumentIds || []), doc.id]
+        /** claim งานขนส่งที่ผูกกับใบวางบิลนี้ด้วย taxInvoiceDocId (เหมือน createInvoiceFromBilling) — ห้ามเขียน
+         *  b.billingStatus แบบเดิม เพราะเป็นฟิลด์เก่าที่ไม่มีความหมายแล้วหลัง redesign เป็นระบบ claim field
+         *  (ดู createBillingFromBookings/createInvoiceFromBilling) การเช็คว่างานเหล่านี้ยังไม่ถูก claim ไปแล้ว
+         *  ต้องทำก่อนสร้างเอกสารจริง ดู eligibility guard ใน createTaxInvoiceManual */
         if (billing.bookingIds.length) {
           const bookingStore = useBookingStore()
           billing.bookingIds.forEach((bid) => {
             const b = bookingStore.bookings.find((bk) => bk.id === bid)
-            if (b) b.billingStatus = 'INVOICED'
+            if (b) b.taxInvoiceDocId = doc.id
           })
         }
       }
@@ -1184,10 +1192,19 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return doc
   }
 
-  /** สร้างใบแจ้งหนี้/ใบกำกับภาษีแบบกรอกเอง (ไม่ผูกกับใบวางบิล) — ใช้หน้าฟอร์มแบบเดียวกับ QuotationFormView.vue (ดู TaxInvoiceFormView.vue) */
-  function createTaxInvoiceManual(data: ManualDocumentFormData): SalesDocument {
+  /** สร้างใบแจ้งหนี้/ใบกำกับภาษีแบบกรอกเอง (ไม่ผูกกับใบวางบิล) — ใช้หน้าฟอร์มแบบเดียวกับ QuotationFormView.vue (ดู TaxInvoiceFormView.vue)
+   *  ถ้าเปิดฟอร์มมาจากดรอปดาวน์ "สร้างใบกำกับภาษี" ของใบวางบิล (data.sourceBillingId ผ่าน documentPrefillStore) ต้องเช็ค
+   *  eligibility ก่อนสร้างเอกสารจริง (เหมือน createInvoiceFromBilling) — คืนค่า null ถ้าใบวางบิลต้นทางไม่ใช่ BILLING_PENDING
+   *  แล้ว หรืองานขนส่งที่ผูกอยู่บางรายการถูกดึงไปออกใบแจ้งหนี้อื่นไปแล้ว (เช่น เปิดสองแท็บพร้อมกัน) กันไม่ให้ claim ซ้ำ */
+  function createTaxInvoiceManual(data: ManualDocumentFormData): SalesDocument | null {
     const documentSettingsStore = useDocumentSettingsStore()
     const bookingStore = useBookingStore()
+    if (data.sourceBillingId) {
+      const billing = documents.value.find((d) => d.id === data.sourceBillingId && d.type === 'BILLING')
+      if (!billing || billing.status !== 'BILLING_PENDING') return null
+      const linkedBookings = billing.bookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid))
+      if (linkedBookings.some((b) => !b || b.taxInvoiceDocId)) return null
+    }
     const numbering = documentSettingsStore.settings.numbering.invoice
     const seq = bookingStore.documents.length + documents.value.filter((d) => d.type === 'TAX_INVOICE').length + 1
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
@@ -1984,7 +2001,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    * โดยเจตนา: ใบเสร็จเป็นแค่เอกสารพิมพ์ยืนยัน ไม่ใช่ตัวกำหนดสถานะการชำระเงินอีกต่อไป — ทำได้ทั้งตอนยังร่างอยู่หรือส่งลูกค้าไปแล้ว) */
   function recordTaxInvoicePayment(
     id: string,
-    payment: { paidDate?: Date; whtAmount?: number; paymentMethod?: string; note?: string }
+    payment: { paidDate?: Date; whtAmount?: number; paymentMethod?: string; paymentBankName?: string; paymentReference?: string; note?: string }
   ): SalesDocument | null {
     const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
     if (!doc || doc.status === 'PAID') return null
@@ -1992,6 +2009,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.paidDate = payment.paidDate || new Date()
     if (payment.whtAmount !== undefined) doc.whtAmount = payment.whtAmount
     doc.paymentMethod = payment.paymentMethod
+    doc.paymentBankName = payment.paymentBankName
+    doc.paymentReference = payment.paymentReference
     doc.note = payment.note
     useBookingStore().addLog(`บันทึกรับชำระ ${doc.number}`, { docId: doc.id })
     return doc
@@ -2026,10 +2045,13 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
 
   /** ยกเลิกใบแจ้งหนี้/ใบกำกับภาษีที่ยังไม่ส่ง (DRAFT) — คืนสถานะงานขนส่งที่ผูกอยู่กลับเป็นว่าง (taxInvoiceDocId), คืนสถานะใบวางบิลต้นทาง
    *  (ถ้ามี — เฉพาะกรณีสร้างผ่านเส้นทางแปลงเดิม createInvoiceFromBilling) กลับเป็นรอออกใบแจ้งหนี้ แล้วลบเอกสารทิ้ง
-   *  ไม่แตะ billingNoteDocId/receiptDocId ของงานเดียวกัน (เป็นอิสระต่อกัน) */
+   *  ไม่แตะ billingNoteDocId/receiptDocId ของงานเดียวกัน (เป็นอิสระต่อกัน) — ตั้งแต่สร้างใบเสร็จได้จากใบแจ้งหนี้สถานะร่างแล้ว
+   *  (ดู isSourceDocEligible) ต้องเช็คก่อนว่ามีใบเสร็จอ้างอิงใบแจ้งหนี้นี้อยู่หรือยัง ไม่งั้นใบเสร็จนั้นจะลอยไม่มีต้นทาง
+   *  (เหมือน resetTaxInvoice ที่เช็คแบบเดียวกันอยู่แล้วสำหรับสถานะอื่น) */
   function cancelTaxInvoice(id: string) {
     const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
     if (!doc || doc.status !== 'DRAFT') return false
+    if (sourceDocsClaimedByOtherReceipts([id]).length > 0) return false
     if (doc.bookingIds.length) {
       const bookingStore = useBookingStore()
       doc.bookingIds.forEach((bid) => {
@@ -2113,11 +2135,13 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     })
   }
 
-  /** เอกสารสถานะ "ใช้อ้างอิงสร้างใบเสร็จได้" ตามชนิด — ใบแจ้งหนี้ต้องชำระแล้ว (PAID) เท่านั้น (ใบเสร็จเป็นแค่เอกสารพิมพ์ยืนยัน
-   *  ไม่ใช่ตัวกำหนดสถานะการชำระเงินอีกต่อไป ดู recordTaxInvoicePayment) ส่วนใบวางบิลคือยังไม่ถูกแปลงไปเป็นใบแจ้งหนี้/ใบเสร็จอื่น
-   *  (BILLING_PENDING เท่านั้น — เส้นทางนี้ไม่มีสถานะ PAID ของตัวเองจึงยังคงพฤติกรรมเดิม) */
+  /** เอกสารสถานะ "ใช้อ้างอิงสร้างใบเสร็จได้" ตามชนิด — ใบแจ้งหนี้สร้างใบเสร็จได้ตั้งแต่สถานะร่าง ไม่ต้องรอเปลี่ยนสถานะก่อน
+   *  (ใบเสร็จเป็นแค่เอกสารพิมพ์ยืนยันการรับเงินที่เกิดขึ้นจริง ไม่ใช่ตัวกำหนด/ผูกกับสถานะของใบแจ้งหนี้ ดู recordTaxInvoicePayment
+   *  ซึ่งเป็นกลไกแยกต่างหากที่เปลี่ยนสถานะใบแจ้งหนี้เป็น PAID) เงื่อนไขเดียวที่ยังกันคือ sourceDocsClaimedByOtherReceipts
+   *  (กันสร้างใบเสร็จซ้ำจากใบแจ้งหนี้ใบเดียวกัน) — ส่วนใบวางบิลคือยังไม่ถูกแปลงไปเป็นใบแจ้งหนี้/ใบเสร็จอื่น (BILLING_PENDING
+   *  เท่านั้น — เส้นทางนี้ไม่มีสถานะ PAID ของตัวเองจึงยังคงพฤติกรรมเดิม) */
   const isSourceDocEligible = (d: SalesDocument, sourceType: ReceiptSourceType) =>
-    sourceType === 'TAX_INVOICE' ? d.status === 'PAID' : d.status === 'BILLING_PENDING'
+    sourceType === 'TAX_INVOICE' ? true : d.status === 'BILLING_PENDING'
 
   /**
    * สร้างใบเสร็จรับเงิน (เดี่ยวหรือรวม) จากเอกสารต้นทางชนิดเดียวกันของลูกค้ารายเดียวกัน — รายการต่อบรรทัด = 1 เอกสารต้นทาง

@@ -46,8 +46,8 @@
           class="print-sheet bg-white text-black rounded-xl shadow-default border border-border p-10 max-w-3xl mx-auto relative mb-4 last:mb-0"
           :class="idx < copyLabels.length - 1 && 'print-page-break'"
         >
-          <div class="corner-flag"></div>
-          <div class="absolute top-2.5 right-3 text-white text-xs font-bold z-10">{{ idx + 1 }}</div>
+          <div v-if="showCornerFlag" class="corner-flag" :class="docMode === 'receipt' ? 'corner-flag-green' : 'corner-flag-blue'"></div>
+          <div v-if="showCornerFlag" class="absolute top-2.5 right-3 text-white text-xs font-bold z-10">{{ idx + 1 }}</div>
 
           <div class="flex items-start justify-between mb-6">
             <div class="max-w-[55%] space-y-4">
@@ -79,7 +79,7 @@
                   <span class="text-gray-500">วันที่</span>
                   <span class="font-semibold">{{ formatDate(activeDoc?.date) }}</span>
                 </div>
-                <div v-if="activeDoc?.creditDays !== undefined" class="flex justify-between gap-4">
+                <div v-if="activeDoc?.creditDays !== undefined && !isInvoiceOrReceipt" class="flex justify-between gap-4">
                   <span class="text-gray-500">เครดิต</span>
                   <span class="font-semibold">{{ activeDoc.creditDays }} วัน</span>
                 </div>
@@ -87,34 +87,47 @@
                   <span class="text-gray-500">ครบกำหนด</span>
                   <span class="font-semibold">{{ formatDate(activeDoc.dueDate) }}</span>
                 </div>
+                <div v-if="activeDoc?.salesperson" class="flex justify-between gap-4">
+                  <span class="text-gray-500">ผู้ขาย</span>
+                  <span class="font-semibold">{{ activeDoc.salesperson }}</span>
+                </div>
                 <div v-if="activeDoc?.reference" class="flex justify-between gap-4">
                   <span class="text-gray-500">เลขที่อ้างอิง</span>
                   <span class="font-semibold text-right max-w-[60%] truncate">{{ activeDoc.reference }}</span>
                 </div>
-                <div class="border-t border-gray-300 my-1.5"></div>
-                <div class="flex justify-between gap-4">
-                  <span class="text-gray-500">ผู้ติดต่อ</span>
-                  <span class="font-semibold">{{ contactPerson }}</span>
-                </div>
-                <div v-if="contactPosition" class="flex justify-between gap-4">
-                  <span class="text-gray-500">ตำแหน่ง</span>
-                  <span class="font-semibold">{{ contactPosition }}</span>
-                </div>
-                <div v-if="contactPhone" class="flex justify-between gap-4">
-                  <span class="text-gray-500">เบอร์โทร</span>
-                  <span class="font-semibold">{{ contactPhone }}</span>
-                </div>
-                <div v-if="contactEmail" class="flex justify-between gap-4">
-                  <span class="text-gray-500">อีเมล</span>
-                  <span class="font-semibold truncate max-w-[150px]">{{ contactEmail }}</span>
-                </div>
+                <template v-if="!isInvoiceOrReceipt">
+                  <div class="border-t border-gray-300 my-1.5"></div>
+                  <div class="flex justify-between gap-4">
+                    <span class="text-gray-500">ผู้ติดต่อ</span>
+                    <span class="font-semibold">{{ contactPerson }}</span>
+                  </div>
+                  <div v-if="contactPosition" class="flex justify-between gap-4">
+                    <span class="text-gray-500">ตำแหน่ง</span>
+                    <span class="font-semibold">{{ contactPosition }}</span>
+                  </div>
+                  <div v-if="contactPhone" class="flex justify-between gap-4">
+                    <span class="text-gray-500">เบอร์โทร</span>
+                    <span class="font-semibold">{{ contactPhone }}</span>
+                  </div>
+                  <div v-if="contactEmail" class="flex justify-between gap-4">
+                    <span class="text-gray-500">อีเมล</span>
+                    <span class="font-semibold truncate max-w-[150px]">{{ contactEmail }}</span>
+                  </div>
+                </template>
+              </div>
+              <!-- "ชื่องาน" — ใบกำกับภาษี/ใบเสร็จรับเงินเท่านั้นที่แสดงคำอธิบายสรุปเป็นฟิลด์มีป้ายกำกับใต้เมตาบ็อกซ์ (ตรงกับ
+                   ฟอร์แมตเอกสารจริงของบริษัท) เอกสารประเภทอื่นแสดงเป็นบรรทัดเต็มความกว้างเหนือตารางเหมือนเดิม (ดูด้านล่าง) -->
+              <div v-if="isInvoiceOrReceipt && activeDoc?.description" class="doc-meta-box text-left text-xs w-64 mt-2">
+                <div class="text-xs font-bold text-primary mb-0.5">ชื่องาน</div>
+                <div class="font-semibold whitespace-pre-line">{{ activeDoc.description }}</div>
               </div>
             </div>
           </div>
 
           <!-- รายละเอียดเอกสาร (คำอธิบายสรุประดับเอกสาร) — เช่น "รายการขนส่งสินค้าห้วงระหว่างวันที่ ... จำนวน N เที่ยว"
-               สำหรับใบวางบิล/ใบแจ้งหนี้รวม แยกจากตารางรายการรายเที่ยวด้านล่าง เอกสารที่ไม่มีค่านี้ไม่แสดงส่วนนี้เลย -->
-          <div v-if="activeDoc?.description" class="text-sm font-medium mb-3">{{ activeDoc.description }}</div>
+               สำหรับใบวางบิล แยกจากตารางรายการรายเที่ยวด้านล่าง เอกสารที่ไม่มีค่านี้ไม่แสดงส่วนนี้เลย (ใบกำกับภาษี/ใบเสร็จ
+               รับเงินย้ายไปแสดงเป็น "ชื่องาน" ใต้เมตาบ็อกซ์แทนแล้ว ดูด้านบน) -->
+          <div v-if="activeDoc?.description && !isInvoiceOrReceipt" class="text-sm font-medium mb-3">{{ activeDoc.description }}</div>
 
           <!-- ตารางรายเที่ยว — ใบวางบิล/ใบแจ้งหนี้/ใบเสร็จที่มีรายการมาจากงานขนส่งโดยตรง (รวมใบเสร็จที่แตกรายการจากเอกสาร
                ต้นทางแล้ว ดู receiptItemRowsFromSourceDocs) ให้ตรงกับฟอร์แมตเอกสารจริงของบริษัท เช็คก่อนตารางอ้างอิงเอกสาร
@@ -129,6 +142,7 @@
                 <th class="border border-gray-400 px-2 py-1 text-left w-28">ใบขนส่ง</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">รายการ</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-16">{{ qtyColumnLabel }}</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-20">หน่วยละ</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-24">จำนวนเงิน</th>
               </tr>
             </thead>
@@ -146,6 +160,7 @@
                 <td class="border border-gray-400 px-2 py-1">{{ row.deliveryNo || '-' }}</td>
                 <td class="border border-gray-400 px-2 py-1 whitespace-pre-line">{{ row.description }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ commonRowUnit ? row.qty : `${row.qty} ${row.unit}` }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.unitPrice) }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
               </tr>
               <tr v-for="n in fillerRows" :key="'filler' + n">
@@ -157,13 +172,14 @@
                 <td class="border border-gray-400 px-2 py-1"></td>
                 <td class="border border-gray-400 px-2 py-1"></td>
                 <td class="border border-gray-400 px-2 py-1"></td>
+                <td class="border border-gray-400 px-2 py-1"></td>
               </tr>
             </tbody>
           </table>
 
-          <!-- ใบเสร็จรุ่นเก่าที่อ้างอิงใบแจ้งหนี้/ใบวางบิลต้นทาง (sourceDocumentIds) แต่รายการยังเป็นฟอร์แมตสรุป 1 บรรทัด/
-               เอกสาร (ไม่มีข้อมูลเที่ยว) — แสดงตารางอ้างอิงเอกสารต้นทางแบบเดิมไว้เป็น fallback -->
-          <table v-else-if="receiptSourceRows.length" class="w-full text-sm border border-gray-400 mb-4">
+          <!-- ใบเสร็จรุ่นเก่าที่อ้างอิงใบแจ้งหนี้/ใบวางบิลต้นทาง (sourceDocumentIds) แต่ไม่มีรายการ (items) ของตัวเองเลย — เอกสาร
+               ที่มี items จริง (ทั้งเก่าและใหม่) ให้แสดงตารางแบบย่อ/สรุปด้านล่างแทนเสมอ ตรงกับฟอร์แมตเอกสารจริงของบริษัท -->
+          <table v-else-if="receiptSourceRows.length && printRows.length === 0" class="w-full text-sm border border-gray-400 mb-4">
             <thead class="bg-gray-100">
               <tr>
                 <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
@@ -197,6 +213,8 @@
             </tbody>
           </table>
 
+          <!-- ตารางรายการทั่วไป — ใบกำกับภาษี/ใบเสร็จรับเงินใช้คอลัมน์แบบย่อ (#/รายละเอียด/จำนวน/ราคาต่อหน่วย/ยอดรวม) ไม่มี
+               คอลัมน์ส่วนลด/ภาษีต่อรายการ ตรงกับฟอร์แมตเอกสารจริงของบริษัท — เอกสารประเภทอื่นคงคอลัมน์เดิมไว้ครบ -->
           <table v-else class="w-full text-sm border border-gray-400 mb-4">
             <thead class="bg-gray-100">
               <tr>
@@ -204,24 +222,24 @@
                 <th class="border border-gray-400 px-2 py-1 text-left">รายละเอียด</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-24">{{ qtyColumnLabel }}</th>
                 <th class="border border-gray-400 px-2 py-1 text-right w-24">{{ docMode === 'sales_order' ? 'ราคาต่อเที่ยว' : 'ราคาต่อหน่วย' }}</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-16">ส่วนลด</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-16">ภาษี</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-28">มูลค่า</th>
+                <th v-if="!isInvoiceOrReceipt" class="border border-gray-400 px-2 py-1 text-right w-16">ส่วนลด</th>
+                <th v-if="!isInvoiceOrReceipt" class="border border-gray-400 px-2 py-1 text-right w-16">ภาษี</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-28">{{ isInvoiceOrReceipt ? 'ยอดรวม' : 'มูลค่า' }}</th>
               </tr>
             </thead>
             <tbody>
               <tr
-                v-for="(row, ridx) in docRows"
+                v-for="(row, ridx) in printRows"
                 :key="ridx"
                 :class="row.onClick ? 'cursor-pointer hover:bg-gray-50' : ''"
                 @click="row.onClick && row.onClick()"
               >
                 <td class="border border-gray-400 px-2 py-1">{{ ridx + 1 }}</td>
                 <td class="border border-gray-400 px-2 py-1 whitespace-pre-line">{{ row.description }}</td>
-                <td class="border border-gray-400 px-2 py-1 text-right">{{ commonRowUnit ? row.qty : `${row.qty} ${row.unit}` }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right">{{ commonRowUnit ? row.qty : row.unit ? `${row.qty} ${row.unit}` : row.qty }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.unitPrice) }}</td>
-                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatDiscount(row) }}</td>
-                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatPercent(row.vatRate) }}</td>
+                <td v-if="!isInvoiceOrReceipt" class="border border-gray-400 px-2 py-1 text-right">{{ formatDiscount(row) }}</td>
+                <td v-if="!isInvoiceOrReceipt" class="border border-gray-400 px-2 py-1 text-right">{{ formatPercent(row.vatRate) }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
               </tr>
               <tr v-for="n in fillerRows" :key="'filler' + n">
@@ -229,8 +247,8 @@
                 <td class="border border-gray-400 px-2 py-1"></td>
                 <td class="border border-gray-400 px-2 py-1"></td>
                 <td class="border border-gray-400 px-2 py-1"></td>
-                <td class="border border-gray-400 px-2 py-1"></td>
-                <td class="border border-gray-400 px-2 py-1"></td>
+                <td v-if="!isInvoiceOrReceipt" class="border border-gray-400 px-2 py-1"></td>
+                <td v-if="!isInvoiceOrReceipt" class="border border-gray-400 px-2 py-1"></td>
                 <td class="border border-gray-400 px-2 py-1"></td>
               </tr>
             </tbody>
@@ -250,7 +268,7 @@
                 <span class="text-gray-600">ส่วนลดรวม</span>
                 <span>-{{ formatBaht(discountAmount) }}</span>
               </div>
-              <template v-if="showVatRow">
+              <template v-if="showVatBreakdownRows">
                 <div class="flex justify-between">
                   <span class="text-gray-600">มูลค่าที่ไม่มี/ยกเว้นภาษี</span>
                   <span>{{ formatBaht(exemptAmount) }}</span>
@@ -259,27 +277,29 @@
                   <span class="text-gray-600">มูลค่าที่คำนวณภาษี</span>
                   <span>{{ formatBaht(taxableAmount) }}</span>
                 </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-600">ภาษีมูลค่าเพิ่ม {{ activeDoc?.vatRate ?? documentSettingsStore.settings.vatRate }}%</span>
-                  <span>{{ formatBaht(vatAmount) }}</span>
-                </div>
               </template>
+              <div v-if="showVatRow" class="flex justify-between">
+                <span class="text-gray-600">ภาษีมูลค่าเพิ่ม {{ activeDoc?.vatRate ?? documentSettingsStore.settings.vatRate }}%</span>
+                <span>{{ formatBaht(vatAmount) }}</span>
+              </div>
               <div class="flex justify-between font-bold border-t border-black pt-1">
                 <span>จำนวนเงินรวมทั้งสิ้น</span>
                 <span>{{ formatBaht(grandTotal) }}</span>
               </div>
-              <div v-if="showWhtRow" class="flex justify-between text-red-600">
-                <span>หักภาษี ณ ที่จ่าย {{ documentSettingsStore.settings.whtRate }}%</span>
-                <span>-{{ formatBaht(whtAmount) }}</span>
-              </div>
-              <div class="flex justify-between font-bold border-t border-black pt-1 text-base">
-                <span>ยอดชำระ</span>
-                <span>{{ formatBaht(netPayable) }}</span>
-              </div>
+              <template v-if="!isInvoiceOrReceipt">
+                <div v-if="showWhtRow" class="flex justify-between text-red-600">
+                  <span>หักภาษี ณ ที่จ่าย {{ documentSettingsStore.settings.whtRate }}%</span>
+                  <span>-{{ formatBaht(whtAmount) }}</span>
+                </div>
+                <div class="flex justify-between font-bold border-t border-black pt-1 text-base">
+                  <span>ยอดชำระ</span>
+                  <span>{{ formatBaht(netPayable) }}</span>
+                </div>
+              </template>
             </div>
           </div>
 
-          <div v-if="hasPaymentInfo" class="text-xs border border-gray-300 rounded p-3 mb-6 max-w-sm">
+          <div v-if="hasPaymentInfo && !isInvoiceOrReceipt" class="text-xs border border-gray-300 rounded p-3 mb-6 max-w-sm">
             <div class="font-semibold mb-1">ข้อมูลการรับชำระ</div>
             <div v-if="documentSettingsStore.settings.payment.bankName">ธนาคาร: {{ documentSettingsStore.settings.payment.bankName }}</div>
             <div v-if="documentSettingsStore.settings.payment.accountName">ชื่อบัญชี: {{ documentSettingsStore.settings.payment.accountName }}</div>
@@ -288,13 +308,43 @@
             <div v-if="documentSettingsStore.settings.payment.note" class="mt-1 text-gray-600">{{ documentSettingsStore.settings.payment.note }}</div>
           </div>
 
+          <!-- ข้อมูลการชำระเงิน — แสดงเฉพาะใบเสร็จรับเงินเท่านั้น (ใบกำกับภาษี/ใบแจ้งหนี้ไม่แสดง แม้จะบันทึกการชำระเงินไว้แล้วก็ตาม —
+               ข้อมูลยังเก็บอยู่ใน SalesDocument ของใบแจ้งหนี้ตามเดิมทุกประการ แค่ UI หน้านี้ไม่ render เท่านั้น ดู isSourceDocEligible/
+               recordTaxInvoicePayment ที่ยังเขียนลงใบแจ้งหนี้เหมือนเดิม) ใบเสร็จดึงวิธีชำระ/ธนาคาร/เลขที่รายการมาจากใบแจ้งหนี้ต้นทาง
+               ที่บันทึกไว้ (sourceTaxInvoiceForReceipt) — ใบเสร็จเองไม่เคยมีฟิลด์พวกนี้เป็นของตัวเอง ยกเว้นใบเสร็จกรอกเอง (createReceiptManual)
+               ที่มี paymentMethod ของตัวเองอยู่แล้ว จึงเช็คค่าของใบเสร็จเองก่อนเป็นอันดับแรก -->
+          <div v-if="docMode === 'receipt'" class="text-xs mb-6 space-y-2">
+            <div class="flex items-center flex-wrap gap-x-2 gap-y-2">
+              <span>การชำระเงินจะสมบูรณ์เมื่อบริษัทได้รับเงินเรียบร้อยแล้ว</span>
+              <label v-for="opt in paymentMethodChecks" :key="opt.value" class="flex items-center gap-1">
+                <span class="payment-checkbox" :class="receiptPaymentMethod === opt.value && 'payment-checkbox-checked'"></span>
+                {{ opt.label }}
+              </label>
+            </div>
+            <div class="flex items-center flex-wrap gap-2">
+              <span>ธนาคาร</span>
+              <span v-if="receiptPaymentBankName" class="font-semibold">{{ receiptPaymentBankName }}</span>
+              <span v-else class="flex-1 border-b border-gray-400 h-4 min-w-[70px]"></span>
+              <span>เลขที่</span>
+              <span v-if="receiptPaymentReference" class="font-semibold">{{ receiptPaymentReference }}</span>
+              <span v-else class="flex-1 border-b border-gray-400 h-4 min-w-[70px]"></span>
+              <span>วันที่</span>
+              <span class="font-semibold">{{ formatDate(receiptPaidDate) }}</span>
+            </div>
+            <div class="flex items-center flex-wrap gap-x-4 gap-y-1">
+              <span>จำนวนเงิน: <span class="font-semibold">{{ formatBaht(grandTotal) }}</span></span>
+              <span v-if="receiptWhtAmount > 0">หักภาษี ณ ที่จ่าย: <span class="font-semibold text-red-600">-{{ formatBaht(receiptWhtAmount) }}</span></span>
+              <span>ยอดที่รับจริง: <span class="font-semibold">{{ formatBaht(receiptNetAfterWht) }}</span></span>
+            </div>
+          </div>
+
           <div v-if="docNote" class="text-xs text-gray-600 mb-6">{{ docNote }}</div>
 
           <div class="grid grid-cols-2 gap-8 text-sm mt-16">
             <div>
               <div class="font-semibold mb-8">ในนาม {{ activeDoc?.customer }}</div>
               <div class="grid grid-cols-2 gap-4 text-center">
-                <div class="border-t border-gray-500 pt-2">ผู้รับวางบิล / ผู้รับเงิน</div>
+                <div class="border-t border-gray-500 pt-2">{{ signatureLabels.customer }}</div>
                 <div class="border-t border-gray-500 pt-2">วันที่</div>
               </div>
             </div>
@@ -306,7 +356,7 @@
               />
               <div class="font-semibold mb-8">ในนาม {{ documentSettingsStore.settings.company.name }}</div>
               <div class="grid grid-cols-2 gap-4 text-center">
-                <div class="border-t border-gray-500 pt-2">ผู้มีอำนาจลงนาม</div>
+                <div class="border-t border-gray-500 pt-2">{{ signatureLabels.company }}</div>
                 <div class="border-t border-gray-500 pt-2">วันที่</div>
               </div>
             </div>
@@ -479,6 +529,10 @@ const activeDoc = computed(() => {
       batchId: d.batchId,
       parentDocumentId: undefined as string | undefined,
       salesperson: undefined as string | undefined,
+      paidDate: undefined as Date | undefined,
+      paymentMethod: undefined as string | undefined,
+      paymentBankName: undefined as string | undefined,
+      paymentReference: undefined as string | undefined,
     }
   }
   if (newDoc.value) {
@@ -503,6 +557,10 @@ const activeDoc = computed(() => {
       contactPosition: d.contactPosition,
       contactPhone: d.contactPhone,
       contactEmail: d.contactEmail,
+      paidDate: d.paidDate,
+      paymentMethod: d.paymentMethod,
+      paymentBankName: d.paymentBankName,
+      paymentReference: d.paymentReference,
     }
   }
   return null
@@ -578,14 +636,22 @@ const docRows = computed<PrintRow[]>(() => {
  *  structure เดียวกันเป๊ะ (ใบเสร็จรวมอยู่ด้วยเพื่อความเสมอภาคของ layout แม้ปัจจุบันใบเสร็จจะยังไม่มีรายการที่มีฟิลด์
  *  พวกนี้จริงๆ ก็ตาม — ดู receiptItemRowsFromSourceDocs ใน salesDocuments.ts) เอกสารกรอกเอง/จากใบเสนอราคา (ไม่มีข้อมูล
  *  เที่ยวรถ) ยังคงใช้ตารางแบบเดิม (รายละเอียด/ส่วนลด/ภาษี) เหมือนเดิมทุกประการ */
-const hasTripColumns = computed(
-  () =>
-    (docMode.value === 'billing' || docMode.value === 'invoice' || docMode.value === 'receipt') &&
-    docRows.value.length > 0 &&
-    docRows.value.every((r) => r.shipDate || r.plate || r.deliveryNo)
-)
+/** ใบกำกับภาษี/ใบเสร็จรับเงินตามฟอร์แมตเอกสารจริงของบริษัท (ดูภาพอ้างอิง) ไม่แสดงตารางแบบรายเที่ยว — สรุปเป็นบรรทัดเดียว
+ *  ต่อเอกสารแทน (ดู aggregatedSummaryRow) มีแค่ใบวางบิลเท่านั้นที่แสดงตารางแบบรายเที่ยวจริง */
+const hasTripColumns = computed(() => docMode.value === 'billing' && docRows.value.length > 0 && docRows.value.every((r) => r.shipDate || r.plate || r.deliveryNo))
 
-const fillerRows = computed(() => Math.max(0, 4 - docRows.value.length))
+/** ใบกำกับภาษี/ใบเสร็จรับเงินที่มาจากงานขนส่ง (มี bookingIds + คำอธิบายสรุประดับเอกสารที่สร้างไว้แล้ว เช่น "รายการขนส่ง
+ *  สินค้าห้วงระหว่างวันที่...") ให้ยุบรายการทั้งหมดเหลือบรรทัดสรุปบรรทัดเดียว (จำนวน 1, ราคาต่อหน่วย = ยอดรวมทั้งเอกสาร)
+ *  ตรงกับฟอร์แมตเอกสารจริงของบริษัท (ดูภาพอ้างอิง) — เอกสารที่กรอกเอง/จากใบเสนอราคา (ไม่มี bookingIds/description แบบนี้)
+ *  ยังคงแสดงรายการจริงตามที่กรอกไว้ทุกบรรทัดเหมือนเดิม ไม่ยุบ */
+const aggregatedSummaryRow = computed<PrintRow | null>(() => {
+  if (docMode.value !== 'invoice' && docMode.value !== 'receipt') return null
+  if (!newDoc.value || !newDoc.value.bookingIds.length || !newDoc.value.description) return null
+  return { description: newDoc.value.description, qty: 1, unit: '', unitPrice: subtotal.value, amount: subtotal.value }
+})
+const printRows = computed<PrintRow[]>(() => (aggregatedSummaryRow.value ? [aggregatedSummaryRow.value] : docRows.value))
+
+const fillerRows = computed(() => Math.max(0, 4 - (hasTripColumns.value ? docRows.value.length : printRows.value.length)))
 
 /**
  * Phase 6 — เอาหน่วยออกจากทุกแถว ย้ายไปโชว์ที่หัวคอลัมน์แทน ("จำนวน (ตัน)") เฉพาะ Billing/ใบกำกับภาษี/ใบเสร็จ
@@ -644,7 +710,8 @@ const vatAmount = computed(() => (showVatRow.value ? activeDoc.value?.vatAmount 
 const discountAmount = computed(() => newDoc.value?.discountTotal ?? 0)
 const showDiscountRow = computed(() => settingsToggles.value.discount && discountAmount.value > 0)
 /** มูลค่าที่ไม่มี/ยกเว้นภาษี + มูลค่าที่คำนวณภาษี คำนวณจากอัตราภาษีรายบรรทัด — เอกสารเดิม (bookingStore) ไม่มีข้อมูลนี้ราย
- *  บรรทัด จึงถือว่าทั้งยอดเป็นมูลค่าที่คำนวณภาษีเมื่อมีการแสดงภาษี (สอดคล้องกับพฤติกรรมเดิมของใบแจ้งหนี้/ใบเสร็จ) */
+ *  บรรทัด จึงถือว่าทั้งยอดเป็นมูลค่าที่คำนวณภาษีเมื่อมีการแสดงภาษี (สอดคล้องกับพฤติกรรมเดิมของใบแจ้งหนี้/ใบเสร็จ)
+ *  ใบกำกับภาษี/ใบเสร็จรับเงินไม่แสดงบรรทัดนี้อีกต่อไป (ดู showVatBreakdownRows) — ตรงกับฟอร์แมตเอกสารจริงของบริษัท */
 const exemptAmount = computed(() => {
   if (newDoc.value) return docRows.value.filter((r) => !r.vatRate).reduce((sum, r) => sum + r.amount, 0)
   return 0
@@ -654,15 +721,65 @@ const taxableAmount = computed(() => {
   return showVatRow.value ? subtotal.value : 0
 })
 const grandTotal = computed(() => subtotal.value + vatAmount.value)
-const showWhtRow = computed(() => settingsToggles.value.wht && documentSettingsStore.settings.calcMode.sales.wht !== 'included' && (activeDoc.value?.whtAmount ?? 0) > 0)
+
+/** ใบกำกับภาษี/ใบเสร็จรับเงินตามฟอร์แมตเอกสารจริงของบริษัท (ดูภาพอ้างอิง): เมตาบ็อกซ์ไม่มีแถว "เครดิต"/ผู้ติดต่อ, ตารางไม่มี
+ *  บรรทัดย่อยมูลค่าที่ไม่มี-ยกเว้นภาษี/คำนวณภาษี และไม่มีบรรทัด "หักภาษี ณ ที่จ่าย"/"ยอดชำระ" แยก (ใบเสร็จย้ายยอดหลังหัก
+ *  ณ ที่จ่ายไปแสดงในกล่องยืนยันการชำระเงินแทน ดู paymentMethodChecks) — เอกสารประเภทอื่นคงพฤติกรรมเดิมทุกประการ */
+const isInvoiceOrReceipt = computed(() => docMode.value === 'invoice' || docMode.value === 'receipt')
+const showVatBreakdownRows = computed(() => showVatRow.value && !isInvoiceOrReceipt.value)
+const showWhtRow = computed(
+  () => !isInvoiceOrReceipt.value && settingsToggles.value.wht && documentSettingsStore.settings.calcMode.sales.wht !== 'included' && (activeDoc.value?.whtAmount ?? 0) > 0
+)
 const whtAmount = computed(() => (showWhtRow.value ? activeDoc.value?.whtAmount ?? 0 : 0))
 const netPayable = computed(() => grandTotal.value - whtAmount.value)
+/** ยอดชำระหลังหัก ณ ที่จ่าย ของใบเสร็จรับเงินโดยเฉพาะ — ไม่ผ่าน showWhtRow/whtAmount ด้านบน (ซึ่งปิดไว้เสมอสำหรับใบเสร็จ
+ *  เพราะไม่แสดงเป็นบรรทัดแยกในตารางสรุปยอดแล้ว) แต่ยังต้องคำนวณเพื่อไปแสดงในกล่องยืนยันการชำระเงินแทน (ดู template) */
+const receiptNetAfterWht = computed(() => grandTotal.value - (activeDoc.value?.whtAmount ?? 0))
+
+/** กล่องยืนยันการชำระเงินท้ายใบเสร็จ (checkbox วิธีชำระ + ธนาคาร/เลขที่รายการ/หัก ณ ที่จ่าย/ยอดที่รับจริง) — เฉพาะใบเสร็จ
+ *  รับเงินเท่านั้น ตรงกับฟอร์แมตเอกสารจริงของบริษัท (ใบกำกับภาษี/เอกสารอื่นไม่แสดงข้อมูลการชำระเงินเลย แม้จะบันทึกการชำระเงิน
+ *  ไว้แล้วก็ตาม — ข้อมูลยังเก็บอยู่ใน SalesDocument ของใบแจ้งหนี้เหมือนเดิมทุกประการ ดู recordTaxInvoicePayment เพียงแต่ UI
+ *  หน้าใบแจ้งหนี้ไม่ render เท่านั้น) */
+const paymentMethodChecks: Array<{ value: string; label: string }> = [
+  { value: 'เงินสด', label: 'เงินสด' },
+  { value: 'เช็ค', label: 'เช็ค' },
+  { value: 'โอนเงิน', label: 'โอนเงิน' },
+  { value: 'บัตรเครดิต', label: 'บัตรเครดิต' },
+]
+const receiptPaidDate = computed(() => (newDoc.value?.type === 'RECEIPT' ? newDoc.value.paidDate : undefined))
+
+/** ใบแจ้งหนี้ต้นทางของใบเสร็จนี้ (ถ้ามี) — ใบเสร็จที่สร้างจากเอกสารต้นทาง (createReceiptFromSourceDocs) ไม่เคยมีวิธีชำระ/
+ *  ธนาคาร/เลขที่รายการเป็นของตัวเองเลย ข้อมูลเหล่านี้ถูกบันทึกไว้ที่ใบแจ้งหนี้ต้นทางตอนกด "บันทึกการชำระเงิน" (recordTaxInvoicePayment)
+ *  ใบเสร็จจึงต้องดึงมาแสดงแทน (ดูคอมเมนต์ paymentMethodChecks ด้านบน) */
+const sourceTaxInvoiceForReceipt = computed(() => {
+  if (!newDoc.value || newDoc.value.type !== 'RECEIPT') return null
+  const sourceId = (newDoc.value.sourceDocumentIds || [])[0]
+  if (!sourceId) return null
+  return salesDocumentsStore.documents.find((d) => d.id === sourceId && d.type === 'TAX_INVOICE') || null
+})
+/** วิธีชำระ/ธนาคาร/เลขที่รายการที่จะแสดงบนใบเสร็จ — เช็คค่าของใบเสร็จเองก่อน (ใบเสร็จกรอกเอง createReceiptManual มีฟิลด์
+ *  พวกนี้เป็นของตัวเองอยู่แล้ว) ถ้าไม่มีจึง fallback ไปดึงจากใบแจ้งหนี้ต้นทางที่บันทึกการชำระเงินไว้ */
+const receiptPaymentMethod = computed(() => newDoc.value?.paymentMethod || sourceTaxInvoiceForReceipt.value?.paymentMethod)
+const receiptPaymentBankName = computed(() => newDoc.value?.paymentBankName || sourceTaxInvoiceForReceipt.value?.paymentBankName)
+const receiptPaymentReference = computed(() => newDoc.value?.paymentReference || sourceTaxInvoiceForReceipt.value?.paymentReference)
+const receiptWhtAmount = computed(() => activeDoc.value?.whtAmount || 0)
+
+/** ป้ายกำกับช่องเซ็นชื่อ — ต่างกันตามประเภทเอกสาร ให้ตรงกับฟอร์แมตเอกสารจริงของบริษัท (ใบวางบิลคงป้ายเดิมไว้ ไม่แตะ) */
+const signatureLabels = computed(() => {
+  if (docMode.value === 'invoice') return { customer: 'ผู้รับสินค้า / บริการ', company: 'ผู้อนุมัติ' }
+  if (docMode.value === 'receipt') return { customer: 'ผู้จ่ายเงิน', company: 'ผู้รับเงิน' }
+  return { customer: 'ผู้รับวางบิล / ผู้รับเงิน', company: 'ผู้มีอำนาจลงนาม' }
+})
 
 /** จำนวนชุดที่จะพิมพ์ — ผู้ใช้ปรับจำนวนต้นฉบับ/สำเนาได้จากแถบด้านข้าง (ไม่มีผลต่อข้อมูลเอกสาร แค่จำนวนชุดที่พิมพ์) */
 const originalCount = ref(1)
 const copyCount = ref(0)
 
 /** สถานะเอกสารพิมพ์บนกระดาษด้วย — เฉพาะเอกสารระบบใหม่ (newDoc) เท่านั้น เอกสารระบบเดิม (legacyDoc) ไม่มี SalesDocumentStatus ให้ map */
+/** มุมสีที่หัวเอกสาร (ต้นฉบับ/สำเนา) — ใบกำกับภาษี/ใบแจ้งหนี้และใบเสร็จรับเงินเท่านั้นที่มี ใบวางบิลตามฟอร์แมตจริงของ
+ *  บริษัทไม่มีมุมนี้ (ดูภาพอ้างอิงเอกสารวางบิลค่าบรรทุกสินค้า) */
+const showCornerFlag = computed(() => docMode.value === 'invoice' || docMode.value === 'receipt')
+
 const statusStampLabel = computed(() => (newDoc.value ? salesDocumentStatusLabel(newDoc.value.type, newDoc.value.status) : null))
 const copyLabels = computed(() => {
   const labels: string[] = []
@@ -747,11 +864,33 @@ const printDoc = () => window.print()
   height: 0;
   border-style: solid;
   border-width: 0 56px 56px 0;
-  border-color: transparent var(--primary) transparent transparent;
+}
+
+/** สีมุมเอกสารตามประเภท ให้ตรงกับฟอร์แมตเอกสารจริงของบริษัท — น้ำเงินสำหรับใบกำกับภาษี/ใบแจ้งหนี้, เขียวสำหรับใบเสร็จรับเงิน
+ *  (ใบวางบิลไม่มีมุมนี้เลย ดู showCornerFlag) */
+.corner-flag-blue {
+  border-color: transparent #2563eb transparent transparent;
+}
+
+.corner-flag-green {
+  border-color: transparent #16a34a transparent transparent;
 }
 
 .doc-meta-box {
   @apply border border-gray-300 rounded-lg p-3 space-y-1;
+}
+
+.payment-checkbox {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #6b7280;
+  border-radius: 2px;
+}
+
+.payment-checkbox-checked {
+  background-color: #111827;
+  border-color: #111827;
 }
 
 @media print {

@@ -149,6 +149,14 @@
               <option value="เช็ค">เช็ค</option>
             </select>
           </div>
+          <div v-if="paymentMethod === 'โอนเงิน' || paymentMethod === 'เช็ค'">
+            <label class="field-label">ธนาคาร</label>
+            <input v-model="paymentBankName" class="input-field w-full" />
+          </div>
+          <div v-if="paymentMethod === 'โอนเงิน' || paymentMethod === 'เช็ค'">
+            <label class="field-label">{{ paymentMethod === 'เช็ค' ? 'เลขที่เช็ค' : 'เลขที่รายการ' }}</label>
+            <input v-model="paymentReference" class="input-field w-full" />
+          </div>
           <div>
             <label class="field-label">หมายเหตุ</label>
             <textarea v-model="paymentNote" rows="2" class="input-field w-full" />
@@ -184,7 +192,7 @@ const search = ref('')
 
 const statusLabel: Partial<Record<SalesDocumentStatus, string>> = {
   DRAFT: 'ร่าง',
-  SENT: 'เปิดใบเสร็จแล้ว',
+  SENT: 'ส่งแล้ว',
   PAID: 'ชำระแล้ว',
 }
 
@@ -256,10 +264,17 @@ const totalAmount = computed(() => filteredDocs.value.reduce((sum, d) => sum + d
 
 type ActionOption = { value: string; label: string }
 
+/** ตัวเลือก "สร้างใบเสร็จรับเงิน" ใช้ได้ตั้งแต่สถานะร่าง ไม่ต้องรอส่ง/รอชำระเงินก่อน (ใบเสร็จเป็นเอกสารพิมพ์ยืนยันการรับเงิน
+ *  ที่แยกอิสระจากสถานะใบแจ้งหนี้ ดู isSourceDocEligible ใน stores/salesDocuments.ts) — ซ่อนเฉพาะกรณีมีใบเสร็จรับเงินอ้างอิง
+ *  ใบแจ้งหนี้นี้ไปแล้ว (กันสร้างซ้ำ) ไม่ว่าใบแจ้งหนี้จะอยู่สถานะไหนก็ตาม ทำให้ตัวเลือกนี้ไม่หายไปกลางทางตอนเปลี่ยนสถานะ */
+const createReceiptOption = (doc: SalesDocument): ActionOption[] =>
+  salesDocumentsStore.sourceDocsClaimedByOtherReceipts([doc.id]).length === 0 ? [{ value: 'CREATE_RECEIPT', label: 'สร้างใบเสร็จรับเงิน' }] : []
+
 const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
   const s = doc.status
   if (s === 'DRAFT') {
     return [
+      ...createReceiptOption(doc),
       { value: 'DRAFT', label: statusLabel.DRAFT! },
       { value: 'SEND', label: 'ส่งใบแจ้งหนี้' },
       { value: 'COLLECT', label: 'บันทึกการชำระเงิน' },
@@ -268,18 +283,14 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
   }
   if (s === 'SENT') {
     return [
+      ...createReceiptOption(doc),
       { value: 'SENT', label: statusLabel.SENT! },
       { value: 'COLLECT', label: 'บันทึกการชำระเงิน' },
       { value: 'RESET', label: 'รีเซ็ต' },
     ]
   }
   if (s === 'PAID') {
-    const options: ActionOption[] = [{ value: 'PAID', label: statusLabel.PAID! }]
-    /** ซ่อนตัวเลือกนี้ถ้ามีใบเสร็จรับเงินอ้างอิงใบแจ้งหนี้นี้ไปแล้ว (กันสร้างซ้ำ) ดู sourceDocsClaimedByOtherReceipts */
-    if (salesDocumentsStore.sourceDocsClaimedByOtherReceipts([doc.id]).length === 0) {
-      options.push({ value: 'CREATE_RECEIPT', label: 'สร้างใบเสร็จรับเงิน' })
-    }
-    return options
+    return [...createReceiptOption(doc), { value: 'PAID', label: statusLabel.PAID! }]
   }
   return [{ value: s, label: s }]
 }
@@ -295,6 +306,8 @@ const paymentDate = ref(new Date().toISOString().slice(0, 10))
 const whtEnabled = ref(false)
 const whtAmount = ref(0)
 const paymentMethod = ref('เงินสด')
+const paymentBankName = ref('')
+const paymentReference = ref('')
 const paymentNote = ref('')
 
 const openPaymentModal = (doc: SalesDocument) => {
@@ -303,6 +316,8 @@ const openPaymentModal = (doc: SalesDocument) => {
   whtEnabled.value = false
   whtAmount.value = 0
   paymentMethod.value = 'เงินสด'
+  paymentBankName.value = ''
+  paymentReference.value = ''
   paymentNote.value = ''
 }
 
@@ -312,6 +327,8 @@ const confirmPayment = () => {
     paidDate: new Date(paymentDate.value),
     whtAmount: whtEnabled.value ? whtAmount.value : undefined,
     paymentMethod: paymentMethod.value,
+    paymentBankName: paymentMethod.value !== 'เงินสด' ? paymentBankName.value || undefined : undefined,
+    paymentReference: paymentMethod.value !== 'เงินสด' ? paymentReference.value || undefined : undefined,
     note: paymentNote.value || undefined,
   })
   paymentDoc.value = null
@@ -327,15 +344,17 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
     case 'COLLECT':
       openPaymentModal(doc)
       break
-    case 'CREATE_RECEIPT': {
-      const result = salesDocumentsStore.createReceiptFromSourceDocs([doc.id], 'TAX_INVOICE')
-      if (result) router.push(`/documents/${result.doc.id}`)
-      else alert('สร้างใบเสร็จรับเงินไม่สำเร็จ — งานขนส่งที่ผูกกับใบแจ้งหนี้นี้บางรายการอาจถูกดึงไปออกใบเสร็จอื่นไปแล้ว')
+    case 'CREATE_RECEIPT':
+      // Navigate เข้าหน้า Create ให้ผู้ใช้ตรวจ/แก้ข้อมูลก่อน — ยังไม่สร้างเอกสารจริงหรือ claim booking ตรงนี้
+      // (createReceiptFromSourceDocs ถูกเรียกตอนกด "บันทึกเอกสาร" ในหน้า ReceiptCreateView.vue เท่านั้น)
+      router.push(`/receipts/create?ids=${doc.id}`)
+      break
+    case 'CANCEL': {
+      if (!confirm(`ยืนยันยกเลิกใบแจ้งหนี้ ${doc.number}? งานขนส่ง/ใบวางบิลที่ผูกไว้จะกลับไปสถานะก่อนหน้า`)) break
+      const ok = salesDocumentsStore.cancelTaxInvoice(doc.id)
+      if (!ok) alert(`ยกเลิกไม่สำเร็จ — มีใบเสร็จรับเงินที่ออกจากใบแจ้งหนี้ ${doc.number} ไปแล้ว ให้ลบใบเสร็จนั้นก่อน`)
       break
     }
-    case 'CANCEL':
-      if (confirm(`ยืนยันยกเลิกใบแจ้งหนี้ ${doc.number}? งานขนส่ง/ใบวางบิลที่ผูกไว้จะกลับไปสถานะก่อนหน้า`)) salesDocumentsStore.cancelTaxInvoice(doc.id)
-      break
     case 'RESET': {
       if (!confirm(`ยืนยัน Reset ใบแจ้งหนี้ ${doc.number} กลับเป็นร่าง?`)) break
       const result = salesDocumentsStore.resetTaxInvoice(doc.id)

@@ -118,6 +118,7 @@ import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
+import { useDocumentPrefillStore, type DocumentPrefillPayload } from '@/stores/documentPrefill'
 import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
 
 const router = useRouter()
@@ -127,6 +128,7 @@ const salesDocumentsStore = useSalesDocumentsStore()
  *  ทำให้ bookingStore.bookings ยังว่างเปล่าตอนกดปุ่มจริง (เพิ่งเริ่ม fetch ตอนนั้นพอดี) */
 useBookingStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const documentPrefillStore = useDocumentPrefillStore()
 
 const statusFilter = ref<'all' | SalesDocumentStatus>('all')
 const search = ref('')
@@ -233,8 +235,8 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
   const s = doc.status
   if (s === 'BILLING_PENDING') {
     return [
-      { value: 'BILLING_PENDING', label: statusLabel.BILLING_PENDING! },
       { value: 'CREATE_INVOICE', label: 'สร้างใบกำกับภาษี' },
+      { value: 'BILLING_PENDING', label: statusLabel.BILLING_PENDING! },
       { value: 'CANCEL', label: 'ยกเลิก' },
     ]
   }
@@ -250,14 +252,42 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
 const statusDotClass = (status: SalesDocumentStatus) =>
   ({ BILLING_PENDING: 'bg-amber-500', BILLED: 'bg-blue-500' })[status as 'BILLING_PENDING' | 'BILLED'] || 'bg-gray-400'
 
+/** ส่งข้อมูลใบวางบิลผ่าน documentPrefillStore ไปเติมในหน้า "สร้างใบแจ้งหนี้" จริง (/tax-invoices/new) โดยตรง
+ *  แบบเดียวกับที่ QuotationListView.vue ทำกับใบเสนอราคา (buildPrefillFromQuotation) — ไม่สร้างเอกสาร/claim booking
+ *  ที่นี่ ผู้ใช้ต้องกด "บันทึกเอกสาร" ในหน้านั้นเองก่อน (ดู createTaxInvoiceManual → linkManualDocToSource) */
+const buildPrefillFromBilling = (doc: SalesDocument): DocumentPrefillPayload => ({
+  sourceType: 'BILLING',
+  sourceId: doc.id,
+  sourceNumber: doc.number,
+  customer: doc.customer,
+  items: salesDocumentsStore.itemsForDocument(doc.id).map(({ id, documentId, sortOrder, ...rest }) => rest),
+  reference: doc.number,
+  creditDays: doc.creditDays,
+  customerAddress: doc.customerAddress,
+  customerZipCode: doc.customerZipCode,
+  customerTaxId: doc.customerTaxId,
+  customerBranchName: doc.customerBranchName,
+  project: doc.project,
+  salesperson: doc.salesperson,
+  currencyCode: doc.currencyCode,
+  warehouse: doc.warehouse,
+  priceMode: doc.priceMode,
+  description: doc.description,
+  note: doc.note,
+  internalNote: doc.internalNote,
+  attachmentImage: doc.attachmentImage,
+  useESignature: doc.useESignature,
+  discountTotal: doc.discountTotal,
+  vatAmount: doc.vatAmount,
+  whtAmount: doc.whtAmount,
+})
+
 const onStatusSelect = (doc: SalesDocument, action: string) => {
   switch (action) {
-    case 'CREATE_INVOICE': {
-      const invoice = salesDocumentsStore.createInvoiceFromBilling(doc.id)
-      if (invoice) router.push(`/documents/${invoice.id}`)
-      else alert('สร้างใบกำกับภาษีไม่สำเร็จ — งานขนส่งที่ผูกกับใบวางบิลนี้บางรายการอาจถูกดึงไปออกใบแจ้งหนี้อื่นไปแล้ว')
+    case 'CREATE_INVOICE':
+      documentPrefillStore.setPrefill(buildPrefillFromBilling(doc))
+      router.push('/tax-invoices/new')
       break
-    }
     case 'CANCEL':
       if (confirm(`ยืนยันยกเลิกใบวางบิล ${doc.number}? งานขนส่งที่ผูกไว้จะกลับไปรอวางบิลใหม่`)) salesDocumentsStore.cancelBillingNote(doc.id)
       break

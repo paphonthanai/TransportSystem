@@ -216,6 +216,7 @@ import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/users'
+import { useBookingStore } from '@/stores/booking'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
@@ -231,6 +232,9 @@ const customerStore = useCustomerStore()
 const contactStore = useContactStore()
 const authStore = useAuthStore()
 const userStore = useUserStore()
+/** instantiate ตั้งแต่หน้านี้โหลด เผื่อผู้ใช้เข้าหน้านี้ตรงๆ (deep link/reload) แล้วกด "บันทึกเอกสาร" เร็วมาก
+ *  ก่อน bookingStore ทัน — createReceiptFromSourceDocs ต้องหา booking ที่ผูกกับเอกสารต้นทางเจอครบก่อนจึงจะ claim ได้ */
+useBookingStore()
 
 const editingId = props.id
 const currentId = ref<string | undefined>(editingId)
