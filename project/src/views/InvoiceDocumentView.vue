@@ -117,9 +117,9 @@
               </div>
               <!-- "ชื่องาน" — ใบกำกับภาษี/ใบเสร็จรับเงินเท่านั้นที่แสดงคำอธิบายสรุปเป็นฟิลด์มีป้ายกำกับใต้เมตาบ็อกซ์ (ตรงกับ
                    ฟอร์แมตเอกสารจริงของบริษัท) เอกสารประเภทอื่นแสดงเป็นบรรทัดเต็มความกว้างเหนือตารางเหมือนเดิม (ดูด้านล่าง) -->
-              <div v-if="isInvoiceOrReceipt && activeDoc?.description" class="doc-meta-box text-left text-xs w-64 mt-2">
+              <div v-if="isInvoiceOrReceipt && jobNameLabel" class="doc-meta-box text-left text-xs w-64 mt-2">
                 <div class="text-xs font-bold text-primary mb-0.5">ชื่องาน</div>
-                <div class="font-semibold whitespace-pre-line">{{ activeDoc.description }}</div>
+                <div class="font-semibold whitespace-pre-line">{{ jobNameLabel }}</div>
               </div>
             </div>
           </div>
@@ -447,6 +447,7 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { bahtText } from '@/utils/companyInfo'
 import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
+import { categoryFeedLabel } from '@/utils/bookingStatus'
 import { traceDocumentChain } from '@/utils/documentTrace'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import DocumentSettingsPanel, { type DocumentSettingsToggles } from '@/components/shared/DocumentSettingsPanel.vue'
@@ -649,25 +650,33 @@ const formatDateSlashFullYear = (date: Date) => {
   return `${dd}/${mm}/${d.getFullYear() + 543}`
 }
 
-/** "Feed" ของรายการหนึ่งแถว = สินค้าที่ขนจริงของงานขนส่งต้นทาง หาโดย join กลับไปที่ Booking ผ่าน deliveryNo (=booking.docNo
- *  เสมอ ดู createBillingFromBookings/createTaxInvoiceFromBookings) ไม่ใช้ productId/description เพราะรายการที่กรอกเอง/
- *  แก้ไขในฟอร์มอาจไม่ตรงกับ Booking จริงแล้ว — หา Booking ไม่เจอ (เช่น รายการกรอกเอง ไม่มี deliveryNo) ถือว่าไม่ทราบ Feed */
+/** "Feed" ของรายการหนึ่งแถว = booking.category ของงานขนส่งต้นทาง (Cement/Ceramic) หาโดย join กลับไปที่ Booking ผ่าน
+ *  deliveryNo (=booking.docNo เสมอ ดู createBillingFromBookings/createTaxInvoiceFromBookings) — "ห้าม" ใช้ productId/
+ *  JobItem.product แทน เพราะเป็น free text ต่อปลายทาง/รหัสงาน (เช่น เลขที่ Site) ไม่ใช่ตัวแบ่งกลุ่มรายได้ที่แท้จริง — หา
+ *  Booking ไม่เจอ (เช่น รายการกรอกเอง ไม่มี deliveryNo) ถือว่าไม่ทราบ Feed (ดู categoryFeedLabel ใน utils/bookingStatus.ts) */
 const feedForRow = (row: PrintRow): string => {
   if (!row.deliveryNo) return ''
   const booking = bookingStore.bookings.find((b) => b.docNo === row.deliveryNo)
-  if (!booking || !booking.items.length) return ''
-  return [...new Set(booking.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  return booking ? categoryFeedLabel[booking.category] : ''
+}
+
+interface FeedGroup {
+  feed: string
+  dateLabel: string
+  qty: number
+  unitPrice: number
+  amount: number
 }
 
 /**
- * ใบกำกับภาษี/ใบเสร็จรับเงินที่มาจากงานขนส่ง: จัดกลุ่มรายการตาม Feed (สินค้า) แล้วยุบแต่ละกลุ่มเหลือบรรทัดเดียว
- * "ค่าขนส่ง [Feed] งวดวันที่ [เริ่มต้น] - [สิ้นสุด]" ตรงกับฟอร์แมตเอกสารจริงของบริษัท — Generate สดจากรายการต้นทางตอนแสดงผล
- * ทุกครั้ง ไม่มีการเก็บข้อความนี้ซ้ำใน Firestore (ห้ามเพิ่ม field ใหม่) ตามหลักการที่ใบวางบิลออกใบแจ้งหนี้ให้แล้วจะมีแค่ Feed
- * เดียวต่อเอกสารเสมอ (แยกออกใบแจ้งหนี้ทีละ Feed ตอนสร้าง ดู BillingListView.vue) จึงมักได้แค่ 1 กลุ่ม/1 บรรทัด — เก็บ logic
- * แบบ "หลายกลุ่ม" ไว้เป็น fallback ให้เอกสารเก่าที่ยังไม่ผ่านการแยก Feed แสดงผลถูกต้องด้วย ไม่ใช่ปัดตกทั้งเอกสาร
- * หา Feed ไม่ได้แม้แต่แถวเดียว (เช่น เอกสารกรอกเอง/จากใบเสนอราคา ไม่มี Booking ผูกอยู่) → คืนอาเรย์ว่าง ให้ printRows ไป fallback ที่ docRows ตรงๆ
+ * ใบกำกับภาษี/ใบเสร็จรับเงินที่มาจากงานขนส่ง: จัดกลุ่มรายการตาม Feed แล้วยุบแต่ละกลุ่มเหลือกลุ่มเดียว — Generate สดจาก
+ * รายการต้นทางตอนแสดงผลทุกครั้ง ไม่มีการเก็บข้อความนี้ซ้ำใน Firestore (ห้ามเพิ่ม field ใหม่) ตามหลักการที่ใบวางบิลต้องมี
+ * สินค้า Feed เดียวเสมออยู่แล้วตั้งแต่ขั้นตอนสร้าง (บังคับที่ createBillingFromBookings/BillingCreateFromBookingsView.vue)
+ * จึงมักได้แค่ 1 กลุ่มเสมอ — เก็บ logic แบบ "หลายกลุ่ม" ไว้เป็น fallback ให้เอกสารเก่าก่อนมีการบังคับ Feed เดียว/ที่ยังไม่ผ่าน
+ * การแยก Feed แสดงผลถูกต้องด้วย ไม่ใช่ปัดตกทั้งเอกสาร — หา Feed ไม่ได้แม้แต่แถวเดียว (เอกสารกรอกเอง/จากใบเสนอราคา ไม่มี
+ * Booking ผูกอยู่) → คืนอาเรย์ว่าง ให้ printRows/jobNameLabel ไป fallback ที่ docRows/newDoc.description ตรงๆ
  */
-const feedGroupedRows = computed<PrintRow[]>(() => {
+const feedGroups = computed<FeedGroup[]>(() => {
   if (docMode.value !== 'invoice' && docMode.value !== 'receipt') return []
   if (docRows.value.length === 0) return []
   const withFeed = docRows.value.map((row) => ({ row, feed: feedForRow(row) }))
@@ -696,9 +705,13 @@ const feedGroupedRows = computed<PrintRow[]>(() => {
      *  ในบางเที่ยว) — คงค่า "จำนวน × ราคาต่อหน่วย = ยอดรวม" ให้ตรงเป๊ะเมื่อราคาสม่ำเสมอ (กรณีส่วนใหญ่) */
     const uniquePrices = new Set(rows.map((r) => r.unitPrice))
     const unitPrice = uniquePrices.size === 1 ? rows[0].unitPrice : Math.round(amount / qty)
-    return { description: `ค่าขนส่ง ${feed} งวดวันที่ ${dateLabel}`, qty, unit: 'เที่ยว', unitPrice, amount }
+    return { feed, dateLabel, qty, unitPrice, amount }
   })
 })
+
+/** บรรทัดตารางรายการ "ค่าขนส่ง [Feed] [วันที่เริ่มต้น] - [วันที่สิ้นสุด]" — ไม่มีคำว่า "งวดวันที่" (คนละข้อความกับ "ชื่องาน"
+ *  ด้านล่างที่มีคำนี้) */
+const feedGroupedRows = computed<PrintRow[]>(() => feedGroups.value.map((g) => ({ description: `ค่าขนส่ง ${g.feed} ${g.dateLabel}`, qty: g.qty, unit: 'เที่ยว', unitPrice: g.unitPrice, amount: g.amount })))
 
 /** เอกสารเก่าที่ยังไม่มีข้อมูล deliveryNo ให้จับกลุ่ม Feed ได้ (สร้างก่อนแก้บั๊กนี้) — fallback เป็นบรรทัดสรุปเดียวแบบเดิม
  *  จากคำอธิบายที่เก็บไว้ตอนสร้างเอกสาร (newDoc.description) เพื่อไม่ให้เอกสารเก่าที่ออกไปแล้วแสดงผลว่างเปล่า/ผิดเพี้ยน */
@@ -711,6 +724,17 @@ const printRows = computed<PrintRow[]>(() => {
   if (feedGroupedRows.value.length > 0) return feedGroupedRows.value
   if (aggregatedSummaryRow.value) return [aggregatedSummaryRow.value]
   return docRows.value
+})
+
+/** "ชื่องาน" ในเมตาบ็อกซ์ — "[Feed] วางบิลรอบวันที่ [เริ่มต้น] - [สิ้นสุด] ([จำนวนเที่ยว] เที่ยว)" มีแค่กรณีจับกลุ่ม Feed ได้
+ *  ครบ 1 กลุ่มเดียวเท่านั้น (กรณีปกติของเอกสารที่ผ่านการแยก Feed แล้ว) — หลายกลุ่ม/จับกลุ่มไม่ได้เลย fallback ไปใช้คำอธิบาย
+ *  ที่เก็บไว้ตอนสร้างเอกสาร (newDoc.description) เหมือนเดิม */
+const jobNameLabel = computed(() => {
+  if (feedGroups.value.length === 1) {
+    const g = feedGroups.value[0]
+    return `${g.feed} วางบิลรอบวันที่ ${g.dateLabel} (${g.qty} เที่ยว)`
+  }
+  return activeDoc.value?.description || ''
 })
 
 const fillerRows = computed(() => Math.max(0, 4 - (hasTripColumns.value ? docRows.value.length : printRows.value.length)))

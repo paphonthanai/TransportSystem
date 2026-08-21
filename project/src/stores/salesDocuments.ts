@@ -1462,6 +1462,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const targetBookings = sortBookingsForDocumentMerge(bookingStore.bookings.filter((b) => bookingIds.includes(b.id)))
     if (targetBookings.length !== bookingIds.length) return null
     const sameCustomer = targetBookings.every((b) => b.customer === targetBookings[0].customer)
+    /** ใบวางบิลหนึ่งใบต้องมีสินค้า Feed (booking.category) เดียวเท่านั้น — ห้ามปนกัน เพราะรายได้แต่ละ Feed คำนวณคนละ
+     *  กติกากัน ต้องแยกตั้งแต่ขั้นตอนสร้างใบวางบิล ไม่ใช่ปล่อยให้ปนแล้วค่อยแยกทีหลังตอนออกใบกำกับภาษี (ดู UI guard เดียวกันใน
+     *  BillingCreateFromBookingsView.vue — ด่านนี้เป็นด่านสุดท้ายที่บังคับจริง กันเส้นทางอื่นที่อาจข้าม UI นั้นมา) */
+    const sameCategory = targetBookings.every((b) => b.category === targetBookings[0].category)
     /** งานที่จบผ่านแอปคนขับต้องผ่านการตรวจสอบ POD ของออฟฟิศ (APPROVED) ก่อนเสมอ — ห้ามสร้างใบวางบิลตอนยัง
      *  PENDING_REVIEW/REJECTED อยู่ (ดู finishDriverJob/reviewPod ใน stores/booking.ts) งานที่ออฟฟิศจบเอง
      *  (completeJob) ไม่ผ่านขั้นตอนนี้ podReviewStatus จะเป็น undefined เสมอ ถือว่าผ่านแล้วโดยปริยาย */
@@ -1469,7 +1473,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     /** เช็คเฉพาะว่า "ยังไม่เคยอยู่ในใบวางบิลรวมอื่น" (billingNoteDocId) เท่านั้น — เป็นอิสระจาก taxInvoiceDocId/receiptDocId โดยเจตนา
      *  งานเดียวกันอยู่ในใบแจ้งหนี้รวม/ใบเสร็จรวมอื่นพร้อมกันได้ (Booking → Billing / Booking → Tax Invoice / Booking → Receipt แยกเส้นทางกัน) */
     const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && !b.billingNoteDocId)
-    if (!sameCustomer || !allEligible || !allPodApproved) return null
+    if (!sameCustomer || !sameCategory || !allEligible || !allPodApproved) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.billingList

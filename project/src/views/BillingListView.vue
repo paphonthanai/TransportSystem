@@ -120,6 +120,7 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
 import { useDocumentPrefillStore, type DocumentPrefillPayload } from '@/stores/documentPrefill'
 import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
+import { categoryFeedLabel } from '@/utils/bookingStatus'
 import type { Booking } from '@/types'
 
 const router = useRouter()
@@ -254,12 +255,14 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
 const statusDotClass = (status: SalesDocumentStatus) =>
   ({ BILLING_PENDING: 'bg-amber-500', BILLED: 'bg-blue-500' })[status as 'BILLING_PENDING' | 'BILLED'] || 'bg-gray-400'
 
-/** "Feed" ของงานขนส่งหนึ่งงาน = สินค้าที่ขนจริง (รวมชื่อไม่ซ้ำถ้ามีหลายรายการในงานเดียว) ใช้ตัวเดียวกับ tripDescription
- *  ในฝั่ง store (stores/salesDocuments.ts) เพื่อให้ "Feed" ที่ใช้แบ่งเอกสารตรงกับคำที่ปรากฏในคำอธิบายรายการเป๊ะ */
-const feedForBooking = (b: Booking): string => [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ') || '-'
+/** "Feed" ของงานขนส่งหนึ่งงาน = booking.category (ดู categoryFeedLabel ใน utils/bookingStatus.ts) — ห้ามใช้
+ *  items[].product แทน เพราะเป็น free text ต่อปลายทาง/รหัสงาน ไม่ใช่ตัวแบ่งกลุ่มรายได้จริง */
+const feedForBooking = (b: Booking): string => categoryFeedLabel[b.category]
 
 /** จัดกลุ่มงานขนส่งของใบวางบิลนี้ตาม Feed — เฉพาะงานที่ยังไม่ถูก claim ไปออกใบแจ้งหนี้อื่น (taxInvoiceDocId) เท่านั้น
- *  (งานที่ถูก claim ไปแล้วจากรอบก่อนหน้า ถือว่าออกใบแจ้งหนี้ของ Feed นั้นไปแล้ว ไม่ต้องเสนอให้เลือกอีก) */
+ *  (งานที่ถูก claim ไปแล้วจากรอบก่อนหน้า ถือว่าออกใบแจ้งหนี้ของ Feed นั้นไปแล้ว ไม่ต้องเสนอให้เลือกอีก) — ตั้งแต่บังคับ 1 Feed
+ *  ต่อใบวางบิลตอนสร้าง (ดู BillingCreateFromBookingsView.vue) กรณีนี้ควรได้แค่ 1 กลุ่มเสมอ เก็บ logic หลายกลุ่มไว้เป็น
+ *  fallback ให้ใบวางบิลเก่าก่อนมีการบังคับนี้เท่านั้น */
 const unclaimedFeedGroups = (doc: SalesDocument): Array<{ feed: string; bookingIds: string[] }> => {
   const groups = new Map<string, string[]>()
   doc.bookingIds.forEach((bid) => {

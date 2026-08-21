@@ -1,4 +1,12 @@
-import type { BookingStatus, BillingStatus, PodReviewStatus } from '@/types'
+import type { BookingStatus, BillingStatus, PodReviewStatus, BookingCategory } from '@/types'
+
+/** ป้ายกำกับ Feed (ประเภทสินค้า) ที่ใช้ทั้งตอนสร้างใบวางบิล (บังคับ 1 Feed ต่อใบวางบิล) และตอนพิมพ์ใบกำกับภาษี/ใบเสร็จ
+ *  (ชื่องาน/รายละเอียดรายการ) — booking.category เป็นฟิลด์เดียวที่บอก "ประเภทสินค้า" ได้เชื่อถือได้ เพราะรายได้แต่ละ Feed
+ *  คำนวณคนละกติกากัน (JobItem.product เป็น free text ต่อปลายทาง/รหัสงาน ไม่ใช่ตัวแบ่งกลุ่มรายได้ ห้ามใช้แทนกัน) */
+export const categoryFeedLabel: Record<BookingCategory, string> = {
+  cements: 'Cement',
+  ceramics: 'Ceramic',
+}
 
 export const bookingStatusLabel: Record<BookingStatus, string> = {
   WAITING_DISPATCH: 'รอจัดรถ',

@@ -27,7 +27,20 @@
         <ContactPickerField :customer-id="selectedCustomerId" v-model="contactId" />
       </div>
 
-      <div v-if="selectedCustomer" class="grid grid-cols-2 gap-3 max-w-sm">
+      <!-- Feed (ประเภทงาน) ต้องเลือกก่อนเห็นรายการงาน — บังคับให้ใบวางบิลหนึ่งใบมีสินค้า Feed เดียวเสมอ ตั้งแต่ขั้นตอนนี้
+           เพราะรายได้แต่ละ Feed คำนวณคนละกติกากัน (ห้ามปนกันแล้วมาแยกทีหลังตอนออกใบกำกับภาษี) -->
+      <div v-if="selectedCustomer" class="max-w-sm">
+        <label class="field-label">ประเภทงาน (Feed)</label>
+        <select v-model="selectedCategory" class="input-field w-full">
+          <option value="">เลือกประเภทงาน...</option>
+          <option v-for="c in eligibleCategoriesForCustomer" :key="c" :value="c">{{ categoryFeedLabel[c] }}</option>
+        </select>
+        <div v-if="eligibleCategoriesForCustomer.length > 1" class="text-[11px] text-muted mt-1">
+          ลูกค้ารายนี้มีงานมากกว่าหนึ่งประเภท ต้องวางบิลแยกทีละประเภท (Feed) เสมอ
+        </div>
+      </div>
+
+      <div v-if="selectedCustomer && selectedCategory" class="grid grid-cols-2 gap-3 max-w-sm">
         <div>
           <label class="field-label">วันที่เริ่ม <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
           <input v-model="dateFrom" type="date" class="input-field w-full" />
@@ -38,7 +51,7 @@
         </div>
       </div>
 
-      <div v-if="selectedCustomer" class="space-y-2">
+      <div v-if="selectedCustomer && selectedCategory" class="space-y-2">
         <div class="border border-border rounded-xl overflow-hidden">
           <table class="w-full text-sm">
             <thead class="bg-surface-2 text-xs text-muted">
@@ -61,7 +74,7 @@
                 <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(bookingTotal(b)) }}</td>
               </tr>
               <tr v-if="eligibleBookings.length === 0">
-                <td colspan="5" class="px-3 py-6 text-center text-muted">ลูกค้ารายนี้ไม่มีงานที่รอวางบิล</td>
+                <td colspan="5" class="px-3 py-6 text-center text-muted">ลูกค้ารายนี้ไม่มีงานประเภทนี้ที่รอวางบิล</td>
               </tr>
             </tbody>
           </table>
@@ -87,7 +100,8 @@ import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
 import ContactPickerField from '@/components/shared/ContactPickerField.vue'
 import { sortBookingsForDocumentMerge } from '@/utils/bookingMergeSort'
-import type { Booking } from '@/types'
+import { categoryFeedLabel } from '@/utils/bookingStatus'
+import type { Booking, BookingCategory } from '@/types'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
@@ -104,18 +118,31 @@ const eligibleCustomers = computed(() => [...new Set(bookingStore.bookings.filte
 const selectedCustomer = ref('')
 const selectedCustomerId = computed(() => customerStore.customers.find((c) => c.name === selectedCustomer.value)?.id)
 const contactId = ref<string | undefined>(undefined)
+/** ต้องเลือก Feed ก่อนถึงจะเห็น/เลือกงานได้ — บังคับใบวางบิลหนึ่งใบมีสินค้า Feed เดียวเสมอตั้งแต่ขั้นตอนนี้ (ดู
+ *  categoryFeedLabel และ createBillingFromBookings ฝั่ง store ที่มี sameCategory guard คุมซ้ำอีกชั้นเป็นด่านสุดท้าย) */
+const selectedCategory = ref<BookingCategory | ''>('')
 watch(selectedCustomer, (name) => {
   const customer = customerStore.customers.find((c) => c.name === name)
   contactId.value = customer?.id ? contactStore.primaryContactFor(customer.id)?.id : undefined
+  selectedCategory.value = ''
+  selectedIds.value = new Set()
 })
 const selectedIds = ref<Set<string>>(new Set())
 
 const dateFrom = ref('')
 const dateTo = ref('')
 
+/** Feed ที่ลูกค้ารายนี้มีงานรอวางบิลอยู่จริง — ถ้ามีมากกว่า 1 ต้องบังคับเลือกทีละ Feed (ห้ามรวมกันในใบวางบิลเดียว) */
+const eligibleCategoriesForCustomer = computed<BookingCategory[]>(() => {
+  if (!selectedCustomer.value) return []
+  const categories = new Set(bookingStore.bookings.filter((b) => b.customer === selectedCustomer.value && isUnbilledEligible(b)).map((b) => b.category))
+  return [...categories].sort()
+})
+
 const eligibleBookings = computed(() => {
+  if (!selectedCategory.value) return []
   const list = bookingStore.bookings.filter((b) => {
-    if (b.customer !== selectedCustomer.value || !isUnbilledEligible(b)) return false
+    if (b.customer !== selectedCustomer.value || b.category !== selectedCategory.value || !isUnbilledEligible(b)) return false
     const refDate = b.completedAt ? new Date(b.completedAt) : undefined
     if (dateFrom.value && (!refDate || refDate < new Date(dateFrom.value))) return false
     if (dateTo.value) {
@@ -126,6 +153,10 @@ const eligibleBookings = computed(() => {
     return true
   })
   return sortBookingsForDocumentMerge(list)
+})
+
+watch(selectedCategory, () => {
+  selectedIds.value = new Set()
 })
 
 const toggleBooking = (id: string) => {
