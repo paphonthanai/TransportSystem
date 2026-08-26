@@ -17,7 +17,7 @@ const COLLECTION = 'vehicles'
  * "ถอดคนขับออกจากรถ" (assignDriver ตั้ง driverCode = undefined) เขียนไม่ลง Firestore จริง ต้องส่ง null ชัดเจนแทน
  * (Firestore SDK ไม่รับ undefined เป็นค่า field ใน addDoc/updateDoc เลย จะ throw ทันที)
  */
-export function sanitizeVehicle(data: Partial<Vehicle> & Record<string, unknown>): Record<string, unknown> {
+export function sanitizeVehicle(data: Partial<Vehicle>): Record<string, unknown> {
   return {
     plate: (data.plate as string) ?? '',
     plateProvince: (data.plateProvince as string) ?? '',
@@ -70,12 +70,12 @@ export const vehicleRepository = {
     return fromFirestore(snapshot.id, snapshot.data())
   },
 
-  async create(data: Partial<Vehicle> & Record<string, unknown>): Promise<string> {
+  async create(data: Partial<Vehicle>): Promise<string> {
     const ref = await addDoc(collection(db, COLLECTION), sanitizeVehicle(data))
     return ref.id
   },
 
-  async update(id: string, data: Partial<Vehicle> & Record<string, unknown>): Promise<void> {
+  async update(id: string, data: Partial<Vehicle>): Promise<void> {
     await updateDoc(doc(db, COLLECTION, id), sanitizeVehicle(data))
   },
 

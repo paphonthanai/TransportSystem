@@ -4,7 +4,7 @@ import type { StaffRecord } from '@/stores/staff'
 
 const COLLECTION = 'staff'
 
-export function sanitizeStaff(data: Partial<StaffRecord> & Record<string, unknown>): Omit<StaffRecord, 'id'> {
+export function sanitizeStaff(data: Partial<StaffRecord>): Omit<StaffRecord, 'id'> {
   return {
     code: (data.code as string) ?? '',
     prefix: (data.prefix as string) ?? '',

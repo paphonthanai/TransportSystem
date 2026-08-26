@@ -145,7 +145,7 @@
               <span class="material-symbols-rounded text-base">close</span>
               ปิด
             </button>
-            <button @click="window.print()" class="btn-primary">
+            <button @click="printCertificate" class="btn-primary">
               <span class="material-symbols-rounded text-base">print</span>
               พิมพ์เอกสาร
             </button>
@@ -318,6 +318,7 @@ const confirmCreate = () => {
 
 // --- View / print ---
 const viewTarget = ref<WHTCertificate | null>(null)
+const printCertificate = () => window.print()
 const openView = (cert: WHTCertificate) => {
   viewTarget.value = cert
 }

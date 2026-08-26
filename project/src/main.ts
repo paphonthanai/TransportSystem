@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+import { initPwa } from './composables/usePwa'
 import './styles/main.css'
 
 const app = createApp(App)
@@ -11,12 +12,7 @@ app.use(router)
 
 app.mount('#app')
 
-// ลงทะเบียน Service Worker ขั้นต่ำ (ดู public/sw.js) — มีไว้แค่ให้ Driver App ติดตั้งเป็น PWA ได้ (Add to Home Screen)
-// ยังไม่ทำ caching/offline ใดๆ — ไม่กระทบฝั่งแอดมิน/เดสก์ท็อปเลย เพราะไม่ intercept request อะไรทั้งสิ้น
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // ติดตั้ง PWA ไม่ได้ก็ไม่กระทบการใช้งานหลัก ปล่อยผ่านเงียบๆ
-    })
-  })
-}
+// Phase F — ลงทะเบียน Service Worker + install prompt capture + update detection (ดู public/sw.js,
+// composables/usePwa.ts) ไม่กระทบฝั่งแอดมิน/เดสก์ท็อปเลย เพราะ sw.js ไม่ intercept อะไรนอกจาก static asset
+// ของ origin เดียวกัน (ดู CACHEABLE_EXTENSIONS ใน sw.js)
+initPwa()

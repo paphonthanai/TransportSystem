@@ -87,7 +87,7 @@ export const useAuthStore = defineStore('auth', () => {
       } else if (!error.value) {
         error.value = err?.message || 'เข้าสู่ระบบไม่สำเร็จ'
       }
-      throw new Error(error.value)
+      throw new Error(error.value ?? 'เข้าสู่ระบบไม่สำเร็จ')
     } finally {
       loading.value = false
     }

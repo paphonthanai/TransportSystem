@@ -7,8 +7,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps } from 'vue'
-
 defineProps({
   screenName: {
     type: String,

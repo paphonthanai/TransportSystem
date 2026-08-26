@@ -290,7 +290,9 @@ const selectedIncomeTotal = computed(() => rows.value.filter((r) => selectedIds.
 
 const createDocument = () => {
   if (!driver.value || selectedIds.value.size === 0) return
-  const doc = driverPayrollDocumentsStore.createDriverPayrollDocument(driver.value.id, [...selectedIds.value], period.value)
+  // DriverRecord.id เป็น optional เฉพาะ record ฟอร์มว่างที่ยังไม่บันทึก (ดู DriversView.vue) — driver ที่มาจาก
+  // driversStore.drivers (โหลดจาก Firestore จริง) มี id เสมอ จึง assert ได้ปลอดภัยตรงนี้
+  const doc = driverPayrollDocumentsStore.createDriverPayrollDocument(driver.value.id!, [...selectedIds.value], period.value)
   if (!doc) {
     alert('สร้างเอกสารไม่สำเร็จ — งานที่เลือกอาจถูกออกเอกสารไปแล้ว กรุณารีเฟรชหน้านี้แล้วลองใหม่')
     return
@@ -299,7 +301,7 @@ const createDocument = () => {
   router.push(`/payroll/drivers/documents/${doc.id}`)
 }
 
-const issuedDocuments = computed(() => (driver.value ? driverPayrollDocumentsStore.documentsForDriver(driver.value.id) : []))
+const issuedDocuments = computed(() => (driver.value ? driverPayrollDocumentsStore.documentsForDriver(driver.value.id!) : []))
 const markDocPaid = (docId: string) => {
   if (!confirm('ยืนยันบันทึกว่าจ่ายเงินเอกสารนี้แล้ว?')) return
   driverPayrollDocumentsStore.recordPayment(docId)

@@ -211,8 +211,8 @@ const runVatBackfill = () => {
       lines.push(`  field ที่ไม่ตรงกัน: ${fieldsLabel}`)
       m.mismatchedFields.forEach((f) => {
         const label = vatBackfillFieldLabel[f] || f
-        const expectedVal = f === 'vatRate' ? `${m.expected.vatRate ?? 0}%` : formatBaht((m.expected as Record<string, number>)[f] || 0)
-        const storedVal = f === 'vatRate' ? `${m.stored.vatRate ?? 0}%` : formatBaht((m.stored as Record<string, number>)[f] || 0)
+        const expectedVal = f === 'vatRate' ? `${m.expected.vatRate ?? 0}%` : formatBaht((m.expected as unknown as Record<string, number>)[f] || 0)
+        const storedVal = f === 'vatRate' ? `${m.stored.vatRate ?? 0}%` : formatBaht((m.stored as unknown as Record<string, number>)[f] || 0)
         lines.push(`    ${label}: เก็บไว้ ${storedVal} / คำนวณใหม่จากใบวางบิล ${expectedVal}`)
       })
     })

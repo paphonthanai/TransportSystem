@@ -12,24 +12,27 @@ export function useForm<T extends Record<string, any>>(
   const isValid = computed(() => Object.keys(errors).length === 0)
   const isDirty = computed(() => Object.keys(touched).length > 0)
 
+  /** reactive<T>()/reactive<Partial<Record<keyof T,...>>>() ของ Vue ไม่รองรับการ index ด้วย `keyof T` ทั่วไปตรงๆ
+   *  (ข้อจำกัดที่รู้จักของ Vue's reactivity types ต่อ generic T — ไม่ใช่ปัญหาของโค้ดนี้) cast ผ่าน Record ธรรมดาเฉพาะ
+   *  จุด index เพื่อผ่าน type-check เท่านั้น ไม่เปลี่ยนพฤติกรรม runtime ใดๆ */
   const setFieldValue = (field: keyof T, value: any) => {
-    values[field] = value
-    touched[field] = true
+    ;(values as Record<keyof T, any>)[field] = value
+    ;(touched as Record<keyof T, boolean>)[field] = true
   }
 
   const setFieldError = (field: keyof T, error: string) => {
-    errors[field] = error
+    ;(errors as Record<keyof T, string>)[field] = error
   }
 
   const resetForm = () => {
     Object.keys(values).forEach((key) => {
-      values[key as keyof T] = initialValues[key as keyof T]
+      ;(values as Record<keyof T, any>)[key as keyof T] = initialValues[key as keyof T]
     })
     Object.keys(errors).forEach((key) => {
-      delete errors[key as keyof T]
+      delete (errors as Record<keyof T, string>)[key as keyof T]
     })
     Object.keys(touched).forEach((key) => {
-      delete touched[key as keyof T]
+      delete (touched as Record<keyof T, boolean>)[key as keyof T]
     })
   }
 
@@ -39,7 +42,7 @@ export function useForm<T extends Record<string, any>>(
 
     isSubmitting.value = true
     try {
-      await onSubmit(values)
+      await onSubmit(values as T)
       resetForm()
     } finally {
       isSubmitting.value = false

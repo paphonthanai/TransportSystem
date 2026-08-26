@@ -14,7 +14,7 @@ const COLLECTION = 'customers'
  * initial/jobs/total ที่ CustomersView.vue คำนวณเพิ่มไว้แสดงผลในตาราง "สมุดรายชื่อ" เท่านั้น) หลุดไปบันทึกจริงใน
  * Firestore แม้ว่าต้นทางจะส่ง object ที่ถูก enrich มาแล้วก็ตาม create()/update() ต้องเรียกผ่าน helper นี้เสมอ
  */
-export function sanitizeCustomer(data: Partial<CustomerRecord> & Record<string, unknown>): Omit<CustomerRecord, 'id'> {
+export function sanitizeCustomer(data: Partial<CustomerRecord>): Omit<CustomerRecord, 'id'> {
   return {
     code: data.code ?? '',
     entityType: (data.entityType as ContactEntityType) ?? 'corporate',

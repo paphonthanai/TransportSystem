@@ -263,14 +263,18 @@ const onStatusSelect = (booking: Booking, action: string) => {
     return
   }
   if (action === 'RESET') {
+    /** Business Rule: Transport Status กับ Billing Progress เป็น 2 มิติที่เป็นอิสระต่อกันโดยเจตนา (Booking หนึ่งอยู่
+     *  ที่ IN_TRANSIT+BILLED หรือ DELIVERED+WAITING_BILLING หรือ DELIVERED+BILLED ได้ทั้งหมด ล้วนเป็น state ที่ถูกต้อง)
+     *  Reset สถานะงานขนส่งจึงต้องไม่แตะ/ไม่ยกเลิก/ไม่ลบเอกสารวางบิล-ใบแจ้งหนี้-ใบเสร็จที่ผูกอยู่เลย ไม่ว่าเอกสารนั้นจะ
+     *  ไปถึงขั้นไหนแล้วก็ตาม — การยกเลิก/แก้ไขเอกสารวางบิลต้องเป็น Billing-side action โดยตรงเท่านั้น (ดู "ยกเลิกใบวางบิล"
+     *  ใน BillingListView.vue ที่ยังทำงานได้ตามปกติ) ไม่ใช่ผล side effect จากการ Reset งานขนส่งที่นี่ */
     if (booking.status === 'DELIVERED') {
-      const billing = salesDocumentsStore.documents.find((d) => d.type === 'BILLING' && d.bookingIds.includes(booking.id))
-      if (billing && billing.status !== 'BILLING_PENDING') {
-        alert(`ไม่สามารถ Reset งาน ${booking.docNo} ได้ เนื่องจากใบวางบิล ${billing.number} ถูกดำเนินการต่อแล้ว (ออกใบแจ้งหนี้แล้ว) กรุณา Reset เอกสารปลายทางก่อน`)
+      if (
+        !confirm(
+          `ยืนยัน Reset สถานะงาน ${booking.docNo} จาก "${bookingStatusLabel.DELIVERED}" กลับไปเป็น "${bookingStatusLabel.DELIVERING}"?\n\nข้อมูลการส่งของที่เกิดขึ้นจริงแล้ว (รูป POD/ชื่อผู้รับ/เวลาส่ง) จะไม่ถูกลบ และเอกสารวางบิล/ใบแจ้งหนี้/ใบเสร็จที่ผูกกับงานนี้ (ถ้ามี) จะไม่ถูกแตะต้องเลย — ต้องไปยกเลิก/แก้ไขจากหน้าเอกสารนั้นโดยตรงถ้าต้องการ`
+        )
+      )
         return
-      }
-      if (!confirm(`ยืนยัน Reset สถานะงาน ${booking.docNo} จาก "ส่งของสำเร็จ" กลับไปขั้นก่อนหน้า?${billing ? ` (จะลบใบวางบิล ${billing.number} ที่ยังไม่ได้ดำเนินการต่อด้วย)` : ''}`)) return
-      if (billing) salesDocumentsStore.cancelBillingNote(billing.id)
     } else {
       const stockWarning = booking.status === 'LOADED' ? ' (สต๊อกที่ตัดไปจากการรับสินค้าจะถูกคืนกลับ)' : ''
       if (!confirm(`ยืนยัน Reset สถานะงาน ${booking.docNo} กลับไปขั้นก่อนหน้า?${stockWarning}`)) return

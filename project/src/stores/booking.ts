@@ -419,6 +419,7 @@ export const useBookingStore = defineStore('booking', () => {
   ) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
+    const previousPlate = booking.plate
     booking.plate = plate
     if (extra?.driverName) {
       booking.driverName = extra.driverName
@@ -434,6 +435,24 @@ export const useBookingStore = defineStore('booking', () => {
     // การวางบิลแยกอิสระจากการจัดรถโดยเจตนา — booking.billingStatus ยังคง UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล (ดู addBookingsToBatch)
     const alreadyAccepted = booking.status !== 'WAITING_DISPATCH' && booking.status !== 'ASSIGNED'
     if (alreadyAccepted) {
+      /**
+       * Phase E.1 (Test 8) — เปลี่ยนรถจริง (plate ไม่เหมือนเดิม ไม่ใช่แค่แก้ชื่อคนขับบนรถคันเดิม) ระหว่างสถานะ
+       * IN_TRANSIT/DELIVERING (หลังผ่าน LOADED มาแล้ว = ของทุกจุดเคยถูกโหลดขึ้นรถคันเดิมจริง) — จุดที่ "ยังไม่ส่งของ"
+       * (deliveryStatus !== DELIVERED) ต้องยืนยันว่าย้ายขึ้นรถคันใหม่แล้วก่อนถึงจะส่งต่อได้ (ดู confirmRemainingPickup
+       * ด้านล่าง + nextPickup ใน utils/driverJobs.ts ที่ Driver UI ใช้เช็คว่ามีจุดรอยืนยันค้างอยู่หรือไม่) จุดที่ส่งไปแล้ว
+       * (DELIVERED) ไม่แตะเด็ดขาด — ห้าม reset ประวัติที่เสร็จแล้วตาม Business Rule (ดู resetBookingStatus ด้านบนที่ยึด
+       * หลักเดียวกัน) เทียบจาก plate เท่านั้นเพราะระบบนี้ไม่มี field vehicleId แยกต่างหาก (plate คือ Source of Truth
+       * เดียวที่มีอยู่จริงสำหรับ "รถคันไหน" — ตรวจแล้วก่อนแก้)
+       */
+      const vehicleChangedMidDelivery = previousPlate !== plate && (booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING')
+      if (vehicleChangedMidDelivery) {
+        booking.items.forEach((item) => {
+          if (item.deliveryStatus !== 'DELIVERED') {
+            item.pickupStatus = undefined
+          }
+        })
+        addLog(`เปลี่ยนรถระหว่างส่งของ ${booking.docNo}: ต้องยืนยันรับสินค้าที่เหลือขึ้นรถคันใหม่ (${plate}) ก่อนส่งต่อ`, { bookingId: booking.id })
+      }
       addLog(`เปลี่ยนรถ/คนขับ ${booking.docNo} เป็นทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''}`, { bookingId: booking.id })
       return
     }
@@ -555,7 +574,12 @@ export const useBookingStore = defineStore('booking', () => {
       return { ok: true }
     }
 
+    const wasDelivered = booking.status === 'DELIVERED'
     const prevIdx = idx - 1
+    /** Reset ถอยกลับทีละ 1 ขั้นเสมอตาม state machine ทั่วไป (DELIVERED -> DELIVERING, DELIVERING -> IN_TRANSIT, ...)
+     *  ไม่มี special case ข้ามขั้น — Business Rule ล่าสุดยืนยันว่า Reset = เปลี่ยน Job-level status เท่านั้น ส่วน
+     *  "ออกใบวางบิลได้จาก IN_TRANSIT" เป็นคนละกติกากับ Reset (ดู allEligible ใน createBillingFromBookings) ไม่ต้อง
+     *  พึ่งการข้ามขั้นตรงนี้อีกต่อไป */
     const prevStatus = BOOKING_STATUS_SEQUENCE[prevIdx]
 
     if (prevIdx <= LOADING_INDEX) {
@@ -577,13 +601,11 @@ export const useBookingStore = defineStore('booking', () => {
       booking.goodsReceivedBy = undefined
     }
 
-    if (booking.status === 'DELIVERED') {
-      booking.items.forEach((item) => {
-        item.deliveryStatus = 'PENDING'
-        item.deliveredAt = undefined
-        item.podImage = undefined
-        item.deliveredBy = undefined
-      })
+    if (wasDelivered) {
+      /** ห้ามล้างข้อมูลการส่งของจริงที่เกิดขึ้นแล้ว (deliveryStatus/deliveredAt/podImage/deliveredBy) — Reset คือการ
+       *  ย้อนสถานะงานระดับ workflow control เท่านั้น ไม่ใช่การลบประวัติการส่งของจริง (Business Rule: Reset ≠ ลบ
+       *  Delivery history — จุดที่ส่งไปแล้วต้องยังมี POD/ผู้รับ/เวลาส่งครบ ไม่บังคับให้คนขับส่งซ้ำ) เหลือแค่
+       *  completedAt ที่เคลียร์ได้เพราะงานไม่ถือว่าจบแล้วอีกต่อไปหลัง Reset */
       booking.completedAt = undefined
     }
 
@@ -640,6 +662,24 @@ export const useBookingStore = defineStore('booking', () => {
       booking.goodsReceivedBy = receivedBy || authStore.userName || booking.driverName
       addLog(`รับสินค้าครบที่ต้นทาง ${booking.docNo} (โดย ${booking.goodsReceivedBy})`, { bookingId: booking.id })
     }
+  }
+
+  /**
+   * Phase E.1 (Test 8) — ยืนยันว่าสินค้าที่เหลือ (ยังไม่ส่งของ) ถูกโหลดขึ้นรถคันใหม่แล้ว หลังเปลี่ยนคนขับ/รถระหว่าง
+   * ส่งของจริง (ดู dispatchBooking ที่ล้าง pickupStatus ของ item ที่ยังไม่ส่งไว้เมื่อตรวจพบว่า plate เปลี่ยนจริงระหว่าง
+   * IN_TRANSIT/DELIVERING) — ตั้งใจแยกจาก pickupJobItem โดยเฉพาะ เพราะ pickupJobItem ใช้ได้เฉพาะสถานะ LOADING เท่านั้น
+   * และมี side effect ที่ไม่ต้องการตรงนี้ (ตัดสต๊อกซ้ำ — สต๊อกถูกตัดไปแล้วตั้งแต่รับสินค้าครั้งแรก, เลื่อนสถานะงานกลับเป็น
+   * LOADED — booking.status ต้องคงเป็น IN_TRANSIT/DELIVERING เดิม ไม่ถอยหลัง) ไม่แตะ deliverySequence เลย (เรียงลำดับ
+   * ส่งของเดิมยังถูกต้องอยู่ ไม่ต้องคำนวณใหม่)
+   */
+  function confirmRemainingPickup(bookingId: string, itemId: string) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
+    if (!booking || (booking.status !== 'IN_TRANSIT' && booking.status !== 'DELIVERING')) return
+    const item = booking.items.find((i) => i.id === itemId)
+    if (!item || item.pickupStatus === 'PICKED_UP' || item.deliveryStatus === 'DELIVERED') return
+    item.pickupStatus = 'PICKED_UP'
+    item.pickedUpAt = new Date()
+    addLog(`ยืนยันรับสินค้าที่เหลือขึ้นรถคันใหม่ ${booking.docNo}: ${item.product} (${item.siteName})`, { bookingId: booking.id })
   }
 
   /** ตรวจงานที่รอคนขับตอบรับเกิน 15 นาที ยกเลิกการจ่ายงานและกลับไปรอจัดคนขับใหม่อัตโนมัติ */
@@ -970,6 +1010,7 @@ export const useBookingStore = defineStore('booking', () => {
     markFuelReceived,
     startLoading,
     pickupJobItem,
+    confirmRemainingPickup,
     startTransit,
     completeJob,
     deliverJobItem,

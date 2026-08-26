@@ -6,15 +6,15 @@
     </div>
     <div class="space-y-2">
       <div v-for="(item, index) in items" :key="index" class="flex items-center gap-2 py-2 border-b border-border last:border-0">
-        <div v-if="type === 'drivers'" :style="{ background: item.color }" class="w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
-          {{ item.initial }}
+        <div v-if="type === 'drivers'" :style="{ background: asDriverItem(item).color }" class="w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+          {{ asDriverItem(item).initial }}
         </div>
-        <div v-else class="w-6 text-xs font-bold text-muted">{{ item.rank }}</div>
+        <div v-else class="w-6 text-xs font-bold text-muted">{{ asCustomerItem(item).rank }}</div>
         <div class="flex-1 min-w-0">
           <div class="text-sm font-semibold text-text truncate">{{ item.name }}</div>
-          <div v-if="type === 'drivers'" class="text-xs text-muted">{{ item.trips }} เที่ยว</div>
+          <div v-if="type === 'drivers'" class="text-xs text-muted">{{ asDriverItem(item).trips }} เที่ยว</div>
           <div v-else class="h-1.5 bg-surface-2 rounded-full mt-1 overflow-hidden">
-            <div :style="{ width: item.percentage + '%' }" class="h-full bg-primary rounded-full"></div>
+            <div :style="{ width: asCustomerItem(item).percentage + '%' }" class="h-full bg-primary rounded-full"></div>
           </div>
         </div>
         <div class="text-sm font-bold text-text whitespace-nowrap">{{ item.amount }}</div>
@@ -26,6 +26,20 @@
 <script setup lang="ts">
 import { computed, PropType } from 'vue'
 
+interface CustomerRankItem {
+  rank: number
+  name: string
+  percentage: number
+  amount: string
+}
+interface DriverRankItem {
+  initial: string
+  name: string
+  color: string
+  trips: number
+  amount: string
+}
+
 const props = defineProps({
   type: {
     type: String as PropType<'customers' | 'drivers'>,
@@ -34,7 +48,13 @@ const props = defineProps({
   title: String,
 })
 
-const items = computed(() => {
+/** items เป็น array เดียวที่ "รูปทรงเดียวกันทั้ง array" เสมอ (กำหนดครั้งเดียวจาก props.type ตอนสร้าง array) แต่ TS
+ *  มองเป็น union ต่อ element เพราะ narrow จาก props.type ในเทมเพลตแยกจาก array ที่ผูกกัน — cast เฉพาะจุดใช้งานจริง
+ *  แทนการเปลี่ยนโครงสร้าง template (ไม่กระทบ markup/พฤติกรรมที่ render ออกมาเลย) */
+const asDriverItem = (item: CustomerRankItem | DriverRankItem): DriverRankItem => item as DriverRankItem
+const asCustomerItem = (item: CustomerRankItem | DriverRankItem): CustomerRankItem => item as CustomerRankItem
+
+const items = computed<(CustomerRankItem | DriverRankItem)[]>(() => {
   if (props.type === 'customers') {
     return [
       { rank: 1, name: 'บริษัท ABC จำกัด', percentage: 95, amount: '฿45.2M' },

@@ -1,19 +1,27 @@
 <template>
-  <div class="min-h-screen bg-primary flex items-center justify-center p-4">
-    <div class="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
-      <!-- Header -->
-      <div class="bg-gradient-to-r from-primary to-blue-700 text-white p-5 flex-shrink-0">
-        <div class="flex items-center justify-between mb-1">
+  <!-- Full-bleed mobile shell — ไม่มีการ์ดลอยกลางจอแบบเดิม (max-w-sm+rounded+shadow) ใช้พื้นที่จอเต็มเหมือนแอปมือถือจริง
+       เผื่อพื้นที่ safe-area บน/ล่างไว้ตั้งแต่ตอนนี้ (env(safe-area-inset-*)) แม้ยังไม่ได้ติดตั้ง PWA manifest จริง
+       เพื่อให้พร้อมต่อยอดเป็น PWA/bottom navigation ได้ทันทีในอนาคตโดยไม่ต้องรื้อ layout ซ้ำ -->
+  <div class="min-h-screen bg-surface-2 flex flex-col">
+    <!-- Header: sticky เต็มความกว้าง ไม่ใช่การ์ดลอย -->
+    <header class="sticky top-0 z-10 bg-gradient-to-r from-primary to-blue-700 text-white shadow-md flex-shrink-0">
+      <div class="px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2">
-            <span class="material-symbols-rounded">local_shipping</span>
-            <div class="font-bold">Driver App</div>
+            <span class="material-symbols-rounded text-2xl">local_shipping</span>
+            <div class="font-bold text-lg">Driver App</div>
           </div>
           <div class="flex items-center gap-1">
-            <button v-if="isDriverRole" @click="openAccountSettings" title="ตั้งค่าบัญชี (เปลี่ยนอีเมล/PIN)" class="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center">
-              <span class="material-symbols-rounded text-lg">manage_accounts</span>
+            <button
+              v-if="isDriverRole"
+              @click="openAccountSettings"
+              title="ตั้งค่าบัญชี (เปลี่ยนอีเมล/PIN)"
+              class="w-11 h-11 rounded-lg hover:bg-white/10 active:bg-white/20 flex items-center justify-center"
+            >
+              <span class="material-symbols-rounded text-xl">manage_accounts</span>
             </button>
-            <button @click="logout" title="ออกจากระบบ" class="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center">
-              <span class="material-symbols-rounded text-lg">logout</span>
+            <button @click="logout" title="ออกจากระบบ" class="w-11 h-11 rounded-lg hover:bg-white/10 active:bg-white/20 flex items-center justify-center">
+              <span class="material-symbols-rounded text-xl">logout</span>
             </button>
           </div>
         </div>
@@ -21,111 +29,138 @@
         <select
           v-model="selectedDriver"
           :disabled="isDriverRole"
-          class="w-full h-10 px-3 rounded-lg text-sm font-semibold text-text bg-white/95 border-0 outline-none disabled:opacity-80"
+          class="w-full h-12 px-3 rounded-lg text-base font-semibold text-text bg-white/95 border-0 outline-none disabled:opacity-80"
         >
           <option v-for="name in driverOptions" :key="name" :value="name">{{ name }}</option>
         </select>
       </div>
+    </header>
 
-      <!-- Body -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-5">
-        <!-- My Jobs -->
-        <div>
-          <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">งานที่ได้รับมอบหมาย</div>
+    <!-- Body: เต็มความกว้างจอ scroll อิสระจาก header -->
+    <main class="flex-1 overflow-y-auto px-4 py-4 space-y-6 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <!-- Phase F: PWA update available — ไม่ auto-reload เอง ให้ Driver กดยืนยันเองเท่านั้น (กัน reload กลางคัน
+           ระหว่างทำงานอยู่ ดู composables/usePwa.ts's applyUpdate) -->
+      <div v-if="updateAvailable" class="flex items-center justify-between gap-3 bg-blue-50 border border-blue-200 rounded-xl px-3.5 py-3">
+        <div class="text-sm text-blue-900">มีแอปเวอร์ชันใหม่</div>
+        <button @click="applyUpdate" class="h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold flex-shrink-0">อัปเดต</button>
+      </div>
 
-          <div v-if="activeJobs.length === 0" class="text-center py-8 text-muted text-sm">
-            <span class="material-symbols-rounded text-3xl block mb-2">inbox</span>
-            ไม่มีงานที่ได้รับมอบหมายในขณะนี้
-          </div>
-
-          <button
-            v-for="job in activeJobs"
-            :key="job.id"
-            @click="router.push(`/driver-app/job/${job.id}`)"
-            class="w-full text-left border border-border rounded-2xl p-4 mb-3 last:mb-0 hover:border-primary transition-all"
-          >
-            <div class="flex items-center justify-between mb-1.5">
-              <div class="font-bold text-primary">{{ job.docNo }}</div>
-              <div class="flex items-center gap-1">
-                <span
-                  :class="[
-                    'text-xs font-semibold px-2 py-1 rounded-full',
-                    job.category === 'cements' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700',
-                  ]"
-                >
-                  {{ job.category === 'cements' ? 'Cements' : 'Ceramics' }}
-                </span>
-                <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[job.status]]">
-                  {{ bookingStatusLabel[job.status] }}
-                </span>
-                <span class="material-symbols-rounded text-muted text-lg">chevron_right</span>
-              </div>
-            </div>
-            <div class="text-xs text-muted">{{ destinationLabel(job) }}</div>
-            <div v-if="job.status === 'ASSIGNED'" class="text-[11px] text-amber-700 mt-1">
-              กรุณาตอบรับภายใน {{ formatCountdown(remainingAcceptSeconds(job)) }}
-            </div>
-          </button>
+      <!-- Phase F: Install prompt — ไม่บังคับ, ไม่ modal ใหญ่, จำการปิดไว้ไม่ให้ขึ้นซ้ำ (ดู usePwa.ts) -->
+      <div v-if="showInstallBanner" class="flex items-center justify-between gap-3 bg-white border border-border rounded-xl px-3.5 py-3">
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-text">ติดตั้งแอป Driver</div>
+          <div class="text-xs text-muted">ใช้งานสะดวกจากหน้าจอมือถือ</div>
         </div>
-
-        <!-- Recent Trips / Income -->
-        <div>
-          <div class="flex items-center justify-between mb-2">
-            <div class="text-xs font-bold text-muted uppercase tracking-wide">เที่ยวล่าสุด</div>
-            <div class="text-xs font-bold text-primary">รวม {{ formatBaht(totalRecentIncome) }}</div>
-          </div>
-          <div v-if="recentJobs.length === 0" class="text-center py-6 text-muted text-sm">ยังไม่มีประวัติเที่ยวงาน</div>
-          <div v-for="job in recentJobs" :key="job.id" class="flex items-center justify-between py-2 border-b border-border last:border-0">
-            <div class="min-w-0">
-              <div class="text-sm font-semibold text-text truncate">{{ job.docNo }} · {{ destinationLabel(job) }}</div>
-              <div class="text-xs text-muted">{{ formatDate(job.completedAt) }}</div>
-            </div>
-            <div class="text-sm font-bold text-green-600 whitespace-nowrap">{{ formatBaht(job.finalAllowance ?? job.allowance) }}</div>
-          </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button @click="dismissInstall" class="h-9 px-3 rounded-lg text-sm font-medium text-muted">ไว้ทีหลัง</button>
+          <button @click="promptInstall" class="h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold">ติดตั้ง</button>
         </div>
       </div>
-    </div>
 
-    <!-- Account Settings Modal — self-service เปลี่ยนอีเมล/PIN ของบัญชีตัวเอง (ดู authStore.updateOwnCredentials) -->
+      <!-- My Jobs -->
+      <div>
+        <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">งานที่ได้รับมอบหมาย</div>
+
+        <div v-if="activeJobs.length === 0" class="text-center py-8 text-muted text-sm">
+          <span class="material-symbols-rounded text-3xl block mb-2">inbox</span>
+          ไม่มีงานที่ได้รับมอบหมายในขณะนี้
+        </div>
+
+        <button
+          v-for="job in activeJobs"
+          :key="job.id"
+          @click="router.push(`/driver-app/job/${job.id}`)"
+          class="w-full text-left bg-white border border-border rounded-2xl p-4 mb-3 last:mb-0 active:bg-surface-2 transition-colors"
+        >
+          <div class="flex items-center justify-between mb-2 gap-2">
+            <div class="font-bold text-primary text-base truncate">{{ job.docNo }}</div>
+            <span class="material-symbols-rounded text-muted text-xl flex-shrink-0">chevron_right</span>
+          </div>
+          <div class="flex items-center gap-1.5 flex-wrap mb-1.5">
+            <span
+              :class="[
+                'text-xs font-semibold px-2 py-1 rounded-full',
+                job.category === 'cements' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700',
+              ]"
+            >
+              {{ job.category === 'cements' ? 'Cements' : 'Ceramics' }}
+            </span>
+            <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[job.status]]">
+              {{ bookingStatusLabel[job.status] }}
+            </span>
+          </div>
+          <!-- ก่อนตอบรับงาน (ASSIGNED) ยังไม่เปิดเผยรายละเอียดปลายทาง — คนขับเห็นแค่ "มีงานใหม่" จนกว่าจะกดรับงาน
+               (Phase E: Driver Sequential Delivery Workflow — Booking เดิมยังเป็น Source of Truth เดียว ไม่มีข้อมูลใหม่
+               ถูกสร้าง แค่ควบคุมว่าตอนนี้คนขับ "ควรเห็น" อะไรเท่านั้น) -->
+          <div v-if="job.status === 'ASSIGNED'" class="text-sm text-muted">มีงานใหม่รอตอบรับ</div>
+          <div v-else-if="job.status === 'IN_TRANSIT' || job.status === 'DELIVERING'" class="text-sm text-muted">
+            ส่งแล้ว {{ deliveryProgress(job.items).completed }}/{{ deliveryProgress(job.items).total }} จุด
+          </div>
+          <div v-else class="text-sm text-muted">{{ destinationLabel(job) }}</div>
+          <div v-if="job.status === 'ASSIGNED'" class="text-sm font-semibold text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5 mt-2">
+            กรุณาตอบรับภายใน {{ formatCountdown(remainingAcceptSeconds(job)) }}
+          </div>
+        </button>
+      </div>
+
+      <!-- Recent Trips / Income -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-xs font-bold text-muted uppercase tracking-wide">เที่ยวล่าสุด</div>
+          <div class="text-sm font-bold text-primary">รวม {{ formatBaht(totalRecentIncome) }}</div>
+        </div>
+        <div v-if="recentJobs.length === 0" class="text-center py-6 text-muted text-sm">ยังไม่มีประวัติเที่ยวงาน</div>
+        <div v-for="job in recentJobs" :key="job.id" class="flex items-center justify-between py-3 border-b border-border last:border-0">
+          <div class="min-w-0">
+            <div class="text-base font-semibold text-text truncate">{{ job.docNo }} · {{ destinationLabel(job) }}</div>
+            <div class="text-xs text-muted">{{ formatDate(job.completedAt) }}</div>
+          </div>
+          <div class="text-base font-bold text-green-600 whitespace-nowrap">{{ formatBaht(job.finalAllowance ?? job.allowance) }}</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Account Settings — bottom sheet (mobile-native) แทน card ลอยกลางจอ -->
     <Teleport to="body" v-if="showAccountSettings">
-      <div @click="closeAccountSettings" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-4">
-        <div @click.stop class="w-full max-w-sm bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div class="flex items-center justify-between px-5 py-4 border-b border-border">
-            <div class="font-bold text-text">ตั้งค่าบัญชี</div>
-            <button @click="closeAccountSettings" class="w-8 h-8 rounded-lg hover:bg-surface-2 flex items-center justify-center">
-              <span class="material-symbols-rounded text-lg">close</span>
+      <div @click="closeAccountSettings" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-end justify-center">
+        <div @click.stop class="w-full bg-white rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+          <div class="w-10 h-1.5 bg-border rounded-full mx-auto mt-3 mb-1"></div>
+          <div class="flex items-center justify-between px-5 py-3 border-b border-border">
+            <div class="font-bold text-text text-lg">ตั้งค่าบัญชี</div>
+            <button @click="closeAccountSettings" class="w-11 h-11 -mr-2 rounded-lg hover:bg-surface-2 flex items-center justify-center">
+              <span class="material-symbols-rounded text-xl">close</span>
             </button>
           </div>
-          <div class="p-5 space-y-3">
-            <div class="text-xs text-muted">
+          <div class="p-5 space-y-4">
+            <div class="text-sm text-muted">
               เพิ่ม/เปลี่ยนอีเมลจริงแทนอีเมลภายในที่ระบบตั้งให้อัตโนมัติ หรือเปลี่ยน PIN — เว้นว่างช่องไหนไว้ถ้าไม่ต้องการเปลี่ยน ต้องกรอก PIN ปัจจุบันเพื่อยืนยันตัวตนก่อนเสมอ
             </div>
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">PIN ปัจจุบัน (ยืนยันตัวตน)</label>
-              <input v-model="accountForm.currentPassword" type="password" placeholder="PIN/รหัสผ่านปัจจุบัน" class="w-full h-9 px-3 rounded-lg border border-border text-sm" />
+              <input v-model="accountForm.currentPassword" type="password" placeholder="PIN/รหัสผ่านปัจจุบัน" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">อีเมลใหม่ (ไม่บังคับ)</label>
-              <input v-model="accountForm.newEmail" type="email" placeholder="เช่น somchai@gmail.com" class="w-full h-9 px-3 rounded-lg border border-border text-sm" />
+              <input v-model="accountForm.newEmail" type="email" placeholder="เช่น somchai@gmail.com" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">PIN ใหม่ (ไม่บังคับ)</label>
-              <input v-model="accountForm.newPassword" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" class="w-full h-9 px-3 rounded-lg border border-border text-sm" />
+              <input v-model="accountForm.newPassword" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
             </div>
-            <div v-if="accountError" class="text-xs text-red-600 flex items-center gap-1">
-              <span class="material-symbols-rounded text-sm">error</span>
+            <div v-if="accountError" class="text-sm text-red-600 flex items-center gap-1">
+              <span class="material-symbols-rounded text-base">error</span>
               {{ accountError }}
             </div>
-            <div v-if="accountSuccess" class="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+            <div v-if="accountSuccess" class="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
               บันทึกสำเร็จ
             </div>
           </div>
-          <div class="flex justify-end gap-2 px-5 py-4 border-t border-border">
-            <button @click="closeAccountSettings" class="h-9 px-4 rounded-lg border border-border text-sm font-medium text-text">ปิด</button>
+          <div class="flex gap-3 px-5 py-4 border-t border-border">
+            <button @click="closeAccountSettings" class="flex-1 h-12 rounded-lg border border-border text-base font-medium text-text">ปิด</button>
             <button
               @click="saveAccountSettings"
               :disabled="!accountForm.currentPassword || accountSaving"
-              class="h-9 px-4 rounded-lg bg-primary text-white text-sm font-semibold flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              class="flex-1 h-12 rounded-lg bg-primary text-white text-base font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {{ accountSaving ? 'กำลังบันทึก...' : 'บันทึก' }}
             </button>
@@ -145,11 +180,17 @@ import { useDriversStore } from '@/stores/drivers'
 import type { Booking } from '@/types'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import { matchesSelectedDriver as matchesDriverHelper } from '@/utils/driverJobs'
+import { deliveryProgress } from '@/utils/deliveryProgress'
+import { usePwaInstall, usePwaUpdate } from '@/composables/usePwa'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
 const authStore = useAuthStore()
 const driversStore = useDriversStore()
+
+// Phase F — PWA install prompt + update-available banners (ดู composables/usePwa.ts)
+const { showInstallBanner, promptInstall, dismissInstall } = usePwaInstall()
+const { updateAvailable, applyUpdate } = usePwaUpdate()
 
 /** รายชื่อคนขับ ดึงจากสมุดรายชื่อจริง (Settings > พนักงานขับรถ) แทนรายชื่อตัวอย่างเดิม */
 const driverOptions = computed(() => driversStore.drivers.map((d) => driversStore.fullName(d)))

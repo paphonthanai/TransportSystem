@@ -14,7 +14,7 @@ const COLLECTION = 'drivers'
  * field ที่ไม่ได้เป็นส่วนหนึ่งของ data model หลุดไปบันทึกจริงใน Firestore ไม่ว่าต้นทางจะส่ง object แบบไหนมาก็ตาม
  * create()/update() ต้องเรียกผ่าน helper นี้เสมอ
  */
-export function sanitizeDriver(data: Partial<DriverRecord> & Record<string, unknown>): Omit<DriverRecord, 'id'> {
+export function sanitizeDriver(data: Partial<DriverRecord>): Omit<DriverRecord, 'id'> {
   return {
     code: data.code ?? '',
     prefix: data.prefix ?? '',

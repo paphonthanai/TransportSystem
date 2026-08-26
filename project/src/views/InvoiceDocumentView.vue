@@ -447,7 +447,7 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { bahtText } from '@/utils/companyInfo'
 import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
-import { categoryFeedLabel } from '@/utils/bookingStatus'
+import { groupRowsByFeed, type FeedGroup } from '@/utils/feedGrouping'
 import { traceDocumentChain } from '@/utils/documentTrace'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import DocumentSettingsPanel, { type DocumentSettingsToggles } from '@/components/shared/DocumentSettingsPanel.vue'
@@ -643,31 +643,6 @@ const hasTripColumns = computed(() => docMode.value === 'billing' && docRows.val
 
 /** วันที่แบบ วว/ดด/ปปปป (พ.ศ. เต็ม 4 หลัก) ใช้เฉพาะบรรทัด "งวดวันที่..." ที่ generate สดตอนแสดงผล (ดู feedGroupedRows)
  *  คนละรูปแบบกับ formatDateShort (พ.ศ. 2 หลัก ใช้กับคอลัมน์วันที่ส่งในตารางรายเที่ยวของใบวางบิล) โดยเจตนา */
-const formatDateSlashFullYear = (date: Date) => {
-  const d = new Date(date)
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  return `${dd}/${mm}/${d.getFullYear() + 543}`
-}
-
-/** "Feed" ของรายการหนึ่งแถว = booking.category ของงานขนส่งต้นทาง (Cement/Ceramic) หาโดย join กลับไปที่ Booking ผ่าน
- *  deliveryNo (=booking.docNo เสมอ ดู createBillingFromBookings/createTaxInvoiceFromBookings) — "ห้าม" ใช้ productId/
- *  JobItem.product แทน เพราะเป็น free text ต่อปลายทาง/รหัสงาน (เช่น เลขที่ Site) ไม่ใช่ตัวแบ่งกลุ่มรายได้ที่แท้จริง — หา
- *  Booking ไม่เจอ (เช่น รายการกรอกเอง ไม่มี deliveryNo) ถือว่าไม่ทราบ Feed (ดู categoryFeedLabel ใน utils/bookingStatus.ts) */
-const feedForRow = (row: PrintRow): string => {
-  if (!row.deliveryNo) return ''
-  const booking = bookingStore.bookings.find((b) => b.docNo === row.deliveryNo)
-  return booking ? categoryFeedLabel[booking.category] : ''
-}
-
-interface FeedGroup {
-  feed: string
-  dateLabel: string
-  qty: number
-  unitPrice: number
-  amount: number
-}
-
 /**
  * ใบกำกับภาษี/ใบเสร็จรับเงินที่มาจากงานขนส่ง: จัดกลุ่มรายการตาม Feed แล้วยุบแต่ละกลุ่มเหลือกลุ่มเดียว — Generate สดจาก
  * รายการต้นทางตอนแสดงผลทุกครั้ง ไม่มีการเก็บข้อความนี้ซ้ำใน Firestore (ห้ามเพิ่ม field ใหม่) ตามหลักการที่ใบวางบิลต้องมี
@@ -675,38 +650,13 @@ interface FeedGroup {
  * จึงมักได้แค่ 1 กลุ่มเสมอ — เก็บ logic แบบ "หลายกลุ่ม" ไว้เป็น fallback ให้เอกสารเก่าก่อนมีการบังคับ Feed เดียว/ที่ยังไม่ผ่าน
  * การแยก Feed แสดงผลถูกต้องด้วย ไม่ใช่ปัดตกทั้งเอกสาร — หา Feed ไม่ได้แม้แต่แถวเดียว (เอกสารกรอกเอง/จากใบเสนอราคา ไม่มี
  * Booking ผูกอยู่) → คืนอาเรย์ว่าง ให้ printRows/jobNameLabel ไป fallback ที่ docRows/newDoc.description ตรงๆ
+ *
+ * Logic การจัดกลุ่มจริงอยู่ที่ utils/feedGrouping.ts (แยกออกมาเป็น pure function ให้ unit test ได้ตรงๆ โดยไม่ต้อง
+ * mount component นี้ — ดู src/utils/feedGrouping.test.ts) ที่นี่แค่ป้อน docRows/bookingStore.bookings เข้าไป
  */
 const feedGroups = computed<FeedGroup[]>(() => {
   if (docMode.value !== 'invoice' && docMode.value !== 'receipt') return []
-  if (docRows.value.length === 0) return []
-  const withFeed = docRows.value.map((row) => ({ row, feed: feedForRow(row) }))
-  if (withFeed.some(({ feed }) => !feed)) return []
-  const order: string[] = []
-  const groups = new Map<string, PrintRow[]>()
-  withFeed.forEach(({ row, feed }) => {
-    if (!groups.has(feed)) {
-      groups.set(feed, [])
-      order.push(feed)
-    }
-    groups.get(feed)!.push(row)
-  })
-  return order.map((feed) => {
-    const rows = groups.get(feed)!
-    const dates = rows
-      .map((r) => r.shipDate)
-      .filter((d): d is Date => !!d)
-      .sort((a, b) => a.getTime() - b.getTime())
-    const start = dates[0]
-    const end = dates[dates.length - 1]
-    const dateLabel = start ? (end && end.toDateString() !== start.toDateString() ? `${formatDateSlashFullYear(start)} - ${formatDateSlashFullYear(end)}` : formatDateSlashFullYear(start)) : ''
-    const qty = rows.length
-    const amount = Math.round(rows.reduce((sum, r) => sum + r.amount, 0))
-    /** ราคาต่อหน่วย = ราคาจริงถ้าทุกเที่ยวในกลุ่มเดียวกันเท่ากันหมด (กรณีปกติ) ไม่งั้นเฉลี่ยจาก amount/qty (กรณีราคาไม่เท่ากัน
-     *  ในบางเที่ยว) — คงค่า "จำนวน × ราคาต่อหน่วย = ยอดรวม" ให้ตรงเป๊ะเมื่อราคาสม่ำเสมอ (กรณีส่วนใหญ่) */
-    const uniquePrices = new Set(rows.map((r) => r.unitPrice))
-    const unitPrice = uniquePrices.size === 1 ? rows[0].unitPrice : Math.round(amount / qty)
-    return { feed, dateLabel, qty, unitPrice, amount }
-  })
+  return groupRowsByFeed(docRows.value, bookingStore.bookings)
 })
 
 /** บรรทัดตารางรายการ "ค่าขนส่ง [Feed] [วันที่เริ่มต้น] - [วันที่สิ้นสุด]" — ไม่มีคำว่า "งวดวันที่" (คนละข้อความกับ "ชื่องาน"

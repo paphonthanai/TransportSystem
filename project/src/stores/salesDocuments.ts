@@ -213,6 +213,50 @@ export interface ManualDocumentFormData {
   contactId?: string
 }
 
+/** ย้ายมาไว้ module scope (เดิมอยู่ในฟังก์ชัน setup ของ store) เพราะ backfillBillingVatFromBookings() คืนค่าเป็น
+ *  BillingVatBackfillReport แล้ว store ทั้งก้อน export ออกไปเป็น public API — TS ต้องการให้ type ที่ปรากฏใน public
+ *  signature ใดๆ อยู่ใน scope ที่มองเห็นได้จากภายนอกไฟล์เพื่อ generate .d.ts ได้ถูกต้อง (TS4025) ย้ายเฉยๆ ไม่มีผลต่อ
+ *  runtime เลย (interface ถูกลบทิ้งหมดตอน compile) */
+export interface BillingVatBackfillTotals {
+  amount: number
+  discountTotal?: number
+  vatAmount?: number
+  vatRate?: number
+}
+export interface BillingVatBackfillChange {
+  billingId: string
+  billingNumber: string
+  customer: string
+  before: BillingVatBackfillTotals
+  after: BillingVatBackfillTotals
+}
+export interface BillingVatBackfillDownstreamMismatch {
+  /** เลขที่เอกสารต้นทาง (ใบวางบิลที่เพิ่งซิงก์ยอดใหม่) */
+  billingId: string
+  billingNumber: string
+  /** เลขที่เอกสารปลายทางที่ยอดไม่ตรงกับใบวางบิลต้นทางหลังซิงก์ — ไม่ถูกแก้ไขให้อัตโนมัติ */
+  downstreamType: 'TAX_INVOICE' | 'RECEIPT'
+  downstreamId: string
+  downstreamNumber: string
+  /** ยอดที่ควรจะเป็นตามใบวางบิลต้นทางหลังซิงก์ (grandTotal = amount + vatAmount) */
+  expected: BillingVatBackfillTotals & { grandTotal: number }
+  /** ยอดที่เก็บอยู่จริงในเอกสารปลายทาง ณ ตอนนี้ (ไม่ถูกแตะต้อง) */
+  stored: BillingVatBackfillTotals & { grandTotal: number }
+  /** รายชื่อ field ที่ค่าไม่ตรงกันระหว่าง expected/stored เช่น ['vatRate', 'vatAmount', 'grandTotal'] */
+  mismatchedFields: string[]
+}
+export interface BillingVatBackfillReport {
+  /** true ถ้าเรียกใช้ตอนที่ store ของ Booking ยังโหลดจาก Firestore ไม่เสร็จ (เพิ่งเข้าเว็บมาสดๆ) — ตอนนี้ยังไม่ได้ตรวจ/แก้อะไรเลย
+   *  ต้องลองกดใหม่อีกครั้งหลังหน้าโหลดข้อมูลเสร็จ ไม่งั้นจะเข้าใจผิดว่า Booking ต้นทางหาไม่เจอ (untraceable) ทั้งที่จริงๆ แค่ยังโหลดไม่เสร็จ */
+  notReady: boolean
+  totalCandidates: number
+  updated: number
+  unchanged: number
+  untraceable: Array<{ billingId: string; billingNumber: string; reason: string }>
+  changes: BillingVatBackfillChange[]
+  downstreamMismatches: BillingVatBackfillDownstreamMismatch[]
+}
+
 export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   const documents = ref<SalesDocument[]>([])
   const items = ref<SalesDocumentItem[]>([])
@@ -1471,8 +1515,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
      *  (completeJob) ไม่ผ่านขั้นตอนนี้ podReviewStatus จะเป็น undefined เสมอ ถือว่าผ่านแล้วโดยปริยาย */
     const allPodApproved = targetBookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
     /** เช็คเฉพาะว่า "ยังไม่เคยอยู่ในใบวางบิลรวมอื่น" (billingNoteDocId) เท่านั้น — เป็นอิสระจาก taxInvoiceDocId/receiptDocId โดยเจตนา
-     *  งานเดียวกันอยู่ในใบแจ้งหนี้รวม/ใบเสร็จรวมอื่นพร้อมกันได้ (Booking → Billing / Booking → Tax Invoice / Booking → Receipt แยกเส้นทางกัน) */
-    const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && !b.billingNoteDocId)
+     *  งานเดียวกันอยู่ในใบแจ้งหนี้รวม/ใบเสร็จรวมอื่นพร้อมกันได้ (Booking → Billing / Booking → Tax Invoice / Booking → Receipt แยกเส้นทางกัน)
+     *  ออกใบวางบิลได้ตั้งแต่สถานะ IN_TRANSIT เป็นต้นไป (Business Rule: universal IN_TRANSIT eligibility) ไม่จำกัดว่าต้อง
+     *  DELIVERED เท่านั้น — ครอบคลุมทั้งงานปกติที่ยังไม่ถึงปลายทาง, งาน Reset กลับมาที่ IN_TRANSIT, และงาน partial
+     *  delivery (บาง item ยัง PENDING) เพราะการออกใบวางบิลไม่แตะ/ไม่ต้องพึ่งข้อมูลระดับ item เลย (ดู bookingBillingRow/
+     *  tripDescription ด้านล่าง — อ่านแค่ tripFee/extraCharges/discount ระดับ booking เท่านั้น) */
+    const allEligible = targetBookings.every((b) => (b.status === 'DELIVERED' || b.status === 'IN_TRANSIT') && !b.billingNoteDocId)
     if (!sameCustomer || !sameCategory || !allEligible || !allPodApproved) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
@@ -1774,46 +1822,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    * ของเอกสารเดิม (คง id/number/bookingIds/sourceDocumentIds/parentDocumentId/convertedToDocumentIds ไว้ทั้งหมด ไม่สร้างเอกสารใหม่)
    * ใบวางบิลที่มี Tax Invoice/Receipt อ้างอิงต่อแล้ว จะไม่ถูกแก้ตามไปด้วย (เสี่ยงเกินไปถ้าเอกสารนั้นส่งลูกค้า/เก็บเงินไปแล้ว) —
    * แค่ตรวจสอบแล้วรายงานเป็น downstreamMismatches ให้ผู้ใช้ตัดสินใจเอง
+   * (interface BillingVatBackfillTotals/Change/DownstreamMismatch/Report ย้ายไป module scope ด้านบนไฟล์แล้ว)
    */
-  interface BillingVatBackfillTotals {
-    amount: number
-    discountTotal?: number
-    vatAmount?: number
-    vatRate?: number
-  }
-  interface BillingVatBackfillChange {
-    billingId: string
-    billingNumber: string
-    customer: string
-    before: BillingVatBackfillTotals
-    after: BillingVatBackfillTotals
-  }
-  interface BillingVatBackfillDownstreamMismatch {
-    /** เลขที่เอกสารต้นทาง (ใบวางบิลที่เพิ่งซิงก์ยอดใหม่) */
-    billingId: string
-    billingNumber: string
-    /** เลขที่เอกสารปลายทางที่ยอดไม่ตรงกับใบวางบิลต้นทางหลังซิงก์ — ไม่ถูกแก้ไขให้อัตโนมัติ */
-    downstreamType: 'TAX_INVOICE' | 'RECEIPT'
-    downstreamId: string
-    downstreamNumber: string
-    /** ยอดที่ควรจะเป็นตามใบวางบิลต้นทางหลังซิงก์ (grandTotal = amount + vatAmount) */
-    expected: BillingVatBackfillTotals & { grandTotal: number }
-    /** ยอดที่เก็บอยู่จริงในเอกสารปลายทาง ณ ตอนนี้ (ไม่ถูกแตะต้อง) */
-    stored: BillingVatBackfillTotals & { grandTotal: number }
-    /** รายชื่อ field ที่ค่าไม่ตรงกันระหว่าง expected/stored เช่น ['vatRate', 'vatAmount', 'grandTotal'] */
-    mismatchedFields: string[]
-  }
-  interface BillingVatBackfillReport {
-    /** true ถ้าเรียกใช้ตอนที่ store ของ Booking ยังโหลดจาก Firestore ไม่เสร็จ (เพิ่งเข้าเว็บมาสดๆ) — ตอนนี้ยังไม่ได้ตรวจ/แก้อะไรเลย
-     *  ต้องลองกดใหม่อีกครั้งหลังหน้าโหลดข้อมูลเสร็จ ไม่งั้นจะเข้าใจผิดว่า Booking ต้นทางหาไม่เจอ (untraceable) ทั้งที่จริงๆ แค่ยังโหลดไม่เสร็จ */
-    notReady: boolean
-    totalCandidates: number
-    updated: number
-    unchanged: number
-    untraceable: Array<{ billingId: string; billingNumber: string; reason: string }>
-    changes: BillingVatBackfillChange[]
-    downstreamMismatches: BillingVatBackfillDownstreamMismatch[]
-  }
 
   /** เทียบยอด "ที่ควรจะเป็น" (expected, จากใบวางบิลต้นทางหลังซิงก์) กับ "ที่เก็บอยู่จริง" (stored, ในเอกสารปลายทาง)
    *  ทีละ field คืน field ที่ไม่ตรงกันทั้งหมด (รวม grandTotal ที่คำนวณจาก amount+vatAmount) — ไม่คืนอะไรถ้ายอดตรงกันหมด */

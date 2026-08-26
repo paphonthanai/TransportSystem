@@ -10,7 +10,7 @@ const COLLECTION = 'settings'
  * กันไม่ให้เกิด loop เขียน-อ่าน-เขียนไม่รู้จบตอนรับค่าจาก Firestore กลับมา (ต่างจาก customers/drivers/vehicles ที่เป็น
  * รายการหลายเอกสาร เพราะ setDoc เขียนทั้ง object ทุกครั้งที่ค่าเปลี่ยนแม้แค่ field เดียว)
  */
-export function useFirestoreSettings<T extends Record<string, unknown>>(
+export function useFirestoreSettings<T extends object>(
   key: string,
   defaultValue: () => T,
   merge: (raw: any) => T = (raw) => ({ ...defaultValue(), ...raw })

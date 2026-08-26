@@ -84,6 +84,9 @@ const toggle = () => {
 
 const fire = (action: 'view' | 'edit' | 'start-transit' | 'complete' | 'delete' | 'cancel') => {
   open.value = false
-  emit(action)
+  /** defineEmits ทำให้ emit มีชนิดเป็น overload แยกต่อชื่อ event — เรียกด้วยตัวแปร union ไม่ผ่าน TS ทั้งที่ทุกแขนง
+   *  ถูกต้องจริง (ข้อจำกัดที่รู้จักของ TS กับ overloaded function + union argument) ฟังก์ชัน fire() เองยังคง
+   *  บังคับ action ให้ตรง union เป๊ะสำหรับผู้เรียกทุกจุด จึง cast เฉพาะจุดเรียก emit ภายในนี้จุดเดียว */
+  ;(emit as (event: string) => void)(action)
 }
 </script>
