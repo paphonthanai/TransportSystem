@@ -237,30 +237,18 @@
               <input v-model="deliveredByInput" placeholder="ชื่อผู้รับสินค้า" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
             </div>
             <div class="text-sm text-muted">
-              ต้องแนบรูปหลักฐานการส่งมอบสินค้า (POD) ของจุดนี้ให้ถูกต้องก่อนจึงจะกดยืนยันได้
-            </div>
-            <label class="block border-2 border-dashed border-border rounded-xl p-5 text-center cursor-pointer active:border-primary transition-colors">
-              <input type="file" accept="image/*" capture="environment" class="hidden" @change="onPodSelected" />
-              <img v-if="podPreview" :src="podPreview" class="max-h-48 mx-auto rounded-lg object-contain" />
-              <template v-else>
-                <span class="material-symbols-rounded text-4xl text-muted block mb-1">add_a_photo</span>
-                <div class="text-base text-muted">แตะเพื่อถ่ายรูป/แนบรูป POD</div>
-              </template>
-            </label>
-            <div v-if="podError" class="text-sm text-red-600 flex items-center gap-1">
-              <span class="material-symbols-rounded text-base">error</span>
-              {{ podError }}
+              ไม่บังคับแนบรูป POD ตอนนี้ — ออฟฟิศแนบ/ยืนยันรูป POD ให้ทีหลังได้จากหน้ารายละเอียดงาน
             </div>
           </div>
           <div class="flex gap-3 px-5 py-4 border-t border-border">
             <button @click="closeDeliverItem" class="flex-1 h-12 rounded-lg border border-border text-base font-medium text-text">ยกเลิก</button>
             <button
               @click="confirmDeliverItem"
-              :disabled="!podPreview || !deliveredByInput || podUploading"
+              :disabled="!deliveredByInput"
               class="flex-[2] h-12 rounded-lg bg-green-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-xl">task_alt</span>
-              {{ podUploading ? 'กำลังอัปโหลด POD...' : 'ยืนยันส่งของจุดนี้' }}
+              ยืนยันส่งของจุดนี้
             </button>
           </div>
         </div>
@@ -311,7 +299,6 @@ import type { Booking, JobItem } from '@/types'
 import { bookingStatusLabel } from '@/utils/bookingStatus'
 import { matchesSelectedDriver, nextPickup as nextPickupItems, nextDelivery as nextDeliveryItems } from '@/utils/driverJobs'
 import { deliveryProgress, pickupProgress } from '@/utils/deliveryProgress'
-import podRepository from '@/repositories/podRepository'
 
 const props = defineProps<{ id: string }>()
 
@@ -398,66 +385,23 @@ const navigateUrl = (item: JobItem) => {
   return ''
 }
 
-// --- Deliver a single JobItem (stop) with its own POD photo + recipient name ---
+// --- Deliver a single JobItem (stop) — บันทึกแค่ชื่อผู้รับ ไม่บังคับ POD (แนบทีหลังได้ ดู JobDocumentView.vue) ---
 const deliverTarget = ref<JobItem | null>(null)
 const deliveredByInput = ref('')
-const podPreview = ref<string | null>(null)
-const podError = ref('')
-const podUploading = ref(false)
 
 const openDeliverItem = (item: JobItem) => {
   deliverTarget.value = item
   deliveredByInput.value = ''
-  podPreview.value = null
-  podError.value = ''
-  podUploading.value = false
 }
 
 const closeDeliverItem = () => {
   deliverTarget.value = null
 }
 
-const onPodSelected = (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  podError.value = ''
-  podPreview.value = null
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
-    podError.value = 'ไฟล์ที่แนบไม่ใช่รูปภาพ กรุณาแนบรูป POD ที่ถูกต้อง'
-    input.value = ''
-    return
-  }
-  const reader = new FileReader()
-  reader.onload = () => {
-    podPreview.value = reader.result as string
-  }
-  reader.onerror = () => {
-    podError.value = 'ไม่สามารถอ่านไฟล์รูปภาพได้ กรุณาลองใหม่'
-  }
-  reader.readAsDataURL(file)
-}
-
-/**
- * อัปโหลดรูป POD ขึ้น Firebase Storage ก่อนเสมอ (ดู repositories/podRepository.ts) แล้วเก็บแค่ URL ที่ได้ลง
- * JobItem.podImage แทนการฝัง base64 ตรงๆ เหมือนเดิม (เสี่ยงชนขีดจำกัดขนาดเอกสาร Firestore เวลามีหลายปลายทาง)
- */
-const confirmDeliverItem = async () => {
-  if (!job.value || !deliverTarget.value || !podPreview.value || !deliveredByInput.value) return
-  const bookingId = job.value.id
-  const itemId = deliverTarget.value.id
-  const deliveredBy = deliveredByInput.value
-  podUploading.value = true
-  podError.value = ''
-  try {
-    const url = await podRepository.upload(bookingId, itemId, podPreview.value)
-    bookingStore.deliverJobItem(bookingId, itemId, url, deliveredBy)
-    closeDeliverItem()
-  } catch (err: any) {
-    podError.value = err?.message || 'อัปโหลดรูป POD ไม่สำเร็จ กรุณาลองใหม่'
-  } finally {
-    podUploading.value = false
-  }
+const confirmDeliverItem = () => {
+  if (!job.value || !deliverTarget.value || !deliveredByInput.value) return
+  bookingStore.deliverJobItem(job.value.id, deliverTarget.value.id, undefined, deliveredByInput.value)
+  closeDeliverItem()
 }
 
 // --- Finish driver job (DELIVERING -> DELIVERED) หลังส่งของครบทุกรายการแล้ว บันทึกเลขไมล์สิ้นสุดที่จุดนี้ ---

@@ -18,7 +18,6 @@ import { vi } from 'vitest'
 vi.mock('@/config/firebase', () => ({
   auth: {},
   db: {},
-  storage: {},
   firebaseConfig: {},
   useEmulator: false,
 }))
@@ -43,14 +42,6 @@ vi.mock('firebase/auth', () => ({
   reauthenticateWithCredential: vi.fn(),
   updateEmail: vi.fn(),
   updatePassword: vi.fn(),
-}))
-
-vi.mock('firebase/storage', () => ({
-  getStorage: vi.fn(() => ({})),
-  connectStorageEmulator: vi.fn(),
-  ref: vi.fn(),
-  uploadString: vi.fn(),
-  getDownloadURL: vi.fn(),
 }))
 
 const DELETE_FIELD = Symbol('deleteField')

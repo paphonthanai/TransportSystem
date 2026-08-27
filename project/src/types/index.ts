@@ -124,9 +124,10 @@ export interface JobItem {
   deliverySequence?: number
   /** สถานะการส่งของของรายการนี้ — ไม่มีค่า = ยังไม่ส่ง (PENDING) */
   deliveryStatus?: 'PENDING' | 'DELIVERED'
-  /** รูปหลักฐานการส่งมอบสินค้า (POD) ของรายการนี้โดยเฉพาะ — เก็บเป็น URL จาก Firebase Storage (ดู
-   *  repositories/podRepository.ts, path: pod/{bookingId}/{jobItemId}/...) ไม่ใช่ base64 ฝังตรงเหมือนเดิม
-   *  (เสี่ยงชนขีดจำกัดขนาดเอกสาร Firestore 1 MiB เวลามีหลายปลายทาง) */
+  /** รูปหลักฐานการส่งมอบสินค้า (POD) ของรายการนี้โดยเฉพาะ — Base64 Data URL ที่ resize/compress แล้วฝัง Firestore ตรงๆ
+   *  (ดู utils/podImage.ts) ไม่ใช้ Firebase Storage แล้ว — ไม่บังคับต้องมีตอนคนขับกดส่งของ (deliveryStatus=DELIVERED
+   *  ได้แม้ยังไม่มี podImage) แนบ/เปลี่ยนได้ทีหลังโดยผู้มีสิทธิ์ฝั่งออฟฟิศ (ดู booking.ts's confirmPodImage) —
+   *  ถือว่า "ยืนยันแล้ว" เมื่อ !!podImage เท่านั้น ไม่มี field สถานะแยกต่างหาก */
   podImage?: string
   /** ชื่อผู้รับสินค้าที่ปลายทางนี้ */
   deliveredBy?: string
@@ -214,7 +215,8 @@ export interface Booking {
   debtAdjustments?: DebtAdjustment[]
   /** เบี้ยเลี้ยงหลังกระทบยอดเพิ่ม/ลดหนี้ ตอนกดจบงาน */
   finalAllowance?: number
-  /** รูปหลักฐานการส่งมอบสินค้า (POD) ล่าสุด = ของปลายทางสุดท้ายที่ส่งสำเร็จ เก็บไว้ที่ระดับงานเพื่อความเข้ากันได้กับหน้าจอที่แสดง POD เดียว */
+  /** รูปหลักฐานการส่งมอบสินค้า (POD) ล่าสุด = ของปลายทางสุดท้ายที่ส่งสำเร็จ เก็บไว้ที่ระดับงานเพื่อความเข้ากันได้กับหน้าจอที่แสดง POD เดียว
+   *  Base64 Data URL เหมือน JobItem.podImage (ดู utils/podImage.ts) — อาจไม่มีค่าได้ถ้ายังไม่มี item ไหนถูกแนบ POD เลย */
   podImage?: string
   /** สถานะการเงินจากระบบรอบบิลเดิม (batches/addBookingsToBatch/issueInvoiceFromBatch ใน stores/booking.ts) — คงไว้เพื่อความเข้ากันได้กับ
    *  หน้า /billing (BillingView.vue) เดิมเท่านั้น ระบบเอกสารรวมปัจจุบัน (createBillingFromBookings/createTaxInvoiceFromBookings/

@@ -736,21 +736,37 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
-   * คนขับกดส่งของสำเร็จทีละรายการ (JobItem) แนบ POD + ชื่อผู้รับของรายการนั้นโดยเฉพาะ
+   * คนขับกดส่งของสำเร็จทีละรายการ (JobItem) — บันทึกชื่อผู้รับของรายการนั้นโดยเฉพาะ ไม่บังคับแนบ POD ก่อน (POD เป็นขั้นตอน
+   * แยกที่ทำได้ทีหลังโดยผู้มีสิทธิ์ฝั่งออฟฟิศ ดู confirmPodImage ด้านล่าง) — podImage เป็น undefined ได้เสมอตรงนี้
    * ไม่ตัดสต๊อกที่นี่ (ตัดไปแล้วตอนรับสินค้าที่ต้นทาง — ดู pickupJobItem)
    * ไม่ปิดงานอัตโนมัติที่นี่แม้ส่งครบทุกรายการแล้ว — ต้องรอคนขับกดยืนยัน "ดำเนินการเสร็จสิ้น" เอง (ดู finishDriverJob)
    */
-  function deliverJobItem(bookingId: string, itemId: string, podImage: string, deliveredBy: string) {
+  function deliverJobItem(bookingId: string, itemId: string, podImage: string | undefined, deliveredBy: string) {
     const booking = bookings.value.find((b) => b.id === bookingId)
     const item = booking?.items.find((i) => i.id === itemId)
     if (!booking || !item || item.deliveryStatus === 'DELIVERED') return
     item.deliveryStatus = 'DELIVERED'
-    item.podImage = podImage
+    if (podImage) item.podImage = podImage
     item.deliveredBy = deliveredBy
     item.deliveredAt = new Date()
     addLog(`ส่งของสำเร็จ ${booking.docNo}: ${item.siteName} - ${item.product} (ผู้รับ: ${deliveredBy})`, { bookingId: booking.id })
 
     if (booking.status === 'IN_TRANSIT') booking.status = 'DELIVERING'
+  }
+
+  /**
+   * ผู้มีสิทธิ์ฝั่งออฟฟิศแนบ/เปลี่ยนรูป POD ให้ JobItem ที่ส่งของแล้ว (deliveryStatus === DELIVERED) หลังจากคนขับส่งของ
+   * สำเร็จไปแล้วโดยไม่มี POD — เป็นขั้นตอนที่แยกออกจากการส่งของของคนขับโดยเจตนา (ดู DriverJobDetailView.vue's
+   * confirmDeliverItem ที่ไม่บังคับ POD แล้ว) ไม่มี field/สถานะใหม่: "ยืนยันแล้ว" คือ !!item.podImage ตรงๆ (ดู
+   * billingRule.ts's hasAllPods ที่ใช้เงื่อนไขนี้อยู่แล้วตั้งแต่ก่อนงานนี้ — สอดคล้องกันโดยไม่ต้องแก้)
+   * รูปที่ส่งเข้ามาต้องเป็น Base64 Data URL ที่ resize/compress แล้ว (ดู utils/podImage.ts) ไม่ใช่ Firebase Storage URL อีกต่อไป
+   */
+  function confirmPodImage(bookingId: string, itemId: string, podImage: string) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
+    const item = booking?.items.find((i) => i.id === itemId)
+    if (!booking || !item || item.deliveryStatus !== 'DELIVERED') return
+    item.podImage = podImage
+    addLog(`แนบ POD ${booking.docNo}: ${item.siteName} - ${item.product}`, { bookingId: booking.id })
   }
 
   /**
@@ -1014,6 +1030,7 @@ export const useBookingStore = defineStore('booking', () => {
     startTransit,
     completeJob,
     deliverJobItem,
+    confirmPodImage,
     finishDriverJob,
     stripDateSuffixFromSiteNames,
     reviewPod,

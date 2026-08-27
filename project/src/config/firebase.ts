@@ -1,7 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
-import { connectStorageEmulator, getStorage } from 'firebase/storage'
 
 // Replace with your Firebase config
 export const firebaseConfig = {
@@ -19,7 +18,6 @@ const app = initializeApp(firebaseConfig)
 // Initialize services
 export const auth = getAuth(app)
 export const db = getFirestore(app)
-export const storage = getStorage(app)
 
 /** ใช้ตรวจว่าตอนนี้ควรต่อ Emulator หรือไม่ — ที่อื่น (เช่น secondary app สำหรับสร้างบัญชีพนักงานใน stores/auth.ts)
  *  ที่ต้องสร้าง Firebase App/Auth instance เพิ่มเอง ต้องเช็คค่านี้เพื่อต่อ Emulator ให้ตรงกับ instance หลักด้วย
@@ -34,7 +32,6 @@ const g = globalThis as unknown as { __firebaseEmulatorsConnected?: boolean }
 if (useEmulator && !g.__firebaseEmulatorsConnected) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
   connectFirestoreEmulator(db, '127.0.0.1', 8080)
-  connectStorageEmulator(storage, '127.0.0.1', 9199)
   g.__firebaseEmulatorsConnected = true
   console.info('[firebase] connected to local emulators')
 }

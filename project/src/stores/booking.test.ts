@@ -67,6 +67,60 @@ describe('deliverJobItem', () => {
     expect(item.deliveredAt).toBeInstanceOf(Date)
     expect(booking.status).toBe('DELIVERING')
   })
+
+  /** Test — POD/Delivery Workflow: DELIVERED ต้องไม่บังคับมี POD ก่อนเลย (ดู utils/podImage.ts — ย้ายจาก Firebase
+   *  Storage มาเป็น Base64 ฝั่ง Frontend, POD กลายเป็นขั้นตอนแยกที่แนบทีหลังได้ ไม่ใช่เงื่อนไขก่อน DELIVERED อีกต่อไป) */
+  it('marks the item DELIVERED with no POD at all when podImage is undefined', () => {
+    const store = useBookingStore()
+    const itemA = makeJobItem({ id: 'a' })
+    const booking = makeBooking({ status: 'IN_TRANSIT', items: [itemA] })
+    store.bookings.push(booking)
+
+    store.deliverJobItem(booking.id, 'a', undefined, 'สมชาย')
+
+    const item = booking.items.find((i) => i.id === 'a')!
+    expect(item.deliveryStatus).toBe('DELIVERED')
+    expect(item.podImage).toBeUndefined()
+    expect(item.deliveredBy).toBe('สมชาย')
+    expect(booking.status).toBe('DELIVERING')
+  })
+})
+
+describe('confirmPodImage', () => {
+  it('attaches POD to an already-delivered item without touching deliveryStatus', () => {
+    const store = useBookingStore()
+    const itemA = makeJobItem({ id: 'a', deliveryStatus: 'DELIVERED', deliveredBy: 'สมชาย', deliveredAt: new Date() })
+    const booking = makeBooking({ status: 'DELIVERING', items: [itemA] })
+    store.bookings.push(booking)
+
+    store.confirmPodImage(booking.id, 'a', 'data:image/jpeg;base64,AAAA')
+
+    const item = booking.items.find((i) => i.id === 'a')!
+    expect(item.podImage).toBe('data:image/jpeg;base64,AAAA')
+    expect(item.deliveryStatus).toBe('DELIVERED')
+  })
+
+  it('replaces an existing POD (re-attach/change photo)', () => {
+    const store = useBookingStore()
+    const itemA = makeJobItem({ id: 'a', deliveryStatus: 'DELIVERED', podImage: 'data:image/jpeg;base64,OLD' })
+    const booking = makeBooking({ status: 'DELIVERING', items: [itemA] })
+    store.bookings.push(booking)
+
+    store.confirmPodImage(booking.id, 'a', 'data:image/jpeg;base64,NEW')
+
+    expect(booking.items.find((i) => i.id === 'a')?.podImage).toBe('data:image/jpeg;base64,NEW')
+  })
+
+  it('refuses to attach POD to an item that has not been delivered yet', () => {
+    const store = useBookingStore()
+    const itemA = makeJobItem({ id: 'a' }) // deliveryStatus undefined = PENDING
+    const booking = makeBooking({ status: 'IN_TRANSIT', items: [itemA] })
+    store.bookings.push(booking)
+
+    store.confirmPodImage(booking.id, 'a', 'data:image/jpeg;base64,AAAA')
+
+    expect(booking.items.find((i) => i.id === 'a')?.podImage).toBeUndefined()
+  })
 })
 
 describe('finishDriverJob', () => {
@@ -82,7 +136,7 @@ describe('finishDriverJob', () => {
     expect(booking.status).toBe('DELIVERING') // ยังไม่ครบ ห้ามจบงาน
   })
 
-  it('moves to DELIVERED and PENDING_REVIEW once every item is delivered', () => {
+  it('moves to DELIVERED and PENDING_REVIEW once every item is delivered — even with zero POD attached anywhere', () => {
     const store = useBookingStore()
     const booking = makeBooking({
       status: 'DELIVERING',
@@ -97,6 +151,8 @@ describe('finishDriverJob', () => {
     expect(booking.status).toBe('DELIVERED')
     expect(booking.podReviewStatus).toBe('PENDING_REVIEW')
     expect(booking.completedAt).toBeInstanceOf(Date)
+    // ไม่มี item ไหนแนบ POD เลยตลอดทั้งงาน — ต้องจบงานได้ปกติ ไม่มีอะไร block, booking.podImage ก็ควรว่างตามจริง
+    expect(booking.podImage).toBeUndefined()
   })
 })
 

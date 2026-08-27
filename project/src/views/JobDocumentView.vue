@@ -290,7 +290,26 @@
               <span class="text-muted font-normal">ค่าเที่ยว:</span>
               {{ formatBaht(item.tripFee || 0) }} x {{ item.tripCount || 1 }} = {{ formatBaht((item.tripFee || 0) * (item.tripCount || 1)) }}
             </div>
-            <img v-if="item.podImage" :src="item.podImage" class="w-full max-h-32 object-contain rounded border border-border" />
+
+            <!-- POD ต่อรายการ — แนบ/เปลี่ยนได้เฉพาะรายการที่ส่งของแล้ว (deliveryStatus=DELIVERED) ไม่บังคับต้องมี
+                 "ยืนยันแล้ว" = มี podImage แล้วเท่านั้น ไม่มี field สถานะแยก (ดู stores/booking.ts's confirmPodImage) -->
+            <div v-if="item.deliveryStatus === 'DELIVERED'" class="pt-1 space-y-1.5">
+              <img v-if="item.podImage" :src="item.podImage" class="w-full max-h-32 object-contain rounded border border-border" />
+              <div class="flex items-center justify-between gap-2">
+                <span :class="['text-xs font-semibold px-2 py-1 rounded-full', item.podImage ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700']">
+                  {{ item.podImage ? 'ยืนยันแล้ว (มี POD)' : 'ยังไม่มี POD' }}
+                </span>
+                <label class="btn-sm cursor-pointer">
+                  <span class="material-symbols-rounded text-base">{{ item.podImage ? 'sync' : 'add_a_photo' }}</span>
+                  {{ podUploadingItemId === item.id ? 'กำลังบันทึก...' : item.podImage ? 'เปลี่ยนรูป' : 'แนบรูป POD' }}
+                  <input type="file" accept="image/*" class="hidden" :disabled="podUploadingItemId === item.id" @change="onPodFileSelected(item, $event)" />
+                </label>
+              </div>
+              <div v-if="podErrorByItemId[item.id]" class="text-xs text-red-600 flex items-center gap-1">
+                <span class="material-symbols-rounded text-sm">error</span>
+                {{ podErrorByItemId[item.id] }}
+              </div>
+            </div>
           </div>
         </div>
         <div v-if="isMulti" class="text-sm text-text mt-2 text-right font-semibold">
@@ -408,8 +427,9 @@ import { useFuelRateStore } from '@/stores/fuelRates'
 import { bahtText } from '@/utils/companyInfo'
 import { bookingStatusLabel, bookingStatusClass, documentClaimBadges } from '@/utils/bookingStatus'
 import { computeRowDiscountBaht, computeRowAmount, computeRowVat } from '@/utils/documentTotals'
+import { compressImageToDataUrl } from '@/utils/podImage'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
-import type { Booking, BookingStatus } from '@/types'
+import type { Booking, BookingStatus, JobItem } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -550,6 +570,36 @@ const savePrice = () => {
   if (!booking.value) return
   bookingStore.updateBookingPrice(booking.value.id, priceForm.value)
   isEditing.value = false
+}
+
+/**
+ * แนบ/เปลี่ยนรูป POD ให้รายการที่ส่งของแล้ว — Resize/Compress เป็น Base64 Data URL ฝั่ง Frontend ล้วนๆ (ดู utils/podImage.ts)
+ * แล้วบันทึกลง Firestore ตรงๆ ไม่ผ่าน Firebase Storage อีกต่อไป ทำได้โดยผู้มีสิทธิ์ที่เข้าหน้านี้ได้เท่านั้น (router meta
+ * จำกัด role ไว้แล้ว: ADMIN/DISPATCHER/STAFF/ACCOUNTING — คนขับเข้าหน้านี้ไม่ได้) ล้มเหลวแล้วต้องไม่ย้อนกลับสถานะส่งของใดๆ
+ * (deliveryStatus ไม่ถูกแตะในฟังก์ชันนี้เลย — เป็นแค่การแนบหลักฐานเพิ่มเติมทีหลัง)
+ */
+const podUploadingItemId = ref<string | null>(null)
+const podErrorByItemId = ref<Record<string, string>>({})
+
+const onPodFileSelected = async (item: JobItem, event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || !booking.value) return
+  if (!file.type.startsWith('image/')) {
+    podErrorByItemId.value = { ...podErrorByItemId.value, [item.id]: 'ไฟล์ที่แนบไม่ใช่รูปภาพ กรุณาแนบรูป POD ที่ถูกต้อง' }
+    return
+  }
+  podUploadingItemId.value = item.id
+  podErrorByItemId.value = { ...podErrorByItemId.value, [item.id]: '' }
+  try {
+    const dataUrl = await compressImageToDataUrl(file)
+    bookingStore.confirmPodImage(booking.value.id, item.id, dataUrl)
+  } catch (err: any) {
+    podErrorByItemId.value = { ...podErrorByItemId.value, [item.id]: err?.message || 'บันทึกรูป POD ไม่สำเร็จ กรุณาลองใหม่' }
+  } finally {
+    podUploadingItemId.value = null
+  }
 }
 </script>
 
