@@ -78,6 +78,21 @@ service cloud.firestore {
       allow write: if hasRole(['ADMIN']) || (isSignedIn() && hasRole(['DRIVER']) && myDriverCode() == code);
     }
 
+    // Driver App credentials (driverCode + driverLoginPassword) — เก็บแยกจาก /drivers/{id} โดยตั้งใจ เพราะ
+    // DISPATCHER มีสิทธิ์ read/write /drivers/* ทั้ง collection อยู่แล้ว (ใช้จัดรถ) แต่ driverLoginPassword ต้องห้าม
+    // DISPATCHER/STAFF เห็นเด็ดขาด — แยก collection ใหม่ที่ ADMIN เท่านั้นเขียนได้ บังคับสิทธิ์ตรงจุดโดยไม่กระทบ
+    // สิทธิ์เดิมของ /drivers/* เลย
+    //
+    // allow get: if true (public) จำเป็นเพราะหน้า Login ต้องเทียบ driverLoginPassword ได้ "ก่อน" มี Firebase Auth
+    // session จริง (สถาปัตยกรรม Frontend + Firestore ล้วน ไม่มี Cloud Functions ตามข้อกำหนด) ผลคือ driverLoginPassword
+    // อ่านได้โดยใครก็ตามที่รู้/เดา driverCode ที่ถูกต้อง ไม่ใช่แค่ผ่านฟอร์ม Login เท่านั้น — เป็นข้อจำกัดของสถาปัตยกรรม
+    // นี้เอง ไม่ใช่ช่องโหว่ที่แก้ตรงนี้ได้ถ้าไม่มี Backend ดู repositories/driverLoginCredentialsRepository.ts
+    match /driverLoginCredentials/{code} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if hasRole(['ADMIN']);
+    }
+
     match /vehicles/{vehicleId} {
       allow read, write: if hasRole(['ADMIN', 'DISPATCHER']);
     }

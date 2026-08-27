@@ -15,9 +15,9 @@
         <h2 class="text-2xl font-bold text-text mb-6">เข้าสู่ระบบ</h2>
 
         <form @submit.prevent="handleLogin" class="space-y-4">
-          <!-- Email/Driver Code Input — คนขับกรอกรหัสคนขับ (เช่น 1025) แทน Email ได้ ระบบตรวจรูปแบบให้อัตโนมัติ (ดู handleLogin) -->
+          <!-- ID / Email — ช่องเดียวรองรับทั้ง Corporate Email และ Driver ID ไม่มี Toggle แยก ระบบตรวจรูปแบบให้อัตโนมัติ (ดู handleLogin) -->
           <div>
-            <label class="block text-sm font-semibold text-text mb-2">Email / รหัสคนขับ</label>
+            <label class="block text-sm font-semibold text-text mb-2">ID / Email</label>
             <input
               v-model="email"
               type="text"
@@ -27,9 +27,9 @@
             />
           </div>
 
-          <!-- Password/PIN Input -->
+          <!-- Password -->
           <div>
-            <label class="block text-sm font-semibold text-text mb-2">รหัสผ่าน / PIN</label>
+            <label class="block text-sm font-semibold text-text mb-2">Password</label>
             <input
               v-model="password"
               type="password"
@@ -78,7 +78,7 @@ import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
-import { isEmailLike } from '@/utils/driverAuth'
+import { isCorporateEmail, filterDigits } from '@/utils/driverAuth'
 
 const router = useRouter()
 const route = useRoute()
@@ -90,18 +90,39 @@ const password = ref('')
 const error = ref('')
 
 /**
- * ช่องเดียวกันรองรับทั้ง Email (STAFF/ADMIN/ฯลฯ) และรหัสคนขับ (ตัวเลข เช่น 1025) — ไม่ใช่รูปแบบอีเมลแปลว่าเป็นรหัสคนขับ
- * ต้อง resolve เป็นอีเมลจริงก่อนเรียก signInWithEmailAndPassword เสมอ (ดู stores/drivers.ts resolveLoginEmail:
- * เช็ค override ที่ผูกไว้ก่อน ถ้าไม่มีค่อย derive เป็นอีเมลภายใน d{code}@drivers.internal — ไม่มีการ query Firestore
- * แบบ WHERE pin == xxx เลย ทุกอย่างตรวจผ่าน Firebase Auth เท่านั้น)
+ * ช่องเดียวกันรองรับทั้ง Corporate Email (ADMIN/STAFF/DISPATCHER/ACCOUNTING) และ Driver ID (คนขับ) — ไม่มี Toggle
+ * แยก ระบบเลือกเส้นทางจากรูปแบบ Identifier ที่กรอกเองอัตโนมัติ:
+ * - ตรงรูปแบบอีเมล Corporate (.com/.go.th/.co.th ตาม isCorporateEmail) → ส่งตรงเข้า Firebase Auth เหมือนเดิมทุก
+ *   ประการ ไม่มีการเปลี่ยนแปลง logic ส่วนนี้เลย
+ * - ไม่ตรง → ถือเป็น Driver ID เสมอ กรอง Identifier และ Password เหลือเฉพาะตัวเลข แล้วลองตรวจกับ
+ *   driverLoginCredentials ก่อน (ระบบใหม่) — ถ้าคนขับคนนี้ยัง "ไม่ Migrate" (ยังไม่มี driverLoginCredentials เลย)
+ *   verifyDriverLogin จะคืน null เสมอ ต้อง fallback กลับไปเส้นทางเดิม (resolve email จาก code แล้วส่ง password ที่
+ *   พิมพ์ "ตรงๆ ไม่กรองตัวเลข" เข้า Firebase Auth) เพื่อให้คนขับที่ยังไม่ Migrate ยังใช้ Email/Password (หรือ PIN เดิม
+ *   ที่อาจไม่ใช่ตัวเลขล้วน) ได้ตามปกติทุกประการ ไม่ถูกบล็อกเพราะระบบใหม่ (ข้อกำหนด: ต้อง Login เดิมได้ต่อจนกว่าจะ Migrate)
  */
 const handleLogin = async () => {
   error.value = ''
   try {
-    const input = email.value.trim()
-    const loginEmail = isEmailLike(input) ? input : await driversStore.resolveLoginEmail(input)
-    await authStore.login(loginEmail, password.value)
-    const redirect = (route.query.redirect as string) || (authStore.role === 'DRIVER' ? '/driver-app' : '/')
+    const identifier = email.value.trim()
+    if (isCorporateEmail(identifier)) {
+      await authStore.login(identifier, password.value)
+      const redirect = (route.query.redirect as string) || '/'
+      router.push(redirect)
+      return
+    }
+
+    const driverCode = filterDigits(identifier)
+    const driverPassword = filterDigits(password.value)
+    const verified = await driversStore.verifyDriverLogin(driverCode, driverPassword)
+    const authEmail = await driversStore.resolveLoginEmail(driverCode)
+    if (verified) {
+      await authStore.login(authEmail, verified.authPassword)
+    } else {
+      // ยังไม่เคย Migrate เป็น Driver Login ใหม่ — ใช้เส้นทางเดิมเป๊ะ: password ที่พิมพ์จริง (ไม่กรองตัวเลข) ตรงเข้า
+      // Firebase Auth เลย เผื่อรหัสผ่าน/PIN เดิมมีตัวอักษรปนอยู่ (ระบบเดิมไม่เคยบังคับตัวเลขล้วน)
+      await authStore.login(authEmail, password.value)
+    }
+    const redirect = (route.query.redirect as string) || '/driver-app'
     router.push(redirect)
   } catch (err: any) {
     error.value = err.message || 'เข้าสู่ระบบไม่สำเร็จ'

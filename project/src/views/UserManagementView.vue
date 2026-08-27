@@ -93,9 +93,48 @@
               <input v-model="form.email" type="email" class="input-field w-full" :disabled="!!editingUser" />
             </div>
             <div v-if="!editingUser">
-              <label class="block text-xs font-semibold text-muted mb-1">{{ form.role === 'DRIVER' ? 'PIN เริ่มต้น (ใช้ล็อกอินคู่กับรหัสคนขับ)' : 'Password เริ่มต้น' }}</label>
-              <input v-model="form.password" type="password" class="input-field w-full" placeholder="อย่างน้อย 6 ตัวอักษร" />
+              <label class="block text-xs font-semibold text-muted mb-1">
+                {{ form.role === 'DRIVER' && form.driverId ? 'รหัสผ่านคนขับ (Driver Login Password — ใช้คู่กับรหัสคนขับตอน Login)' : 'Password เริ่มต้น' }}
+              </label>
+              <input
+                v-model="form.password"
+                type="password"
+                :inputmode="form.role === 'DRIVER' && form.driverId ? 'numeric' : undefined"
+                class="input-field w-full"
+                :placeholder="form.role === 'DRIVER' && form.driverId ? 'ตัวเลขเท่านั้น เช่น 123456' : 'อย่างน้อย 6 ตัวอักษร'"
+              />
+              <div v-if="form.role === 'DRIVER' && form.driverId" class="text-[11px] text-muted mt-1">
+                นี่คือรหัสผ่านที่คนขับใช้เข้าแอปคู่กับรหัสคนขับ ({{ driversStore.drivers.find((d) => d.id === form.driverId)?.code }}) โดยตรง —
+                แยกจากรหัสผ่าน Firebase Auth ภายในเด็ดขาด ไม่ต้องพิมพ์ Email เลย
+              </div>
             </div>
+
+            <!-- Driver ID / Driver Password — เฉพาะบัญชี DRIVER ที่ผูกกับคนขับในสมุดรายชื่อแล้วเท่านั้น (แก้ไขบัญชีที่มีอยู่) -->
+            <div v-if="editingUser && form.role === 'DRIVER' && form.driverId" class="border-t border-border pt-3 mt-1 space-y-3">
+              <div class="text-xs font-bold text-text">Driver Login Credentials</div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">Driver ID (รหัสคนขับ)</label>
+                <input v-model="driverIdEdit" inputmode="numeric" class="input-field w-full" />
+                <button @click="saveDriverIdChange" :disabled="driverCredSaving" class="btn-sm mt-1.5">
+                  {{ driverCredSaving ? 'กำลังบันทึก...' : 'เปลี่ยน Driver ID' }}
+                </button>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">Driver Password</label>
+                <div v-if="driverPasswordVisible" class="font-mono text-sm text-text bg-surface-2 border border-border rounded-lg px-3 py-2 mb-1.5">
+                  {{ driverPasswordValue ?? '(ยังไม่เคยตั้งค่า Driver Login ให้บัญชีนี้)' }}
+                </div>
+                <button v-else @click="viewDriverPassword" class="btn-sm">ดูรหัสผ่านปัจจุบัน</button>
+                <div class="flex items-center gap-2 mt-1.5">
+                  <input v-model="driverPasswordEdit" inputmode="numeric" class="input-field flex-1" placeholder="รหัสผ่านใหม่ ตัวเลขเท่านั้น" />
+                  <button @click="saveDriverPasswordChange" :disabled="driverCredSaving" class="btn-sm">
+                    {{ driverCredSaving ? 'กำลังบันทึก...' : 'เปลี่ยนรหัสผ่าน' }}
+                  </button>
+                </div>
+              </div>
+              <div v-if="driverCredError" class="text-xs text-red-600">{{ driverCredError }}</div>
+            </div>
+
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">Role</label>
               <select v-model="form.role" class="input-field w-full">
@@ -205,6 +244,68 @@ const passwordTarget = ref<UserProfile | null>(null)
 const passwordError = ref('')
 const passwordApplied = ref(false)
 
+// Driver Login Credentials (Driver ID / Driver Password) — จัดการเฉพาะตอนแก้ไขบัญชี DRIVER ที่ผูก driverId แล้ว
+const driverIdEdit = ref('')
+const driverPasswordVisible = ref(false)
+const driverPasswordValue = ref<string | null>(null)
+const driverPasswordEdit = ref('')
+const driverCredSaving = ref(false)
+const driverCredError = ref('')
+
+const resetDriverCredState = () => {
+  driverIdEdit.value = ''
+  driverPasswordVisible.value = false
+  driverPasswordValue.value = null
+  driverPasswordEdit.value = ''
+  driverCredError.value = ''
+}
+
+const viewDriverPassword = async () => {
+  driverCredError.value = ''
+  const code = driversStore.drivers.find((d) => d.id === form.value.driverId)?.code
+  if (!code) return
+  try {
+    const cred = await driversStore.getDriverLoginCredentials(code)
+    driverPasswordValue.value = cred?.loginPassword ?? null
+    driverPasswordVisible.value = true
+  } catch (err: any) {
+    driverCredError.value = err?.message || 'โหลดรหัสผ่านไม่สำเร็จ'
+  }
+}
+
+const saveDriverIdChange = async () => {
+  driverCredError.value = ''
+  const driver = driversStore.drivers.find((d) => d.id === form.value.driverId)
+  const newCode = driverIdEdit.value.trim()
+  if (!driver || !newCode || newCode === driver.code) return
+  driverCredSaving.value = true
+  try {
+    await driversStore.changeDriverLoginCode(driver.id!, driver.code, newCode)
+    driverPasswordVisible.value = false
+  } catch (err: any) {
+    driverCredError.value = err?.message || 'เปลี่ยน Driver ID ไม่สำเร็จ'
+  } finally {
+    driverCredSaving.value = false
+  }
+}
+
+const saveDriverPasswordChange = async () => {
+  driverCredError.value = ''
+  const code = driversStore.drivers.find((d) => d.id === form.value.driverId)?.code
+  const newPassword = driverPasswordEdit.value.replace(/\D/g, '')
+  if (!code || !newPassword) return
+  driverCredSaving.value = true
+  try {
+    await driversStore.updateDriverLoginPassword(code, newPassword)
+    driverPasswordEdit.value = ''
+    if (driverPasswordVisible.value) driverPasswordValue.value = newPassword
+  } catch (err: any) {
+    driverCredError.value = err?.message || 'เปลี่ยนรหัสผ่านไม่สำเร็จ'
+  } finally {
+    driverCredSaving.value = false
+  }
+}
+
 const openPasswordDialog = (user: UserProfile) => {
   passwordTarget.value = user
   passwordError.value = ''
@@ -228,6 +329,7 @@ const openCreateDialog = () => {
   form.value = { name: '', email: '', password: '', role: 'STAFF', driverId: undefined, canOverrideFuelRate: false }
   formError.value = ''
   confirmNoDriverLink.value = false
+  resetDriverCredState()
   showDialog.value = true
 }
 
@@ -243,6 +345,10 @@ const openEditDialog = (user: UserProfile) => {
   }
   formError.value = ''
   confirmNoDriverLink.value = !!user.driverId // บัญชีที่ผูกอยู่แล้วไม่ต้องติ๊กซ้ำ
+  resetDriverCredState()
+  if (user.role === 'DRIVER' && user.driverId) {
+    driverIdEdit.value = driversStore.drivers.find((d) => d.id === user.driverId)?.code ?? ''
+  }
   showDialog.value = true
 }
 
@@ -256,7 +362,12 @@ const save = async () => {
     formError.value = 'กรุณาผูกกับคนขับในสมุดรายชื่อ หรือติ๊กยืนยันว่าต้องการสร้างบัญชีนี้โดยไม่ผูกกับคนขับ'
     return
   }
-  if (!editingUser.value && form.value.password.trim().length < 6) {
+  const isDriverLinkedCreate = !editingUser.value && form.value.role === 'DRIVER' && !!form.value.driverId
+  if (isDriverLinkedCreate && !/^\d{4,}$/.test(form.value.password.trim())) {
+    formError.value = 'กรุณากรอกรหัสผ่านคนขับเป็นตัวเลขอย่างน้อย 4 หลัก'
+    return
+  }
+  if (!isDriverLinkedCreate && !editingUser.value && form.value.password.trim().length < 6) {
     formError.value = 'กรุณากรอก Password อย่างน้อย 6 ตัวอักษร'
     return
   }
@@ -270,7 +381,16 @@ const save = async () => {
         canOverrideFuelRate: form.value.canOverrideFuelRate,
       })
     } else {
-      const uid = await authStore.createStaffAccount(form.value.email, form.value.password, form.value.name, form.value.role, form.value.driverId)
+      // บัญชี DRIVER ที่ผูกกับคนขับในสมุดรายชื่อ — form.password คือ Driver Login Password (ตัวเลข ที่คนขับพิมพ์เอง)
+      // ไม่ใช่รหัสผ่าน Firebase Auth ตรงๆ อีกต่อไป: สุ่ม Auth Bootstrap Secret แยกต่างหาก (ดู
+      // driversStore.createDriverLoginCredentials) แล้วใช้ค่านั้นสร้างบัญชี Firebase Auth จริงแทน — บัญชี DRIVER ที่
+      // ไม่ผูกคนขับ (ไม่มี driverId) ยังใช้ form.password เป็นรหัสผ่าน Firebase Auth ตรงๆ เหมือนเดิมทุกประการ
+      let firebaseAuthPassword = form.value.password
+      if (form.value.role === 'DRIVER' && form.value.driverId) {
+        const driver = driversStore.drivers.find((d) => d.id === form.value.driverId)
+        if (driver) firebaseAuthPassword = await driversStore.createDriverLoginCredentials(driver.id!, driver.code, form.value.password.replace(/\D/g, ''))
+      }
+      const uid = await authStore.createStaffAccount(form.value.email, firebaseAuthPassword, form.value.name, form.value.role, form.value.driverId)
       userStore.addLocalCopy({
         id: uid,
         email: form.value.email.trim(),

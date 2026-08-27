@@ -19,6 +19,7 @@
             <th class="px-4 py-3 font-semibold">เลขบัตรประชาชน</th>
             <th class="px-4 py-3 font-semibold">เลขใบขับขี่</th>
             <th class="px-4 py-3 font-semibold">สถานภาพ</th>
+            <th v-if="isAdmin" class="px-4 py-3 font-semibold">Driver Login</th>
             <th class="px-4 py-3 font-semibold"></th>
           </tr>
         </thead>
@@ -44,6 +45,16 @@
               <span :class="['text-xs font-semibold px-2 py-1 rounded-full', driver.employmentStatus === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
                 {{ driver.employmentStatus === 'active' ? 'ทำงานปกติ' : 'ลาออกแล้ว' }}
               </span>
+            </td>
+            <td v-if="isAdmin" class="px-4 py-3">
+              <span v-if="driverLoginStatus[driver.code]" class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">ตั้งค่าแล้ว</span>
+              <span v-else-if="hasExistingAccount(driver)" class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700" title="มีบัญชี Firebase Auth เดิมอยู่แล้ว (Login ด้วย Email/Password เดิม) ยัง Migrate อัตโนมัติไม่ได้">
+                มีบัญชี Login เดิม
+              </span>
+              <div v-else class="flex items-center gap-1.5">
+                <span class="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600">ยังไม่ได้ตั้งค่า</span>
+                <button @click="openSetupDialog(driver)" class="btn-sm">ตั้งค่า</button>
+              </div>
             </td>
             <td class="px-4 py-3 text-right">
               <div class="flex items-center justify-end gap-1.5">
@@ -276,19 +287,139 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- ตั้งค่า Driver Login ให้คนขับที่ยังไม่มีบัญชีเลย -->
+    <Teleport to="body" v-if="setupTarget">
+      <div @click="setupTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
+        <div @click.stop class="w-full max-w-sm bg-surface rounded-2xl shadow-2xl">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+            <div class="font-bold text-text">ตั้งค่า Driver Login — {{ fullName(setupTarget) }} ({{ setupTarget.code }})</div>
+            <button @click="setupTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+          <div class="px-6 py-5 space-y-3">
+            <div class="text-xs text-muted">
+              จะสร้างบัญชี Login ใหม่ให้คนขับคนนี้ (ยังไม่เคยมีบัญชีมาก่อน) คนขับจะใช้รหัสคนขับ ({{ setupTarget.code }}) คู่กับรหัสผ่านที่ตั้งด้านล่างนี้เข้าแอปได้ทันที ไม่ต้องพิมพ์ Email เลย
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">รหัสผ่านคนขับ (ตัวเลขอย่างน้อย 4 หลัก)</label>
+              <input v-model="setupPassword" inputmode="numeric" type="password" class="input-field w-full" placeholder="เช่น 123456" />
+            </div>
+            <div v-if="setupError" class="text-xs text-red-600">{{ setupError }}</div>
+          </div>
+          <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
+            <button @click="setupTarget = null" class="btn-secondary">ยกเลิก</button>
+            <button @click="confirmSetup" :disabled="setupSaving" class="btn-primary disabled:opacity-50">{{ setupSaving ? 'กำลังบันทึก...' : 'บันทึก' }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useDriversStore, type DriverRecord, type LicenseType, type IncomeType } from '@/stores/drivers'
 import { useVehiclesStore } from '@/stores/vehicles'
+import { useUserStore } from '@/stores/users'
+import { useAuthStore } from '@/stores/auth'
+import { internalDriverEmail } from '@/utils/driverAuth'
+import type { DriverLoginCredentials } from '@/repositories/driverLoginCredentialsRepository'
 
 const onboardingStore = useOnboardingStore()
 const driversStore = useDriversStore()
 const vehiclesStore = useVehiclesStore()
+const userStore = useUserStore()
+const authStore = useAuthStore()
 const fullName = driversStore.fullName
+
+/**
+ * Driver Login Credential — สถานะ Migrate ต่อคนขับ (ADMIN เท่านั้นที่เห็นคอลัมน์นี้) โหลดทีเดียวตอนเปิดหน้า ไม่ auto
+ * สร้าง/ทับข้อมูลใครเลย เป็นแค่การแสดงสถานะ + ปุ่ม "ตั้งค่า" ที่ ADMIN ต้องกดเองทีละคนเท่านั้น (ตามข้อกำหนด)
+ *
+ * แบ่ง 3 สถานะ:
+ * - "ตั้งค่าแล้ว" — มี driverLoginCredentials/{code} อยู่แล้ว
+ * - "มีบัญชี Login เดิม" — ยังไม่มี driverLoginCredentials แต่มีบัญชี Firebase Auth (users/*) ผูก driverId นี้อยู่แล้ว
+ *   (ระบบเดิมก่อนมี Driver Login) — Migrate อัตโนมัติไม่ได้เพราะไม่มีทางรู้รหัสผ่าน Firebase Auth เดิมที่ตั้งไว้ (Hash
+ *   ทางเดียว ไม่มี Backend/Admin SDK ให้ reset แทนได้) คนขับกลุ่มนี้ยังคง Login ด้วย Email + Password เดิมได้ปกติ
+ *   ต่อไป จนกว่าจะมีการ Migrate ด้วยวิธีอื่น (นอกขอบเขตงานนี้)
+ * - "ยังไม่ได้ตั้งค่า" — ไม่มีทั้งคู่ ADMIN ตั้งค่า Driver Login ใหม่ให้ได้เลย (สร้างบัญชี Firebase Auth ภายใน + PIN
+ *   คู่กัน ครั้งเดียว)
+ */
+const driverLoginStatus = ref<Record<string, DriverLoginCredentials | null>>({})
+const isAdmin = computed(() => authStore.role === 'ADMIN')
+
+const hasExistingAccount = (driver: DriverRecord) => userStore.users.some((u) => u.role === 'DRIVER' && u.driverId === driver.id)
+
+const loadDriverLoginStatuses = async () => {
+  const entries = await Promise.all(
+    driversStore.drivers.map(async (d) => [d.code, await driversStore.getDriverLoginCredentials(d.code)] as const)
+  )
+  driverLoginStatus.value = Object.fromEntries(entries)
+}
+
+/**
+ * ต้อง watch ทั้ง isAdmin (authStore.role โหลดแบบ async รอ onAuthStateChanged + fetch profile — ตอน mounted
+ * ตรงๆ อาจยังเป็น false อยู่) และ driversStore.drivers.length (store fetch รายชื่อคนขับตอนสร้าง instance เองก็เป็น
+ * async เช่นกัน ไม่มี fetchDrivers() แบบ await เพิ่มได้จากข้างนอก) — ถ้า watch แค่ตัวใดตัวหนึ่ง มีโอกาสพลาดจังหวะที่
+ * อีกตัวโหลดเสร็จทีหลัง ทำให้สถานะของคนขับที่โหลดไม่ทันหายไปเงียบๆ
+ */
+watch(
+  [isAdmin, () => driversStore.drivers.length],
+  ([admin, count]) => {
+    if (admin && count > 0) loadDriverLoginStatuses()
+  },
+  { immediate: true }
+)
+
+// --- ตั้งค่า Driver Login ให้คนขับที่ยังไม่มีบัญชีเลย (เฉพาะกรณีนี้เท่านั้นที่ทำอัตโนมัติได้ปลอดภัย) ---
+const setupTarget = ref<DriverRecord | null>(null)
+const setupPassword = ref('')
+const setupError = ref('')
+const setupSaving = ref(false)
+
+const openSetupDialog = (driver: DriverRecord) => {
+  setupTarget.value = driver
+  setupPassword.value = ''
+  setupError.value = ''
+  setupSaving.value = false
+}
+
+const confirmSetup = async () => {
+  setupError.value = ''
+  const driver = setupTarget.value
+  if (!driver?.id) return
+  const password = setupPassword.value.replace(/\D/g, '')
+  if (!/^\d{4,}$/.test(password)) {
+    setupError.value = 'กรุณากรอกรหัสผ่านคนขับเป็นตัวเลขอย่างน้อย 4 หลัก'
+    return
+  }
+  setupSaving.value = true
+  try {
+    const authPassword = await driversStore.createDriverLoginCredentials(driver.id, driver.code, password)
+    const email = internalDriverEmail(driver.code)
+    const uid = await authStore.createStaffAccount(email, authPassword, fullName(driver), 'DRIVER', driver.id)
+    userStore.addLocalCopy({
+      id: uid,
+      email,
+      name: fullName(driver),
+      role: 'DRIVER',
+      active: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      driverId: driver.id,
+    })
+    await driversStore.updateDriver(driver.id, { ...driver, authEmail: email })
+    driverLoginStatus.value = { ...driverLoginStatus.value, [driver.code]: await driversStore.getDriverLoginCredentials(driver.code) }
+    setupTarget.value = null
+  } catch (err: any) {
+    setupError.value = err?.message || 'ตั้งค่า Driver Login ไม่สำเร็จ'
+  } finally {
+    setupSaving.value = false
+  }
+}
 
 /** รถที่ประจำคนขับคนนี้อยู่ (ถ้ามี) แสดงในตารางรายชื่อ */
 const assignedVehicleLabel = (driver: DriverRecord) => {

@@ -2,7 +2,8 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { driverRepository, sanitizeDriver } from '@/repositories/driverRepository'
 import { driverAuthRepository } from '@/repositories/driverAuthRepository'
-import { internalDriverEmail } from '@/utils/driverAuth'
+import { driverLoginCredentialsRepository } from '@/repositories/driverLoginCredentialsRepository'
+import { internalDriverEmail, generateAuthBootstrapSecret } from '@/utils/driverAuth'
 
 export type EmploymentStatus = 'active' | 'resigned'
 export type IncomeType = 'daily' | 'monthly' | 'trip'
@@ -112,5 +113,84 @@ export const useDriversStore = defineStore('drivers', () => {
     if (index !== -1) drivers.value[index] = { ...drivers.value[index], authEmail: newEmail }
   }
 
-  return { drivers, loading, error, fullName, createDriver, updateDriver, deleteDriver, sanitizeDriver, resolveLoginEmail, setAuthEmail }
+  /**
+   * ตรวจ driverCode + driverLoginPassword ตอน Login (ก่อนมี Firebase Auth session) — เทียบกับ
+   * driverLoginCredentials/{code} ตรงๆ (ค่า plaintext ตามข้อกำหนด) คืน authPassword (Auth Bootstrap Secret แยก
+   * ต่างหาก ไม่ใช่ driverLoginPassword) ให้ LoginView เอาไปเรียก signInWithEmailAndPassword ต่อเมื่อตรงกันเท่านั้น
+   */
+  async function verifyDriverLogin(code: string, password: string): Promise<{ driverId: string; authPassword: string } | null> {
+    if (!code || !password) return null
+    const cred = await driverLoginCredentialsRepository.get(code)
+    if (!cred || cred.loginPassword !== password) return null
+    return { driverId: cred.driverId, authPassword: cred.authPassword }
+  }
+
+  /**
+   * ใช้ตอนสร้างบัญชีคนขับใหม่เท่านั้น (UserManagementView.vue) — สุ่ม Auth Bootstrap Secret ใหม่ (ใช้สร้างบัญชี
+   * Firebase Auth จริงตอนนั้นเลย) แล้วบันทึกคู่กับ driverLoginPassword ที่แอดมินตั้ง คืนค่า authPassword ที่สุ่มได้
+   * ให้ผู้เรียกเอาไปใช้ createUserWithEmailAndPassword ต่อ (ทำครั้งเดียว ไม่เก็บซ้ำที่อื่น)
+   */
+  async function createDriverLoginCredentials(driverId: string, code: string, loginPassword: string): Promise<string> {
+    const authPassword = generateAuthBootstrapSecret()
+    await driverLoginCredentialsRepository.set(code, {
+      driverId,
+      code,
+      loginPassword,
+      authPassword,
+      updatedAt: new Date().toISOString(),
+    })
+    return authPassword
+  }
+
+  /** แอดมินดู driverLoginPassword ปัจจุบันจากหน้าจัดการผู้ใช้งาน (คืน null ถ้าคนขับคนนี้ยังไม่เคยตั้งค่า Driver Login เลย) */
+  async function getDriverLoginCredentials(code: string) {
+    return driverLoginCredentialsRepository.get(code)
+  }
+
+  /** แอดมินเปลี่ยน driverLoginPassword — แตะเฉพาะ field นี้ ไม่ยุ่งกับ authPassword (Firebase Auth) เลยตามข้อกำหนด
+   *  ห้าม sync กัน ถ้าคนขับคนนี้ยังไม่เคยมี credentials มาก่อน (ยังไม่เคย migrate จากระบบเดิม) ให้ throw แทนการสร้าง
+   *  authPassword ใหม่เงียบๆ เพราะนั่นจะทำให้บัญชี Firebase Auth เดิมของคนขับ (ถ้ามี) ใช้ล็อกอินไม่ได้อีกต่อไป —
+   *  ต้องสร้างผ่าน createDriverLoginCredentials ตอนสร้างบัญชีใหม่เท่านั้น
+   */
+  async function updateDriverLoginPassword(code: string, newPassword: string) {
+    const existing = await driverLoginCredentialsRepository.get(code)
+    if (!existing) throw new Error('คนขับคนนี้ยังไม่เคยตั้งค่า Driver Login ไว้ — ต้องสร้างผ่านการเพิ่มผู้ใช้งานใหม่เท่านั้น')
+    await driverLoginCredentialsRepository.set(code, { ...existing, loginPassword: newPassword, updatedAt: new Date().toISOString() })
+  }
+
+  /**
+   * แอดมินเปลี่ยน driverCode (Driver ID) — ย้าย driverLoginCredentials ไป document ใหม่ (id เอกสาร = code) และตั้ง
+   * driverAuthEmails/{newCode} ให้ชี้ไปที่อีเมล Firebase Auth จริงเดิมเสมอ (เผื่อคนขับยังใช้อีเมลภายในแบบ default
+   * ที่ derive จาก code เดิม — ถ้าไม่ตั้ง override ตัวนี้ resolveLoginEmail(newCode) จะคำนวณอีเมลผิดไปเป็น
+   * d{newCode}@drivers.internal ซึ่งไม่ตรงกับบัญชี Firebase Auth จริงที่สร้างไว้ตั้งแต่แรกด้วย code เดิม) แล้วค่อย
+   * อัปเดต DriverRecord.code เป็นค่าใหม่
+   */
+  async function changeDriverLoginCode(driverId: string, oldCode: string, newCode: string) {
+    if (oldCode === newCode) return
+    const cred = await driverLoginCredentialsRepository.get(oldCode)
+    if (!cred) throw new Error('คนขับคนนี้ยังไม่เคยตั้งค่า Driver Login ไว้')
+    const currentAuthEmail = await resolveLoginEmail(oldCode)
+    await driverAuthRepository.setAuthEmail(newCode, currentAuthEmail)
+    await driverLoginCredentialsRepository.move(oldCode, newCode, { ...cred, code: newCode, updatedAt: new Date().toISOString() })
+    const driver = drivers.value.find((d) => d.id === driverId)
+    if (driver) await updateDriver(driverId, { ...driver, code: newCode })
+  }
+
+  return {
+    drivers,
+    loading,
+    error,
+    fullName,
+    createDriver,
+    updateDriver,
+    deleteDriver,
+    sanitizeDriver,
+    resolveLoginEmail,
+    setAuthEmail,
+    verifyDriverLogin,
+    createDriverLoginCredentials,
+    getDriverLoginCredentials,
+    updateDriverLoginPassword,
+    changeDriverLoginCode,
+  }
 })
