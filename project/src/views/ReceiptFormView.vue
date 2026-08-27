@@ -145,7 +145,12 @@
                 <th class="text-left px-3 py-2 font-semibold w-20">หน่วย</th>
                 <th class="text-right px-3 py-2 font-semibold w-24">ราคาต่อหน่วย</th>
                 <th class="text-right px-3 py-2 font-semibold w-24">ส่วนลด</th>
-                <th class="text-right px-3 py-2 font-semibold w-20">ภาษี (%)</th>
+                <th class="text-right px-3 py-2 font-semibold w-20">
+                  <div class="flex items-center justify-end gap-1.5">
+                    <input type="checkbox" :checked="allRowsTaxed" @change="toggleAllTax" class="w-4 h-4" />
+                    ภาษี (%)
+                  </div>
+                </th>
                 <th class="text-left px-3 py-2 font-semibold w-24">หัก ณ ที่จ่าย</th>
                 <th class="text-right px-3 py-2 font-semibold w-28">ราคารวม</th>
                 <th class="w-8"></th>
@@ -178,7 +183,7 @@
                   <input v-else v-model.number="row.discountAmount" type="number" min="0" class="input-field w-full text-right" />
                 </td>
                 <td class="px-3 py-2">
-                  <input v-model.number="row.vatRate" type="number" min="0" max="100" class="input-field w-full text-right" />
+                  <TaxRateCell v-model="row.vatRate" />
                 </td>
                 <td class="px-3 py-2">
                   <select v-model.number="row.whtRate" class="input-field w-full">
@@ -316,6 +321,7 @@ import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
 import ContactPickerField from '@/components/shared/ContactPickerField.vue'
+import TaxRateCell from '@/components/shared/TaxRateCell.vue'
 import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
 
 const route = useRoute()
@@ -411,8 +417,16 @@ type Row = {
   discountMode: 'percent' | 'fixed'
   discountPercent: number
   discountAmount: number
-  vatRate: number
+  vatRate?: number
   whtRate: number
+  /** มีเฉพาะรายการที่มาจากงานขนส่งโดยตรง (ใบเสร็จที่สร้างจาก Booking ผ่าน createReceiptFromBookings ซึ่งไม่มี
+   *  sourceDocumentIds จึงถูกแก้ไขผ่านฟอร์มนี้ได้ ดู editRouteFor ใน ReceiptListView.vue) — ต้อง "ผ่าน" ไปกับแถวเสมอ
+   *  ตอนโหลด/บันทึกซ้ำ ไม่งั้นหน้าพิมพ์เอกสารจับกลุ่ม Feed/ห้วงวันที่ไม่ได้อีกต่อไป (ดู pattern เดียวกันใน
+   *  TaxInvoiceFormView.vue/BillingFormView.vue) */
+  shipDate?: Date
+  plate?: string
+  referenceDoc?: string
+  deliveryNo?: string
 }
 
 const whtOptions = [
@@ -437,6 +451,15 @@ const addRow = () => {
 
 if (!isEditMode) addRow()
 
+const allRowsTaxed = computed(() => rows.value.length > 0 && rows.value.every((r) => !!r.vatRate))
+const toggleAllTax = (event: Event) => {
+  const checked = (event.target as HTMLInputElement).checked
+  const rate = documentSettingsStore.settings.vatRate || 7
+  rows.value.forEach((r) => {
+    r.vatRate = checked ? rate : undefined
+  })
+}
+
 const onProductSelected = (idx: number, productId: string) => {
   const row = rows.value[idx]
   if (!productId) {
@@ -460,12 +483,12 @@ const subtotal = computed(() => rows.value.reduce((sum, r) => sum + r.qty * r.un
 const discountTotal = computed(() => rows.value.reduce((sum, r) => sum + computeRowDiscountBaht(r), 0))
 const afterDiscount = computed(() => subtotal.value - discountTotal.value)
 const exemptAmount = computed(() => rows.value.filter((r) => !r.vatRate).reduce((sum, r) => sum + rowAmount(r), 0))
-const taxableAmount = computed(() => rows.value.filter((r) => r.vatRate > 0).reduce((sum, r) => sum + rowAmount(r), 0))
+const taxableAmount = computed(() => rows.value.filter((r) => (r.vatRate || 0) > 0).reduce((sum, r) => sum + rowAmount(r), 0))
 const vatTotal = computed(() => rows.value.reduce((sum, r) => sum + rowVat(r), 0))
 const grandTotal = computed(() => afterDiscount.value + vatTotal.value)
 /** อัตรา VAT ระดับเอกสาร (ใช้แค่แสดงผล) — ถ้าทุกแถวใช้อัตราเดียวกันก็ใช้อัตรานั้นตรงๆ ถ้าผสมหลายอัตรา fallback ไปอัตรา default ของระบบ */
 const documentVatRate = computed(() => {
-  const rates = new Set(rows.value.filter((r) => r.vatRate > 0).map((r) => r.vatRate))
+  const rates = new Set(rows.value.filter((r) => (r.vatRate || 0) > 0).map((r) => r.vatRate))
   return rates.size === 1 ? [...rates][0] : documentSettingsStore.settings.vatRate
 })
 const whtComputed = computed(() => rows.value.reduce((sum, r) => sum + rowWht(r), 0))
@@ -519,6 +542,10 @@ watch(
       discountAmount: i.discountAmount || 0,
       vatRate: i.vatRate ?? documentSettingsStore.settings.vatRate,
       whtRate: i.whtRate || 0,
+      shipDate: i.shipDate,
+      plate: i.plate,
+      referenceDoc: i.referenceDoc,
+      deliveryNo: i.deliveryNo,
     }))
   },
   { immediate: true }
@@ -586,6 +613,10 @@ const saveAndGetDoc = () => {
     vatRate: r.vatRate,
     whtRate: r.whtRate,
     amount: rowAmount(r),
+    shipDate: r.shipDate,
+    plate: r.plate,
+    referenceDoc: r.referenceDoc,
+    deliveryNo: r.deliveryNo,
   }))
   const payload = {
     customer: customerName.value.trim(),

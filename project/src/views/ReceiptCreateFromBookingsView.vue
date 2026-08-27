@@ -4,19 +4,29 @@
       <div>
         <h2 class="text-lg font-bold text-text">สร้างใบเสร็จรับเงิน</h2>
         <div class="text-xs text-muted mt-0.5">
-          เลือกงานขนส่งที่ส่งเสร็จแล้ว (DELIVERED) ของลูกค้ารายเดียวกัน เพื่อออกใบเสร็จรับเงินทันที — ใช้เมื่อรับเงินแล้วจริง (เช่น ลูกค้าที่ไม่ต้องออกใบกำกับภาษี หรือรับเงินสดหน้างาน)
+          {{
+            phase === 'select'
+              ? 'เลือกงานขนส่งที่ส่งเสร็จแล้ว (DELIVERED) ของลูกค้ารายเดียวกัน — ใบเสร็จจะเริ่มที่สถานะ "รอเก็บเงิน" เสมอ'
+              : 'ตรวจสอบ/แก้ไขข้อมูลเอกสารก่อนบันทึกจริง'
+          }}
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <button @click="router.push('/receipts')" class="btn-secondary">ยกเลิก</button>
-        <button @click="submit" :disabled="!canSubmit" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+        <button v-if="phase === 'select'" @click="router.push('/receipts')" class="btn-secondary">ยกเลิก</button>
+        <button v-if="phase === 'select'" @click="goToReview" :disabled="!canSubmit" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+          <span class="material-symbols-rounded text-base">arrow_forward</span>
+          ถัดไป: ตรวจสอบเอกสาร
+        </button>
+        <button v-if="phase === 'review'" @click="phase = 'select'" class="btn-secondary">ย้อนกลับ</button>
+        <button v-if="phase === 'review'" @click="confirmSave" :disabled="saving" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
           <span class="material-symbols-rounded text-base">check</span>
-          สร้างใบเสร็จรับเงิน
+          {{ saving ? 'กำลังบันทึก...' : 'ยืนยันสร้างใบเสร็จรับเงิน' }}
         </button>
       </div>
     </div>
 
-    <div class="card-lg space-y-4">
+    <!-- Phase 1: เลือกงานขนส่ง -->
+    <div v-if="phase === 'select'" class="card-lg space-y-4">
       <div>
         <label class="field-label">ลูกค้า</label>
         <select v-model="selectedCustomer" class="input-field w-full max-w-sm">
@@ -76,6 +86,67 @@
         </div>
       </div>
     </div>
+
+    <!-- Phase 2: ตรวจสอบ/แก้ไขก่อนบันทึกจริง -->
+    <div v-else class="card-lg space-y-4">
+      <div v-if="saveError" class="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{{ saveError }}</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="field-label">เลขที่เอกสาร <span class="font-normal text-[10px]">(ว่างไว้ = ออกเลขอัตโนมัติ)</span></label>
+          <input v-model="reviewNumber" class="input-field w-full font-mono" placeholder="ออกอัตโนมัติ" />
+        </div>
+        <div>
+          <label class="field-label">เลขที่อ้างอิง</label>
+          <input v-model="reviewReference" class="input-field w-full" />
+        </div>
+        <div>
+          <label class="field-label">ที่อยู่ลูกค้า</label>
+          <textarea v-model="reviewCustomerAddress" rows="2" class="input-field w-full" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="field-label">รหัสไปรษณีย์</label>
+            <input v-model="reviewCustomerZipCode" class="input-field w-full" />
+          </div>
+          <div>
+            <label class="field-label">เลขประจำตัวผู้เสียภาษี</label>
+            <input v-model="reviewCustomerTaxId" class="input-field w-full" />
+          </div>
+        </div>
+      </div>
+
+      <div class="border border-border rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-surface-2 text-xs text-muted">
+            <tr>
+              <th class="text-left px-3 py-2 font-semibold">รายการ</th>
+              <th class="text-right px-3 py-2 font-semibold">จำนวนเงิน</th>
+              <th class="text-right px-3 py-2 font-semibold">
+                <div class="flex items-center justify-end gap-1.5">
+                  <input type="checkbox" :checked="allRowsTaxed" @change="toggleAllTax" class="w-4 h-4" />
+                  ภาษี (%)
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, idx) in reviewRows" :key="idx" class="border-t border-border">
+              <td class="px-3 py-2 text-text">{{ row.description }}</td>
+              <td class="px-3 py-2 text-right font-mono text-text">{{ formatBaht(row.amount) }}</td>
+              <td class="px-3 py-2">
+                <TaxRateCell v-model="row.vatRate" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex justify-end gap-6 text-sm">
+        <div><span class="text-muted">ยอดก่อนภาษี:</span> <span class="font-semibold text-text ml-1">{{ formatBaht(reviewTotals.amount) }}</span></div>
+        <div><span class="text-muted">ภาษีมูลค่าเพิ่ม:</span> <span class="font-semibold text-text ml-1">{{ formatBaht(reviewTotals.vatAmount) }}</span></div>
+        <div><span class="text-muted">รวมทั้งสิ้น:</span> <span class="font-bold text-primary ml-1">{{ formatBaht(reviewTotals.amount + reviewTotals.vatAmount) }}</span></div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -88,7 +159,9 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
 import ContactPickerField from '@/components/shared/ContactPickerField.vue'
+import TaxRateCell from '@/components/shared/TaxRateCell.vue'
 import { sortBookingsForDocumentMerge } from '@/utils/bookingMergeSort'
+import { computeDocumentTotals } from '@/utils/documentTotals'
 import type { Booking } from '@/types'
 
 const router = useRouter()
@@ -110,6 +183,7 @@ const contactId = ref<string | undefined>(undefined)
 watch(selectedCustomer, (name) => {
   const customer = customerStore.customers.find((c) => c.name === name)
   contactId.value = customer?.id ? contactStore.primaryContactFor(customer.id)?.id : undefined
+  selectedIds.value = new Set()
 })
 const selectedIds = ref<Set<string>>(new Set())
 
@@ -137,6 +211,12 @@ const toggleBooking = (id: string) => {
   selectedIds.value = new Set(selectedIds.value)
 }
 
+/** เหมือน bookingReferenceDoc ใน stores/salesDocuments.ts เป๊ะ */
+const bookingReferenceDoc = (b: Booking): string => {
+  const salesOrder = b.sourceDocumentId ? salesDocumentsStore.documents.find((d) => d.type === 'SALES_ORDER' && d.id === b.sourceDocumentId) : undefined
+  return salesOrder?.number || b.docNo
+}
+
 const bookingTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)
 const destinationLabel = (b: Booking) => {
   if (!b.items.length) return '-'
@@ -151,11 +231,104 @@ const canSubmit = computed(() => selectedIds.value.size > 0)
 const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH')}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
-const submit = () => {
+/** Create/Edit flow เหมือน BillingCreateFromBookingsView.vue — ยังไม่ persist อะไรจนกว่าจะกด "ยืนยันสร้างใบเสร็จรับเงิน" */
+const phase = ref<'select' | 'review'>('select')
+const saving = ref(false)
+const saveError = ref('')
+const reviewNumber = ref('')
+const reviewReference = ref('')
+const reviewCustomerAddress = ref('')
+const reviewCustomerZipCode = ref('')
+const reviewCustomerTaxId = ref('')
+
+interface ReviewRow {
+  bookingId: string
+  description: string
+  qty: number
+  unit: string
+  unitPrice: number
+  amount: number
+  discountMode?: 'percent' | 'fixed'
+  discountPercent?: number
+  discountAmount?: number
+  vatRate?: number
+  shipDate?: Date
+  plate?: string
+  referenceDoc?: string
+  deliveryNo?: string
+}
+const reviewRows = ref<ReviewRow[]>([])
+
+const goToReview = () => {
   if (!canSubmit.value) return
   const orderedIds = eligibleBookings.value.filter((b) => selectedIds.value.has(b.id)).map((b) => b.id)
-  const result = salesDocumentsStore.createReceiptFromBookings(orderedIds, { contactId: contactId.value })
-  if (result) router.push(`/documents/${result.id}`)
+  const targetBookings = orderedIds.map((id) => bookingStore.bookings.find((b) => b.id === id)!).filter(Boolean)
+  reviewNumber.value = ''
+  reviewReference.value = targetBookings.map(bookingReferenceDoc).join(', ')
+  const customer = customerStore.customers.find((c) => c.name === selectedCustomer.value)
+  reviewCustomerAddress.value = customer?.address || ''
+  reviewCustomerZipCode.value = customer?.zipCode || ''
+  reviewCustomerTaxId.value = customer?.taxId || ''
+  reviewRows.value = targetBookings.map((b) => {
+    const unitPrice = (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)
+    const dest = b.items.length > 1 ? `${b.items[0]?.siteName} +${b.items.length - 1} ที่อื่น` : b.items[0]?.siteName || '-'
+    const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+    return {
+      bookingId: b.id,
+      description: products ? `${dest} — ${products}` : dest,
+      qty: 1,
+      unit: 'เที่ยว',
+      unitPrice,
+      amount: unitPrice,
+      discountMode: b.discountMode,
+      discountPercent: b.discountPercent,
+      discountAmount: b.discountAmount,
+      vatRate: b.vatRate,
+      shipDate: b.shipDate,
+      plate: b.plate,
+      referenceDoc: bookingReferenceDoc(b),
+      deliveryNo: b.docNo,
+    }
+  })
+  saveError.value = ''
+  phase.value = 'review'
+}
+
+const allRowsTaxed = computed(() => reviewRows.value.length > 0 && reviewRows.value.every((r) => !!r.vatRate))
+const toggleAllTax = (event: Event) => {
+  const checked = (event.target as HTMLInputElement).checked
+  const rate = documentSettingsStore.settings.vatRate || 7
+  reviewRows.value.forEach((r) => {
+    r.vatRate = checked ? rate : undefined
+  })
+}
+
+const reviewTotals = computed(() => computeDocumentTotals(reviewRows.value))
+
+const confirmSave = () => {
+  saveError.value = ''
+  saving.value = true
+  try {
+    const orderedIds = reviewRows.value.map((r) => r.bookingId)
+    const result = salesDocumentsStore.createReceiptFromBookings(orderedIds, {
+      contactId: contactId.value,
+      number: reviewNumber.value.trim() || undefined,
+      reference: reviewReference.value.trim() || undefined,
+      customerAddress: reviewCustomerAddress.value.trim() || undefined,
+      customerZipCode: reviewCustomerZipCode.value.trim() || undefined,
+      customerTaxId: reviewCustomerTaxId.value.trim() || undefined,
+      items: reviewRows.value.map(({ bookingId, ...row }) => row),
+    })
+    if (!result) {
+      saveError.value = reviewNumber.value.trim()
+        ? `บันทึกไม่สำเร็จ — เลขที่เอกสาร ${reviewNumber.value.trim()} อาจถูกใช้ไปแล้ว หรืองานที่เลือกไม่ตรงเงื่อนไข (สถานะ/ลูกค้า/POD) อีกต่อไป`
+        : 'บันทึกไม่สำเร็จ — งานที่เลือกไม่ตรงเงื่อนไข (สถานะ/ลูกค้า/POD) อีกต่อไป ลองย้อนกลับไปเลือกใหม่'
+      return
+    }
+    router.push(`/documents/${result.id}`)
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 

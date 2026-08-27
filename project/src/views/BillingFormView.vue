@@ -25,6 +25,8 @@
       ดึงข้อมูลมาจากใบเสนอราคา <span class="font-mono font-semibold text-text">{{ sourceNumber }}</span>
     </div>
 
+    <div v-if="saveError" class="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{{ saveError }}</div>
+
     <div class="card-lg space-y-6">
       <!-- Customer + document header -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -161,7 +163,12 @@
                 <th class="text-left px-3 py-2 font-semibold w-20">หน่วย</th>
                 <th class="text-right px-3 py-2 font-semibold w-24">ราคาต่อหน่วย</th>
                 <th class="text-right px-3 py-2 font-semibold w-24">ส่วนลด</th>
-                <th class="text-right px-3 py-2 font-semibold w-20">ภาษี (%)</th>
+                <th class="text-right px-3 py-2 font-semibold w-20">
+                  <div class="flex items-center justify-end gap-1.5">
+                    <input type="checkbox" :checked="allRowsTaxed" @change="toggleAllTax" class="w-4 h-4" />
+                    ภาษี (%)
+                  </div>
+                </th>
                 <th class="text-left px-3 py-2 font-semibold w-24">หัก ณ ที่จ่าย</th>
                 <th class="text-right px-3 py-2 font-semibold w-28">ราคารวม</th>
                 <th class="w-8"></th>
@@ -194,7 +201,7 @@
                   <input v-else v-model.number="row.discountAmount" type="number" min="0" class="input-field w-full text-right" />
                 </td>
                 <td class="px-3 py-2">
-                  <input v-model.number="row.vatRate" type="number" min="0" max="100" class="input-field w-full text-right" />
+                  <TaxRateCell v-model="row.vatRate" />
                 </td>
                 <td class="px-3 py-2">
                   <select v-model.number="row.whtRate" class="input-field w-full">
@@ -332,6 +339,7 @@ import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
 import ContactPickerField from '@/components/shared/ContactPickerField.vue'
+import TaxRateCell from '@/components/shared/TaxRateCell.vue'
 import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
 
 const route = useRoute()
@@ -442,8 +450,15 @@ type Row = {
   discountMode: 'percent' | 'fixed'
   discountPercent: number
   discountAmount: number
-  vatRate: number
+  vatRate?: number
   whtRate: number
+  /** มีเฉพาะรายการที่มาจากงานขนส่งโดยตรง (ใบวางบิลที่สร้างจาก Booking) — ไม่มีช่องแก้ไขในฟอร์มนี้ (ผู้ใช้ไม่เห็น/ไม่แก้)
+   *  แต่ต้อง "ผ่าน" ไปกับแถวเสมอตอนโหลด/บันทึกซ้ำ ไม่งั้นหน้าพิมพ์เอกสาร (InvoiceDocumentView.vue hasTripColumns) จะจับ
+   *  กลุ่ม Feed/ห้วงวันที่ไม่ได้อีกต่อไปหลังแก้ไขผ่านฟอร์มนี้ (ดู pattern เดียวกันใน TaxInvoiceFormView.vue) */
+  shipDate?: Date
+  plate?: string
+  referenceDoc?: string
+  deliveryNo?: string
 }
 
 const whtOptions = [
@@ -483,6 +498,15 @@ const addRow = () => {
 
 if (!prefill && !editingDoc) addRow()
 
+const allRowsTaxed = computed(() => rows.value.length > 0 && rows.value.every((r) => !!r.vatRate))
+const toggleAllTax = (event: Event) => {
+  const checked = (event.target as HTMLInputElement).checked
+  const rate = documentSettingsStore.settings.vatRate || 7
+  rows.value.forEach((r) => {
+    r.vatRate = checked ? rate : undefined
+  })
+}
+
 const onProductSelected = (idx: number, productId: string) => {
   const row = rows.value[idx]
   if (!productId) {
@@ -506,7 +530,7 @@ const subtotal = computed(() => rows.value.reduce((sum, r) => sum + r.qty * r.un
 const discountTotal = computed(() => rows.value.reduce((sum, r) => sum + computeRowDiscountBaht(r), 0))
 const afterDiscount = computed(() => subtotal.value - discountTotal.value)
 const exemptAmount = computed(() => rows.value.filter((r) => !r.vatRate).reduce((sum, r) => sum + rowAmount(r), 0))
-const taxableAmount = computed(() => rows.value.filter((r) => r.vatRate > 0).reduce((sum, r) => sum + rowAmount(r), 0))
+const taxableAmount = computed(() => rows.value.filter((r) => (r.vatRate || 0) > 0).reduce((sum, r) => sum + rowAmount(r), 0))
 const vatTotal = computed(() => rows.value.reduce((sum, r) => sum + rowVat(r), 0))
 const grandTotal = computed(() => afterDiscount.value + vatTotal.value)
 const whtComputed = computed(() => rows.value.reduce((sum, r) => sum + rowWht(r), 0))
@@ -553,6 +577,10 @@ if (editingDoc) {
     discountAmount: i.discountAmount || 0,
     vatRate: i.vatRate ?? documentSettingsStore.settings.vatRate,
     whtRate: i.whtRate || 0,
+    shipDate: i.shipDate,
+    plate: i.plate,
+    referenceDoc: i.referenceDoc,
+    deliveryNo: i.deliveryNo,
   }))
 }
 
@@ -575,6 +603,8 @@ const previewNumber = computed(() => {
 
 /** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ */
 const documentNumber = ref(previewNumber.value)
+/** แสดง error ตอนบันทึกไม่สำเร็จ (เช่น เลขที่เอกสารซ้ำ — createBillingManual/updateBillingManual คืน null) */
+const saveError = ref('')
 
 const canSubmit = computed(() => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0))
 
@@ -608,6 +638,10 @@ const saveAndGetDoc = () => {
     vatRate: r.vatRate,
     whtRate: r.whtRate,
     amount: rowAmount(r),
+    shipDate: r.shipDate,
+    plate: r.plate,
+    referenceDoc: r.referenceDoc,
+    deliveryNo: r.deliveryNo,
   }))
   const payload = {
     customer: customerName.value.trim(),
@@ -637,10 +671,14 @@ const saveAndGetDoc = () => {
     sourceQuotationId: sourceQuotationId.value,
     contactId: contactId.value,
   }
-  if (currentId.value) return salesDocumentsStore.updateBillingManual(currentId.value, payload)
-  const created = salesDocumentsStore.createBillingManual(payload)
-  currentId.value = created.id
-  return created
+  const result = currentId.value ? salesDocumentsStore.updateBillingManual(currentId.value, payload) : salesDocumentsStore.createBillingManual(payload)
+  if (!result) {
+    saveError.value = `เลขที่เอกสาร ${documentNumber.value.trim()} ถูกใช้ไปแล้ว กรุณาเปลี่ยนเลขที่เอกสาร`
+    return null
+  }
+  saveError.value = ''
+  currentId.value = result.id
+  return result
 }
 
 const submit = () => {

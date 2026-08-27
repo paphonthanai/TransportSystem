@@ -253,13 +253,9 @@ const onStatusSelect = (booking: Booking, action: string) => {
     return
   }
   if (action === 'CREATE_BILLING') {
-    if (!confirm(`ยืนยันออกใบวางบิลสำหรับงาน ${booking.docNo}?`)) return
-    const result = salesDocumentsStore.createBillingFromBookings([booking.id])
-    if (!result) {
-      alert(
-        `ไม่สามารถออกใบวางบิลให้งาน ${booking.docNo} ได้ — สถานะการวางบิลของงานนี้อาจค้างจากระบบเดิม กรุณาไปที่หน้า "ใบวางบิล" แล้วกดปุ่ม "ซิงก์ข้อมูล/เอกสารก่อนหน้า" ก่อน แล้วค่อยลองใหม่อีกครั้ง`
-      )
-    }
+    /** ไม่ persist ตรงจากจุดนี้อีกต่อไป (เดิมกด confirm() แล้วสร้างทันที ข้าม Create/Edit Review) — ส่งไปหน้า
+     * "สร้างใบวางบิล" พร้อม preselect งานนี้ให้ แล้วให้ผู้ใช้ตรวจสอบ/แก้ไขในหน้า Review ก่อนกดยืนยันบันทึกจริงเสมอ */
+    router.push({ name: 'BillingNoteCreate', query: { bookingId: booking.id } })
     return
   }
   if (action === 'RESET') {

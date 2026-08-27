@@ -129,12 +129,37 @@ service cloud.firestore {
     }
 
     // เอกสารขาย (ใบเสนอราคา/ใบสั่งขาย/ใบวางบิล/ใบกำกับภาษี/ใบเสร็จ) — ตรงกับ meta.roles ของ route กลุ่มเอกสารขาย
+    // salesDocuments รวมทุกประเภทเอกสาร (QUOTATION/SALES_ORDER/BILLING/TAX_INVOICE/RECEIPT/CASH_SALE/PURCHASE_ORDER)
+    // ไว้ใน collection เดียว — STAFF/DISPATCHER ยังต้องเขียนได้จริงเฉพาะ QUOTATION (หน้าใบเสนอราคา) และ SALES_ORDER
+    // (สร้าง/ลบพร้อม Booking ดู createSalesOrderForBooking/deleteSalesOrder ใน stores/salesDocuments.ts) เท่านั้น
+    // — เอกสารฝั่งบัญชี (BILLING/TAX_INVOICE/RECEIPT/CASH_SALE/PURCHASE_ORDER) ทุกหน้าที่เขียนถึงล้วนเป็นเส้นทางที่มี
+    // meta.roles จำกัดแค่ ADMIN/ACCOUNTING อยู่แล้วในระดับ route guard เป็นทุนเดิม (ตรวจสอบทุกเส้นทางแล้วก่อนแก้กฎนี้)
+    // จึงจำกัดฝั่ง Firestore ให้ตรงกันเพื่อไม่ให้เขียนได้ผ่านการเรียก API ตรงๆ ข้าม route guard — ไม่เพิ่มสิทธิ์ใหม่ให้ STAFF/
+    // DISPATCHER เลย (ตรงกับที่ทำได้อยู่แล้วในแอปทุกประการ)
+    function isSalesDocRestrictedType(t) {
+      return !(t in ['QUOTATION', 'SALES_ORDER']);
+    }
     match /salesDocuments/{docId} {
-      allow read, write: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING', 'DISPATCHER']);
+      allow read: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING', 'DISPATCHER']);
+      allow create, update: if hasRole(['ADMIN', 'ACCOUNTING']) ||
+        (hasRole(['STAFF', 'DISPATCHER']) && !isSalesDocRestrictedType(request.resource.data.type));
+      allow delete: if hasRole(['ADMIN', 'ACCOUNTING']) ||
+        (hasRole(['STAFF', 'DISPATCHER']) && !isSalesDocRestrictedType(resource.data.type));
     }
 
+    // salesDocumentItems ไม่มีฟิลด์ type ของตัวเอง (มีแค่ documentId อ้างถึงเอกสารแม่ใน salesDocuments) จึงต้อง get()
+    // เอกสารแม่มาเช็ค type แทนสำหรับ create/update (เอกสารแม่ยังคงอยู่แน่นอนตอนนั้น ไม่มีปัญหา race) — allow delete คงเปิด
+    // ให้ทุก role เดิมเหมือนก่อนแก้กฎนี้โดยเจตนา ไม่ผูกกับ type ของเอกสารแม่ เพราะ deleteSalesOrder (STAFF ใช้ได้จริง
+    // ผ่าน SalesOrderListView.vue) ลบเอกสารแม่กับ item พร้อมกันในจังหวะเดียว (สอง watcher แยกกันใน salesDocuments.ts
+    // ไม่รับประกันลำดับการยิง Firestore write) ผูก type-check กับ delete ตรงนี้เสี่ยง race แล้ว get() เอกสารแม่ไม่เจอ
+    // (ถูกลบไปพร้อมกันแล้ว) ทำให้ลบ item ไม่สำเร็จ กลายเป็น item ค้าง — item เดี่ยวๆ ไม่มีมูลค่าเอกสารในตัวเอง (ตัว
+    // เอกสารแม่ต่างหากที่คุม type-based create/update/delete เข้มแล้วด้านบน) จึงปล่อย delete item ตามเดิมได้อย่างปลอดภัย
     match /salesDocumentItems/{itemId} {
-      allow read, write: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING', 'DISPATCHER']);
+      allow read: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING', 'DISPATCHER']);
+      allow create, update: if hasRole(['ADMIN', 'ACCOUNTING']) ||
+        (hasRole(['STAFF', 'DISPATCHER']) &&
+          !isSalesDocRestrictedType(get(/databases/$(database)/documents/salesDocuments/$(request.resource.data.documentId)).data.type));
+      allow delete: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING', 'DISPATCHER']);
     }
 
     // หนังสือรับรองหัก ณ ที่จ่าย — route wht-certificates

@@ -308,12 +308,12 @@
             <div v-if="documentSettingsStore.settings.payment.note" class="mt-1 text-gray-600">{{ documentSettingsStore.settings.payment.note }}</div>
           </div>
 
-          <!-- ข้อมูลการชำระเงิน — แสดงเฉพาะใบเสร็จรับเงินเท่านั้น (ใบกำกับภาษี/ใบแจ้งหนี้ไม่แสดง แม้จะบันทึกการชำระเงินไว้แล้วก็ตาม —
-               ข้อมูลยังเก็บอยู่ใน SalesDocument ของใบแจ้งหนี้ตามเดิมทุกประการ แค่ UI หน้านี้ไม่ render เท่านั้น ดู isSourceDocEligible/
-               recordTaxInvoicePayment ที่ยังเขียนลงใบแจ้งหนี้เหมือนเดิม) ใบเสร็จดึงวิธีชำระ/ธนาคาร/เลขที่รายการมาจากใบแจ้งหนี้ต้นทาง
-               ที่บันทึกไว้ (sourceTaxInvoiceForReceipt) — ใบเสร็จเองไม่เคยมีฟิลด์พวกนี้เป็นของตัวเอง ยกเว้นใบเสร็จกรอกเอง (createReceiptManual)
-               ที่มี paymentMethod ของตัวเองอยู่แล้ว จึงเช็คค่าของใบเสร็จเองก่อนเป็นอันดับแรก -->
-          <div v-if="docMode === 'receipt'" class="text-xs mb-6 space-y-2">
+          <!-- ข้อมูลการชำระเงิน — แสดงตอนดูใบเสร็จรับเงิน หรือดูใบกำกับภาษี/ใบแจ้งหนี้ที่ถูกบันทึกการชำระเงินแล้ว (status PAID) เอง
+               โดยตรง (ดู showPaymentConfirmationBox) ใบเสร็จดึงวิธีชำระ/ธนาคาร/เลขที่รายการมาจากใบแจ้งหนี้ต้นทางที่บันทึกไว้
+               (sourceTaxInvoiceForReceipt) เมื่อใบเสร็จเองไม่มีฟิลด์พวกนี้เป็นของตัวเอง (ยกเว้นใบเสร็จกรอกเอง createReceiptManual
+               ที่มี paymentMethod ของตัวเองอยู่แล้ว จึงเช็คค่าของใบเสร็จเองก่อนเป็นอันดับแรก) ส่วนใบกำกับภาษี/ใบแจ้งหนี้อ่านฟิลด์
+               ของตัวเองตรงๆ (newDoc.value.paymentMethod ฯลฯ) เพราะ newDoc คือเอกสารนั้นเองอยู่แล้ว -->
+          <div v-if="showPaymentConfirmationBox" class="text-xs mb-6 space-y-2">
             <div class="flex items-center flex-wrap gap-x-2 gap-y-2">
               <span>การชำระเงินจะสมบูรณ์เมื่อบริษัทได้รับเงินเรียบร้อยแล้ว</span>
               <label v-for="opt in paymentMethodChecks" :key="opt.value" class="flex items-center gap-1">
@@ -772,20 +772,23 @@ const netPayable = computed(() => grandTotal.value - whtAmount.value)
  *  เพราะไม่แสดงเป็นบรรทัดแยกในตารางสรุปยอดแล้ว) แต่ยังต้องคำนวณเพื่อไปแสดงในกล่องยืนยันการชำระเงินแทน (ดู template) */
 const receiptNetAfterWht = computed(() => grandTotal.value - (activeDoc.value?.whtAmount ?? 0))
 
-/** กล่องยืนยันการชำระเงินท้ายใบเสร็จ (checkbox วิธีชำระ + ธนาคาร/เลขที่รายการ/หัก ณ ที่จ่าย/ยอดที่รับจริง) — เฉพาะใบเสร็จ
- *  รับเงินเท่านั้น ตรงกับฟอร์แมตเอกสารจริงของบริษัท (ใบกำกับภาษี/เอกสารอื่นไม่แสดงข้อมูลการชำระเงินเลย แม้จะบันทึกการชำระเงิน
- *  ไว้แล้วก็ตาม — ข้อมูลยังเก็บอยู่ใน SalesDocument ของใบแจ้งหนี้เหมือนเดิมทุกประการ ดู recordTaxInvoicePayment เพียงแต่ UI
- *  หน้าใบแจ้งหนี้ไม่ render เท่านั้น) */
+/** กล่องยืนยันการชำระเงินท้ายเอกสาร (checkbox วิธีชำระ + ธนาคาร/เลขที่รายการ/หัก ณ ที่จ่าย/ยอดที่รับจริง) — แสดงตอนดูใบเสร็จ
+ *  รับเงิน หรือดูใบกำกับภาษี/ใบแจ้งหนี้ที่บันทึกการชำระเงินแล้ว (status PAID) ด้วยตัวเอง (ดู showPaymentConfirmationBox) */
 const paymentMethodChecks: Array<{ value: string; label: string }> = [
   { value: 'เงินสด', label: 'เงินสด' },
   { value: 'เช็ค', label: 'เช็ค' },
   { value: 'โอนเงิน', label: 'โอนเงิน' },
   { value: 'บัตรเครดิต', label: 'บัตรเครดิต' },
 ]
-const receiptPaidDate = computed(() => (newDoc.value?.type === 'RECEIPT' ? newDoc.value.paidDate : undefined))
+const receiptPaidDate = computed(() => (newDoc.value?.type === 'RECEIPT' || newDoc.value?.type === 'TAX_INVOICE' ? newDoc.value.paidDate : undefined))
+/** ใบกำกับภาษี/ใบแจ้งหนี้ที่ถูกบันทึกการชำระเงินแล้ว (status PAID) ต้องแสดงกล่องยืนยันการชำระเงินของตัวเองด้วย ไม่ใช่แสดง
+ *  เฉพาะตอนดูใบเสร็จที่ออกจากมันเท่านั้น — ข้อมูลเก็บอยู่ใน SalesDocument ของใบแจ้งหนี้เองอยู่แล้ว (recordReceiptPayment
+ *  cascade ไว้ให้ตอนกด "เก็บเงิน" ที่ใบเสร็จ) แค่ไม่เคย render ก่อนหน้านี้ */
+const showPaymentConfirmationBox = computed(() => docMode.value === 'receipt' || (newDoc.value?.type === 'TAX_INVOICE' && newDoc.value.status === 'PAID'))
 
 /** ใบแจ้งหนี้ต้นทางของใบเสร็จนี้ (ถ้ามี) — ใบเสร็จที่สร้างจากเอกสารต้นทาง (createReceiptFromSourceDocs) ไม่เคยมีวิธีชำระ/
- *  ธนาคาร/เลขที่รายการเป็นของตัวเองเลย ข้อมูลเหล่านี้ถูกบันทึกไว้ที่ใบแจ้งหนี้ต้นทางตอนกด "บันทึกการชำระเงิน" (recordTaxInvoicePayment)
+ *  ธนาคาร/เลขที่รายการเป็นของตัวเองเลย (ใบแจ้งหนี้ไม่มีปุ่ม "บันทึกการชำระเงิน" ของตัวเองแล้ว — ย้ายไปที่ใบเสร็จทั้งหมด
+ *  ดู recordReceiptPayment) กรณีนี้เกิดได้เฉพาะใบเสร็จเก่าก่อนหน้าการย้ายนี้ที่ข้อมูลยังติดอยู่ที่ใบแจ้งหนี้ต้นทาง
  *  ใบเสร็จจึงต้องดึงมาแสดงแทน (ดูคอมเมนต์ paymentMethodChecks ด้านบน) */
 const sourceTaxInvoiceForReceipt = computed(() => {
   if (!newDoc.value || newDoc.value.type !== 'RECEIPT') return null

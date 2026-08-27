@@ -153,7 +153,12 @@
                 <th class="text-left px-3 py-2 font-semibold w-20">หน่วย</th>
                 <th class="text-right px-3 py-2 font-semibold w-24">ราคาต่อหน่วย</th>
                 <th class="text-right px-3 py-2 font-semibold w-24">ส่วนลด</th>
-                <th class="text-right px-3 py-2 font-semibold w-20">ภาษี (%)</th>
+                <th class="text-right px-3 py-2 font-semibold w-20">
+                  <div class="flex items-center justify-end gap-1.5">
+                    <input type="checkbox" :checked="allRowsTaxed" @change="toggleAllTax" class="w-4 h-4" />
+                    ภาษี (%)
+                  </div>
+                </th>
                 <th class="text-left px-3 py-2 font-semibold w-24">หัก ณ ที่จ่าย</th>
                 <th class="text-right px-3 py-2 font-semibold w-28">ราคารวม</th>
                 <th class="w-8"></th>
@@ -186,7 +191,7 @@
                   <input v-else v-model.number="row.discountAmount" type="number" min="0" class="input-field w-full text-right" />
                 </td>
                 <td class="px-3 py-2">
-                  <input v-model.number="row.vatRate" type="number" min="0" max="100" class="input-field w-full text-right" />
+                  <TaxRateCell v-model="row.vatRate" />
                 </td>
                 <td class="px-3 py-2">
                   <select v-model.number="row.whtRate" class="input-field w-full">
@@ -321,6 +326,7 @@ import { useUserStore } from '@/stores/users'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
+import TaxRateCell from '@/components/shared/TaxRateCell.vue'
 import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
 
 const route = useRoute()
@@ -418,7 +424,7 @@ type Row = {
   discountMode: 'percent' | 'fixed'
   discountPercent: number
   discountAmount: number
-  vatRate: number
+  vatRate?: number
   whtRate: number
 }
 
@@ -444,6 +450,15 @@ const addRow = () => {
 
 if (!editingDoc) addRow()
 
+const allRowsTaxed = computed(() => rows.value.length > 0 && rows.value.every((r) => !!r.vatRate))
+const toggleAllTax = (event: Event) => {
+  const checked = (event.target as HTMLInputElement).checked
+  const rate = documentSettingsStore.settings.vatRate || 7
+  rows.value.forEach((r) => {
+    r.vatRate = checked ? rate : undefined
+  })
+}
+
 const onProductSelected = (idx: number, productId: string) => {
   const row = rows.value[idx]
   if (!productId) {
@@ -467,7 +482,7 @@ const subtotal = computed(() => rows.value.reduce((sum, r) => sum + r.qty * r.un
 const discountTotal = computed(() => rows.value.reduce((sum, r) => sum + computeRowDiscountBaht(r), 0))
 const afterDiscount = computed(() => subtotal.value - discountTotal.value)
 const exemptAmount = computed(() => rows.value.filter((r) => !r.vatRate).reduce((sum, r) => sum + rowAmount(r), 0))
-const taxableAmount = computed(() => rows.value.filter((r) => r.vatRate > 0).reduce((sum, r) => sum + rowAmount(r), 0))
+const taxableAmount = computed(() => rows.value.filter((r) => (r.vatRate || 0) > 0).reduce((sum, r) => sum + rowAmount(r), 0))
 const vatTotal = computed(() => rows.value.reduce((sum, r) => sum + rowVat(r), 0))
 const grandTotal = computed(() => afterDiscount.value + vatTotal.value)
 const whtComputed = computed(() => rows.value.reduce((sum, r) => sum + rowWht(r), 0))

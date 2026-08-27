@@ -12,10 +12,18 @@
             สร้างใหม่
             <span class="material-symbols-rounded text-base">expand_more</span>
           </button>
-          <div v-if="createMenuOpen" v-click-outside="() => (createMenuOpen = false)" class="absolute right-0 top-full mt-1 w-52 bg-surface border border-border rounded-lg shadow-lg py-1 z-20">
+          <div v-if="createMenuOpen" v-click-outside="() => (createMenuOpen = false)" class="absolute right-0 top-full mt-1 w-64 bg-surface border border-border rounded-lg shadow-lg py-1 z-20">
             <button @click="createMenuOpen = false; router.push('/receipts/new-from-bookings')" class="menu-item">
               <span class="material-symbols-rounded text-base">call_merge</span>
               ใบเสร็จรับเงิน (จากงานขนส่ง)
+            </button>
+            <button @click="createMenuOpen = false; router.push('/receipts/select')" class="menu-item">
+              <span class="material-symbols-rounded text-base">receipt_long</span>
+              จากใบแจ้งหนี้/ใบกำกับภาษี
+            </button>
+            <button @click="createMenuOpen = false; router.push('/receipts/select?source=billing')" class="menu-item">
+              <span class="material-symbols-rounded text-base">request_quote</span>
+              จากใบวางบิลโดยตรง
             </button>
             <button @click="createMenuOpen = false; router.push('/receipts/new-manual')" class="menu-item">
               <span class="material-symbols-rounded text-base">payments</span>
@@ -30,8 +38,8 @@
       <div class="flex items-center justify-between flex-wrap gap-3">
         <select v-model="statusFilter" class="input-field w-44">
           <option value="all">แสดงทั้งหมด</option>
-          <option value="DRAFT">รอดำเนินการ</option>
-          <option value="PAID">เก็บเงินแล้ว</option>
+          <option value="DRAFT">รอเก็บเงิน</option>
+          <option value="PAID">เก็บเงิน</option>
         </select>
         <div class="relative w-full max-w-xs">
           <span class="material-symbols-rounded text-base text-muted absolute left-3 top-1/2 -translate-y-1/2">search</span>
@@ -59,6 +67,9 @@
                 <div class="flex items-center gap-2 font-bold text-primary">
                   <span class="w-2 h-2 rounded-full flex-shrink-0" :class="statusDotClass(doc.status)"></span>
                   {{ doc.number }}
+                  <button @click="editDocumentNumber(doc)" class="text-muted hover:text-primary" title="แก้ไขเลขที่เอกสาร">
+                    <span class="material-symbols-rounded text-sm">edit_note</span>
+                  </button>
                 </div>
               </td>
               <td class="px-3 py-3 font-semibold text-text">{{ doc.customer }}</td>
@@ -138,6 +149,14 @@
               <option value="เช็ค">เช็ค</option>
             </select>
           </div>
+          <div v-if="paymentMethod === 'โอนเงิน' || paymentMethod === 'เช็ค'">
+            <label class="field-label">ธนาคาร</label>
+            <input v-model="paymentBankName" class="input-field w-full" />
+          </div>
+          <div v-if="paymentMethod === 'โอนเงิน' || paymentMethod === 'เช็ค'">
+            <label class="field-label">{{ paymentMethod === 'เช็ค' ? 'เลขที่เช็ค' : 'เลขที่รายการ' }}</label>
+            <input v-model="paymentReference" class="input-field w-full" />
+          </div>
           <div>
             <label class="field-label">หมายเหตุ</label>
             <textarea v-model="paymentNote" rows="2" class="input-field w-full" />
@@ -179,8 +198,8 @@ const vClickOutside = {
 }
 
 const statusLabel: Partial<Record<SalesDocumentStatus, string>> = {
-  DRAFT: 'รอดำเนินการ',
-  PAID: 'เก็บเงินแล้ว',
+  DRAFT: 'รอเก็บเงิน',
+  PAID: 'เก็บเงิน',
 }
 
 const statusFilterLabel = computed(() => (statusFilter.value === 'all' ? 'แสดงทั้งหมด' : statusLabel[statusFilter.value] || 'แสดงทั้งหมด'))
@@ -257,6 +276,14 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
 
 const statusDotClass = (status: SalesDocumentStatus) => ({ DRAFT: 'bg-amber-500', PAID: 'bg-green-500' })[status as 'DRAFT' | 'PAID'] || 'bg-gray-400'
 
+/** item 2.1/3: แก้ไขเลขที่เอกสารได้ทุกสถานะ พร้อมกันเลขซ้ำ (ดู changeDocumentNumber ใน stores/salesDocuments.ts) */
+const editDocumentNumber = (doc: SalesDocument) => {
+  const input = prompt('เลขที่เอกสารใหม่:', doc.number)
+  if (input === null) return
+  const result = salesDocumentsStore.changeDocumentNumber(doc.id, input)
+  if (!result.ok && result.message) alert(result.message)
+}
+
 /** ใบเสร็จที่มาจากใบแจ้งหนี้ (มี sourceDocumentIds) แก้ไขผ่านฟอร์มอ้างอิงใบแจ้งหนี้ (ReceiptCreateView.vue) ส่วนใบเสร็จกรอกเอง แก้ไขผ่านฟอร์มรายการสินค้าเดิม (ReceiptFormView.vue) — ห้ามสลับกันเพราะโครงสร้างรายการต่างกัน */
 const editRouteFor = (doc: SalesDocument) => (doc.sourceDocumentIds?.length ? `/receipts/create/${doc.id}/edit` : `/receipts/new-manual/${doc.id}/edit`)
 
@@ -265,6 +292,8 @@ const paymentDate = ref(new Date().toISOString().slice(0, 10))
 const whtEnabled = ref(false)
 const whtAmount = ref(0)
 const paymentMethod = ref('เงินสด')
+const paymentBankName = ref('')
+const paymentReference = ref('')
 const paymentNote = ref('')
 
 const openPaymentModal = (doc: SalesDocument) => {
@@ -273,6 +302,8 @@ const openPaymentModal = (doc: SalesDocument) => {
   whtEnabled.value = false
   whtAmount.value = 0
   paymentMethod.value = 'เงินสด'
+  paymentBankName.value = ''
+  paymentReference.value = ''
   paymentNote.value = ''
 }
 
@@ -282,6 +313,8 @@ const confirmPayment = () => {
     paidDate: new Date(paymentDate.value),
     whtAmount: whtEnabled.value ? whtAmount.value : undefined,
     paymentMethod: paymentMethod.value,
+    paymentBankName: paymentMethod.value !== 'เงินสด' ? paymentBankName.value || undefined : undefined,
+    paymentReference: paymentMethod.value !== 'เงินสด' ? paymentReference.value || undefined : undefined,
     note: paymentNote.value || undefined,
   })
   paymentDoc.value = null

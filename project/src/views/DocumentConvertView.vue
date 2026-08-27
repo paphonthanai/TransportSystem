@@ -31,9 +31,19 @@
           </div>
         </div>
         <div class="space-y-3">
-          <div class="text-right">
-            <div class="text-xs text-muted">จำนวนเงินรวมทั้งสิ้น</div>
-            <div class="text-2xl font-bold text-primary">{{ formatBaht(grandTotal) }}</div>
+          <div class="bg-surface-2 rounded-xl p-3 space-y-1 text-sm text-right">
+            <div class="flex justify-between">
+              <span class="text-muted">ยอดก่อนภาษี</span>
+              <span class="text-text">{{ formatBaht(totals.amount) }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted">ภาษีมูลค่าเพิ่ม</span>
+              <span class="text-text">{{ formatBaht(totals.vatAmount) }}</span>
+            </div>
+            <div class="flex justify-between font-bold border-t border-border pt-1">
+              <span class="text-text">จำนวนเงินรวมทั้งสิ้น</span>
+              <span class="text-primary">{{ formatBaht(grandTotal) }}</span>
+            </div>
           </div>
           <div v-if="targetType === 'invoice'">
             <label class="field-label">เครดิต (วัน)</label>
@@ -54,6 +64,12 @@
                 <th class="text-left px-3 py-2 font-semibold w-20">หน่วย</th>
                 <th class="text-right px-3 py-2 font-semibold w-24">ราคาต่อหน่วย</th>
                 <th class="text-right px-3 py-2 font-semibold w-24">ส่วนลด</th>
+                <th class="text-right px-3 py-2 font-semibold w-20">
+                  <div class="flex items-center justify-end gap-1.5">
+                    <input type="checkbox" :checked="allRowsTaxed" @change="toggleAllTax" class="w-4 h-4" />
+                    ภาษี (%)
+                  </div>
+                </th>
                 <th class="text-right px-3 py-2 font-semibold w-28">ราคารวม</th>
                 <th class="w-8"></th>
               </tr>
@@ -80,6 +96,9 @@
                   <input v-if="row.discountMode !== 'fixed'" v-model.number="row.discountPercent" type="number" min="0" max="100" class="input-field w-full text-right" />
                   <input v-else v-model.number="row.discountAmount" type="number" min="0" class="input-field w-full text-right" />
                 </td>
+                <td class="px-3 py-2">
+                  <TaxRateCell v-model="row.vatRate" />
+                </td>
                 <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(rowAmount(row)) }}</td>
                 <td class="px-3 py-2 text-right">
                   <button @click="rows.splice(idx, 1)" class="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-red-50 hover:text-red-600">
@@ -88,7 +107,7 @@
                 </td>
               </tr>
               <tr v-if="rows.length === 0">
-                <td colspan="8" class="px-3 py-6 text-center text-muted">ยังไม่มีรายการ</td>
+                <td colspan="9" class="px-3 py-6 text-center text-muted">ยังไม่มีรายการ</td>
               </tr>
             </tbody>
           </table>
@@ -107,7 +126,8 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentType, type QuotationConvertOverrides } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
-import { computeRowAmount } from '@/utils/documentTotals'
+import TaxRateCell from '@/components/shared/TaxRateCell.vue'
+import { computeRowAmount, computeDocumentTotals } from '@/utils/documentTotals'
 
 type SourceType = 'quotation' | 'billing'
 type TargetType = 'billing' | 'invoice' | 'cash_sale' | 'purchase_order'
@@ -147,6 +167,7 @@ type Row = {
   discountMode: 'percent' | 'fixed'
   discountPercent: number
   discountAmount: number
+  vatRate?: number
 }
 
 const discountModeOptions = [
@@ -164,16 +185,27 @@ const rows = ref<Row[]>(
         discountMode: i.discountMode || 'percent',
         discountPercent: i.discountPercent || 0,
         discountAmount: i.discountAmount || 0,
+        vatRate: i.vatRate,
       }))
     : []
 )
 
 const addRow = () => {
-  rows.value.push({ description: '', qty: 1, unit: '', unitPrice: 0, discountMode: 'percent', discountPercent: 0, discountAmount: 0 })
+  rows.value.push({ description: '', qty: 1, unit: '', unitPrice: 0, discountMode: 'percent', discountPercent: 0, discountAmount: 0, vatRate: documentSettingsStore.settings.vatRate })
+}
+
+const allRowsTaxed = computed(() => rows.value.length > 0 && rows.value.every((r) => !!r.vatRate))
+const toggleAllTax = (event: Event) => {
+  const checked = (event.target as HTMLInputElement).checked
+  const rate = documentSettingsStore.settings.vatRate || 7
+  rows.value.forEach((r) => {
+    r.vatRate = checked ? rate : undefined
+  })
 }
 
 const rowAmount = (row: Row) => computeRowAmount(row)
-const grandTotal = computed(() => rows.value.reduce((sum, r) => sum + rowAmount(r), 0))
+const totals = computed(() => computeDocumentTotals(rows.value))
+const grandTotal = computed(() => totals.value.amount + totals.value.vatAmount)
 
 const canSubmit = computed(() => customer.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0))
 
@@ -194,6 +226,7 @@ const submit = () => {
       discountMode: r.discountMode,
       discountPercent: r.discountPercent,
       discountAmount: r.discountAmount,
+      vatRate: r.vatRate,
       amount: rowAmount(r),
     })),
   }

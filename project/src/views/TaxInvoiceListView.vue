@@ -60,6 +60,9 @@
                 <div class="flex items-center gap-2 font-bold text-primary">
                   <span class="w-2 h-2 rounded-full flex-shrink-0" :class="statusDotClass(doc.status)"></span>
                   {{ doc.number }}
+                  <button @click="editDocumentNumber(doc)" class="text-muted hover:text-primary" title="แก้ไขเลขที่เอกสาร">
+                    <span class="material-symbols-rounded text-sm">edit_note</span>
+                  </button>
                 </div>
               </td>
               <td class="px-3 py-3 font-semibold text-text">{{ doc.customer }}</td>
@@ -121,53 +124,6 @@
       @close="shareTarget = null"
     />
 
-    <!-- บันทึกการชำระเงิน -->
-    <Teleport to="body">
-      <div v-if="paymentDoc" class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" @click.self="paymentDoc = null">
-        <div class="bg-surface rounded-xl shadow-xl w-full max-w-md p-5 space-y-4">
-          <h3 class="text-lg font-bold text-text">บันทึกการชำระเงิน</h3>
-          <div class="text-sm text-muted">
-            เลขที่เอกสาร: <span class="font-mono font-semibold text-text">{{ paymentDoc.number }}</span> ({{ paymentDoc.customer }})
-          </div>
-          <div>
-            <label class="field-label">วันที่รับชำระ</label>
-            <input type="date" v-model="paymentDate" class="input-field w-full" />
-          </div>
-          <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
-            <input type="checkbox" v-model="whtEnabled" class="w-4 h-4" />
-            หัก ณ ที่จ่าย
-          </label>
-          <div v-if="whtEnabled">
-            <label class="field-label">จำนวนเงินหัก ณ ที่จ่าย</label>
-            <input v-model.number="whtAmount" type="number" min="0" class="input-field w-full" />
-          </div>
-          <div>
-            <label class="field-label">วิธีการรับชำระ</label>
-            <select v-model="paymentMethod" class="input-field w-full">
-              <option value="เงินสด">เงินสด</option>
-              <option value="โอนเงิน">โอนเงิน</option>
-              <option value="เช็ค">เช็ค</option>
-            </select>
-          </div>
-          <div v-if="paymentMethod === 'โอนเงิน' || paymentMethod === 'เช็ค'">
-            <label class="field-label">ธนาคาร</label>
-            <input v-model="paymentBankName" class="input-field w-full" />
-          </div>
-          <div v-if="paymentMethod === 'โอนเงิน' || paymentMethod === 'เช็ค'">
-            <label class="field-label">{{ paymentMethod === 'เช็ค' ? 'เลขที่เช็ค' : 'เลขที่รายการ' }}</label>
-            <input v-model="paymentReference" class="input-field w-full" />
-          </div>
-          <div>
-            <label class="field-label">หมายเหตุ</label>
-            <textarea v-model="paymentNote" rows="2" class="input-field w-full" />
-          </div>
-          <div class="flex justify-end gap-2 pt-2">
-            <button @click="paymentDoc = null" class="btn-secondary">ยกเลิก</button>
-            <button @click="confirmPayment" class="btn-primary">บันทึก</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -264,35 +220,31 @@ const totalAmount = computed(() => filteredDocs.value.reduce((sum, d) => sum + d
 
 type ActionOption = { value: string; label: string }
 
-/** ตัวเลือก "สร้างใบเสร็จรับเงิน" ใช้ได้ตั้งแต่สถานะร่าง ไม่ต้องรอส่ง/รอชำระเงินก่อน (ใบเสร็จเป็นเอกสารพิมพ์ยืนยันการรับเงิน
- *  ที่แยกอิสระจากสถานะใบแจ้งหนี้ ดู isSourceDocEligible ใน stores/salesDocuments.ts) — ซ่อนเฉพาะกรณีมีใบเสร็จรับเงินอ้างอิง
- *  ใบแจ้งหนี้นี้ไปแล้ว (กันสร้างซ้ำ) ไม่ว่าใบแจ้งหนี้จะอยู่สถานะไหนก็ตาม ทำให้ตัวเลือกนี้ไม่หายไปกลางทางตอนเปลี่ยนสถานะ */
-const createReceiptOption = (doc: SalesDocument): ActionOption[] =>
-  salesDocumentsStore.sourceDocsClaimedByOtherReceipts([doc.id]).length === 0 ? [{ value: 'CREATE_RECEIPT', label: 'สร้างใบเสร็จรับเงิน' }] : []
-
+/** item 1.5: เอาตัวเลือก "สร้างใบเสร็จรับเงิน"/"บันทึกการชำระเงิน" ออกจากใบแจ้งหนี้ทั้งคู่ — ใบแจ้งหนี้ไม่รับผิดชอบเรื่องรับเงินอีก
+ * ต่อไป (ย้ายไปเป็นความรับผิดชอบของใบเสร็จรับเงินทั้งหมด ดู recordReceiptPayment ที่ไล่ปิดสถานะ/ข้อมูลการชำระเงินของใบแจ้งหนี้
+ * ต้นทางให้อัตโนมัติเมื่อกด "เก็บเงิน" ที่ใบเสร็จ) การสร้างใบเสร็จจากใบแจ้งหนี้ยังทำได้อยู่ แต่ย้ายไปเริ่มจากฝั่งใบเสร็จเอง
+ * (ปุ่ม "สร้างใหม่" ในหน้า ReceiptListView.vue → "จากใบแจ้งหนี้/ใบกำกับภาษี") แทนทางลัดจากแถวเอกสารในหน้านี้ —
+ * recordTaxInvoicePayment ยังอยู่ในสโตร์ครบ ไม่ได้ลบ เผื่อมีที่อื่นต้องใช้ในอนาคต แค่ไม่มี UI เรียกแล้ว */
 const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
   const s = doc.status
   if (s === 'DRAFT') {
-    return [
-      ...createReceiptOption(doc),
-      { value: 'DRAFT', label: statusLabel.DRAFT! },
-      { value: 'SEND', label: 'ส่งใบแจ้งหนี้' },
-      { value: 'COLLECT', label: 'บันทึกการชำระเงิน' },
-      { value: 'CANCEL', label: 'ยกเลิก' },
-    ]
+    return [{ value: 'DRAFT', label: statusLabel.DRAFT! }, { value: 'SEND', label: 'ส่งใบแจ้งหนี้' }, { value: 'CANCEL', label: 'ยกเลิก' }]
   }
   if (s === 'SENT') {
-    return [
-      ...createReceiptOption(doc),
-      { value: 'SENT', label: statusLabel.SENT! },
-      { value: 'COLLECT', label: 'บันทึกการชำระเงิน' },
-      { value: 'RESET', label: 'รีเซ็ต' },
-    ]
+    return [{ value: 'SENT', label: statusLabel.SENT! }, { value: 'RESET', label: 'รีเซ็ต' }, { value: 'DELETE', label: 'ลบ' }]
   }
   if (s === 'PAID') {
-    return [...createReceiptOption(doc), { value: 'PAID', label: statusLabel.PAID! }]
+    return [{ value: 'PAID', label: statusLabel.PAID! }, { value: 'DELETE', label: 'ลบ' }]
   }
   return [{ value: s, label: s }]
+}
+
+/** item 2.1/3: แก้ไขเลขที่เอกสารได้ทุกสถานะ พร้อมกันเลขซ้ำ (ดู changeDocumentNumber ใน stores/salesDocuments.ts) */
+const editDocumentNumber = (doc: SalesDocument) => {
+  const input = prompt('เลขที่เอกสารใหม่:', doc.number)
+  if (input === null) return
+  const result = salesDocumentsStore.changeDocumentNumber(doc.id, input)
+  if (!result.ok && result.message) alert(result.message)
 }
 
 const statusDotClass = (status: SalesDocumentStatus) =>
@@ -300,54 +252,12 @@ const statusDotClass = (status: SalesDocumentStatus) =>
 
 const shareTarget = ref<SalesDocument | null>(null)
 
-/** บันทึกการชำระเงิน — กลไกเดียวที่เปลี่ยนใบแจ้งหนี้เป็น "ชำระแล้ว" (แยกจากการสร้างใบเสร็จรับเงินโดยเจตนา ดู recordTaxInvoicePayment) */
-const paymentDoc = ref<SalesDocument | null>(null)
-const paymentDate = ref(new Date().toISOString().slice(0, 10))
-const whtEnabled = ref(false)
-const whtAmount = ref(0)
-const paymentMethod = ref('เงินสด')
-const paymentBankName = ref('')
-const paymentReference = ref('')
-const paymentNote = ref('')
-
-const openPaymentModal = (doc: SalesDocument) => {
-  paymentDoc.value = doc
-  paymentDate.value = new Date().toISOString().slice(0, 10)
-  whtEnabled.value = false
-  whtAmount.value = 0
-  paymentMethod.value = 'เงินสด'
-  paymentBankName.value = ''
-  paymentReference.value = ''
-  paymentNote.value = ''
-}
-
-const confirmPayment = () => {
-  if (!paymentDoc.value) return
-  salesDocumentsStore.recordTaxInvoicePayment(paymentDoc.value.id, {
-    paidDate: new Date(paymentDate.value),
-    whtAmount: whtEnabled.value ? whtAmount.value : undefined,
-    paymentMethod: paymentMethod.value,
-    paymentBankName: paymentMethod.value !== 'เงินสด' ? paymentBankName.value || undefined : undefined,
-    paymentReference: paymentMethod.value !== 'เงินสด' ? paymentReference.value || undefined : undefined,
-    note: paymentNote.value || undefined,
-  })
-  paymentDoc.value = null
-}
-
 const onStatusSelect = (doc: SalesDocument, action: string) => {
   switch (action) {
     case 'SEND':
       // ปุ่ม "ส่งใบแจ้งหนี้" เปิด Share Document เดิม (ไม่สร้าง logic ส่งใหม่) แล้วค่อยปรับสถานะเป็นส่งแล้วเหมือนเดิม
       salesDocumentsStore.sendInvoice(doc.id)
       shareTarget.value = doc
-      break
-    case 'COLLECT':
-      openPaymentModal(doc)
-      break
-    case 'CREATE_RECEIPT':
-      // Navigate เข้าหน้า Create ให้ผู้ใช้ตรวจ/แก้ข้อมูลก่อน — ยังไม่สร้างเอกสารจริงหรือ claim booking ตรงนี้
-      // (createReceiptFromSourceDocs ถูกเรียกตอนกด "บันทึกเอกสาร" ในหน้า ReceiptCreateView.vue เท่านั้น)
-      router.push(`/receipts/create?ids=${doc.id}`)
       break
     case 'CANCEL': {
       if (!confirm(`ยืนยันยกเลิกใบแจ้งหนี้ ${doc.number}? งานขนส่ง/ใบวางบิลที่ผูกไว้จะกลับไปสถานะก่อนหน้า`)) break
@@ -358,6 +268,12 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
     case 'RESET': {
       if (!confirm(`ยืนยัน Reset ใบแจ้งหนี้ ${doc.number} กลับเป็นร่าง?`)) break
       const result = salesDocumentsStore.resetTaxInvoice(doc.id)
+      if (!result.ok && result.message) alert(result.message)
+      break
+    }
+    case 'DELETE': {
+      if (!confirm(`ยืนยันลบใบแจ้งหนี้ ${doc.number}? งานขนส่ง/ใบวางบิลที่ผูกไว้จะกลับไปสถานะก่อนหน้า`)) break
+      const result = salesDocumentsStore.deleteTaxInvoice(doc.id)
       if (!result.ok && result.message) alert(result.message)
       break
     }

@@ -59,6 +59,9 @@
                 <div class="flex items-center gap-2 font-bold text-primary">
                   <span class="w-2 h-2 rounded-full flex-shrink-0" :class="statusDotClass(doc.status)"></span>
                   {{ doc.number }}
+                  <button @click="editDocumentNumber(doc)" class="text-muted hover:text-primary" title="แก้ไขเลขที่เอกสาร">
+                    <span class="material-symbols-rounded text-sm">edit_note</span>
+                  </button>
                 </div>
               </td>
               <td class="px-3 py-3 font-semibold text-text">{{ doc.customer }}</td>
@@ -247,9 +250,18 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
     return [
       { value: 'BILLED', label: statusLabel.BILLED! },
       { value: 'RESET', label: 'รีเซ็ต' },
+      { value: 'DELETE', label: 'ลบ' },
     ]
   }
   return [{ value: s, label: s }]
+}
+
+/** item 2.1/3: แก้ไขเลขที่เอกสารได้ทุกสถานะ พร้อมกันเลขซ้ำ (ดู changeDocumentNumber ใน stores/salesDocuments.ts) */
+const editDocumentNumber = (doc: SalesDocument) => {
+  const input = prompt('เลขที่เอกสารใหม่:', doc.number)
+  if (input === null) return
+  const result = salesDocumentsStore.changeDocumentNumber(doc.id, input)
+  if (!result.ok && result.message) alert(result.message)
 }
 
 const statusDotClass = (status: SalesDocumentStatus) =>
@@ -337,6 +349,12 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
     case 'RESET': {
       if (!confirm(`ยืนยัน Reset ใบวางบิล ${doc.number} กลับเป็น "รอวางบิล"? (ใบแจ้งหนี้ที่ยังไม่ส่งซึ่งออกจากใบวางบิลนี้จะถูกลบไปด้วย)`)) break
       const result = salesDocumentsStore.resetBillingNote(doc.id)
+      if (!result.ok && result.message) alert(result.message)
+      break
+    }
+    case 'DELETE': {
+      if (!confirm(`ยืนยันลบใบวางบิล ${doc.number}? งานขนส่งที่ผูกไว้จะกลับไปรอวางบิลใหม่ (ไม่กระทบเอกสารอื่นที่ไม่เกี่ยวข้อง)`)) break
+      const result = salesDocumentsStore.deleteBillingNote(doc.id)
       if (!result.ok && result.message) alert(result.message)
       break
     }

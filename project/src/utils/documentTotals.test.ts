@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeRowDiscountBaht, computeRowAmount, computeRowVat, computeRowWht } from './documentTotals'
+import { computeRowDiscountBaht, computeRowAmount, computeRowVat, computeRowWht, computeDocumentTotals } from './documentTotals'
 import { bahtText } from './companyInfo'
 
 describe('computeRowDiscountBaht', () => {
@@ -46,6 +46,41 @@ describe('computeRowWht', () => {
   it('computes WHT on the post-discount amount', () => {
     const row = { qty: 1, unitPrice: 1000, whtRate: 3 }
     expect(computeRowWht(row)).toBeCloseTo(30)
+  })
+})
+
+describe('computeDocumentTotals', () => {
+  it('sums VAT per-row (not a single rate over the document total) when rows mix taxed and exempt items', () => {
+    const rows = [
+      { qty: 1, unitPrice: 1000, vatRate: 7 }, // taxable, vat = 70
+      { qty: 1, unitPrice: 500 }, // exempt (no vatRate), vat = 0
+    ]
+    const totals = computeDocumentTotals(rows)
+    expect(totals.amount).toBe(1500)
+    expect(totals.vatAmount).toBe(70)
+  })
+
+  it('reports a uniform vatRate only when every taxed row shares the same rate', () => {
+    const uniform = computeDocumentTotals([{ qty: 1, unitPrice: 100, vatRate: 7 }, { qty: 1, unitPrice: 100, vatRate: 7 }])
+    expect(uniform.vatRate).toBe(7)
+
+    const mixed = computeDocumentTotals([{ qty: 1, unitPrice: 100, vatRate: 7 }, { qty: 1, unitPrice: 100, vatRate: 3 }])
+    expect(mixed.vatRate).toBeUndefined()
+  })
+
+  it('sums discountTotal and whtAmount across all rows', () => {
+    const rows = [
+      { qty: 2, unitPrice: 1000, discountMode: 'percent' as const, discountPercent: 10, whtRate: 3 },
+      { qty: 1, unitPrice: 500, whtRate: 1 },
+    ]
+    const totals = computeDocumentTotals(rows)
+    expect(totals.discountTotal).toBe(200) // 2000*10%
+    expect(totals.whtAmount).toBeCloseTo(1800 * 0.03 + 500 * 0.01)
+  })
+
+  it('empty rows: all totals are zero, vatRate undefined', () => {
+    const totals = computeDocumentTotals([])
+    expect(totals).toEqual({ amount: 0, discountTotal: 0, vatAmount: 0, vatRate: undefined, whtAmount: 0 })
   })
 })
 
