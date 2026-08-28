@@ -90,7 +90,7 @@
                   :class="bookingStatusClass[row.booking.status]"
                 >
                   <option :value="row.booking.status">{{ bookingStatusLabel[row.booking.status] }}</option>
-                  <option v-if="row.booking.status !== 'DELIVERED'" value="COMPLETE">✓ จบงาน (ออกใบวางบิล)</option>
+                  <option v-if="row.booking.status !== 'DELIVERED' && row.booking.items.length > 0" value="COMPLETE">✓ จบงาน (ออกใบวางบิล)</option>
                   <option v-if="row.booking.status === 'DELIVERED' && !hasActiveBillingDoc(row.booking)" value="CREATE_BILLING">🧾 ออกใบวางบิล</option>
                   <option v-if="row.booking.status !== 'WAITING_DISPATCH'" value="RESET">↺ Reset สถานะ</option>
                 </select>
