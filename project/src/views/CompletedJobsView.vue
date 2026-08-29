@@ -122,6 +122,17 @@
                     <button @click="router.push(`/job/${booking.id}`)" class="btn-sm" title="รายละเอียดงาน">
                       <span class="material-symbols-rounded text-base">visibility</span>
                     </button>
+                    <!-- งานที่ออฟฟิศจบเอง (ไม่ผ่านแอปคนขับ) ไม่มี podReviewStatus เลย — ถ้ายังไม่มี POD ของรายการไหนแนบอยู่
+                         ต้องมีทางแนบได้ตรงนี้เลย ไม่ต้องเดาว่าต้องไปกด "รายละเอียดงาน" ก่อนถึงจะเจอ (ดู confirmPodImage ใน stores/booking.ts) -->
+                    <button
+                      v-if="!booking.podReviewStatus && hasMissingPod(booking)"
+                      @click="router.push(`/job/${booking.id}`)"
+                      class="btn-sm !border-amber-200 !bg-amber-50 !text-amber-700"
+                      title="ยังไม่มี POD — กดเพื่อแนบ"
+                    >
+                      <span class="material-symbols-rounded text-base">add_a_photo</span>
+                      แนบ POD
+                    </button>
                     <button v-if="firstPodImage(booking)" @click="openPod(booking)" class="btn-sm" title="ดู POD">
                       <span class="material-symbols-rounded text-base">photo_camera</span>
                       POD
@@ -209,6 +220,9 @@ const hasActiveDateOrPicks = computed(
 const clearFilters = () => {
   filters.value = { fleet: undefined, search: filters.value.search, dateFrom: '', dateTo: '', customer: '', driverName: '', docClaim: '', site: '', district: '' }
 }
+
+/** งานที่ออฟฟิศจบเอง (podReviewStatus undefined) แต่ยังไม่มีรายการไหนแนบ POD เลยสักรูป — ให้แสดงปุ่มแนบ POD แทนขีด "-" */
+const hasMissingPod = (booking: Booking) => !firstPodImage(booking)
 
 const podPreviewImage = ref<string | null>(null)
 const openPod = (booking: Booking) => {

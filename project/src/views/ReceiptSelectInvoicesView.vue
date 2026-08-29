@@ -2,7 +2,7 @@
   <div class="space-y-4 pb-10">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div>
-        <h2 class="text-lg font-bold text-text">เลือกลูกค้าและเอกสาร</h2>
+        <h2 class="text-lg font-bold text-text">{{ isBilling ? 'เลือกใบวางบิล' : 'เลือกใบแจ้งหนี้/ใบกำกับภาษี' }}</h2>
         <div class="text-xs text-muted mt-0.5">{{ isBilling ? 'เลือกใบวางบิลที่ยังไม่ออกใบแจ้งหนี้ของลูกค้ารายเดียว หนึ่งใบหรือหลายใบมารวมกันได้' : 'เลือกใบแจ้งหนี้/ใบกำกับภาษีที่ยังไม่ชำระของลูกค้ารายเดียว หนึ่งใบหรือหลายใบมารวมกันได้' }}</div>
       </div>
       <div class="flex items-center gap-2">
@@ -32,19 +32,24 @@
                 <th class="text-left px-3 py-2 font-semibold">เลขที่เอกสาร</th>
                 <th class="text-left px-3 py-2 font-semibold">วันครบกำหนด</th>
                 <th class="text-right px-3 py-2 font-semibold">จำนวนเงิน</th>
+                <th class="text-left px-3 py-2 font-semibold">สถานะงาน</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="inv in eligibleDocs" :key="inv.id" class="border-t border-border">
+              <tr v-for="inv in eligibleDocs" :key="inv.id" class="border-t border-border" :class="{ 'opacity-50': !isConfirmed(inv) }">
                 <td class="px-3 py-2">
-                  <input type="checkbox" :checked="selectedIds.has(inv.id)" @change="toggle(inv.id)" class="w-4 h-4" />
+                  <input type="checkbox" :checked="selectedIds.has(inv.id)" :disabled="!isConfirmed(inv)" @change="toggle(inv.id)" class="w-4 h-4" />
                 </td>
                 <td class="px-3 py-2 font-mono text-text">{{ inv.number }}</td>
                 <td class="px-3 py-2 text-muted">{{ formatDate(inv.dueDate) }}</td>
                 <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(inv.amount) }}</td>
+                <td class="px-3 py-2">
+                  <span v-if="isConfirmed(inv)" class="badge-confirm badge-confirm-ok">ยืนยันแล้ว</span>
+                  <span v-else class="badge-confirm badge-confirm-pending" title="งานขนส่งที่ผูกกับเอกสารนี้ยังไม่ผ่านการตรวจสอบ POD จากออฟฟิศ">รอยืนยัน (POD)</span>
+                </td>
               </tr>
               <tr v-if="eligibleDocs.length === 0">
-                <td colspan="4" class="px-3 py-6 text-center text-muted">{{ isBilling ? 'ลูกค้ารายนี้ไม่มีใบวางบิลที่รอออกใบแจ้งหนี้' : 'ลูกค้ารายนี้ไม่มีใบแจ้งหนี้ที่รอชำระ' }}</td>
+                <td colspan="5" class="px-3 py-6 text-center text-muted">{{ isBilling ? 'ลูกค้ารายนี้ไม่มีใบวางบิลที่รอออกใบแจ้งหนี้' : 'ลูกค้ารายนี้ไม่มีใบแจ้งหนี้ที่รอชำระ' }}</td>
               </tr>
             </tbody>
           </table>
@@ -61,7 +66,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useSalesDocumentsStore } from '@/stores/salesDocuments'
+import { useSalesDocumentsStore, type SalesDocument } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 
 const route = useRoute()
@@ -96,6 +101,11 @@ const eligibleDocs = computed(() =>
     (d) => d.type === sourceDocType && d.customer === selectedCustomer.value && isEligible(d) && !claimedByOthers.value.has(d.id)
   )
 )
+
+/** สถานะ "คอนเฟิร์มแล้ว" แสดงผลเท่านั้น ผูกกับสถานะ Booking ที่เอกสารต้นทางอ้างอิง (ดู bookingsConfirmedFor ใน
+ *  stores/salesDocuments.ts) — เอกสารที่ยังไม่คอนเฟิร์มยังคงแสดงในลิสต์นี้ (ไม่ซ่อน) แต่ถูกปิดกั้นไม่ให้เลือก เพราะตัว
+ *  store เองจะปฏิเสธการสร้างใบเสร็จจากเอกสารนี้อยู่แล้ว (isSourceDocEligible) */
+const isConfirmed = (doc: SalesDocument) => salesDocumentsStore.bookingsConfirmedFor(doc)
 
 const toggle = (id: string) => {
   if (selectedIds.value.has(id)) selectedIds.value.delete(id)
@@ -141,5 +151,17 @@ const proceed = () => {
 
 .card-lg {
   @apply bg-surface border border-border rounded-xl shadow-default p-5;
+}
+
+.badge-confirm {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold;
+}
+
+.badge-confirm-ok {
+  @apply bg-green-100 text-green-700;
+}
+
+.badge-confirm-pending {
+  @apply bg-amber-100 text-amber-700;
 }
 </style>

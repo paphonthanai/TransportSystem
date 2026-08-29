@@ -6,31 +6,17 @@
         <!-- ปุ่ม Sync (ซิงก์เอกสารที่ขาดหาย/ซิงก์ข้อมูลก่อนหน้า/ซิงก์ความสัมพันธ์เอกสารต้นทาง) ซ่อนจาก UI ตาม requirement — ฟังก์ชันเบื้องหลัง
              (syncMissingSalesOrders/syncBillingReadiness/syncReceiptReferences) ยังอยู่ครบ ไม่ได้ลบ ไม่มี auto-trigger ที่ไหน
              เรียกเฉพาะตอนกดปุ่มเหล่านี้เท่านั้น (ตรวจแล้วก่อนซ่อน) -->
-        <div class="relative">
-          <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
-            <span class="material-symbols-rounded text-base">add</span>
-            สร้างใหม่
-            <span class="material-symbols-rounded text-base">expand_more</span>
-          </button>
-          <div v-if="createMenuOpen" v-click-outside="() => (createMenuOpen = false)" class="absolute right-0 top-full mt-1 w-64 bg-surface border border-border rounded-lg shadow-lg py-1 z-20">
-            <button @click="createMenuOpen = false; router.push('/receipts/new-from-bookings')" class="menu-item">
-              <span class="material-symbols-rounded text-base">call_merge</span>
-              ใบเสร็จรับเงิน (จากงานขนส่ง)
-            </button>
-            <button @click="createMenuOpen = false; router.push('/receipts/select')" class="menu-item">
-              <span class="material-symbols-rounded text-base">receipt_long</span>
-              จากใบแจ้งหนี้/ใบกำกับภาษี
-            </button>
-            <button @click="createMenuOpen = false; router.push('/receipts/select?source=billing')" class="menu-item">
-              <span class="material-symbols-rounded text-base">request_quote</span>
-              จากใบวางบิลโดยตรง
-            </button>
-            <button @click="createMenuOpen = false; router.push('/receipts/new-manual')" class="menu-item">
-              <span class="material-symbols-rounded text-base">payments</span>
-              รับเงินอื่นๆ
-            </button>
-          </div>
-        </div>
+        <!-- ยกเลิกการสร้างเอกสารแบบ Dropdown ตาม requirement — ไปหน้าเลือกประเภทแบบการ์ด (ReceiptTypeSelectView.vue) แทน
+             "จากใบแจ้งหนี้/ใบกำกับภาษี" และ "จากใบวางบิลโดยตรง" ยังเป็นปุ่มสถานะต่อแถวใน TaxInvoiceListView.vue/BillingListView.vue
+             อยู่ด้วย (ทางลัดตรงจากเอกสารต้นทาง) แต่เพิ่มปุ่มลัดตรงนี้ด้วยเผื่อไม่ได้เริ่มจากฝั่งเอกสารต้นทาง -->
+        <button @click="router.push('/receipts/select')" class="btn-secondary">
+          <span class="material-symbols-rounded text-base">receipt_long</span>
+          จากใบแจ้งหนี้/ใบกำกับภาษี
+        </button>
+        <button @click="router.push('/receipts/new')" class="btn-primary">
+          <span class="material-symbols-rounded text-base">add</span>
+          สร้างใหม่
+        </button>
       </div>
     </div>
 
@@ -184,18 +170,6 @@ const documentSettingsStore = useDocumentSettingsStore()
 
 const statusFilter = ref<'all' | SalesDocumentStatus>('all')
 const search = ref('')
-const createMenuOpen = ref(false)
-const vClickOutside = {
-  mounted(el: HTMLElement & { _clickOutside?: (e: MouseEvent) => void }, binding: { value: () => void }) {
-    el._clickOutside = (e: MouseEvent) => {
-      if (!el.contains(e.target as Node)) binding.value()
-    }
-    document.addEventListener('click', el._clickOutside, true)
-  },
-  unmounted(el: HTMLElement & { _clickOutside?: (e: MouseEvent) => void }) {
-    if (el._clickOutside) document.removeEventListener('click', el._clickOutside, true)
-  },
-}
 
 const statusLabel: Partial<Record<SalesDocumentStatus, string>> = {
   DRAFT: 'รอเก็บเงิน',

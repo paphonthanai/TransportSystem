@@ -3,18 +3,11 @@
     <h2 class="text-lg font-bold text-text">ประเภทใบเสร็จรับเงิน</h2>
 
     <div class="space-y-3">
-      <button @click="router.push('/receipts/select')" class="option-card">
-        <span class="material-symbols-rounded text-2xl text-primary">receipt_long</span>
+      <button @click="router.push('/receipts/select-bookings')" class="option-card">
+        <span class="material-symbols-rounded text-2xl text-primary">local_shipping</span>
         <span class="flex-1 text-left">
-          <span class="block font-semibold text-text">รับเงินจากใบกำกับภาษี (ใบเสร็จรวมได้)</span>
-          <span class="block text-xs text-muted mt-0.5">เลือกใบแจ้งหนี้/ใบกำกับภาษีของลูกค้ารายเดียว ใบเดียวหรือหลายใบมารวมกันได้</span>
-        </span>
-      </button>
-      <button @click="router.push('/receipts/select?source=billing')" class="option-card">
-        <span class="material-symbols-rounded text-2xl text-primary">request_quote</span>
-        <span class="flex-1 text-left">
-          <span class="block font-semibold text-text">รับเงินจากใบวางบิลโดยตรง (ข้ามใบแจ้งหนี้)</span>
-          <span class="block text-xs text-muted mt-0.5">ลูกค้าที่ไม่ต้องออกใบกำกับภาษี — เก็บเงินจากใบวางบิลได้เลยโดยไม่ต้องแปลงเป็นใบแจ้งหนี้ก่อน</span>
+          <span class="block font-semibold text-text">จากงานขนส่ง</span>
+          <span class="block text-xs text-muted mt-0.5">เลือกงานขนส่งที่ส่งมอบแล้วของลูกค้ารายเดียว ออกใบเสร็จตรงจากงานขนส่งได้เลย ไม่ต้องผ่านใบวางบิล/ใบแจ้งหนี้ก่อน</span>
         </span>
       </button>
       <button @click="router.push('/receipts/new-manual')" class="option-card">

@@ -307,7 +307,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentItem } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
@@ -317,17 +317,20 @@ import { useContactStore } from '@/stores/contacts'
 import { useInventoryStore } from '@/stores/inventory'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/users'
+import { useBookingStore } from '@/stores/booking'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
 import ContactPickerField from '@/components/shared/ContactPickerField.vue'
 import TaxRateCell from '@/components/shared/TaxRateCell.vue'
 import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
+import type { Booking } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const bookingStore = useBookingStore()
 const numberRegistry = useDocumentNumberRegistryStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
@@ -427,6 +430,10 @@ type Row = {
   plate?: string
   referenceDoc?: string
   deliveryNo?: string
+  /** id ของงานขนส่งต้นทาง ถ้าแถวนี้ถูกดึงมาจากปุ่ม "ดึงข้อมูลจากงานขนส่ง" — ใช้แค่ฝั่ง UI เพื่อรู้ว่าจะต้อง claim
+   *  งานขนส่งไหนตอนบันทึก (ดู sourceBookingIds) ไม่ส่งเข้า store เป็นส่วนหนึ่งของ item ลบแถวออกจากตาราง = ไม่ claim
+   *  งานนั้นแล้วเช่นกัน */
+  bookingId?: string
 }
 
 const whtOptions = [
@@ -449,7 +456,64 @@ const addRow = () => {
   rows.value.push({ description: '', qty: 1, unit: '', unitPrice: 0, discountMode: 'percent', discountPercent: 0, discountAmount: 0, vatRate: documentSettingsStore.settings.vatRate, whtRate: 0 })
 }
 
-if (!isEditMode) addRow()
+if (!isEditMode && typeof route.query.bookingIds !== 'string') addRow()
+
+/** รับงานขนส่งที่เลือกไว้แล้วจากหน้า ReceiptBookingSelectView.vue ("จากงานขนส่ง") มาเติมเป็นแถวรายการโดยตรง — การเลือก
+ *  ลูกค้า/งานขนส่งย้ายไปทำที่หน้าการ์ดแยกต่างหากก่อนแล้ว (เหมือนโฉมเดิม) หน้านี้มีหน้าที่แค่รับ bookingIds ที่เลือกไว้
+ *  แล้วมาแสดงผล/ตรวจสอบก่อนกด "บันทึกเอกสาร" เท่านั้น เงื่อนไข claim เดียวกับ createReceiptFromBookings ทุกประการ */
+const isBookingBillable = (b: Booking) => b.status === 'DELIVERED' && !b.receiptDocId
+
+const alreadyPickedBookingIds = computed(() => new Set(rows.value.map((r) => r.bookingId).filter((id): id is string => !!id)))
+
+/** เหมือน bookingReferenceDoc ใน stores/salesDocuments.ts เป๊ะ */
+const bookingReferenceDoc = (b: Booking): string => {
+  const salesOrder = b.sourceDocumentId ? salesDocumentsStore.documents.find((d) => d.type === 'SALES_ORDER' && d.id === b.sourceDocumentId) : undefined
+  return salesOrder?.number || b.docNo
+}
+const bookingPickerDestination = (b: Booking) => {
+  if (!b.items.length) return '-'
+  const first = b.items[0].siteName
+  return b.items.length > 1 ? `${first} +${b.items.length - 1} ที่อื่น` : first
+}
+const bookingPickerTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)
+const bookingPickerDescription = (b: Booking) => {
+  const dest = bookingPickerDestination(b)
+  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  return products ? `${dest} — ${products}` : dest
+}
+
+const addBookingRow = (b: Booking) => {
+  rows.value.push({
+    description: bookingPickerDescription(b),
+    qty: 1,
+    unit: 'เที่ยว',
+    unitPrice: bookingPickerTotal(b),
+    discountMode: b.discountMode || 'percent',
+    discountPercent: b.discountPercent || 0,
+    discountAmount: b.discountAmount || 0,
+    vatRate: b.vatRate ?? documentSettingsStore.settings.vatRate,
+    whtRate: 0,
+    shipDate: b.shipDate,
+    plate: b.plate,
+    referenceDoc: bookingReferenceDoc(b),
+    deliveryNo: b.docNo,
+    bookingId: b.id,
+  })
+}
+
+onMounted(() => {
+  if (isEditMode) return
+  const bookingIds = typeof route.query.bookingIds === 'string' ? route.query.bookingIds.split(',').filter(Boolean) : []
+  if (bookingIds.length === 0) return
+  const bookings = bookingIds.map((id) => bookingStore.bookings.find((b) => b.id === id)).filter((b): b is Booking => !!b && isBookingBillable(b))
+  if (bookings.length === 0) {
+    alert('ไม่สามารถเปิดงานเหล่านี้เพื่อออกใบเสร็จได้ — งานอาจถูกรับเงินไปแล้ว หรือสถานะเปลี่ยนไป กรุณาเลือกงานด้วยตนเอง')
+    return
+  }
+  customerName.value = bookings[0].customer
+  onCustomerChange()
+  bookings.forEach(addBookingRow)
+})
 
 const allRowsTaxed = computed(() => rows.value.length > 0 && rows.value.every((r) => !!r.vatRate))
 const toggleAllTax = (event: Event) => {
@@ -644,6 +708,7 @@ const saveAndGetDoc = () => {
     vatAmount: vatTotal.value,
     whtAmount: whtTotal.value,
     contactId: contactId.value,
+    bookingIds: [...alreadyPickedBookingIds.value],
   }
   if (currentId.value) {
     const updated = salesDocumentsStore.updateReceiptManual(currentId.value, payload)

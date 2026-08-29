@@ -6,23 +6,11 @@
         <!-- ปุ่ม Sync (ซิงก์เอกสารที่ขาดหาย/ซิงก์ข้อมูลก่อนหน้า/ซิงก์ยอด VAT) ซ่อนจาก UI ตาม requirement — ฟังก์ชันเบื้องหลัง
              (syncMissingSalesOrders/syncBillingReadiness/runVatBackfill) ยังอยู่ครบ ไม่ได้ลบ ไม่มี auto-trigger ที่ไหน
              เรียกเฉพาะตอนกดปุ่มเหล่านี้เท่านั้น (ตรวจแล้วก่อนซ่อน) -->
-        <div class="relative">
-        <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
+        <!-- ยกเลิกการสร้างเอกสารแบบ Dropdown ตาม requirement — ไปหน้าเลือกประเภทแบบการ์ด (BillingTypeSelectView.vue) แทน -->
+        <button @click="router.push('/billing-notes/type-select')" class="btn-primary">
           <span class="material-symbols-rounded text-base">add</span>
           สร้างใหม่
-          <span class="material-symbols-rounded text-base">expand_more</span>
         </button>
-        <div v-if="createMenuOpen" v-click-outside="() => (createMenuOpen = false)" class="absolute right-0 top-full mt-1 w-48 bg-surface border border-border rounded-lg shadow-lg py-1 z-20">
-          <button @click="router.push('/billing-notes/manual')" class="menu-item">
-            <span class="material-symbols-rounded text-base">description</span>
-            ใบวางบิล
-          </button>
-          <button @click="router.push('/billing-notes/new')" class="menu-item">
-            <span class="material-symbols-rounded text-base">library_add</span>
-            ใบวางบิลรวม
-          </button>
-        </div>
-        </div>
       </div>
     </div>
 
@@ -49,6 +37,7 @@
               <th class="text-right px-3 py-3 font-semibold text-muted">จำนวนงาน</th>
               <th class="text-right px-3 py-3 font-semibold text-muted">ยอดรวมสุทธิ</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานะ</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">เอกสารต่อเนื่อง</th>
               <th class="px-3 py-3 w-10"></th>
             </tr>
           </thead>
@@ -69,13 +58,31 @@
               <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(doc.amount + (doc.vatAmount || 0)) }}</td>
               <td class="px-3 py-3">
                 <select
-                  :value="doc.status"
-                  @change="onStatusSelect(doc, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = doc.status"
+                  :value="''"
+                  @change="onStatusSelect(doc, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = ''"
                   class="status-select"
                   :class="salesDocumentStatusClass(doc.type, doc.status)"
                 >
+                  <option value="" disabled hidden>{{ statusLabel[doc.status] || doc.status }}</option>
                   <option v-for="opt in statusOptionsFor(doc)" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                 </select>
+              </td>
+              <td class="px-3 py-3">
+                <div v-if="downstreamDocsFor(doc).length" class="flex flex-col gap-1">
+                  <RouterLink
+                    v-for="d in downstreamDocsFor(doc)"
+                    :key="d.id"
+                    :to="`/documents/${d.id}`"
+                    class="inline-flex items-center gap-1.5 hover:underline w-fit"
+                    :title="d.number"
+                  >
+                    <span class="text-[11px] text-muted">{{ salesDocumentTypeLabel[d.type] }}</span>
+                    <span class="text-xs font-semibold px-1.5 py-0.5 rounded-full" :class="salesDocumentStatusClass(d.type, d.status)">
+                      {{ salesDocumentStatusLabel(d.type, d.status) }}
+                    </span>
+                  </RouterLink>
+                </div>
+                <span v-else class="text-xs text-muted">-</span>
               </td>
               <td class="px-3 py-3">
                 <div class="flex items-center justify-end gap-1.5">
@@ -93,7 +100,7 @@
               </td>
             </tr>
             <tr v-if="pagedDocs.length === 0">
-              <td colspan="7" class="px-3 py-8 text-center text-muted">ยังไม่มีเอกสาร</td>
+              <td colspan="8" class="px-3 py-8 text-center text-muted">ยังไม่มีเอกสาร</td>
             </tr>
           </tbody>
         </table>
@@ -122,7 +129,7 @@ import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } 
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
 import { useDocumentPrefillStore, type DocumentPrefillPayload } from '@/stores/documentPrefill'
-import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
+import { salesDocumentStatusClass, salesDocumentStatusLabel, salesDocumentTypeLabel } from '@/utils/salesDocumentStatus'
 import { categoryFeedLabel } from '@/utils/bookingStatus'
 import type { Booking } from '@/types'
 
@@ -138,7 +145,6 @@ const documentPrefillStore = useDocumentPrefillStore()
 
 const statusFilter = ref<'all' | SalesDocumentStatus>('all')
 const search = ref('')
-const createMenuOpen = ref(false)
 
 const statusLabel: Partial<Record<SalesDocumentStatus, string>> = {
   BILLING_PENDING: 'รอวางบิล',
@@ -223,32 +229,20 @@ const runVatBackfill = () => {
   alert(lines.join('\n'))
 }
 
-const vClickOutside = {
-  mounted(el: HTMLElement & { _clickOutside?: (e: MouseEvent) => void }, binding: { value: () => void }) {
-    el._clickOutside = (e: MouseEvent) => {
-      if (!el.contains(e.target as Node)) binding.value()
-    }
-    document.addEventListener('click', el._clickOutside, true)
-  },
-  unmounted(el: HTMLElement & { _clickOutside?: (e: MouseEvent) => void }) {
-    if (el._clickOutside) document.removeEventListener('click', el._clickOutside, true)
-  },
-}
-
 type ActionOption = { value: string; label: string }
 
 const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
   const s = doc.status
   if (s === 'BILLING_PENDING') {
     return [
+      { value: 'MARK_BILLED', label: 'วางบิล' },
       { value: 'CREATE_INVOICE', label: 'สร้างใบกำกับภาษี' },
-      { value: 'BILLING_PENDING', label: statusLabel.BILLING_PENDING! },
+      { value: 'DELETE', label: 'ลบ' },
       { value: 'CANCEL', label: 'ยกเลิก' },
     ]
   }
   if (s === 'BILLED') {
     return [
-      { value: 'BILLED', label: statusLabel.BILLED! },
       { value: 'RESET', label: 'รีเซ็ต' },
       { value: 'DELETE', label: 'ลบ' },
     ]
@@ -263,6 +257,12 @@ const editDocumentNumber = (doc: SalesDocument) => {
   const result = salesDocumentsStore.changeDocumentNumber(doc.id, input)
   if (!result.ok && result.message) alert(result.message)
 }
+
+/** เอกสารที่ต่อยอดมาจากใบวางบิลนี้แล้ว (ใบแจ้งหนี้/ใบเสร็จ) — อ่านจาก convertedToDocumentIds ที่ linkManualDocToSource/
+ *  createTaxInvoiceFromBookings/createReceiptFromSourceDocs (กรณีออกใบรับเงินตรง) เขียนไว้อยู่แล้ว ไม่ต้องเก็บ field ใหม่
+ *  แสดงสถานะสดของเอกสารปลายทางแบบ reactive (ดึงจาก store ตรงๆ) เพื่อให้เห็นภาพรวมว่าใบวางบิลนี้เดินไปถึงไหนแล้วโดยไม่ต้องกดเข้าไปดูทีละใบ */
+const downstreamDocsFor = (doc: SalesDocument): SalesDocument[] =>
+  (doc.convertedToDocumentIds || []).map((id) => salesDocumentsStore.documents.find((d) => d.id === id)).filter((d): d is SalesDocument => !!d)
 
 const statusDotClass = (status: SalesDocumentStatus) =>
   ({ BILLING_PENDING: 'bg-amber-500', BILLED: 'bg-blue-500' })[status as 'BILLING_PENDING' | 'BILLED'] || 'bg-gray-400'
@@ -324,6 +324,15 @@ const buildPrefillFromBilling = (doc: SalesDocument, targetBookingIds?: string[]
 
 const onStatusSelect = (doc: SalesDocument, action: string) => {
   switch (action) {
+    case 'CREATE_RECEIPT_DIRECT':
+      router.push({ path: '/receipts/select', query: { source: 'billing', customer: doc.customer, invoiceId: doc.id } })
+      break
+    case 'MARK_BILLED': {
+      if (!confirm(`ยืนยันทำเครื่องหมายใบวางบิล ${doc.number} ว่า "วางบิลแล้ว"?`)) break
+      const result = salesDocumentsStore.markBillingBilled(doc.id)
+      if (!result.ok && result.message) alert(result.message)
+      break
+    }
     case 'CREATE_INVOICE': {
       /** ใบวางบิลที่มีสินค้าหลาย Feed (เช่น Cement + Ceramic) ต้องแยกออกใบแจ้งหนี้คนละใบต่อ Feed ห้ามรวมหลาย Feed ไว้ใน
        *  ใบแจ้งหนี้เดียว — เติมข้อมูลของ Feed แรกที่ยังไม่ได้ออกใบแจ้งหนี้ก่อน กดซ้ำอีกครั้งภายหลังเพื่อออก Feed ที่เหลือ

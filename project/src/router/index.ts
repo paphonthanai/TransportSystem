@@ -104,6 +104,18 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN', 'ACCOUNTING'] },
       },
       {
+        path: 'billing-notes/type-select',
+        name: 'BillingTypeSelect',
+        component: () => import('@/views/BillingTypeSelectView.vue'),
+        meta: { roles: ['ADMIN', 'ACCOUNTING'] },
+      },
+      {
+        path: 'billing-notes/select-bookings',
+        name: 'BillingBookingSelect',
+        component: () => import('@/views/BillingBookingSelectView.vue'),
+        meta: { roles: ['ADMIN', 'ACCOUNTING'] },
+      },
+      {
         path: 'billing-notes/manual',
         name: 'BillingNoteManualCreate',
         component: () => import('@/views/BillingFormView.vue'),
@@ -117,27 +129,27 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN', 'ACCOUNTING'] },
       },
       {
-        path: 'billing-notes/new',
-        name: 'BillingNoteCreate',
-        component: () => import('@/views/BillingCreateFromBookingsView.vue'),
-        meta: { roles: ['ADMIN', 'ACCOUNTING'] },
-      },
-      {
         path: 'tax-invoices',
         name: 'TaxInvoices',
         component: () => import('@/views/TaxInvoiceListView.vue'),
         meta: { roles: ['ADMIN', 'ACCOUNTING'] },
       },
       {
-        path: 'tax-invoices/new',
-        name: 'TaxInvoiceCreate',
-        component: () => import('@/views/TaxInvoiceFormView.vue'),
+        path: 'tax-invoices/type-select',
+        name: 'TaxInvoiceTypeSelect',
+        component: () => import('@/views/TaxInvoiceTypeSelectView.vue'),
         meta: { roles: ['ADMIN', 'ACCOUNTING'] },
       },
       {
-        path: 'tax-invoices/new-merged',
-        name: 'TaxInvoiceCreateFromBookings',
-        component: () => import('@/views/TaxInvoiceCreateFromBookingsView.vue'),
+        path: 'tax-invoices/select-bookings',
+        name: 'TaxInvoiceBookingSelect',
+        component: () => import('@/views/TaxInvoiceBookingSelectView.vue'),
+        meta: { roles: ['ADMIN', 'ACCOUNTING'] },
+      },
+      {
+        path: 'tax-invoices/new',
+        name: 'TaxInvoiceCreate',
+        component: () => import('@/views/TaxInvoiceFormView.vue'),
         meta: { roles: ['ADMIN', 'ACCOUNTING'] },
       },
       {
@@ -160,9 +172,9 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN', 'ACCOUNTING'] },
       },
       {
-        path: 'receipts/new-from-bookings',
-        name: 'ReceiptCreateFromBookings',
-        component: () => import('@/views/ReceiptCreateFromBookingsView.vue'),
+        path: 'receipts/select-bookings',
+        name: 'ReceiptBookingSelect',
+        component: () => import('@/views/ReceiptBookingSelectView.vue'),
         meta: { roles: ['ADMIN', 'ACCOUNTING'] },
       },
       {

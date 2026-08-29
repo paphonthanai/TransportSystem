@@ -254,8 +254,9 @@ const onStatusSelect = (booking: Booking, action: string) => {
   }
   if (action === 'CREATE_BILLING') {
     /** ไม่ persist ตรงจากจุดนี้อีกต่อไป (เดิมกด confirm() แล้วสร้างทันที ข้าม Create/Edit Review) — ส่งไปหน้า
-     * "สร้างใบวางบิล" พร้อม preselect งานนี้ให้ แล้วให้ผู้ใช้ตรวจสอบ/แก้ไขในหน้า Review ก่อนกดยืนยันบันทึกจริงเสมอ */
-    router.push({ name: 'BillingNoteCreate', query: { bookingId: booking.id } })
+     * "สร้างใบวางบิล" (Manual — เดิมมีหน้ากลาง BillingCreateFromBookingsView.vue แยกต่างหาก ยุบรวมมาที่นี่แล้ว)
+     * พร้อม preselect งานนี้ให้ แล้วให้ผู้ใช้ตรวจสอบ/แก้ไขก่อนกดยืนยันบันทึกจริงเสมอ */
+    router.push({ name: 'BillingNoteManualCreate', query: { bookingId: booking.id } })
     return
   }
   if (action === 'RESET') {

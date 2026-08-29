@@ -1212,7 +1212,35 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   }
 
   /** สร้างใบวางบิลแบบกรอกเอง (ไม่ผูกกับ Booking) — ใช้หน้าฟอร์มแบบเดียวกับ QuotationFormView.vue (ดู BillingFormView.vue) */
+  /** งานขนส่งที่ดึงเข้ามาแสดงในหน้า Manual โดยตรง (ไม่ผ่านใบเสนอราคา/ใบวางบิลต้นทาง) — เกิดจากปุ่ม "ดึงข้อมูลจากงานขนส่ง"
+   *  ในหน้า Manual เอง (BillingFormView.vue) ไม่ใช่ sourceQuotationId/sourceBillingId เดิม เช็คเงื่อนไขเดียวกับ
+   *  createBillingFromBookings ทุกประการ (ลูกค้าเดียวกัน, Feed เดียวกัน, ผ่าน POD, ยังไม่ถูก claim) ก่อน claim จริง
+   *  คืน true ถ้าผ่านเงื่อนไข (หรือไม่มีงานขนส่งให้ claim เลย) คืน false ถ้าเงื่อนไขไม่ผ่าน (ผู้เรียกต้องคืน null ทันที) */
+  function isDirectBookingClaimEligibleForBilling(data: ManualDocumentFormData): boolean {
+    if (!data.bookingIds?.length || data.sourceBillingId || data.sourceQuotationId) return true
+    const bookingStore = useBookingStore()
+    const targetBookings = data.bookingIds.map((bid) => bookingStore.bookings.find((b) => b.id === bid))
+    if (targetBookings.some((b) => !b)) return false
+    const bookings = targetBookings as Booking[]
+    const sameCustomer = bookings.every((b) => b.customer === data.customer)
+    const sameCategory = bookings.every((b) => b.category === bookings[0].category)
+    const allPodApproved = bookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    const allEligible = bookings.every((b) => (b.status === 'DELIVERED' || b.status === 'IN_TRANSIT') && !b.billingNoteDocId)
+    return sameCustomer && sameCategory && allEligible && allPodApproved
+  }
+
+  function claimDirectBookingsForBilling(billing: SalesDocument, data: ManualDocumentFormData) {
+    if (!data.bookingIds?.length || data.sourceBillingId || data.sourceQuotationId) return
+    const bookingStore = useBookingStore()
+    billing.bookingIds = data.bookingIds
+    data.bookingIds.forEach((bid) => {
+      const b = bookingStore.bookings.find((bk) => bk.id === bid)
+      if (b) b.billingNoteDocId = billing.id
+    })
+  }
+
   function createBillingManual(data: ManualDocumentFormData): SalesDocument | null {
+    if (!isDirectBookingClaimEligibleForBilling(data)) return null
     const documentSettingsStore = useDocumentSettingsStore()
     const numberRegistry = useDocumentNumberRegistryStore()
     const bookingStore = useBookingStore()
@@ -1261,6 +1289,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     documents.value.unshift(billing)
     addItemsToDocument(billing.id, data.items)
     linkManualDocToSource(billing, data)
+    claimDirectBookingsForBilling(billing, data)
     numberRegistry.registerNumber(billing.number)
     bookingStore.addLog('สร้างเอกสาร ' + billing.number, { docId: billing.id })
     return billing
@@ -1313,6 +1342,31 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    *  ถ้าเปิดฟอร์มมาจากดรอปดาวน์ "สร้างใบกำกับภาษี" ของใบวางบิล (data.sourceBillingId ผ่าน documentPrefillStore) ต้องเช็ค
    *  eligibility ก่อนสร้างเอกสารจริง (เหมือน createInvoiceFromBilling) — คืนค่า null ถ้าใบวางบิลต้นทางไม่ใช่ BILLING_PENDING
    *  แล้ว หรืองานขนส่งที่ผูกอยู่บางรายการถูกดึงไปออกใบแจ้งหนี้อื่นไปแล้ว (เช่น เปิดสองแท็บพร้อมกัน) กันไม่ให้ claim ซ้ำ */
+  /** งานขนส่งที่ดึงเข้ามาแสดงในหน้า Manual โดยตรง (ไม่ผ่านใบวางบิลต้นทาง) — เกิดจากปุ่ม "ดึงข้อมูลจากงานขนส่ง" ในหน้า
+   *  Manual เอง (TaxInvoiceFormView.vue) เช็คเงื่อนไขเดียวกับ createTaxInvoiceFromBookings ทุกประการ */
+  function isDirectBookingClaimEligibleForTaxInvoice(data: ManualDocumentFormData): boolean {
+    if (!data.bookingIds?.length || data.sourceBillingId) return true
+    const bookingStore = useBookingStore()
+    const targetBookings = data.bookingIds.map((bid) => bookingStore.bookings.find((b) => b.id === bid))
+    if (targetBookings.some((b) => !b)) return false
+    const bookings = targetBookings as Booking[]
+    const sameCustomer = bookings.every((b) => b.customer === data.customer)
+    const sameCategory = bookings.every((b) => b.category === bookings[0].category)
+    const allPodApproved = bookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    const allEligible = bookings.every((b) => b.status === 'DELIVERED' && !b.taxInvoiceDocId)
+    return sameCustomer && sameCategory && allEligible && allPodApproved
+  }
+
+  function claimDirectBookingsForTaxInvoice(invoice: SalesDocument, data: ManualDocumentFormData) {
+    if (!data.bookingIds?.length || data.sourceBillingId) return
+    const bookingStore = useBookingStore()
+    invoice.bookingIds = data.bookingIds
+    data.bookingIds.forEach((bid) => {
+      const b = bookingStore.bookings.find((bk) => bk.id === bid)
+      if (b) b.taxInvoiceDocId = invoice.id
+    })
+  }
+
   function createTaxInvoiceManual(data: ManualDocumentFormData): SalesDocument | null {
     const documentSettingsStore = useDocumentSettingsStore()
     const numberRegistry = useDocumentNumberRegistryStore()
@@ -1326,6 +1380,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       const linkedBookings = targetBookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid))
       if (linkedBookings.some((b) => !b || b.taxInvoiceDocId)) return null
     }
+    if (!isDirectBookingClaimEligibleForTaxInvoice(data)) return null
     const manualNumber = data.number?.trim()
     if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
     const numbering = documentSettingsStore.settings.numbering.invoice
@@ -1373,6 +1428,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     documents.value.unshift(invoice)
     addItemsToDocument(invoice.id, data.items)
     linkManualDocToSource(invoice, data)
+    claimDirectBookingsForTaxInvoice(invoice, data)
     numberRegistry.registerNumber(invoice.number)
     bookingStore.addLog('สร้างเอกสาร ' + invoice.number, { docId: invoice.id })
     return invoice
@@ -1451,7 +1507,32 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   /** สร้างใบเสร็จรับเงินแบบกรอกเอง — ใช้หน้าฟอร์มแบบเดียวกับ QuotationFormView.vue (ดู ReceiptFormView.vue) ถือว่าเก็บเงินแล้วทันทีตอนบันทึก
    *  เลขที่เอกสารแก้ไขเองได้ (data.number) — ถ้าเลขนี้เคยถูกใช้มาแล้ว (ไม่ว่าเอกสารเดิมจะยังอยู่หรือถูกลบไปแล้วก็ตาม)
    *  ปฏิเสธการสร้างทันที คืนค่า null ให้ผู้เรียกแสดง error (ดู documentNumberRegistry store) */
+  /** งานขนส่งที่ดึงเข้ามาแสดงในหน้า Manual โดยตรง (ปุ่ม "ดึงข้อมูลจากงานขนส่ง" ใน ReceiptFormView.vue) — เช็คเงื่อนไข
+   *  เดียวกับ createReceiptFromBookings ทุกประการ (ไม่มีเงื่อนไข Feed เดียวกันเหมือน Billing/TaxInvoice) */
+  function isDirectBookingClaimEligibleForReceipt(data: ManualDocumentFormData): boolean {
+    if (!data.bookingIds?.length) return true
+    const bookingStore = useBookingStore()
+    const targetBookings = data.bookingIds.map((bid) => bookingStore.bookings.find((b) => b.id === bid))
+    if (targetBookings.some((b) => !b)) return false
+    const bookings = targetBookings as Booking[]
+    const sameCustomer = bookings.every((b) => b.customer === data.customer)
+    const allPodApproved = bookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    const allEligible = bookings.every((b) => b.status === 'DELIVERED' && !b.receiptDocId)
+    return sameCustomer && allEligible && allPodApproved
+  }
+
+  function claimDirectBookingsForReceipt(receipt: SalesDocument, data: ManualDocumentFormData) {
+    if (!data.bookingIds?.length) return
+    const bookingStore = useBookingStore()
+    receipt.bookingIds = data.bookingIds
+    data.bookingIds.forEach((bid) => {
+      const b = bookingStore.bookings.find((bk) => bk.id === bid)
+      if (b) b.receiptDocId = receipt.id
+    })
+  }
+
   function createReceiptManual(data: ManualDocumentFormData): SalesDocument | null {
+    if (!isDirectBookingClaimEligibleForReceipt(data)) return null
     const documentSettingsStore = useDocumentSettingsStore()
     const numberRegistry = useDocumentNumberRegistryStore()
     const numbering = documentSettingsStore.settings.numbering.receipt
@@ -1497,6 +1578,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     Object.assign(receipt, resolveContactSnapshot(data.customer, data.contactId))
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, data.items)
+    claimDirectBookingsForReceipt(receipt, data)
     numberRegistry.registerNumber(receipt.number)
     useBookingStore().addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
     return receipt
@@ -2140,6 +2222,22 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   }
 
   /**
+   * ทำเครื่องหมายใบวางบิลว่า "วางบิลแล้ว" ด้วยตนเอง (BILLING_PENDING → BILLED) — เปลี่ยนแค่สถานะของเอกสารนี้เอง
+   * ไม่แตะ bookingIds/booking.billingNoteDocId หรือสร้างเอกสารปลายทางใดๆ (คนละเรื่องกับการสร้างใบแจ้งหนี้/ใบเสร็จ
+   * ซึ่งเป็นคนละ Action — ดู CREATE_INVOICE/CREATE_RECEIPT_DIRECT ใน BillingListView.vue) ปกติสถานะนี้จะเปลี่ยนเองอัตโนมัติ
+   * เมื่องานขนส่งทุกรายการถูก claim ครบผ่านการออกเอกสารถัดไป — ฟังก์ชันนี้เพิ่มมาให้กดยืนยันได้เองตรงๆ ด้วยในกรณีที่ต้องการ
+   * ปิดสถานะใบวางบิลโดยไม่รอให้ระบบ claim งานขนส่งให้ครบ
+   */
+  function markBillingBilled(id: string): { ok: boolean; message?: string } {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'BILLING')
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (doc.status !== 'BILLING_PENDING') return { ok: false, message: 'เอกสารนี้ไม่ได้อยู่สถานะรอวางบิล' }
+    doc.status = 'BILLED'
+    useBookingStore().addLog('ทำเครื่องหมายวางบิลแล้ว ' + doc.number, { docId: id })
+    return { ok: true }
+  }
+
+  /**
    * Reset ใบวางบิลที่ออกใบแจ้งหนี้ไปแล้วกลับเป็น "รอวางบิล" — ทำได้เฉพาะกรณีใบแจ้งหนี้ลูกยังเป็นร่าง (ยังไม่ส่ง/ยังไม่มีใบเสร็จ)
    * ใช้ cancelTaxInvoice ตัวเดียวกับปุ่มยกเลิกใบแจ้งหนี้ ซึ่งลบใบแจ้งหนี้ทิ้งและคืนสถานะใบวางบิลต้นทางเป็น BILLING_PENDING ให้อัตโนมัติอยู่แล้ว
    */
@@ -2147,6 +2245,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const doc = documents.value.find((d) => d.id === id && d.type === 'BILLING')
     if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
     if (doc.status !== 'BILLED') return { ok: false, message: 'เอกสารนี้อยู่สถานะรอวางบิลอยู่แล้ว' }
+    /** ไม่มีเอกสารปลายทางเลย = ถูกทำเครื่องหมาย "วางบิลแล้ว" ด้วยตนเอง (ดู markBillingBilled) ไม่ได้แปลงเป็นใบแจ้งหนี้จริง —
+     *  Reset กรณีนี้แค่คืนสถานะตรงๆ ไม่ต้องยุ่งกับ cancelTaxInvoice */
+    if (!(doc.convertedToDocumentIds || []).length) {
+      doc.status = 'BILLING_PENDING'
+      return { ok: true }
+    }
     const childId = (doc.convertedToDocumentIds || [])[0]
     const childDoc = childId ? documents.value.find((d) => d.id === childId) : undefined
     /** ใบวางบิลนี้อาจถูกแปลงเป็นใบแจ้งหนี้ (ทางเดิม) หรือถูกอ้างอิงตรงจากใบเสร็จ (ทางใหม่ createReceiptFromBillingNotes) ก็ได้ — Reset ผ่านปุ่มนี้รองรับแค่ทางแรก ทางที่สองต้องยกเลิกที่ใบเสร็จแทน (cancelReceipt คืนสถานะให้อัตโนมัติอยู่แล้ว) */
@@ -2263,15 +2367,29 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    *  ซึ่งเป็นกลไกแยกต่างหากที่เปลี่ยนสถานะใบแจ้งหนี้เป็น PAID) เงื่อนไขเดียวที่ยังกันคือ sourceDocsClaimedByOtherReceipts
    *  (กันสร้างใบเสร็จซ้ำจากใบแจ้งหนี้ใบเดียวกัน) — ส่วนใบวางบิลคือยังไม่ถูกแปลงไปเป็นใบแจ้งหนี้/ใบเสร็จอื่น (BILLING_PENDING
    *  เท่านั้น — เส้นทางนี้ไม่มีสถานะ PAID ของตัวเองจึงยังคงพฤติกรรมเดิม) */
+  /** "คอนเฟิร์มแล้ว" ของเอกสารต้นทาง = ผูกตรงกับสถานะ Booking ที่เอกสารนั้นอ้างอิง ไม่ใช่ field แยกบนตัวเอกสารเอง (ตาม
+   *  requirement) งานขนส่งทุกงานที่ผูกกับเอกสารต้องผ่านการตรวจสอบ POD ของออฟฟิศแล้ว (podReviewStatus ไม่ค้าง
+   *  PENDING_REVIEW/REJECTED) — งานที่ออฟฟิศจบเองไม่เคยเข้าขั้นตอนตรวจสอบ POD (podReviewStatus เป็น undefined) ถือว่า
+   *  คอนเฟิร์มแล้วโดยปริยาย เหมือนเงื่อนไข allPodApproved ที่ใช้ตอนออกใบวางบิล/ใบแจ้งหนี้ — เอกสารที่ไม่มี bookingIds
+   *  เลย (กรอกเอง) ถือว่าผ่านเสมอ ใช้เป็นเงื่อนไขเพิ่มเฉพาะตอนสร้าง/แก้ไขใบเสร็จรับเงินเท่านั้น (ห้ามใช้ที่หน้าเอกสารอื่น) */
+  function bookingsConfirmedFor(d: SalesDocument): boolean {
+    if (!d.bookingIds.length) return true
+    const bookingStore = useBookingStore()
+    return d.bookingIds.every((bid) => {
+      const booking = bookingStore.bookings.find((b) => b.id === bid)
+      return !booking || (booking.podReviewStatus !== 'PENDING_REVIEW' && booking.podReviewStatus !== 'REJECTED')
+    })
+  }
+
   const isSourceDocEligible = (d: SalesDocument, sourceType: ReceiptSourceType) =>
-    sourceType === 'TAX_INVOICE' ? true : d.status === 'BILLING_PENDING'
+    (sourceType === 'TAX_INVOICE' ? true : d.status === 'BILLING_PENDING') && bookingsConfirmedFor(d)
 
   /**
    * สร้างใบเสร็จรับเงิน (เดี่ยวหรือรวม) จากเอกสารต้นทางชนิดเดียวกันของลูกค้ารายเดียวกัน — รายการต่อบรรทัด = 1 เอกสารต้นทาง
    * ต่อ 1 บรรทัด เริ่มเป็น DRAFT ("รอเก็บเงิน") เสมอไม่ว่า sourceType จะเป็น TAX_INVOICE หรือ BILLING ก็ตาม (ดูคอมเมนต์ที่
    * ตัว receipt object ด้านล่าง) — sourceType = 'TAX_INVOICE': ไม่จำกัดสถานะใบแจ้งหนี้ต้นทาง (isSourceDocEligible คืน true
    * เสมอ) sourceType = 'BILLING': ข้ามใบแจ้งหนี้ไปเลย (Booking → Sales Order → Billing Note → Receipt) ต้องเป็น
-   * BILLING_PENDING เท่านั้น (เส้นทางนี้ไม่มีจุดไหนเรียกจาก UI แล้ว แต่คงพฤติกรรมเดิมไว้เผื่อนำกลับมาใช้ในอนาคต) — ตอนสำเร็จ
+   * BILLING_PENDING เท่านั้น (เรียกจาก BillingListView.vue ปุ่มสถานะต่อแถว "ออกใบรับเงินจากใบวางบิลโดยตรง") — ตอนสำเร็จ
    * จะปิดสถานะใบวางบิลต้นทางเป็น BILLED เหมือน createInvoiceFromBilling ทำ ยอด/ภาษี/ส่วนลด/หัก ณ ที่จ่าย ดึงจากเอกสาร
    * ต้นทางตรงๆ (ดู buildReceiptTotalsFromSourceDocs) ไม่คำนวณเปอร์เซ็นต์ใหม่เอง เช็คเพิ่มว่างานขนส่งที่ผูกกับเอกสารต้นทาง
    * ยังไม่มี receiptDocId (เป็นอิสระจาก sourceDocsClaimedByOtherReceipts ที่เช็คระดับเอกสาร — กันกรณีงานเดียวกันถูกดึงไป
@@ -2607,6 +2725,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     createTaxInvoiceManual,
     updateTaxInvoiceManual,
     cancelBillingNote,
+    markBillingBilled,
     resetBillingNote,
     deleteBillingNote,
     cancelTaxInvoice,
@@ -2624,6 +2743,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     updateReceiptFromSourceDocs,
     invoicesClaimedByOtherReceipts,
     sourceDocsClaimedByOtherReceipts,
+    bookingsConfirmedFor,
     createReceiptManual,
     updateReceiptManual,
     recordReceiptPayment,

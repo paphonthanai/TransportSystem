@@ -6,23 +6,11 @@
         <!-- ปุ่ม Sync (ซิงก์เอกสารที่ขาดหาย/ซิงก์ข้อมูลก่อนหน้า/ซิงก์ความสัมพันธ์ใบวางบิล) ซ่อนจาก UI ตาม requirement — ฟังก์ชันเบื้องหลัง
              (syncMissingSalesOrders/syncBillingReadiness/syncInvoiceReferences) ยังอยู่ครบ ไม่ได้ลบ ไม่มี auto-trigger ที่ไหน
              เรียกเฉพาะตอนกดปุ่มเหล่านี้เท่านั้น (ตรวจแล้วก่อนซ่อน) -->
-        <div class="relative">
-          <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
-            <span class="material-symbols-rounded text-base">add</span>
-            สร้างใบแจ้งหนี้
-            <span class="material-symbols-rounded text-base">expand_more</span>
-          </button>
-          <div v-if="createMenuOpen" v-click-outside="() => (createMenuOpen = false)" class="absolute right-0 top-full mt-1 w-52 bg-surface border border-border rounded-lg shadow-lg py-1 z-20">
-            <button @click="createMenuOpen = false; router.push('/tax-invoices/new')" class="menu-item">
-              <span class="material-symbols-rounded text-base">description</span>
-              สร้างใบแจ้งหนี้
-            </button>
-            <button @click="createMenuOpen = false; router.push('/tax-invoices/new-merged')" class="menu-item">
-              <span class="material-symbols-rounded text-base">call_merge</span>
-              สร้างใบแจ้งหนี้รวม
-            </button>
-          </div>
-        </div>
+        <!-- ยกเลิกการสร้างเอกสารแบบ Dropdown ตาม requirement — ไปหน้าเลือกประเภทแบบการ์ด (TaxInvoiceTypeSelectView.vue) แทน -->
+        <button @click="router.push('/tax-invoices/type-select')" class="btn-primary">
+          <span class="material-symbols-rounded text-base">add</span>
+          สร้างใบแจ้งหนี้
+        </button>
       </div>
     </div>
 
@@ -50,6 +38,7 @@
               <th class="text-left px-3 py-3 font-semibold text-muted">วันครบกำหนด</th>
               <th class="text-right px-3 py-3 font-semibold text-muted">ยอดรวมสุทธิ</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานะ</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">เอกสารต่อเนื่อง</th>
               <th class="px-3 py-3 w-10"></th>
             </tr>
           </thead>
@@ -79,6 +68,23 @@
                 </select>
               </td>
               <td class="px-3 py-3">
+                <div v-if="downstreamReceiptsFor(doc).length" class="flex flex-col gap-1">
+                  <RouterLink
+                    v-for="d in downstreamReceiptsFor(doc)"
+                    :key="d.id"
+                    :to="`/documents/${d.id}`"
+                    class="inline-flex items-center gap-1.5 hover:underline w-fit"
+                    :title="d.number"
+                  >
+                    <span class="text-[11px] text-muted">{{ salesDocumentTypeLabel[d.type] }}</span>
+                    <span class="text-xs font-semibold px-1.5 py-0.5 rounded-full" :class="salesDocumentStatusClass(d.type, d.status)">
+                      {{ salesDocumentStatusLabel(d.type, d.status) }}
+                    </span>
+                  </RouterLink>
+                </div>
+                <span v-else class="text-xs text-muted">-</span>
+              </td>
+              <td class="px-3 py-3">
                 <div class="flex items-center justify-end gap-1.5">
                   <button
                     v-if="doc.status === 'DRAFT'"
@@ -94,7 +100,7 @@
               </td>
             </tr>
             <tr v-if="pagedDocs.length === 0">
-              <td colspan="7" class="px-3 py-8 text-center text-muted">ยังไม่มีเอกสาร</td>
+              <td colspan="8" class="px-3 py-8 text-center text-muted">ยังไม่มีเอกสาร</td>
             </tr>
           </tbody>
         </table>
@@ -133,7 +139,7 @@ import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
-import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
+import { salesDocumentStatusClass, salesDocumentStatusLabel, salesDocumentTypeLabel } from '@/utils/salesDocumentStatus'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 
 const router = useRouter()
@@ -220,18 +226,27 @@ const totalAmount = computed(() => filteredDocs.value.reduce((sum, d) => sum + d
 
 type ActionOption = { value: string; label: string }
 
-/** item 1.5: เอาตัวเลือก "สร้างใบเสร็จรับเงิน"/"บันทึกการชำระเงิน" ออกจากใบแจ้งหนี้ทั้งคู่ — ใบแจ้งหนี้ไม่รับผิดชอบเรื่องรับเงินอีก
- * ต่อไป (ย้ายไปเป็นความรับผิดชอบของใบเสร็จรับเงินทั้งหมด ดู recordReceiptPayment ที่ไล่ปิดสถานะ/ข้อมูลการชำระเงินของใบแจ้งหนี้
- * ต้นทางให้อัตโนมัติเมื่อกด "เก็บเงิน" ที่ใบเสร็จ) การสร้างใบเสร็จจากใบแจ้งหนี้ยังทำได้อยู่ แต่ย้ายไปเริ่มจากฝั่งใบเสร็จเอง
- * (ปุ่ม "สร้างใหม่" ในหน้า ReceiptListView.vue → "จากใบแจ้งหนี้/ใบกำกับภาษี") แทนทางลัดจากแถวเอกสารในหน้านี้ —
- * recordTaxInvoicePayment ยังอยู่ในสโตร์ครบ ไม่ได้ลบ เผื่อมีที่อื่นต้องใช้ในอนาคต แค่ไม่มี UI เรียกแล้ว */
+/** ใบที่ถูกใบเสร็จรับเงิน (ที่ยังไม่ถูกยกเลิก) อ้างอิงไปแล้ว — กันเสนอ "สร้างใบเสร็จรับเงิน" ซ้ำ ดู sourceDocsClaimedByOtherReceipts */
+const claimedByReceipt = computed(() => new Set(salesDocumentsStore.invoicesClaimedByOtherReceipts(allInvoices.value.map((d) => d.id))))
+
+/** ย้ายตัวเลือก "สร้างใบเสร็จรับเงิน" กลับมาไว้ที่ปุ่มสถานะต่อแถวของใบแจ้งหนี้ (นำทางไปหน้าเลือกเอกสารจริง /receipts/select
+ *  ไม่ใช่การสร้างลัดแบบเดิมที่เคยถูกถอดออกไป — ดู onStatusSelect กรณี CREATE_RECEIPT) แทนที่จะต้องเริ่มจากฝั่งใบเสร็จเท่านั้น
+ *  recordTaxInvoicePayment ยังอยู่ในสโตร์ครบ ไม่ได้ลบ ไม่มี UI เรียกแล้วเพราะการเก็บเงินย้ายไปอยู่ที่ใบเสร็จรับเงินทั้งหมด */
 const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
   const s = doc.status
+  const canCreateReceipt = !claimedByReceipt.value.has(doc.id)
+  const createReceiptOpt: ActionOption[] = canCreateReceipt ? [{ value: 'CREATE_RECEIPT', label: 'สร้างใบเสร็จรับเงิน' }] : []
   if (s === 'DRAFT') {
-    return [{ value: 'DRAFT', label: statusLabel.DRAFT! }, { value: 'SEND', label: 'ส่งใบแจ้งหนี้' }, { value: 'CANCEL', label: 'ยกเลิก' }]
+    return [
+      { value: 'DRAFT', label: statusLabel.DRAFT! },
+      { value: 'SEND', label: 'ส่งใบแจ้งหนี้' },
+      ...createReceiptOpt,
+      { value: 'DELETE', label: 'ลบ' },
+      { value: 'CANCEL', label: 'ยกเลิก' },
+    ]
   }
   if (s === 'SENT') {
-    return [{ value: 'SENT', label: statusLabel.SENT! }, { value: 'RESET', label: 'รีเซ็ต' }, { value: 'DELETE', label: 'ลบ' }]
+    return [{ value: 'SENT', label: statusLabel.SENT! }, ...createReceiptOpt, { value: 'RESET', label: 'รีเซ็ต' }, { value: 'DELETE', label: 'ลบ' }]
   }
   if (s === 'PAID') {
     return [{ value: 'PAID', label: statusLabel.PAID! }, { value: 'DELETE', label: 'ลบ' }]
@@ -250,10 +265,18 @@ const editDocumentNumber = (doc: SalesDocument) => {
 const statusDotClass = (status: SalesDocumentStatus) =>
   ({ DRAFT: 'bg-gray-400', SENT: 'bg-amber-500', PAID: 'bg-green-500' })[status as 'DRAFT' | 'SENT' | 'PAID'] || 'bg-gray-400'
 
+/** ใบเสร็จรับเงินที่ออกจากใบแจ้งหนี้นี้แล้ว — ใบแจ้งหนี้ไม่มี convertedToDocumentIds ของตัวเอง (ต่างจากใบวางบิล) จึงต้อง
+ *  หาย้อนกลับจาก sourceDocumentIds ของใบเสร็จแทน แสดงสถานะสดแบบ reactive เพื่อให้เห็นว่าใบแจ้งหนี้นี้เดินไปถึงไหนแล้ว */
+const downstreamReceiptsFor = (doc: SalesDocument): SalesDocument[] =>
+  salesDocumentsStore.documents.filter((d) => d.type === 'RECEIPT' && d.sourceDocumentIds?.includes(doc.id))
+
 const shareTarget = ref<SalesDocument | null>(null)
 
 const onStatusSelect = (doc: SalesDocument, action: string) => {
   switch (action) {
+    case 'CREATE_RECEIPT':
+      router.push({ path: '/receipts/select', query: { customer: doc.customer, invoiceId: doc.id } })
+      break
     case 'SEND':
       // ปุ่ม "ส่งใบแจ้งหนี้" เปิด Share Document เดิม (ไม่สร้าง logic ส่งใหม่) แล้วค่อยปรับสถานะเป็นส่งแล้วเหมือนเดิม
       salesDocumentsStore.sendInvoice(doc.id)

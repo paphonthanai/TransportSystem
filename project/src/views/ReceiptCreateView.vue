@@ -4,7 +4,13 @@
       <div class="flex items-end gap-3">
         <div>
           <label class="field-label">เลขที่เอกสาร</label>
-          <input :value="documentNumber" disabled class="input-field h-9 px-2 font-mono text-sm w-40 opacity-70" />
+          <input
+            v-model="documentNumber"
+            :disabled="!!editingId"
+            class="input-field h-9 px-2 font-mono text-sm w-40"
+            :class="{ 'opacity-70': editingId, 'border-red-400': numberDuplicate }"
+          />
+          <div v-if="numberDuplicate" class="text-xs text-red-600 mt-0.5">เลขที่นี้ถูกใช้ไปแล้ว</div>
         </div>
         <div>
           <label class="field-label">วันที่</label>
@@ -212,6 +218,7 @@ import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type ReceiptSourceType } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useDocumentNumberRegistryStore } from '@/stores/documentNumberRegistry'
 import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
 import { useAuthStore } from '@/stores/auth'
@@ -228,6 +235,7 @@ const route = useRoute()
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const numberRegistry = useDocumentNumberRegistryStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
 const authStore = useAuthStore()
@@ -356,16 +364,33 @@ const openPicker = (type: ReceiptSourceType) => {
 const previewNumber = computed(() => {
   if (editingDoc.value) return editingDoc.value.number
   const numbering = documentSettingsStore.settings.numbering.receipt
-  const seq = salesDocumentsStore.documents.filter((d) => d.type === 'RECEIPT').length + 1
+  const seq = numberRegistry.peekNextSequence('RECEIPT')
   const now = new Date()
   const yyyy = now.getFullYear()
   const mm = String(now.getMonth() + 1).padStart(2, '0')
   const dd = String(now.getDate()).padStart(2, '0')
   return `${numbering.prefix}${yyyy}${mm}${dd}${documentSettingsStore.padNumber(seq, numbering.padding)}`
 })
-const documentNumber = computed(() => previewNumber.value)
 
-const canSubmit = computed(() => customerName.value.trim().length > 0 && sourceIds.value.length > 0)
+/** เลขที่เอกสารแก้ไขเองได้ตอนสร้างใหม่ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ (เหมือน ReceiptFormView.vue)
+ *  เอกสารที่บันทึกไปแล้ว (editingId) ห้ามแก้เลขที่ผ่านหน้านี้ ให้ใช้ปุ่มแก้ไขเลขที่เอกสารในหน้ารายการแทน (changeDocumentNumber) */
+const numberManuallyEdited = ref(false)
+const documentNumber = ref(previewNumber.value)
+watch(previewNumber, (val) => {
+  if (!numberManuallyEdited.value) documentNumber.value = val
+})
+watch(documentNumber, (val) => {
+  if (val !== previewNumber.value) numberManuallyEdited.value = true
+})
+
+const numberDuplicate = computed(() => {
+  if (editingId) return false
+  const n = documentNumber.value.trim()
+  if (!n) return false
+  return numberRegistry.isNumberUsed(n)
+})
+
+const canSubmit = computed(() => customerName.value.trim().length > 0 && sourceIds.value.length > 0 && !numberDuplicate.value)
 
 const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
@@ -377,12 +402,21 @@ const submitError = ref('')
 const saveAndGetDoc = () => {
   if (!canSubmit.value) return null
   submitError.value = ''
-  const overrides = { customer: customerName.value.trim(), reference: reference.value || undefined, contactId: contactId.value }
+  if (!currentId.value && numberDuplicate.value) {
+    submitError.value = 'เลขที่เอกสารนี้ถูกใช้ไปแล้ว'
+    return null
+  }
+  const overrides = {
+    customer: customerName.value.trim(),
+    reference: reference.value || undefined,
+    contactId: contactId.value,
+    number: !currentId.value ? documentNumber.value.trim() || undefined : undefined,
+  }
   const result = currentId.value
     ? salesDocumentsStore.updateReceiptFromSourceDocs(currentId.value, sourceIds.value, sourceType.value, overrides)
     : salesDocumentsStore.createReceiptFromSourceDocs(sourceIds.value, sourceType.value, overrides)
   if (!result) {
-    submitError.value = `บันทึกไม่สำเร็จ — ${sourceLabel.value}ที่เลือกอาจถูกใช้ในใบเสร็จอื่นแล้ว เก็บเงิน/ออกใบแจ้งหนี้ไปแล้ว หรือเป็นลูกค้าคนละราย`
+    submitError.value = `บันทึกไม่สำเร็จ — ${sourceLabel.value}ที่เลือกอาจถูกใช้ในใบเสร็จอื่นแล้ว เก็บเงิน/ออกใบแจ้งหนี้ไปแล้ว เลขที่เอกสารซ้ำ หรือเป็นลูกค้าคนละราย`
     return null
   }
   currentId.value = result.doc.id
