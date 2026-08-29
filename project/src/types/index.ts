@@ -242,6 +242,9 @@ export interface Booking {
   podReviewStatus?: PodReviewStatus
   /** เหตุผลที่ออฟฟิศ REJECTED (ถ้ามี) ให้คนขับเห็นว่าต้องแก้อะไร */
   podReviewNote?: string
+  /** เช็คตั๋ว (ตั๋วชั่งน้ำหนัก/ใบส่งของ ฯลฯ ที่ออฟฟิศต้องตรวจก่อนวางบิล) — ไม่มีค่า/false = ยังไม่เช็ค, true = เช็คแล้ว
+   *  toggle ได้จาก Booking List โดยตรง (ดู bookingStore.toggleTicketChecked) เป็นอิสระจาก BookingStatus/BillingStatus เดิมทั้งหมด */
+  ticketChecked?: boolean
   /** ค่าใช้จ่ายเพิ่มเติมที่เรียกเก็บลูกค้า เพิ่มได้ตอนตรวจสอบรอบบิล */
   extraCharges?: ExtraCharge[]
   /** รอบบิลที่งานนี้ถูกจัดเข้าไป (ถ้ามี) */
@@ -446,6 +449,10 @@ export interface Vehicle {
   repairDays?: number
   /** รหัสคนขับประจำรถคันนี้ (ผูกกับ DriverRecord.code) ไม่บังคับต้องมี และเปลี่ยนได้ภายหลังเสมอ — แก้ไขผ่าน vehiclesStore.assignDriver() เท่านั้น เพื่อให้ทุกหน้าเห็นข้อมูลตรงกัน */
   driverCode?: string
+  /** ประเภทงาน (Feed) ที่รถคันนี้วิ่งได้ — ไม่มีค่า/array ว่าง = วิ่งได้ทุก Feed (ไม่จำกัด) มีค่า = จำกัดเฉพาะ Feed
+   *  ที่ระบุเท่านั้น ใช้กรองรายการรถที่เลือกได้ตอนจัดรถ (ดู vehiclesStore.availableFor) — คนละเรื่องกับ VehicleType
+   *  (department) ซึ่งเป็นประเภทความเป็นเจ้าของรถ (รถบริษัท/รถร่วมใน/ฯลฯ) ห้ามใช้แทนกัน */
+  allowedCategories?: BookingCategory[]
 }
 
 /** ประเภทค่าใช้จ่ายประจำรถ — ผู้ใช้กรอกเองเป็นข้อความอิสระ (ไม่ใช่ enum ตายตัว) ไม่มี default/predefined category ในระบบ */

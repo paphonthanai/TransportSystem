@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Vehicle } from '@/types'
+import type { Vehicle, BookingCategory } from '@/types'
 import { vehicleRepository, sanitizeVehicle } from '@/repositories/vehicleRepository'
 
 export const useVehiclesStore = defineStore('vehicles', () => {
@@ -36,6 +36,11 @@ export const useVehiclesStore = defineStore('vehicles', () => {
 
   /** รถที่มีคนขับรหัสนี้ประจำอยู่ (ถ้ามี) */
   const vehicleForDriver = (driverCode: string) => vehicles.value.find((v) => v.driverCode === driverCode)
+
+  /** รถที่วิ่งงาน Feed นี้ได้ — ไม่มีค่า/array ว่างใน allowedCategories = ไม่จำกัด (วิ่งได้ทุก Feed) ใช้จุดเดียวนี้
+   *  ทุกที่ที่ต้องเลือกรถให้ Booking กัน UI คนละหน้าแสดงรถไม่ตรงกัน (ดู types/index.ts's Vehicle.allowedCategories) */
+  const availableFor = (category: BookingCategory) =>
+    vehicles.value.filter((v) => !v.allowedCategories || v.allowedCategories.length === 0 || v.allowedCategories.includes(category))
 
   /**
    * กำหนด/เปลี่ยนคนขับประจำของรถคันนี้ — จุดเดียวที่แก้ไขความสัมพันธ์รถ-คนขับ เพื่อให้ทุกหน้าเห็นข้อมูลเดียวกันเสมอ
@@ -87,6 +92,7 @@ export const useVehiclesStore = defineStore('vehicles', () => {
     fullPlate,
     findByFullPlate,
     vehicleForDriver,
+    availableFor,
     assignDriver,
     createVehicle,
     updateVehicle,

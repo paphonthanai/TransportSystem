@@ -796,6 +796,15 @@ export const useBookingStore = defineStore('booking', () => {
    * ออฟฟิศตรวจสอบ POD ของงานที่คนขับจบงานผ่านแอป (PENDING_REVIEW) แล้วอนุมัติ/ตีกลับ
    * ต้อง APPROVED ก่อนถึงจะสร้างใบวางบิลได้ (ดู createBillingFromBookings ใน salesDocuments.ts)
    */
+  /** สลับสถานะเช็คตั๋วจาก Booking List โดยตรง — เป็นอิสระจาก BookingStatus/BillingStatus/PodReviewStatus เดิมทั้งหมด
+   *  (ดู Booking.ticketChecked ใน types/index.ts) ไม่มี business rule อื่นผูกกับค่านี้ */
+  function toggleTicketChecked(id: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return
+    booking.ticketChecked = !booking.ticketChecked
+    addLog(`${booking.ticketChecked ? 'เช็คตั๋ว' : 'ยกเลิกเช็คตั๋ว'} ${booking.docNo}`, { bookingId: booking.id })
+  }
+
   function reviewPod(bookingId: string, decision: 'APPROVED' | 'REJECTED', note?: string) {
     const booking = bookings.value.find((b) => b.id === bookingId)
     if (!booking || booking.podReviewStatus !== 'PENDING_REVIEW') return
@@ -1031,6 +1040,7 @@ export const useBookingStore = defineStore('booking', () => {
     completeJob,
     deliverJobItem,
     confirmPodImage,
+    toggleTicketChecked,
     finishDriverJob,
     stripDateSuffixFromSiteNames,
     reviewPod,

@@ -34,6 +34,7 @@ export function sanitizeCustomer(data: Partial<CustomerRecord>): Omit<CustomerRe
     bankAccountName: data.bankAccountName ?? '',
     bankAccountNumber: data.bankAccountNumber ?? '',
     note: data.note ?? '',
+    color: data.color || undefined,
   }
 }
 

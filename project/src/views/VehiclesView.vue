@@ -23,6 +23,7 @@
             <th class="px-4 py-3 font-semibold">เลขเครื่อง</th>
             <th class="px-4 py-3 font-semibold">ปีรถ</th>
             <th class="px-4 py-3 font-semibold">หน่วยงาน</th>
+            <th class="px-4 py-3 font-semibold">Feed ที่วิ่งได้</th>
             <th class="px-4 py-3 font-semibold">คนขับประจำ</th>
             <th class="px-4 py-3 font-semibold text-right">เลขไมล์</th>
             <th class="px-4 py-3 font-semibold"></th>
@@ -43,6 +44,7 @@
             <td class="px-4 py-3">
               <span class="text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">{{ vehicle.department }}</span>
             </td>
+            <td class="px-4 py-3 text-muted">{{ feedLabel(vehicle) }}</td>
             <td class="px-4 py-3 text-muted">{{ assignedDriverLabel(vehicle) }}</td>
             <td class="px-4 py-3 text-right text-text">{{ vehicle.mileage.toLocaleString('th-TH') }}</td>
             <td class="px-4 py-3 text-right whitespace-nowrap">
@@ -114,6 +116,22 @@
                 </button>
               </div>
             </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-muted mb-1">
+                Feed ที่วิ่งได้
+                <span class="text-[10px] font-normal text-muted">(ไม่เลือกเลย = วิ่งได้ทุก Feed)</span>
+              </label>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-1.5 text-sm text-text cursor-pointer">
+                  <input type="checkbox" :checked="form.allowedCategories?.includes('cements')" @change="toggleAllowedCategory('cements')" />
+                  Cement
+                </label>
+                <label class="flex items-center gap-1.5 text-sm text-text cursor-pointer">
+                  <input type="checkbox" :checked="form.allowedCategories?.includes('ceramics')" @change="toggleAllowedCategory('ceramics')" />
+                  Ceramics
+                </label>
+              </div>
+            </div>
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">เลขไมล์</label>
               <input v-model.number="form.mileage" type="number" class="input-field w-full" />
@@ -143,7 +161,8 @@ import { useOnboardingStore } from '@/stores/onboarding'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useDriversStore } from '@/stores/drivers'
 import { useAuthStore } from '@/stores/auth'
-import type { Vehicle, VehicleType } from '@/types'
+import type { Vehicle, VehicleType, BookingCategory } from '@/types'
+import { categoryFeedLabel } from '@/utils/bookingStatus'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -166,6 +185,10 @@ const assignedDriverLabel = (vehicle: Vehicle) => {
   return driver ? driversStore.fullName(driver) : '-'
 }
 
+/** ไม่มีค่า/array ว่าง = วิ่งได้ทุก Feed (ดู types/index.ts's Vehicle.allowedCategories) */
+const feedLabel = (vehicle: Vehicle) =>
+  vehicle.allowedCategories?.length ? vehicle.allowedCategories.map((c) => categoryFeedLabel[c]).join(', ') : 'ทุก Feed'
+
 const showDialog = ref(false)
 const editingIndex = ref<number | null>(null)
 /** id เอกสาร Firestore ของรายการที่กำลังแก้ไข — ใช้เรียก vehiclesStore.updateVehicle() ให้ตรงตัวจริง แทนการอิง index ในอาเรย์ */
@@ -185,7 +208,13 @@ const emptyForm = (): VehicleForm => ({
   department: 'รถบริษัท',
   year: undefined,
   mileage: 0,
+  allowedCategories: [],
 })
+
+const toggleAllowedCategory = (category: BookingCategory) => {
+  const current = form.value.allowedCategories || []
+  form.value.allowedCategories = current.includes(category) ? current.filter((c) => c !== category) : [...current, category]
+}
 
 const form = ref<VehicleForm>(emptyForm())
 

@@ -52,33 +52,12 @@
               ⚠ ปลายทางนี้อยู่คนละสาย/เส้นทางกับรายการอื่นในงานนี้ ตรวจสอบว่าต้องการรวมในงานเดียวกันจริงหรือไม่
             </div>
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">ต้นทาง/จุดรับสินค้า (ไม่บังคับ)</label>
-              <input
-                v-model="draft.pickupOriginName"
-                :disabled="!!lockedDestination"
-                list="itemEditorOriginOptions"
-                placeholder="ว่าง = ใช้ต้นทางของงาน"
-                class="input-field w-full disabled:opacity-70"
-              />
-              <datalist id="itemEditorOriginOptions">
-                <option v-for="n in originsStore.originNames" :key="n" :value="n" />
-              </datalist>
-            </div>
-            <div>
               <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้ติดต่อหน้างาน (ไม่บังคับ)</label>
               <input v-model="draft.siteContactName" placeholder="ชื่อผู้ติดต่อ" class="input-field w-full" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทรหน้างาน (ไม่บังคับ)</label>
               <input v-model="draft.sitePhone" placeholder="เบอร์โทร" class="input-field w-full" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">วันที่ลงสินค้าจุดนี้ (ไม่บังคับ)</label>
-              <input v-model="draft.loadingDate" type="date" class="input-field w-full" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">เวลาลงสินค้าจุดนี้ (ไม่บังคับ)</label>
-              <input v-model="draft.loadingTime" type="time" class="input-field w-full" />
             </div>
             <div class="md:col-span-2">
               <label class="block text-xs font-semibold text-muted mb-1">พิกัด/ลิงก์ Google Maps หน้างาน (ไม่บังคับ)</label>
@@ -191,7 +170,6 @@ import { ref, computed, watch } from 'vue'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
-import { useOriginsStore } from '@/stores/origins'
 import { useBookingStore } from '@/stores/booking'
 import type { BookingJobType, JobItem, PricingMode } from '@/types'
 import type { Product } from '@/stores/inventory'
@@ -237,7 +215,6 @@ const emit = defineEmits<{ save: [draft: JobItemDraft]; close: [] }>()
 const inventoryStore = useInventoryStore()
 const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
-const originsStore = useOriginsStore()
 const bookingStore = useBookingStore()
 
 const jobTypeOptions: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']

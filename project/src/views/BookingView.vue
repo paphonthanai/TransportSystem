@@ -31,43 +31,55 @@
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เที่ยวที่</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">พขร.</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
+              <th class="text-center px-4 py-3 font-semibold text-muted">เช็คตั๋ว</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">ปลายทาง</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน/สินค้า' : 'สินค้า' }}</th>
-              <th class="text-right px-4 py-3 font-semibold text-muted">น้ำมัน</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">รถ / คนขับ</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ลงสินค้า</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เวลาลงสินค้า</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">สถานะ</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เวลา</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">สถานที่ส่ง</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">สถานะขนส่ง</th>
+              <th class="px-4 py-3"></th>
               <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="booking in inProgressBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
-              <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
-              <td class="px-4 py-3 font-semibold text-text">
-                {{ destinationLabel(booking) }}
-                <span class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-surface-2 text-muted">{{ booking.items.length }} เที่ยว</span>
-                <span
-                  v-if="booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING'"
-                  class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700"
+              <td class="px-4 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
+              <td class="px-4 py-3 text-text">{{ booking.driverName || '-' }}</td>
+              <td class="px-4 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
+              <td class="px-4 py-3 text-center">
+                <button
+                  @click="bookingStore.toggleTicketChecked(booking.id)"
+                  :class="[
+                    'w-7 h-7 rounded-md border flex items-center justify-center mx-auto',
+                    booking.ticketChecked ? 'bg-green-600 border-green-600 text-white' : 'bg-surface border-border text-transparent',
+                  ]"
+                  title="เช็คตั๋ว"
                 >
-                  ส่งแล้ว {{ deliveredItemCount(booking) }}/{{ booking.items.length }}
+                  <span class="material-symbols-rounded text-base">check</span>
+                </button>
+              </td>
+              <td class="px-4 py-3 text-text">
+                <span class="inline-flex items-center gap-1.5" :title="booking.customer">
+                  <span
+                    v-if="customerRecordFor(booking)?.color"
+                    :style="{ background: customerRecordFor(booking)!.color }"
+                    class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  ></span>
+                  {{ customerRecordFor(booking)?.code || booking.customer }}
                 </span>
               </td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-4 py-3 text-text">
-                {{ productLabel(booking) }}
-                <div class="text-xs text-muted">รวม {{ totalQtyLabel(booking) }}</div>
-              </td>
-              <td class="px-4 py-3 text-right text-muted">{{ fuelLitersLabel(booking) }}</td>
-              <td class="px-4 py-3 text-text">
-                <div class="font-semibold">{{ booking.plate || '-' }}</div>
-                <div class="text-xs text-muted flex items-center gap-1">
-                  {{ booking.driverName || '-' }}
+                <div class="font-semibold">{{ destinationLabel(booking) }}</div>
+                <div v-if="booking.items.length" class="text-[11px] text-muted leading-tight mt-0.5">
+                  <div>{{ productNamesRow(booking) }}</div>
+                  <div>{{ productQtyRow(booking) }}</div>
                 </div>
               </td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap items-center gap-1">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
@@ -75,6 +87,11 @@
                     เหลือ {{ formatCountdown(remainingAcceptSeconds(booking)) }}
                   </span>
                 </div>
+              </td>
+              <td class="px-4 py-3">
+                <button v-if="booking.note" @click="noteTarget = booking" class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center" title="ดูหมายเหตุ">
+                  !
+                </button>
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
@@ -103,7 +120,7 @@
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
-              <td colspan="9" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="11" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -121,51 +138,62 @@
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เที่ยวที่</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">พขร.</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
+              <th class="text-center px-4 py-3 font-semibold text-muted">เช็คตั๋ว</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">ปลายทาง</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน/สินค้า' : 'สินค้า' }}</th>
-              <th class="text-right px-4 py-3 font-semibold text-muted">น้ำมัน</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">รถ / คนขับ</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ลงสินค้า</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เวลาลงสินค้า</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">สถานะ</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">เวลา</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">สถานที่ส่ง</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">สถานะขนส่ง</th>
+              <th class="px-4 py-3"></th>
               <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="booking in inTransitBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
-              <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
-              <td class="px-4 py-3 font-semibold text-text">
-                {{ destinationLabel(booking) }}
-                <span class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-surface-2 text-muted">{{ booking.items.length }} เที่ยว</span>
-                <span
-                  v-if="booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING'"
-                  class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700"
+              <td class="px-4 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
+              <td class="px-4 py-3 text-text">{{ booking.driverName || '-' }}</td>
+              <td class="px-4 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
+              <td class="px-4 py-3 text-center">
+                <button
+                  @click="bookingStore.toggleTicketChecked(booking.id)"
+                  :class="[
+                    'w-7 h-7 rounded-md border flex items-center justify-center mx-auto',
+                    booking.ticketChecked ? 'bg-green-600 border-green-600 text-white' : 'bg-surface border-border text-transparent',
+                  ]"
+                  title="เช็คตั๋ว"
                 >
-                  ส่งแล้ว {{ deliveredItemCount(booking) }}/{{ booking.items.length }}
+                  <span class="material-symbols-rounded text-base">check</span>
+                </button>
+              </td>
+              <td class="px-4 py-3 text-text">
+                <span class="inline-flex items-center gap-1.5" :title="booking.customer">
+                  <span
+                    v-if="customerRecordFor(booking)?.color"
+                    :style="{ background: customerRecordFor(booking)!.color }"
+                    class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  ></span>
+                  {{ customerRecordFor(booking)?.code || booking.customer }}
                 </span>
               </td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-4 py-3 text-text">
-                {{ productLabel(booking) }}
-                <div class="text-xs text-muted">รวม {{ totalQtyLabel(booking) }}</div>
-              </td>
-              <td class="px-4 py-3 text-right text-muted">{{ fuelLitersLabel(booking) }}</td>
-              <td class="px-4 py-3 text-text">
-                <div class="font-semibold">{{ booking.plate || '-' }}</div>
-                <div class="text-xs text-muted flex items-center gap-1">
-                  {{ booking.driverName || '-' }}
-                  <span
-                    v-if="booking.driverName && driverTripNumberForBooking(booking) > 1"
-                    class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700"
-                  >
-                    เที่ยวที่ {{ driverTripNumberForBooking(booking) }}
-                  </span>
+                <div class="font-semibold">{{ destinationLabel(booking) }}</div>
+                <div v-if="booking.items.length" class="text-[11px] text-muted leading-tight mt-0.5">
+                  <div>{{ productNamesRow(booking) }}</div>
+                  <div>{{ productQtyRow(booking) }}</div>
                 </div>
               </td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
               <td class="px-4 py-3">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
+              </td>
+              <td class="px-4 py-3">
+                <button v-if="booking.note" @click="noteTarget = booking" class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center" title="ดูหมายเหตุ">
+                  !
+                </button>
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
@@ -186,7 +214,7 @@
               </td>
             </tr>
             <tr v-if="inTransitBookings.length === 0">
-              <td colspan="9" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="11" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -208,11 +236,16 @@
           </div>
           <div class="px-6 py-5 space-y-3">
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">ทะเบียนรถ *</label>
-              <input v-model="dispatchForm.plate" list="dispatchVehicleOptions" placeholder="เช่น 82-4417 กรุงเทพ" class="input-field w-full" />
-              <datalist id="dispatchVehicleOptions">
-                <option v-for="v in vehiclesStore.vehicles" :key="v.id" :value="vehiclesStore.fullPlate(v)" />
-              </datalist>
+              <label class="block text-xs font-semibold text-muted mb-1">
+                ทะเบียนรถ *
+                <span class="text-[10px] font-normal text-muted">(แสดงเฉพาะรถที่วิ่ง Feed นี้ได้)</span>
+              </label>
+              <select v-model="dispatchForm.plate" class="input-field w-full">
+                <option value="">เลือกทะเบียนรถ...</option>
+                <option v-for="v in availableVehiclesForDispatch" :key="v.id" :value="vehiclesStore.fullPlate(v)">
+                  {{ vehicleOptionLabel(v) }}
+                </option>
+              </select>
             </div>
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">คนขับ</label>
@@ -434,6 +467,21 @@
       </div>
     </Teleport>
 
+    <!-- Note Viewer — เปิดอ่านหมายเหตุจากปุ่ม "!" ใน Booking List -->
+    <Teleport to="body" v-if="noteTarget">
+      <div @click="noteTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6 animate-fade">
+        <div @click.stop class="w-full max-w-md bg-surface rounded-2xl shadow-2xl animate-slide">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+            <div class="font-bold text-text">หมายเหตุ {{ noteTarget.docNo }}</div>
+            <button @click="noteTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+          <div class="px-6 py-5 text-sm text-text whitespace-pre-wrap">{{ noteTarget.note }}</div>
+        </div>
+      </div>
+    </Teleport>
+
   </div>
 </template>
 
@@ -448,7 +496,7 @@ import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { useOriginsStore } from '@/stores/origins'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
-import type { Booking, BookingCategory, BookingJobType, BookingStatus, DebtAdjustment, JobItem } from '@/types'
+import type { Booking, BookingCategory, BookingJobType, BookingStatus, DebtAdjustment, JobItem, Vehicle } from '@/types'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
 import { parseGpsInput } from '@/utils/gps'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
@@ -535,6 +583,23 @@ const driverOptionLabel = (name: string) => {
 const formatShortDate = (date?: Date) =>
   date ? new Date(date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
 
+/** งานล่าสุดที่ "รถคันนี้" กำลังวิ่งอยู่ (ยังไม่ DELIVERED) — Requirement ข้อ 3: ผูกสถานะกับรถ ไม่ใช่คนขับ ใช้แสดง
+ *  "ว่าง"/สถานะปัจจุบันตอนเลือกรถให้ Booking ในกล่องจัดรถ ไม่รวมตัว Booking ที่กำลังจัดรถอยู่นี้เอง (กันจัดรถซ้ำ/แก้ไขรถเดิม) */
+const activeBookingForVehicle = (plate: string) =>
+  bookingStore.bookings
+    .filter((b) => b.plate === plate && b.id !== dispatchTarget.value?.id && ACTIVE_STATUSES.includes(b.status))
+    .sort((a, b) => new Date(b.dispatchedAt || b.createdAt).getTime() - new Date(a.dispatchedAt || a.createdAt).getTime())[0]
+
+/** รถที่วิ่ง Feed ของงานนี้ได้เท่านั้น (ดู vehiclesStore.availableFor + Vehicle.allowedCategories) — Requirement ข้อ 3:
+ *  จัดรถแสดงเฉพาะรถที่ประเภทตรงกับ Feed ของ Booking รถที่ไม่ตรงไม่แสดงเลย ไม่ใช่แค่เตือน */
+const availableVehiclesForDispatch = computed(() => (dispatchTarget.value ? vehiclesStore.availableFor(dispatchTarget.value.category) : []))
+
+const vehicleOptionLabel = (v: Vehicle) => {
+  const full = vehiclesStore.fullPlate(v)
+  const activeBooking = activeBookingForVehicle(full)
+  return activeBooking ? `${full} — ${bookingStatusLabel[activeBooking.status]} (${activeBooking.docNo})` : `${full} — ว่าง`
+}
+
 const statusRank: Record<BookingStatus, number> = {
   WAITING_DISPATCH: 0,
   ASSIGNED: 1,
@@ -593,6 +658,24 @@ const destinationLabel = (booking: Booking) => {
   const first = booking.items[0].siteName
   return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
 }
+
+/** อำเภอ/จังหวัด ของปลายทางแรก — ตัวย่อ + สีลูกค้าใน Requirement นี้อ้างอิงปลายทางแรกเสมอ (เหมือน destinationLabel เดิม) */
+const districtProvinceLabel = (booking: Booking) => {
+  if (!booking.items.length) return '-'
+  const { district, province } = booking.items[0]
+  return `${district || '-'} / ${province || '-'}`
+}
+
+/** ตัวย่อ 3 ตัว + สีประจำลูกค้า (Requirement ข้อ 2/5) — หา CustomerRecord จากชื่อลูกค้าที่ผูกกับ Booking (ไม่มี id
+ *  บน Booking โดยตรง เหมือนจุดอื่นๆ ที่ join ด้วยชื่อลูกค้าอยู่แล้วในระบบนี้) */
+const customerRecordFor = (booking: Booking) => customerStore.customers.find((c) => c.name === booking.customer)
+
+/** สินค้าหลายรายการแสดงแนวนอน 2 แถว: แถวบน = ชื่อสินค้า, แถวล่าง = จำนวน คั่นด้วย " | " ต่อรายการ (Requirement ข้อ 2) */
+const productNamesRow = (booking: Booking) => booking.items.map((i) => i.product || '-').join(' | ')
+const productQtyRow = (booking: Booking) => booking.items.map((i) => `${i.qty}`).join(' | ')
+
+/** เปิดดูหมายเหตุแบบเต็มจากปุ่ม "!" ท้ายแถวใน Booking List (Requirement ข้อ 2) */
+const noteTarget = ref<Booking | null>(null)
 
 /** รวมจำนวนสินค้าทั้งงาน แยกกลุ่มตามหน่วยนับ (Phase 1 ข้อ 2) — ใช้แสดงผลใน List เท่านั้น ไม่แตะ/ไม่ลบรายการ
  *  สินค้าย่อยเดิม (M1/M2 ฯลฯ) ที่ยังต้องแสดงครบใน Booking Detail/Document เหมือนเดิม */

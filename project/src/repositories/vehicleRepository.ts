@@ -1,6 +1,6 @@
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore'
 import { db } from '@/config/firebase'
-import type { Vehicle, VehicleType } from '@/types'
+import type { BookingCategory, Vehicle, VehicleType } from '@/types'
 
 /**
  * Phase 3 ของ incremental migration (localStorage -> Firestore) — เหมือน customerRepository.ts/driverRepository.ts:
@@ -33,6 +33,7 @@ export function sanitizeVehicle(data: Partial<Vehicle>): Record<string, unknown>
     repairStatus: (data.repairStatus as string) || null,
     repairDays: typeof data.repairDays === 'number' ? data.repairDays : null,
     driverCode: (data.driverCode as string) || null,
+    allowedCategories: Array.isArray(data.allowedCategories) && data.allowedCategories.length ? (data.allowedCategories as BookingCategory[]) : null,
   }
 }
 
@@ -55,6 +56,7 @@ function fromFirestore(id: string, data: Record<string, any>): Vehicle {
     repairStatus: data.repairStatus ?? undefined,
     repairDays: data.repairDays ?? undefined,
     driverCode: data.driverCode ?? undefined,
+    allowedCategories: Array.isArray(data.allowedCategories) && data.allowedCategories.length ? data.allowedCategories : undefined,
   }
 }
 

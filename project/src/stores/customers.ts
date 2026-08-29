@@ -30,6 +30,8 @@ export interface CustomerRecord {
   bankAccountName: string
   bankAccountNumber: string
   note: string
+  /** สีประจำลูกค้า (hex เช่น "#3b82f6") ใช้แยกลูกค้าด้วยสายตาในหน้าสร้างงาน/Booking List — ไม่มีค่า = ยังไม่ได้ตั้งสี */
+  color?: string
 }
 
 export const useCustomerStore = defineStore('customers', () => {

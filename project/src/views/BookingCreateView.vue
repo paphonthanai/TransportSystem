@@ -31,6 +31,18 @@
             <datalist id="customerNameOptions">
               <option v-for="c in customerStore.customers" :key="c.name" :value="c.name" />
             </datalist>
+            <div v-if="selectedCustomerRecord" class="flex items-center gap-2 mt-1.5">
+              <span
+                class="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full bg-surface-2 text-text"
+              >
+                <span
+                  v-if="selectedCustomerRecord.color"
+                  :style="{ background: selectedCustomerRecord.color }"
+                  class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                ></span>
+                {{ selectedCustomerRecord.code || '-' }}
+              </span>
+            </div>
           </div>
           <div class="w-full sm:w-1/2">
             <ContactPickerField :customer-id="selectedCustomerId" v-model="header.contactId" />
@@ -40,36 +52,8 @@
               <label class="field-label">ใบสั่งงาน (PO)</label>
               <input v-model="header.po" class="input-field w-full" />
             </div>
-            <div>
-              <label class="field-label">วันที่ขนส่ง</label>
-              <input v-model="header.shipDate" type="date" class="input-field w-full" />
-            </div>
-            <div>
-              <label class="field-label">วันที่ลงสินค้า <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
-              <input v-model="header.loadingDate" type="date" class="input-field w-full" />
-            </div>
-            <div>
-              <label class="field-label">เวลาลงสินค้า <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
-              <input v-model="header.loadingTime" type="time" class="input-field w-full" />
-            </div>
-            <div>
-              <label class="field-label">ทะเบียนรถ <span class="font-normal text-[10px]">(กรอกทีหลังได้)</span></label>
-              <input v-model="header.plate" list="headerVehicleOptions" placeholder="เช่น 82-4417 กรุงเทพ" class="input-field w-full" />
-              <datalist id="headerVehicleOptions">
-                <option v-for="v in vehicleOptions" :key="v" :value="v" />
-              </datalist>
-            </div>
-            <div>
-              <label class="field-label">คนขับ <span class="font-normal text-[10px]">(กรอกทีหลังได้)</span></label>
-              <select v-model="header.driverName" class="input-field w-full">
-                <option value="">เลือกคนขับ...</option>
-                <option v-for="name in driverOptions" :key="name" :value="name">{{ driverOptionLabel(name) }}</option>
-              </select>
-            </div>
-            <div>
-              <label class="field-label">วันที่กลับ <span class="font-normal text-[10px]">(แก้ไขทีหลังได้)</span></label>
-              <input v-model="header.returnDate" type="date" class="input-field w-full" />
-            </div>
+            <!-- ซ่อนตาม Requirement: วันที่ขนส่ง/วันที่ลงสินค้า/วันที่กลับ/ทะเบียนรถ/คนขับ — คง field ใน data model ไว้
+                 (ดู header/defaultHeader/saveAllItems) จัดรถ/คนขับย้ายไปทำที่ Booking List แทน (ดู BookingView.vue) -->
           </div>
         </div>
 
@@ -113,25 +97,8 @@
             <input v-if="header.pricingMode !== 'MULTI_DESTINATION'" v-model.number="header.tripFee" type="number" placeholder="0" class="input-field w-full" />
             <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-semibold">{{ formatBaht(multiTripFeeTotal) }} (อัตโนมัติ)</div>
           </div>
-          <div>
-            <label class="field-label">
-              ราคาที่ตกลงกับลูกค้า (บาท)
-              <span class="text-[10px] font-normal text-muted">(ว่างไว้ = ใช้ค่าเที่ยว)</span>
-            </label>
-            <input v-model.number="header.agreedPrice" type="number" placeholder="auto" class="input-field w-full" />
-          </div>
-          <div>
-            <label class="field-label">ส่วนลด</label>
-            <select v-model="header.discountMode" class="input-field w-full mb-1 text-xs">
-              <option v-for="opt in discountModeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-            </select>
-            <input v-if="header.discountMode !== 'fixed'" v-model.number="header.discountPercent" type="number" min="0" max="100" class="input-field w-full" />
-            <input v-else v-model.number="header.discountAmount" type="number" min="0" class="input-field w-full" />
-          </div>
-          <div>
-            <label class="field-label">อัตราภาษีมูลค่าเพิ่ม (%)</label>
-            <input v-model.number="header.vatRate" type="number" min="0" max="100" class="input-field w-full" />
-          </div>
+          <!-- ซ่อนตาม Requirement: ราคาที่ตกลงกับลูกค้า/ส่วนลด/VAT — คง field ใน data model ไว้ (agreedPrice fallback
+               เป็น tripFee, discountMode default 'percent'/0, vatRate default จาก documentSettingsStore เหมือนเดิม) -->
           <div>
             <label class="field-label">เบี้ยเลี้ยงคนขับ</label>
             <input v-if="isCements" v-model.number="header.allowance" type="number" placeholder="0" class="input-field w-full" />
@@ -140,19 +107,11 @@
         </div>
       </div>
 
-      <!-- เลขชิพเม้น / เส้นทาง / ต้นทาง / เลขที่อ้างอิง / รายละเอียด -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-4 border-t border-border">
+      <!-- เลขชิพเม้น / เลขที่อ้างอิง / รายละเอียด — ซ่อนเส้นทาง/ต้นทางตาม Requirement (คง field ไว้ใน data model) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-4 border-t border-border">
         <div>
           <label class="field-label">เลขชิพเม้น</label>
           <input v-model="header.shipmentNo" placeholder="เลขที่ Shipment" class="input-field w-full" />
-        </div>
-        <div>
-          <label class="field-label">เส้นทาง</label>
-          <input v-model="header.route" placeholder="เช่น กรุงเทพ-นครสวรรค์-เชียงใหม่" class="input-field w-full" />
-        </div>
-        <div>
-          <label class="field-label">ต้นทาง</label>
-          <input v-model="header.origin" placeholder="จุดขึ้นสินค้า" class="input-field w-full" />
         </div>
         <div>
           <label class="field-label">เลขที่อ้างอิง</label>
@@ -375,7 +334,8 @@ const discountModeOptions = [
 const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
 
 const isCements = computed(() => props.fleet === 'cements')
-const selectedCustomerId = computed(() => customerStore.customers.find((c) => c.name === header.value.customer)?.id)
+const selectedCustomerRecord = computed(() => customerStore.customers.find((c) => c.name === header.value.customer))
+const selectedCustomerId = computed(() => selectedCustomerRecord.value?.id)
 const productOptionsForFleet = computed(() => inventoryStore.products.filter((p) => p.category === props.fleet))
 const vehicleOptions = computed(() => vehiclesStore.vehicles.map((v) => vehiclesStore.fullPlate(v)))
 const nextReleaseNoPreview = computed(() => bookingStore.nextReleaseNo())
@@ -643,12 +603,18 @@ const removeLineItem = (idx: number) => {
 
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
 
+/**
+ * Requirement: หน้านี้ทำหน้าที่ "จอง/ล็อครถให้ลูกค้า" — เลือก Feed (props.fleet) + เลือกลูกค้าแล้วสร้างงานได้ทันที
+ * ห้ามใช้ "ไม่มีสินค้า" เป็น Blocker (items=[] ต้องสร้างได้) เพิ่มรายการ/รายละเอียดทีหลังได้เสมอผ่านหน้าแก้ไขงาน
+ * ยังตรวจความถูกต้องของรายการที่มีอยู่จริงเท่านั้น (ถ้าเลือกโหมด MULTI_DESTINATION และมีรายการแล้ว ต้องกรอกค่าเที่ยว/
+ * จำนวนเที่ยวให้ครบก่อนจึงบันทึกได้ — กันข้อมูลพังตั้งแต่ต้น ไม่ใช่ Blocker ของการไม่มีรายการเลย)
+ */
 const canSave = computed(() => {
-  if (!header.value.customer || lineItems.value.length === 0) return false
-  if (header.value.pricingMode === 'MULTI_DESTINATION') {
+  if (!header.value.customer) return false
+  if (header.value.pricingMode === 'MULTI_DESTINATION' && lineItems.value.length > 0) {
     return lineItems.value.every((i) => (i.tripFee || 0) > 0 && Number.isInteger(i.tripCount) && (i.tripCount || 0) >= 1)
   }
-  return header.value.tripFee > 0
+  return true
 })
 
 const goBack = () => router.push(`/booking/${props.fleet}`)

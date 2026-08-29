@@ -24,7 +24,12 @@
         </thead>
         <tbody>
           <tr v-for="customer in customerRows" :key="customer.code || customer.name" class="border-t border-border hover:bg-surface-2 transition-colors">
-            <td class="px-4 py-3 text-muted font-semibold">{{ customer.code || '-' }}</td>
+            <td class="px-4 py-3 text-muted font-semibold">
+              <span class="inline-flex items-center gap-1.5">
+                <span v-if="customer.color" :style="{ background: customer.color }" class="w-2.5 h-2.5 rounded-full flex-shrink-0"></span>
+                {{ customer.code || '-' }}
+              </span>
+            </td>
             <td class="px-4 py-3">
               <div class="flex items-center gap-3">
                 <div :style="{ background: customer.avatarBg }" class="w-9 h-9 rounded-xl text-white flex items-center justify-center font-bold">{{ customer.initial }}</div>
@@ -106,6 +111,17 @@
                     <span class="text-[10px] font-normal text-muted">(ใช้อ้างอิงในเลข PO)</span>
                   </label>
                   <input v-model="form.code" placeholder="เช่น SCC" class="input-field w-full" />
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">
+                  สีประจำลูกค้า
+                  <span class="text-[10px] font-normal text-muted">(แยกลูกค้าด้วยสายตาในหน้าสร้างงาน/Booking List)</span>
+                </label>
+                <div class="flex items-center gap-2">
+                  <input v-model="form.color" type="color" class="h-9 w-14 rounded-lg border border-border cursor-pointer" />
+                  <span class="text-xs text-muted">{{ form.color || 'ยังไม่ได้ตั้งสี' }}</span>
                 </div>
               </div>
 
@@ -254,6 +270,7 @@ const emptyForm = (): CustomerRecord => ({
   bankAccountName: '',
   bankAccountNumber: '',
   note: '',
+  color: '',
 })
 
 const form = ref<CustomerRecord>(emptyForm())
