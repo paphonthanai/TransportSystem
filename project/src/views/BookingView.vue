@@ -36,6 +36,7 @@
               <th class="text-left px-4 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
               <th class="text-center px-4 py-3 font-semibold text-muted">เช็คตั๋ว</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ลงงาน</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">เวลา</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">สถานที่ส่ง</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
@@ -71,6 +72,7 @@
                   {{ customerRecordFor(booking)?.code || booking.customer }}
                 </span>
               </td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
               <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ destinationLabel(booking) }}</div>
@@ -121,7 +123,7 @@
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
-              <td colspan="11" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -144,6 +146,7 @@
               <th class="text-left px-4 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
               <th class="text-center px-4 py-3 font-semibold text-muted">เช็คตั๋ว</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
+              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ลงงาน</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">เวลา</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">สถานที่ส่ง</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
@@ -179,6 +182,7 @@
                   {{ customerRecordFor(booking)?.code || booking.customer }}
                 </span>
               </td>
+              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
               <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ destinationLabel(booking) }}</div>
@@ -216,7 +220,7 @@
               </td>
             </tr>
             <tr v-if="inTransitBookings.length === 0">
-              <td colspan="11" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>

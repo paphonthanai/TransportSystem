@@ -52,8 +52,17 @@
               <label class="field-label">ใบสั่งงาน (PO)</label>
               <input v-model="header.po" class="input-field w-full" />
             </div>
-            <!-- ซ่อนตาม Requirement: วันที่ขนส่ง/วันที่ลงสินค้า/วันที่กลับ/ทะเบียนรถ/คนขับ — คง field ใน data model ไว้
-                 (ดู header/defaultHeader/saveAllItems) จัดรถ/คนขับย้ายไปทำที่ Booking List แทน (ดู BookingView.vue) -->
+            <div>
+              <label class="field-label">วันที่ลงงาน <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
+              <input v-model="header.loadingDate" type="date" class="input-field w-full" />
+            </div>
+            <div>
+              <label class="field-label">เวลา <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
+              <input v-model="header.loadingTime" type="time" class="input-field w-full" />
+            </div>
+            <!-- ซ่อนตาม Requirement เดิม: วันที่ขนส่ง/วันที่กลับ/ทะเบียนรถ/คนขับ — คง field ใน data model ไว้ (ดู
+                 header/defaultHeader/saveAllItems) จัดรถ/คนขับย้ายไปทำที่ Booking List แทน (ดู BookingView.vue) —
+                 วันที่ลงงาน/เวลา (loadingDate/loadingTime) แสดงแล้วตาม Requirement ใหม่ (Customer/Job Information) -->
           </div>
         </div>
 
@@ -413,6 +422,7 @@ const lineItems = ref<JobItem[]>(
   quotationItemsPrefill && quotationItemsPrefill.sourceId === sourceQuotationId
     ? quotationItemsPrefill.items.map((item, idx) => ({
         id: `item${Date.now()}${idx}${Math.random().toString(36).slice(2, 4)}`,
+        productId: item.productId,
         product: item.description,
         qty: item.qty,
         unit: item.unit,
@@ -548,6 +558,7 @@ const draftToItem = (draft: JobItemDraft, existingId?: string): JobItem => {
     longitude: gps.longitude,
     mapUrl: draft.gpsInput || undefined,
     pickupOriginName: draft.pickupOriginName || undefined,
+    productId: draft.productId || undefined,
     product: draft.product,
     qty: draft.qty,
     unit: draft.unit,

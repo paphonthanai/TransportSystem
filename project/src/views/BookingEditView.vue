@@ -454,6 +454,7 @@ const draftToItem = (draft: JobItemDraft, existingId?: string): JobItem => {
     longitude: gps.longitude,
     mapUrl: draft.gpsInput || undefined,
     pickupOriginName: draft.pickupOriginName || undefined,
+    productId: draft.productId || undefined,
     product: draft.product,
     qty: draft.qty,
     unit: draft.unit,

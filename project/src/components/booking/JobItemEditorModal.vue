@@ -183,6 +183,9 @@ export interface JobItemDraft {
   sitePhone: string
   gpsInput: string
   pickupOriginName: string
+  /** FK → Product.id ถ้า `product` ตรงกับชื่อสินค้าใน Product Master เป๊ะ (resolve อัตโนมัติ ดู watch(draft.product) ด้านล่าง)
+   *  ว่างได้เสมอถ้าพิมพ์ชื่อที่ไม่ตรง Product Master — ไม่บังคับ ไม่มี validation ใหม่ */
+  productId: string
   product: string
   qty: number
   unit: string
@@ -227,6 +230,7 @@ const defaultDraft = (): JobItemDraft => ({
   sitePhone: '',
   gpsInput: '',
   pickupOriginName: '',
+  productId: '',
   product: '',
   qty: 0,
   unit: '',
@@ -260,6 +264,7 @@ const seed = () => {
       sitePhone: i.sitePhone || '',
       gpsInput: i.mapUrl || '',
       pickupOriginName: i.pickupOriginName || '',
+      productId: i.productId || '',
       product: i.product,
       qty: i.qty,
       unit: i.unit,
@@ -287,11 +292,14 @@ const corridorWarning = computed(() => {
 })
 
 // เลือกสินค้าปุ๊บ เติมหน่วยนับจากสินค้าที่ตั้งค่าไว้ให้เป็นค่าเริ่มต้นเฉยๆ (เฉพาะตอนช่องหน่วยยังว่างอยู่) ไม่ทับค่าที่ผู้ใช้พิมพ์เองไว้แล้ว — ผู้ใช้แก้ไขหน่วยเองได้อิสระเสมอ
+// resolve productId คู่กันไปด้วย (ถ้าชื่อตรงกับ Product Master เป๊ะ) — ไม่ตรงก็เคลียร์ทิ้ง ไม่บังคับ ไม่มี validation ใหม่
+// ไม่แตะ Stock/Inventory ใดๆ — แค่บันทึก reference ไว้ที่ JobItem เท่านั้น
 watch(
   () => draft.value.product,
   (name) => {
-    if (draft.value.unit) return
     const match = inventoryStore.products.find((p) => p.name === name)
+    draft.value.productId = match?.id || ''
+    if (draft.value.unit) return
     if (match?.unit) draft.value.unit = match.unit
   }
 )

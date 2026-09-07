@@ -89,7 +89,13 @@ export interface PickupOrigin {
  */
 export interface JobItem {
   id: string
-  /** ชื่อสินค้า จับคู่กับสินค้าที่ตั้งค่าไว้ในคลังสินค้า */
+  /** FK → inventory Product.id ถ้าเลือกจาก Product Master ตรงๆ (จับคู่ชื่อสำเร็จตอนกรอก) — ไม่บังคับมีค่า เพราะ `product`
+   *  ยังเป็น free text ที่พิมพ์เองได้เสมอ งานเก่าก่อนมี field นี้ (หรืองานที่พิมพ์ชื่อสินค้าที่ไม่ตรงกับ Product Master
+   *  เป๊ะ) จะไม่มีค่านี้ — ทุกจุดที่ใช้ field นี้ต้อง fallback ไปแสดง/อ้างอิงด้วย `product` (string) เสมอ ไม่ผูก Stock/
+   *  Inventory ใดๆ เพิ่มจาก field นี้ (ดู stores/inventory.ts — ยังจับคู่ตัดสต๊อกด้วยชื่อเหมือนเดิมทุกประการ)
+   *  ไม่ unique ภายใน Booking — Product เดียวกันมีได้หลาย JobItem โดยแต่ละรายการยังคงเป็นรายการอิสระ ห้าม merge/รวม qty */
+  productId?: string
+  /** ชื่อสินค้า จับคู่กับสินค้าที่ตั้งค่าไว้ในคลังสินค้า — เก็บเฉพาะข้อมูลสินค้าเท่านั้น ห้ามปนชื่อปลายทาง (siteName) เข้ามา */
   product: string
   /** จำนวน/น้ำหนักของรายการนี้ ตามหน่วยของสินค้า */
   qty: number
