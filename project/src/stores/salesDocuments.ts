@@ -2688,6 +2688,38 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return doc
   }
 
+  /**
+   * เอกสารขายทั้งหมด (ทุกประเภท) ที่อ้างอิง Booking นี้ผ่าน bookingIds — ใช้ทั้งแสดง Confirmation ก่อน Hard Delete
+   * Booking (ดู hardDeleteBooking ใน stores/booking.ts) และตอนลบจริง เอกสารทุกประเภทมี bookingIds เป็น required
+   * field เสมอ (ค่าเริ่มต้น []) จึง filter เดียวครอบคลุมทุกประเภทที่เคย claim งานนี้ได้ (SALES_ORDER/BILLING/
+   * TAX_INVOICE/RECEIPT — CASH_SALE/QUOTATION ไม่เคยมี bookingIds ที่ไม่ว่างเปล่า จึงไม่มีทางถูกจับคู่)
+   */
+  function documentsReferencingBooking(bookingId: string): SalesDocument[] {
+    return documents.value.filter((d) => (d.bookingIds || []).includes(bookingId))
+  }
+
+  /**
+   * ลบเอกสารขายหลายใบออกจาก local state พร้อมกัน (ใช้เฉพาะหลัง Hard Delete Booking ลบเอกสารเหล่านี้ใน Firestore
+   * จริงสำเร็จแล้วเท่านั้น — ฟังก์ชันนี้ไม่เขียน Firestore เอง แค่ sync state ให้ตรงกับความจริง) ไม่ใช้
+   * deleteBillingNote/deleteTaxInvoice/deleteReceipt ตัวเดิมเพราะฟังก์ชันเหล่านั้นมี guard บล็อกการลบถ้ามีเอกสาร
+   * ปลายทางอ้างอิงอยู่ (เจตนาป้องกันผู้ใช้ทั่วไปลบเอกสารเดี่ยวๆ พลาด) ซึ่งขัดกับ Hard Delete Booking ที่ต้องลบทั้ง
+   * สายเอกสารพร้อมกันได้เสมอ — เคลียร์ billingNoteDocId/taxInvoiceDocId/receiptDocId ที่ค้างอยู่บน Booking อื่น
+   * (เช่น เอกสารรวมหลายงานที่ถูกลบไปพร้อมกับงานที่ Hard Delete) ไม่ให้เหลือ orphan reference เหมือน
+   * deleteBillingNote/deleteTaxInvoice/deleteReceipt ทำ
+   */
+  function removeDocumentsLocally(docIds: string[]) {
+    if (!docIds.length) return
+    const idSet = new Set(docIds)
+    documents.value = documents.value.filter((d) => !idSet.has(d.id))
+    items.value = items.value.filter((i) => !idSet.has(i.documentId))
+    const bookingStore = useBookingStore()
+    bookingStore.bookings.forEach((b) => {
+      if (b.billingNoteDocId && idSet.has(b.billingNoteDocId)) b.billingNoteDocId = undefined
+      if (b.taxInvoiceDocId && idSet.has(b.taxInvoiceDocId)) b.taxInvoiceDocId = undefined
+      if (b.receiptDocId && idSet.has(b.receiptDocId)) b.receiptDocId = undefined
+    })
+  }
+
   return {
     documents,
     items,
@@ -2750,5 +2782,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     cancelReceipt,
     deleteReceipt,
     createCashSale,
+    documentsReferencingBooking,
+    removeDocumentsLocally,
   }
 })

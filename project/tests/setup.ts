@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { vi, beforeEach } from 'vitest'
 
 /**
  * Vitest setup file — โหลดก่อนทุก test suite (ดู vitest.config.ts's setupFiles) จำเป็นเพราะเกือบทุก Pinia store
@@ -58,6 +58,16 @@ interface CollectionRef {
 
 const store = new Map<string, Map<string, Record<string, unknown>>>()
 let autoId = 0
+
+/** เคลียร์ fake Firestore ก่อนทุกเทสต์ — เดิมไม่มีการรีเซ็ตจุดนี้เลย ทำให้ document ที่ store push เข้า bookings.value/
+ *  documents.value ในเทสต์หนึ่ง (ซึ่งไป trigger watcher sync เข้า fake Firestore ก้อนนี้) รั่วไหลข้ามไปยังเทสต์อื่นที่
+ *  รันตามมาในไฟล์เดียวกัน (setActivePinia(createPinia()) สร้าง store ใหม่ทุกครั้งก็จริง แต่ fetchBookings()/fetchAll()
+ *  ที่ยิงตอน store ถูกสร้างใหม่จะไป "โหลดคืน" ข้อมูลที่ค้างอยู่ใน fake Firestore ก้อนเดิมกลับเข้ามาอีก) — ไม่กระทบเทสต์
+ *  เดิมที่ผ่านอยู่แล้วเพราะเทสต์เดิมเช็คด้วย .find(id) ไม่เคยเช็ค .length ของทั้งอาเรย์ */
+beforeEach(() => {
+  store.clear()
+  autoId = 0
+})
 
 function collectionMap(path: string) {
   if (!store.has(path)) store.set(path, new Map())
@@ -130,4 +140,18 @@ vi.mock('firebase/firestore', () => ({
     return () => {}
   },
   deleteField: () => DELETE_FIELD,
+  // Hard Delete Booking (bookingRepository.hardDeleteWithReferences) ใช้ writeBatch เพื่อลบหลาย document แบบ atomic
+  // — fake แบบง่าย เก็บ operation ไว้ก่อนแล้วค่อย apply ทั้งหมดตอน commit() (พอสำหรับ delete ที่ repository นี้ใช้จริง
+  // เท่านั้น ยังไม่ต้องรองรับ set/update ในนี้เพราะยังไม่มี repository ไหนใช้ batch กับสอง op นั้น)
+  writeBatch: (_db: unknown) => {
+    const ops: Array<() => void> = []
+    return {
+      delete: (ref: DocRef) => {
+        ops.push(() => collectionMap(ref.path).delete(ref.id))
+      },
+      commit: async () => {
+        ops.forEach((op) => op())
+      },
+    }
+  },
 }))

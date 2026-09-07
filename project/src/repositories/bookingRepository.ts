@@ -1,4 +1,4 @@
-import { collection, deleteDoc, deleteField, doc, getDocs, onSnapshot, query, setDoc, where, type Unsubscribe } from 'firebase/firestore'
+import { collection, deleteDoc, deleteField, doc, getDocs, onSnapshot, query, setDoc, where, writeBatch, type Unsubscribe } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import type { Booking } from '@/types'
 
@@ -90,6 +90,28 @@ export const bookingRepository = {
 
   async delete(id: string): Promise<void> {
     await deleteDoc(doc(db, COLLECTION, id))
+  },
+
+  /**
+   * Hard Delete Booking — ลบ Booking พร้อมเอกสารขาย/รายการเอกสารที่อ้างอิงทั้งหมด (ถ้ามี) แบบ atomic ในก้อนเดียว
+   * ด้วย Firestore writeBatch กันไม่ให้เกิด partial deletion (เช่น ลบ Booking สำเร็จแต่เอกสารลูกลบไม่สำเร็จ ทิ้ง
+   * orphan ไว้) — ผู้เรียก (stores/booking.ts's hardDeleteBooking) ต้องตรวจสอบสิทธิ์ ADMIN และหา reference มา
+   * ครบก่อนเรียกฟังก์ชันนี้ ฟังก์ชันนี้แค่ execute การลบจริงเท่านั้น ไม่ตรวจสอบ business rule ใดๆ
+   *
+   * Firestore writeBatch จำกัดที่ 500 operation ต่อ batch (ข้อจำกัดจริงของ Firestore ไม่ใช่ที่เราตั้งเอง) ถ้า refs
+   * เกิน 500 รายการ (แทบเป็นไปไม่ได้ในทางปฏิบัติของระบบนี้ — งานหนึ่งมีเอกสารอ้างอิงจริงแค่หลักหน่วย) จะแบ่งเป็นหลาย
+   * batch เรียงกัน — แต่ละ batch ยัง atomic ในตัวเอง แต่ทั้งชุดไม่ atomic ข้าม batch ถ้า batch หลังล้มเหลวหลังจาก
+   * batch ก่อนหน้า commit ไปแล้ว จะเหลือการลบไม่ครบ (โยน error ให้ผู้เรียกรู้ แต่กู้คืนอัตโนมัติไม่ได้ในสถาปัตยกรรม
+   * ปัจจุบันที่ไม่มี Cloud Functions/transaction ข้าม batch)
+   */
+  async hardDeleteWithReferences(refs: { collection: string; id: string }[]): Promise<void> {
+    const CHUNK_SIZE = 500
+    for (let i = 0; i < refs.length; i += CHUNK_SIZE) {
+      const chunk = refs.slice(i, i + CHUNK_SIZE)
+      const batch = writeBatch(db)
+      chunk.forEach(({ collection: colName, id }) => batch.delete(doc(db, colName, id)))
+      await batch.commit()
+    }
   },
 
   /** subscribe realtime — คืนฟังก์ชัน unsubscribe ให้เรียกตอน store ถูกทำลาย (ปกติ store นี้อยู่ตลอดอายุแอปจึงไม่ค่อยได้เรียก)

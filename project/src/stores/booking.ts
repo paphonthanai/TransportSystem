@@ -7,6 +7,7 @@ import { useInventoryStore } from '@/stores/inventory'
 import { useBillingRuleStore } from '@/stores/billingRule'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { bookingRepository } from '@/repositories/bookingRepository'
+import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import type { Booking, BookingCategory, BookingStatus, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
 
 /** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง, ไม่มีค่า pricingMode (ข้อมูลเก่า) ถือเป็น SINGLE_DESTINATION เสมอ */
@@ -386,7 +387,8 @@ export const useBookingStore = defineStore('booking', () => {
     )
   }
 
-  /** ลบงานขนส่งทิ้งถาวร (CRUD ครบตาม repository pattern) — ปัจจุบันยังไม่มีปุ่มเรียกใช้จาก UI เพราะ workflow ปัจจุบันใช้การยกเลิก/ถอนออกจากรอบบิลแทน */
+  /** ลบงานขนส่งทิ้งถาวร (CRUD ครบตาม repository pattern) — ปัจจุบันยังไม่มีปุ่มเรียกใช้จาก UI เพราะ workflow ปัจจุบันใช้การยกเลิก/ถอนออกจากรอบบิลแทน
+   *  (ไม่ cascade ลบเอกสารอ้างอิงใดๆ — ใช้ hardDeleteBooking() ด้านล่างแทนสำหรับ Hard Delete Booking ตาม Requirement ที่มี Cascade) */
   function deleteBooking(id: string) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
@@ -396,6 +398,53 @@ export const useBookingStore = defineStore('booking', () => {
       bookingsError.value = err?.message || 'ลบงานขนส่งจาก Firestore ไม่สำเร็จ'
     })
     addLog(`ลบงาน ${booking.docNo}`, { bookingId: id })
+  }
+
+  /**
+   * Hard Delete Booking (ลบถาวร) — เฉพาะ ADMIN เท่านั้น บังคับสิทธิ์ที่นี่ซ้ำอีกชั้น (defense in depth) ไม่พึ่งแค่การ
+   * ซ่อนปุ่มฝั่ง UI (ดู BookingActionMenu.vue's canHardDelete prop) และ Firestore Rules ก็บังคับสิทธิ์แยกต่างหากอีก
+   * ชั้นที่ระดับ Database (ดู firestore.rules's /bookings/{bookingId} allow delete)
+   *
+   * ค้นหาเอกสารขายทั้งหมดที่อ้างอิง Booking นี้ (ผ่าน SalesDocument.bookingIds — ดู
+   * salesDocumentsStore.documentsReferencingBooking) แล้วลบทั้ง Booking + เอกสารเหล่านั้น + salesDocumentItems ของ
+   * เอกสารเหล่านั้นพร้อมกันแบบ atomic ผ่าน Firestore batch (bookingRepository.hardDeleteWithReferences) — ถ้า
+   * batch ล้มเหลว จะไม่มีอะไรถูกลบเลย (โยน error กลับไปให้ผู้เรียกแสดงผลเอง ไม่แตะ local state ใดๆ กัน UI แสดง
+   * "ลบสำเร็จ" ทั้งที่ยังไม่ได้ลบจริง) ถ้าสำเร็จ ค่อย sync local state (ทั้ง Booking และเอกสารที่เกี่ยวข้อง) ให้ตรงกับ
+   * Firestore ทันที ไม่ต้องรอ realtime listener
+   *
+   * items=[] ไม่ใช่เงื่อนไขที่ห้าม Hard Delete — ฟังก์ชันนี้ไม่เช็ค booking.items เลย ตามข้อกำหนด
+   */
+  async function hardDeleteBooking(id: string): Promise<{ ok: boolean; message?: string; deletedDocumentCount: number }> {
+    const authStore = useAuthStore()
+    if (authStore.role !== 'ADMIN') {
+      return { ok: false, message: 'ไม่มีสิทธิ์ลบงานขนส่งถาวร (เฉพาะ ADMIN เท่านั้น)', deletedDocumentCount: 0 }
+    }
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return { ok: false, message: 'ไม่พบงานขนส่งนี้', deletedDocumentCount: 0 }
+
+    const salesDocumentsStore = useSalesDocumentsStore()
+    const referencedDocs = salesDocumentsStore.documentsReferencingBooking(id)
+    const referencedDocIds = referencedDocs.map((d) => d.id)
+    const referencedItemIds = salesDocumentsStore.items.filter((i) => referencedDocIds.includes(i.documentId)).map((i) => i.id)
+
+    const refs: { collection: string; id: string }[] = [
+      ...referencedItemIds.map((itemId) => ({ collection: 'salesDocumentItems', id: itemId })),
+      ...referencedDocIds.map((docId) => ({ collection: 'salesDocuments', id: docId })),
+      { collection: 'bookings', id },
+    ]
+
+    try {
+      await bookingRepository.hardDeleteWithReferences(refs)
+    } catch (err: any) {
+      return { ok: false, message: err?.message || 'ลบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', deletedDocumentCount: 0 }
+    }
+
+    // ลบจริงใน Firestore สำเร็จแล้วเท่านั้นถึงจะมาถึงจุดนี้ — ค่อย sync local state ให้ตรงกัน
+    bookings.value = bookings.value.filter((b) => b.id !== id)
+    lastKnownBookingJson.delete(id)
+    salesDocumentsStore.removeDocumentsLocally(referencedDocIds)
+    addLog(`ลบงานถาวร ${booking.docNo}${referencedDocs.length ? ` (พร้อมเอกสารที่เกี่ยวข้อง ${referencedDocs.length} รายการ)` : ''}`, { bookingId: id })
+    return { ok: true, deletedDocumentCount: referencedDocs.length }
   }
 
   /** เพิ่มรายการสินค้า/ปลายทางใหม่เข้าไปในงานที่มีอยู่แล้ว (ใช้ตอนจัดรถแล้วมีรายการเพิ่มทีหลัง) ไม่สร้างงาน/เลขที่เอกสารใหม่ */
@@ -1030,6 +1079,7 @@ export const useBookingStore = defineStore('booking', () => {
     nextPoNo,
     addBooking,
     deleteBooking,
+    hardDeleteBooking,
     updateBookingPrice,
     updateBookingOps,
     updateBookingFull,

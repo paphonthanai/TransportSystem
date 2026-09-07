@@ -109,6 +109,7 @@
                   </button>
                   <BookingActionMenu
                     :booking="booking"
+                    :can-hard-delete="isAdmin"
                     @view="router.push(`/job/${booking.id}`)"
                     @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
                     @start-transit="bookingStore.startTransit(booking.id)"
@@ -203,6 +204,7 @@
                   </button>
                   <BookingActionMenu
                     :booking="booking"
+                    :can-hard-delete="isAdmin"
                     @view="router.push(`/job/${booking.id}`)"
                     @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
                     @start-transit="bookingStore.startTransit(booking.id)"
@@ -489,6 +491,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
+import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useInventoryStore } from '@/stores/inventory'
@@ -512,6 +515,11 @@ const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
 const originsStore = useOriginsStore()
 const salesDocumentsStore = useSalesDocumentsStore()
+const authStore = useAuthStore()
+
+/** เฉพาะ ADMIN เท่านั้นที่เห็นปุ่ม "ลบถาวร" (Hard Delete Booking) — ซ่อนที่ UI ชั้นแรก บังคับสิทธิ์ซ้ำอีกชั้นที่
+ *  bookingStore.hardDeleteBooking() และอีกชั้นที่ Firestore Rules (ดู firestore.rules's /bookings allow delete) */
+const isAdmin = computed(() => authStore.role === 'ADMIN')
 
 /** หาคนขับจากชื่อเต็ม รองรับทั้งแบบมีคำนำหน้าและไม่มี (เดิมเคยอยู่ใน driversStore.findDriverByVehicle) */
 const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
@@ -883,26 +891,39 @@ const adminAcceptDispatch = (booking: Booking) => {
 }
 
 /**
- * ลบ Booking (Phase 1 ข้อ 6) — ห้ามลบถ้ามีเอกสารบัญชี (Billing/Tax Invoice/Receipt/Sales Order) อ้างอิงงานนี้อยู่แล้ว
- * (ห้ามลบ Sales Document อัตโนมัติ ตามสเปก) ต้องแจ้งเหตุผล+รายชื่อเอกสารที่บล็อกให้ Admin เห็นชัดเจนก่อน ถ้าปลอดภัย
- * ให้ confirm ก่อนลบจริงเสมอ และคืนสต๊อกที่ตัดไปแล้ว (ถ้ามีรายการที่กดรับสินค้าไปแล้ว) ด้วย reverseDeliveryMovement
- * ตัวเดียวกับที่ resetBookingStatus ใช้อยู่แล้ว (reuse ของเดิม ไม่สร้าง logic คืนสต๊อกใหม่)
+ * Hard Delete Booking — ลบถาวร เฉพาะ ADMIN เท่านั้น (บังคับสิทธิ์ซ้ำที่นี่ แม้ปุ่มจะซ่อนจาก UI ไปแล้วสำหรับ role อื่น
+ * ดู isAdmin/BookingActionMenu.vue's canHardDelete — ชั้นจริงที่บังคับสิทธิ์คือ bookingStore.hardDeleteBooking()
+ * และ Firestore Rules)
+ *
+ * เดิมฟังก์ชันนี้ "บล็อก" การลบถ้ามีเอกสารบัญชีอ้างอิงงานนี้อยู่ (ต้องไปยกเลิกเอกสารเองก่อน) — ตาม Requirement ใหม่
+ * (Hard Delete Booking) เปลี่ยนเป็น "อนุญาตให้ลบพร้อม Cascade เอกสารที่อ้างอิงทั้งหมด" แทน โดยแจ้งผลกระทบให้ชัดเจน
+ * ใน Confirmation ก่อนเสมอ (ดู bookingStore.hardDeleteBooking ที่ทำการลบจริงแบบ atomic ผ่าน Firestore batch)
+ *
+ * ยังคงคืนสต๊อกที่ตัดไปแล้ว (ถ้ามีรายการที่กดรับสินค้าไปแล้ว) ด้วย reverseDeliveryMovement ตัวเดิมเหมือนเดิมทุกประการ
+ * (reuse ของเดิม ไม่สร้าง/ไม่แก้ logic คืนสต๊อก) แต่ย้ายมาทำ "หลัง" ลบสำเร็จจริงเท่านั้น กันคืนสต๊อกไปแล้วทั้งที่ลบไม่สำเร็จ
  */
-const deleteBooking = (booking: Booking) => {
-  const refs = salesDocumentsStore.documents.filter((d) => (d.bookingIds || []).includes(booking.id))
-  if (refs.length > 0) {
-    alert(
-      `ไม่สามารถลบงาน ${booking.docNo} ได้ เพราะมีเอกสารบัญชีอ้างอิงงานนี้อยู่แล้ว:\n` +
+const deleteBooking = async (booking: Booking) => {
+  if (!isAdmin.value) return
+  const refs = salesDocumentsStore.documentsReferencingBooking(booking.id)
+
+  const confirmMessage =
+    refs.length === 0
+      ? `⚠️ ลบ Booking ถาวร\n\nBooking: ${booking.docNo}\nลูกค้า: ${booking.customer}\n\nการลบเป็นการลบถาวร ไม่สามารถกู้คืนได้`
+      : `⚠️ ลบ Booking ถาวร\n\nBooking: ${booking.docNo}\nลูกค้า: ${booking.customer}\n\nพบเอกสารที่เกี่ยวข้อง ${refs.length} รายการ:\n` +
         refs.map((d) => `- ${d.number} (${d.type})`).join('\n') +
-        `\n\nกรุณายกเลิก/ตรวจสอบเอกสารเหล่านี้ก่อน ระบบไม่ลบเอกสารบัญชีให้อัตโนมัติ`
-    )
+        `\n\nการดำเนินการนี้จะ:\n- ลบ Booking\n- ลบเอกสารที่อ้างอิง Booking\n- ลบรายการสินค้าในเอกสารที่เกี่ยวข้อง\n\nข้อมูลทั้งหมดจะถูกลบถาวรและไม่สามารถกู้คืนได้`
+
+  if (!confirm(confirmMessage)) return
+
+  const result = await bookingStore.hardDeleteBooking(booking.id)
+  if (!result.ok) {
+    alert(result.message || 'ลบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
     return
   }
+  // ลบสำเร็จจริงแล้วเท่านั้นถึงจะคืนสต๊อกที่ตัดไปแล้ว (ถ้ามีรายการที่กดรับสินค้าไปแล้ว) — reuse ของเดิมทุกประการ
   const pickedItems = booking.items.filter((i) => i.pickupStatus === 'PICKED_UP')
-  const stockNote = pickedItems.length ? '\n\n(สต๊อกที่ตัดไปแล้วจะถูกคืนอัตโนมัติ)' : ''
-  if (!confirm(`ยืนยันลบงาน ${booking.docNo}? ไม่สามารถกู้คืนได้${stockNote}`)) return
   if (pickedItems.length) inventoryStore.reverseDeliveryMovement(booking, pickedItems)
-  bookingStore.deleteBooking(booking.id)
+  alert(`ลบงาน ${booking.docNo} ถาวรสำเร็จแล้ว`)
 }
 
 // --- Complete job flow ---

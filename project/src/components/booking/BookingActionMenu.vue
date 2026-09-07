@@ -31,11 +31,12 @@
           จบงาน{{ booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING' ? '' : ' (ข้ามขั้นตอน)' }}
         </button>
         <button
+          v-if="canHardDelete"
           @click="fire('delete')"
           class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-red-700"
         >
-          <span class="material-symbols-rounded text-base">delete</span>
-          ลบงาน
+          <span class="material-symbols-rounded text-base">delete_forever</span>
+          ลบถาวร
         </button>
         <button
           v-if="booking.status === 'ASSIGNED'"
@@ -54,7 +55,7 @@
 import { ref } from 'vue'
 import type { Booking } from '@/types'
 
-defineProps<{ booking: Booking }>()
+defineProps<{ booking: Booking; canHardDelete?: boolean }>()
 
 const emit = defineEmits<{
   view: []
