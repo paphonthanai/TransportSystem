@@ -76,9 +76,11 @@
               <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ destinationLabel(booking) }}</div>
-                <div v-if="booking.items.length" class="text-[11px] text-muted leading-tight mt-0.5">
-                  <div>{{ productNamesRow(booking) }}</div>
-                  <div>{{ productQtyRow(booking) }}</div>
+                <div v-if="booking.items.length" class="flex flex-wrap gap-3 text-[11px] text-muted leading-tight mt-0.5">
+                  <div v-for="item in booking.items" :key="item.id" class="border-l border-border pl-2 first:border-l-0 first:pl-0">
+                    <div>{{ item.product || '-' }}</div>
+                    <div>{{ item.qty }} {{ item.unit }}</div>
+                  </div>
                 </div>
               </td>
               <td class="px-4 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
@@ -186,9 +188,11 @@
               <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ destinationLabel(booking) }}</div>
-                <div v-if="booking.items.length" class="text-[11px] text-muted leading-tight mt-0.5">
-                  <div>{{ productNamesRow(booking) }}</div>
-                  <div>{{ productQtyRow(booking) }}</div>
+                <div v-if="booking.items.length" class="flex flex-wrap gap-3 text-[11px] text-muted leading-tight mt-0.5">
+                  <div v-for="item in booking.items" :key="item.id" class="border-l border-border pl-2 first:border-l-0 first:pl-0">
+                    <div>{{ item.product || '-' }}</div>
+                    <div>{{ item.qty }} {{ item.unit }}</div>
+                  </div>
                 </div>
               </td>
               <td class="px-4 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
@@ -248,7 +252,12 @@
               </label>
               <select v-model="dispatchForm.plate" class="input-field w-full">
                 <option value="">เลือกทะเบียนรถ...</option>
-                <option v-for="v in availableVehiclesForDispatch" :key="v.id" :value="vehiclesStore.fullPlate(v)">
+                <option
+                  v-for="v in availableVehiclesForDispatch"
+                  :key="v.id"
+                  :value="vehiclesStore.fullPlate(v)"
+                  :style="{ backgroundColor: vehicleOptionColor(v) }"
+                >
                   {{ vehicleOptionLabel(v) }}
                 </option>
               </select>
@@ -595,21 +604,35 @@ const driverOptionLabel = (name: string) => {
 const formatShortDate = (date?: Date) =>
   date ? new Date(date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
 
-/** งานล่าสุดที่ "รถคันนี้" กำลังวิ่งอยู่ (ยังไม่ DELIVERED) — Requirement ข้อ 3: ผูกสถานะกับรถ ไม่ใช่คนขับ ใช้แสดง
- *  "ว่าง"/สถานะปัจจุบันตอนเลือกรถให้ Booking ในกล่องจัดรถ ไม่รวมตัว Booking ที่กำลังจัดรถอยู่นี้เอง (กันจัดรถซ้ำ/แก้ไขรถเดิม) */
-const activeBookingForVehicle = (plate: string) =>
+/** งาน (ทั้งหมด ไม่ใช่แค่ล่าสุด) ที่ "รถคันนี้" กำลังวิ่งอยู่ (ยังไม่ DELIVERED) — Requirement ข้อ 3 เดิม: ผูกสถานะกับรถ
+ *  ไม่ใช่คนขับ ไม่รวมตัว Booking ที่กำลังจัดรถอยู่นี้เอง (กันจัดรถซ้ำ/แก้ไขรถเดิม) เรียงล่าสุดก่อน — ใช้ทั้งนับจำนวนเที่ยว
+ *  (ตาม Requirement ใหม่: แสดงสีตามจำนวนเที่ยว) และหาปลายทางของเที่ยวล่าสุดไปแสดงในป้าย dropdown */
+const activeBookingsForVehicle = (plate: string) =>
   bookingStore.bookings
     .filter((b) => b.plate === plate && b.id !== dispatchTarget.value?.id && ACTIVE_STATUSES.includes(b.status))
-    .sort((a, b) => new Date(b.dispatchedAt || b.createdAt).getTime() - new Date(a.dispatchedAt || a.createdAt).getTime())[0]
+    .sort((a, b) => new Date(b.dispatchedAt || b.createdAt).getTime() - new Date(a.dispatchedAt || a.createdAt).getTime())
 
 /** รถที่วิ่ง Feed ของงานนี้ได้เท่านั้น (ดู vehiclesStore.availableFor + Vehicle.allowedCategories) — Requirement ข้อ 3:
  *  จัดรถแสดงเฉพาะรถที่ประเภทตรงกับ Feed ของ Booking รถที่ไม่ตรงไม่แสดงเลย ไม่ใช่แค่เตือน */
 const availableVehiclesForDispatch = computed(() => (dispatchTarget.value ? vehiclesStore.availableFor(dispatchTarget.value.category) : []))
 
+/** ป้าย dropdown รถ — เดิมโชว์สถานะ+เลข Booking (เข้าใจยาก) เปลี่ยนเป็นจำนวนเที่ยว+ปลายทางของเที่ยวล่าสุดแทน ตาม
+ *  Requirement ใหม่ ("จัดรถ/สร้างงาน — ปรับการแสดงรถที่มีงานอยู่") — นับเที่ยวด้วย activeBookingsForVehicle เดิมที่มีอยู่
+ *  แล้ว (ของเดิมแค่หยิบตัวล่าสุดตัวเดียว [0] ตอนนี้ใช้ .length ด้วย) ไม่สร้าง logic นับเที่ยวใหม่ซ้ำ */
 const vehicleOptionLabel = (v: Vehicle) => {
   const full = vehiclesStore.fullPlate(v)
-  const activeBooking = activeBookingForVehicle(full)
-  return activeBooking ? `${full} — ${bookingStatusLabel[activeBooking.status]} (${activeBooking.docNo})` : `${full} — ว่าง`
+  const active = activeBookingsForVehicle(full)
+  if (!active.length) return `${full} — ว่าง`
+  return `${full} — ${active.length} เที่ยว — ${destinationLabel(active[0])}`
+}
+
+/** สีพื้นหลังของแต่ละ <option> ตามจำนวนเที่ยวที่รถคันนี้มีอยู่ — เป็นแค่ UI ช่วยแยกสถานะการใช้งานรถให้มองเห็นง่าย
+ *  (0 เที่ยว=ขาว, 1 เที่ยว=เขียว, 2 เที่ยวขึ้นไป=แดง) ไม่เปลี่ยน Booking Status/logic จัดรถ/workflow มอบหมายงานใดๆ */
+const vehicleOptionColor = (v: Vehicle) => {
+  const count = activeBookingsForVehicle(vehiclesStore.fullPlate(v)).length
+  if (count >= 2) return '#fecaca'
+  if (count === 1) return '#bbf7d0'
+  return '#ffffff'
 }
 
 const statusRank: Record<BookingStatus, number> = {
@@ -640,6 +663,7 @@ const inProgressBookings = computed(() => {
     .filter(
       (b) =>
         b.status !== 'DELIVERED' &&
+        b.status !== 'ACCEPTED' &&
         b.status !== 'IN_TRANSIT' &&
         b.status !== 'DELIVERING' &&
         (!q || matchesSearch(b, q))
@@ -656,7 +680,7 @@ const inProgressBookings = computed(() => {
 const inTransitBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return fleetBookings.value
-    .filter((b) => (b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') && (!q || matchesSearch(b, q)))
+    .filter((b) => (b.status === 'ACCEPTED' || b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') && (!q || matchesSearch(b, q)))
     .sort((a, b) => new Date(b.transitStartedAt || 0).getTime() - new Date(a.transitStartedAt || 0).getTime())
 })
 
@@ -681,10 +705,6 @@ const districtProvinceLabel = (booking: Booking) => {
 /** ตัวย่อ 3 ตัว + สีประจำลูกค้า (Requirement ข้อ 2/5) — หา CustomerRecord จากชื่อลูกค้าที่ผูกกับ Booking (ไม่มี id
  *  บน Booking โดยตรง เหมือนจุดอื่นๆ ที่ join ด้วยชื่อลูกค้าอยู่แล้วในระบบนี้) */
 const customerRecordFor = (booking: Booking) => customerStore.customers.find((c) => c.name === booking.customer)
-
-/** สินค้าหลายรายการแสดงแนวนอน 2 แถว: แถวบน = ชื่อสินค้า, แถวล่าง = จำนวน คั่นด้วย " | " ต่อรายการ (Requirement ข้อ 2) */
-const productNamesRow = (booking: Booking) => booking.items.map((i) => i.product || '-').join(' | ')
-const productQtyRow = (booking: Booking) => booking.items.map((i) => `${i.qty}`).join(' | ')
 
 /** เปิดดูหมายเหตุแบบเต็มจากปุ่ม "!" ท้ายแถวใน Booking List (Requirement ข้อ 2) */
 const noteTarget = ref<Booking | null>(null)

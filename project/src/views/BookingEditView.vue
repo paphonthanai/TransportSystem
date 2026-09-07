@@ -30,8 +30,12 @@
           <input v-model="editForm.loadingDate" type="date" class="input-field w-full" />
         </div>
         <div>
-          <label class="block text-xs font-semibold text-muted mb-1">เวลาลงสินค้า <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
-          <input v-model="editForm.loadingTime" type="time" class="input-field w-full" />
+          <label class="block text-xs font-semibold text-muted mb-1">เวลาลงสินค้า <span class="font-normal text-[10px]">(ช่วงเวลา ไม่บังคับ)</span></label>
+          <div class="flex items-center gap-2">
+            <input v-model="editForm.loadingTime" type="time" class="input-field w-full" />
+            <span class="text-muted text-sm">-</span>
+            <input v-model="editForm.loadingTimeEnd" type="time" class="input-field w-full" />
+          </div>
         </div>
         <div>
           <label class="block text-xs font-semibold text-muted mb-1">วันที่กลับ</label>
@@ -298,11 +302,28 @@ const target = computed(() => bookingStore.bookings.find((b) => b.id === props.i
 
 const toDateInput = (d?: Date) => (d ? new Date(d).toISOString().slice(0, 10) : '')
 
+/** แยกข้อความช่วงเวลา "HH:mm - HH:mm" (หรือ "HH:mm" เดี่ยวๆ ของงานเก่าก่อนมี Requirement ช่วงเวลา) กลับเป็น
+ *  [เวลาเริ่ม, เวลาสิ้นสุด] สำหรับเติมฟอร์มตอนเปิดแก้ไข — ไม่ตรงรูปแบบใดเลยถือเป็นเวลาเริ่มอย่างเดียว ไม่ error */
+const splitLoadingTime = (value?: string): [string, string] => {
+  if (!value) return ['', '']
+  const parts = value.split(' - ')
+  return parts.length === 2 ? [parts[0], parts[1]] : [value, '']
+}
+
+/** รวมเวลาเริ่ม/สิ้นสุดเป็นข้อความช่วงเวลาเดียวก่อนบันทึกกลับลง booking.loadingTime — ตัวเดียวกับ BookingCreateView.vue */
+const combineLoadingTime = (start: string, end: string): string | undefined => {
+  if (start && end) return `${start} - ${end}`
+  return start || undefined
+}
+
 const editForm = ref({
   po: '',
   shipDate: '',
   loadingDate: '',
   loadingTime: '',
+  /** เวลาสิ้นสุดของช่วงเวลา (ไม่บังคับ) — form-only state ไม่ใช่ field ของ Booking โดยตรง รวมกับ loadingTime เป็น
+   *  ข้อความช่วงเวลาเดียว "HH:mm - HH:mm" ก่อนบันทึกจริง (ดู confirmEditBooking) — ไม่เพิ่ม field ใหม่ใน data model */
+  loadingTimeEnd: '',
   returnDate: '',
   shipmentNo: '',
   route: '',
@@ -324,11 +345,13 @@ watch(
   target,
   (booking) => {
     if (!booking) return
+    const [loadingTime, loadingTimeEnd] = splitLoadingTime(booking.loadingTime)
     editForm.value = {
       po: booking.po || '',
       shipDate: toDateInput(booking.shipDate),
       loadingDate: toDateInput(booking.loadingDate),
-      loadingTime: booking.loadingTime || '',
+      loadingTime,
+      loadingTimeEnd,
       returnDate: toDateInput(booking.returnDate),
       shipmentNo: booking.shipmentNo || '',
       route: booking.route || '',
@@ -530,7 +553,7 @@ const confirmEditBooking = () => {
     po: f.po || undefined,
     shipDate: f.shipDate ? new Date(f.shipDate) : undefined,
     loadingDate: f.loadingDate ? new Date(f.loadingDate) : undefined,
-    loadingTime: f.loadingTime,
+    loadingTime: combineLoadingTime(f.loadingTime, f.loadingTimeEnd),
     returnDate: f.returnDate ? new Date(f.returnDate) : undefined,
     shipmentNo: f.shipmentNo || undefined,
     route: f.route || undefined,

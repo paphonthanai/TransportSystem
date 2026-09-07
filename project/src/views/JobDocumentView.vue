@@ -122,6 +122,12 @@
               <td class="border border-gray-400 px-2 py-1"></td>
               <td class="border border-gray-400 px-2 py-1"></td>
             </tr>
+            <tr v-for="s in qtySummaryRows" :key="'sum-' + s.unit" class="font-semibold bg-gray-50">
+              <td class="border border-gray-400 px-2 py-1"></td>
+              <td class="border border-gray-400 px-2 py-1 text-right">รวม</td>
+              <td class="border border-gray-400 px-2 py-1 text-right">{{ s.qty }}</td>
+              <td class="border border-gray-400 px-2 py-1">{{ s.unit }}</td>
+            </tr>
           </tbody>
         </table>
 
@@ -511,6 +517,16 @@ const productRows = computed(() => {
       })),
     ]
   })
+})
+
+/** Row รวมท้ายตาราง: SUM(qty) ของ Booking.items[] หลักเท่านั้น (ไม่รวม extraProducts) จัดกลุ่มตามหน่วย — ไม่แก้ข้อมูลใน Booking.items[] */
+const qtySummaryRows = computed(() => {
+  if (!booking.value) return []
+  const byUnit = new Map<string, number>()
+  booking.value.items.forEach((item) => {
+    byUnit.set(item.unit, (byUnit.get(item.unit) || 0) + (item.qty || 0))
+  })
+  return [...byUnit.entries()].map(([unit, qty]) => ({ unit, qty }))
 })
 
 /** สรุประยะทาง/อัตราสิ้นเปลืองน้ำมัน/ชดเชยน้ำมัน เมื่อมีเลขไมล์เริ่มต้น-สิ้นสุดครบแล้ว */
