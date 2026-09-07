@@ -97,9 +97,15 @@ service cloud.firestore {
       allow read, write: if hasRole(['ADMIN', 'DISPATCHER']);
     }
 
-    // DRIVER รวมอยู่ด้วยเพราะ Driver App เขียน booking ตรงๆ (รับสินค้า/ส่งของ/จบงาน) ผ่าน uid ของคนขับเอง
     match /bookings/{bookingId} {
-      allow read, write: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING', 'DRIVER']);
+      allow read, write: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING']);
+      // DRIVER: อ่าน/แก้ไขได้เฉพาะงานของตัวเอง (Driver App ใช้ booking document เป็น state ของการปฏิบัติงานจริง —
+      // รับงาน/รับสินค้า/ส่งของ/จบงาน ดู stores/booking.ts acceptDispatch/pickupJobItem/deliverJobItem/finishDriverJob)
+      // ห้ามสร้าง/ลบงานเด็ดขาด — งานทั้งหมดสร้าง/ลบจากฝั่งหลังบ้านเท่านั้น (ไม่มี allow create/delete ให้ DRIVER ตรงนี้
+      // เจตนา) และห้ามแก้ driverId ให้หนีไปเป็นของคนขับคนอื่นผ่านการ update เอง
+      allow read: if isSignedIn() && hasRole(['DRIVER']) && resource.data.driverId == myDriverId();
+      allow update: if isSignedIn() && hasRole(['DRIVER']) && resource.data.driverId == myDriverId() &&
+        request.resource.data.driverId == resource.data.driverId;
     }
 
     // สมุดรายชื่อเสมียน (StaffView.vue) — ตรงกับ meta.roles ของ route settings/staff

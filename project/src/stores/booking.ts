@@ -197,16 +197,23 @@ export const useBookingStore = defineStore('booking', () => {
   async function fetchBookings() {
     bookingsLoading.value = true
     bookingsError.value = null
+    // DRIVER ต้อง query แบบจำกัดด้วย driverId ของตัวเองเท่านั้น ให้ตรงกับ Firestore Rules ที่จำกัดสิทธิ์อ่านของ DRIVER
+    // ไว้แค่ booking.driverId == ตัวเอง (ดู firestore.rules) — role อื่นยัง query ทั้ง collection เหมือนเดิมทุกประการ
+    const driverId = authStore.currentUser?.role === 'DRIVER' ? authStore.currentUser?.driverId : undefined
     try {
-      applyRemoteBookings(await bookingRepository.getAll())
+      applyRemoteBookings(await bookingRepository.getAll(driverId))
     } catch (err: any) {
       bookingsError.value = err?.message || 'โหลดข้อมูลงานขนส่งจาก Firestore ไม่สำเร็จ'
     } finally {
       bookingsLoading.value = false
     }
-    bookingRepository.subscribe(applyRemoteBookings, (err) => {
-      bookingsError.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ'
-    })
+    bookingRepository.subscribe(
+      applyRemoteBookings,
+      (err) => {
+        bookingsError.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ'
+      },
+      driverId
+    )
   }
 
   fetchBookings()

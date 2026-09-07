@@ -179,7 +179,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
 import type { Booking } from '@/types'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
-import { matchesSelectedDriver as matchesDriverHelper } from '@/utils/driverJobs'
+import { isDriverVisibleBooking } from '@/utils/driverJobs'
 import { deliveryProgress } from '@/utils/deliveryProgress'
 import { usePwaInstall, usePwaUpdate } from '@/composables/usePwa'
 
@@ -224,7 +224,8 @@ const selectedDriverId = computed(() => {
   return driversStore.drivers.find((d) => driversStore.fullName(d) === selectedDriver.value)?.id
 })
 
-const matchesSelectedDriver = (b: Booking) => matchesDriverHelper(b, selectedDriverId.value, selectedDriver.value)
+// รวม items>0 ไว้ในนี้แล้ว (ดู isDriverVisibleBooking ใน utils/driverJobs.ts) — Driver App ไม่แสดงงาน items=[]
+const matchesSelectedDriver = (b: Booking) => isDriverVisibleBooking(b, selectedDriverId.value, selectedDriver.value)
 
 const logout = async () => {
   await authStore.logout()

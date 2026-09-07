@@ -297,7 +297,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
 import type { Booking, JobItem } from '@/types'
 import { bookingStatusLabel } from '@/utils/bookingStatus'
-import { matchesSelectedDriver, nextPickup as nextPickupItems, nextDelivery as nextDeliveryItems } from '@/utils/driverJobs'
+import { isDriverVisibleBooking, nextPickup as nextPickupItems, nextDelivery as nextDeliveryItems } from '@/utils/driverJobs'
 import { deliveryProgress, pickupProgress } from '@/utils/deliveryProgress'
 
 const props = defineProps<{ id: string }>()
@@ -327,8 +327,9 @@ const selectedDriverId = computed(() => (isDriverRole.value ? authStore.profile?
 const job = computed<Booking | undefined>(() => {
   const b = bookingStore.bookings.find((x) => x.id === props.id)
   if (!b) return undefined
-  // เข้าจาก URL ตรงๆ ต้องเป็นงานของคนขับที่ล็อกอินอยู่เท่านั้น (ผู้ดูแลระบบดูได้ทุกงาน)
-  if (isDriverRole.value && !matchesSelectedDriver(b, selectedDriverId.value, selectedDriver.value)) return undefined
+  // เข้าจาก URL ตรงๆ ต้องเป็นงานของคนขับที่ล็อกอินอยู่เท่านั้น (ผู้ดูแลระบบดูได้ทุกงาน) และต้องมี items>0 (Driver App
+  // ไม่แสดงงาน items=[] — ดู isDriverVisibleBooking ใน utils/driverJobs.ts)
+  if (isDriverRole.value && !isDriverVisibleBooking(b, selectedDriverId.value, selectedDriver.value)) return undefined
   return b
 })
 

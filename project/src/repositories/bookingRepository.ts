@@ -1,4 +1,4 @@
-import { collection, deleteDoc, deleteField, doc, getDocs, onSnapshot, setDoc, type Unsubscribe } from 'firebase/firestore'
+import { collection, deleteDoc, deleteField, doc, getDocs, onSnapshot, query, setDoc, where, type Unsubscribe } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import type { Booking } from '@/types'
 
@@ -67,8 +67,13 @@ function reviveBooking(raw: any): Booking {
 }
 
 export const bookingRepository = {
-  async getAll(): Promise<Booking[]> {
-    const snapshot = await getDocs(collection(db, COLLECTION))
+  /** driverId ถ้าระบุ = จำกัด query ให้เฉพาะงานของคนขับคนนั้น (ต้องใช้คู่กับ role DRIVER เท่านั้น เพื่อให้ query ตรงกับ
+   *  Firestore Rules ที่จำกัดให้ DRIVER อ่านได้เฉพาะ booking.driverId ของตัวเอง — ไม่งั้น listener/getAll ทั้งก้อนจะถูก
+   *  ปฏิเสธทันทีเพราะไม่มี where() ให้ Rules พิสูจน์ได้ว่าทุกเอกสารที่คืนมาผ่านเงื่อนไข) ไม่ระบุ = query ทั้ง collection
+   *  เหมือนเดิม ใช้กับ role อื่นที่เข้าถึงได้ทุกงาน */
+  async getAll(driverId?: string): Promise<Booking[]> {
+    const q = driverId ? query(collection(db, COLLECTION), where('driverId', '==', driverId)) : collection(db, COLLECTION)
+    const snapshot = await getDocs(q)
     return snapshot.docs.map((d) => reviveBooking({ id: d.id, ...d.data() }))
   },
 
@@ -87,10 +92,12 @@ export const bookingRepository = {
     await deleteDoc(doc(db, COLLECTION, id))
   },
 
-  /** subscribe realtime — คืนฟังก์ชัน unsubscribe ให้เรียกตอน store ถูกทำลาย (ปกติ store นี้อยู่ตลอดอายุแอปจึงไม่ค่อยได้เรียก) */
-  subscribe(onChange: (bookings: Booking[]) => void, onError?: (err: Error) => void): Unsubscribe {
+  /** subscribe realtime — คืนฟังก์ชัน unsubscribe ให้เรียกตอน store ถูกทำลาย (ปกติ store นี้อยู่ตลอดอายุแอปจึงไม่ค่อยได้เรียก)
+   *  driverId ถ้าระบุ = จำกัด listener ให้เฉพาะงานของคนขับคนนั้น (ดูเหตุผลเดียวกับ getAll ด้านบน) */
+  subscribe(onChange: (bookings: Booking[]) => void, onError?: (err: Error) => void, driverId?: string): Unsubscribe {
+    const q = driverId ? query(collection(db, COLLECTION), where('driverId', '==', driverId)) : collection(db, COLLECTION)
     return onSnapshot(
-      collection(db, COLLECTION),
+      q,
       (snapshot) => onChange(snapshot.docs.map((d) => reviveBooking({ id: d.id, ...d.data() }))),
       (err) => onError?.(err)
     )

@@ -12,6 +12,17 @@ export function matchesSelectedDriver(booking: Booking, selectedDriverId: string
 }
 
 /**
+ * เหมือน matchesSelectedDriver แต่เพิ่มเงื่อนไข "ต้องมี items อย่างน้อย 1 รายการ" — Driver App (DriverJobsView.vue,
+ * DriverJobDetailView.vue) ไม่ควรแสดงงานที่ยังไม่มีรายการปลายทางเลย (items=[]) เพราะไม่มีอะไรให้คนขับรับ/ส่งจริงผ่าน
+ * แอป งาน items=[] ยังคงเข้าสู่ DELIVERED ได้ตาม business flow เดิมทุกประการ (เช่น จบงานเข้า Sales Document/Billing
+ * โดยไม่มีรายการปลายทาง) — ฟังก์ชันนี้กรองแค่ชั้นการแสดงผลของ Driver App เท่านั้น ไม่แตะ status transition หรือ
+ * Sales Document/Billing เลย
+ */
+export function isDriverVisibleBooking(booking: Booking, selectedDriverId: string | undefined, selectedDriverName: string): boolean {
+  return matchesSelectedDriver(booking, selectedDriverId, selectedDriverName) && booking.items.length > 0
+}
+
+/**
  * จุดรับสินค้าถัดไปที่ Driver ควรเห็น (Phase E.1: Sequential Pickup) — เรียงตามลำดับที่ item ปรากฏใน booking.items[]
  * ตรงๆ ไม่มี field ลำดับรับล่วงหน้าแยกต่างหาก ตั้งใจใช้ array order เป็น Source of Truth เดียว ตรงกับที่
  * pickupJobItem (stores/booking.ts) บันทึก pickupSequence ตามลำดับที่กดจริงอยู่แล้ว — คืนค่า null เมื่อรับครบทุกรายการแล้ว
