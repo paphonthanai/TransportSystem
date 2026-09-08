@@ -47,6 +47,12 @@
               <datalist id="itemEditorDistrictOptions">
                 <option v-for="d in fuelRateStore.districtsForProvince(draft.province)" :key="d" :value="d" />
               </datalist>
+              <div v-if="draft.province && draft.district && standardLiters === null" class="flex items-center gap-2 mt-1">
+                <span class="text-[10px] text-amber-600">ยังไม่มีข้อมูลน้ำมันสำหรับพื้นที่นี้</span>
+                <a href="/settings/fuel" target="_blank" rel="noopener" class="text-[10px] font-semibold text-primary hover:underline whitespace-nowrap">
+                  ตั้งค่าน้ำมัน →
+                </a>
+              </div>
             </div>
             <div v-if="corridorWarning" class="md:col-span-2 text-xs text-amber-600">
               ⚠ ปลายทางนี้อยู่คนละสาย/เส้นทางกับรายการอื่นในงานนี้ ตรวจสอบว่าต้องการรวมในงานเดียวกันจริงหรือไม่
