@@ -77,9 +77,9 @@
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ destinationLabel(booking) }}</div>
                 <div v-if="booking.items.length" class="flex flex-wrap gap-3 text-[11px] text-muted leading-tight mt-0.5">
-                  <div v-for="item in booking.items" :key="item.id" class="border-l border-border pl-2 first:border-l-0 first:pl-0">
-                    <div>{{ item.product || '-' }}</div>
-                    <div>{{ item.qty }} {{ item.unit }}</div>
+                  <div v-for="col in productColumns(booking)" :key="col.key" class="border-l border-border pl-2 first:border-l-0 first:pl-0">
+                    <div>{{ col.product || '-' }}</div>
+                    <div>{{ col.qty }} {{ col.unit }}</div>
                   </div>
                 </div>
               </td>
@@ -189,9 +189,9 @@
               <td class="px-4 py-3 text-text">
                 <div class="font-semibold">{{ destinationLabel(booking) }}</div>
                 <div v-if="booking.items.length" class="flex flex-wrap gap-3 text-[11px] text-muted leading-tight mt-0.5">
-                  <div v-for="item in booking.items" :key="item.id" class="border-l border-border pl-2 first:border-l-0 first:pl-0">
-                    <div>{{ item.product || '-' }}</div>
-                    <div>{{ item.qty }} {{ item.unit }}</div>
+                  <div v-for="col in productColumns(booking)" :key="col.key" class="border-l border-border pl-2 first:border-l-0 first:pl-0">
+                    <div>{{ col.product || '-' }}</div>
+                    <div>{{ col.qty }} {{ col.unit }}</div>
                   </div>
                 </div>
               </td>
@@ -700,6 +700,21 @@ const districtProvinceLabel = (booking: Booking) => {
   if (!booking.items.length) return '-'
   const { district, province } = booking.items[0]
   return `${district || '-'} / ${province || '-'}`
+}
+
+/** คอลัมน์สินค้าต่อ Item ใต้ "สถานที่ส่ง" — งานจริงส่วนใหญ่ใช้ "สินค้าอื่นในรายการนี้" (JobItem.extraProducts)
+ *  แทนการเพิ่ม Item แยกใน Booking.items[] ทำให้ items.length มักเหลือ 1 แม้มีหลายสินค้าจริง จึงต้อง flatten
+ *  extraProducts เข้ามาเป็นคอลัมน์ของตัวเองด้วย (เหมือนที่ JobDocumentView.vue ทำกับ Row ใน JobDetail) ไม่ merge/
+ *  รวม qty ของแต่ละคอลัมน์เข้าด้วยกัน แต่ละคอลัมน์ยังเป็นรายการอิสระของตัวเอง */
+const productColumns = (booking: Booking) => {
+  const cols: { key: string; product: string; qty: number; unit: string }[] = []
+  booking.items.forEach((item) => {
+    cols.push({ key: item.id, product: item.product, qty: item.qty, unit: item.unit })
+    ;(item.extraProducts || []).forEach((ep, idx) => {
+      cols.push({ key: `${item.id}-extra-${idx}`, product: ep.product, qty: ep.qty, unit: ep.unit })
+    })
+  })
+  return cols
 }
 
 /** ตัวย่อ 3 ตัว + สีประจำลูกค้า (Requirement ข้อ 2/5) — หา CustomerRecord จากชื่อลูกค้าที่ผูกกับ Booking (ไม่มี id
