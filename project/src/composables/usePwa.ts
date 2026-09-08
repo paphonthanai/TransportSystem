@@ -12,8 +12,16 @@ const showInstallBanner = ref(false)
 const showIosInstallHint = ref(false)
 const updateAvailable = ref(false)
 let waitingWorker: ServiceWorker | null = null
+/** true เฉพาะตอนอัปเดตถูกสั่งจาก user gesture จริง (Driver กด applyUpdate) — คุม controllerchange listener ด้านล่าง
+ *  ว่าจะ reload หน้าทันทีไหม ฝั่งแอดมินที่ auto-skipWaiting เงียบๆ (ดู initPwa) ต้องไม่ตั้ง flag นี้ กัน reload
+ *  กลางคันขณะแอดมินกำลังกรอกฟอร์มอยู่ — ปล่อยให้ SW ใหม่ทำงานแทนเฉยๆ รอ reload/เข้าเว็บครั้งถัดไปตามธรรมชาติ */
+let pendingReloadAllowed = false
 
 const DISMISS_KEY = 'pwa_install_dismissed'
+
+/** true เฉพาะหน้า Driver App (/driver-app, /driver-app/job/:id) — ใช้แยกว่าตอนนี้ควรระวัง reload กลางคันหรือไม่
+ *  (อ่านจาก path ปัจจุบันสด ๆ ทุกครั้ง ไม่ cache ตอน bootstrap เพราะ SPA เปลี่ยนหน้าได้โดยไม่ reload) */
+const isDriverAppRoute = () => window.location.pathname.startsWith('/driver-app')
 
 const isIosDevice = () => /iPad|iPhone|iPod/.test(navigator.userAgent)
 const isStandaloneDisplay = () =>
@@ -60,8 +68,10 @@ export function usePwaUpdate() {
   return {
     updateAvailable,
     /** สั่งให้ Service Worker รุ่นใหม่ (ที่ค้าง waiting อยู่แล้ว ดู sw.js's install handler) activate ทันที —
-     *  ต้องเรียกตอน Driver กดยืนยันเองเท่านั้น (ไม่ auto-apply) กัน reload กลางคันขณะกำลังทำงานอยู่ */
+     *  ต้องเรียกตอน Driver กดยืนยันเองเท่านั้น (ไม่ auto-apply) กัน reload กลางคันขณะกำลังทำงานอยู่ — ฝั่งนี้ต่างจาก
+     *  auto-update ฝั่งแอดมิน (ดู initPwa) ตรงที่ reload ทันทีเพราะ Driver กดยืนยันเองแล้วว่าพร้อม */
     applyUpdate() {
+      pendingReloadAllowed = true
       waitingWorker?.postMessage({ type: 'SKIP_WAITING' })
     },
   }
@@ -95,6 +105,11 @@ export function initPwa() {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
               waitingWorker = newWorker
               updateAvailable.value = true
+              // ฝั่งแอดมิน/เดสก์ท็อป (ไม่ใช่ /driver-app): auto-apply เงียบๆ ทันที ไม่ต้องรอกดปุ่ม เพราะไม่มีความเสี่ยง
+              // "reload กลางคันตอนกำลังส่งของ" แบบ Driver — แต่ไม่ตั้ง pendingReloadAllowed ด้วย เพื่อไม่ให้ reload
+              // หน้าทันที (กันข้อมูลฟอร์มที่แอดมินกำลังกรอกอยู่หาย) SW ใหม่จะ activate ไปคุม asset ถัดๆ ไปเงียบๆ แทน
+              // แล้วมีผลเต็มที่ตอน reload/เข้าเว็บครั้งถัดไปตามธรรมชาติ (ไม่ต้องเจอ bundle ค้างเก่าข้ามหลาย deploy อีก)
+              if (!isDriverAppRoute()) newWorker.postMessage({ type: 'SKIP_WAITING' })
             }
           })
         })
@@ -103,11 +118,12 @@ export function initPwa() {
         // ติดตั้ง PWA ไม่ได้ก็ไม่กระทบการใช้งานหลัก ปล่อยผ่านเงียบๆ
       })
 
-    // controllerchange เกิดตอน SW ใหม่ activate สำเร็จ (หลัง Driver กด applyUpdate) — reload หน้าครั้งเดียวเพื่อให้
-    // ได้ asset ชุดใหม่ล่าสุด (กันเกิด reload วนซ้ำด้วย flag เดียวตามรูปแบบมาตรฐานของ Workbox/PWA)
+    // controllerchange เกิดตอน SW ใหม่ activate สำเร็จ ไม่ว่าจะจาก Driver กด applyUpdate หรือแอดมิน auto-skipWaiting
+    // เงียบๆ ก็ตาม — reload หน้าจริงเฉพาะกรณี Driver กดยืนยันเอง (pendingReloadAllowed) เท่านั้น ฝั่งแอดมินปล่อยให้ SW
+    // ใหม่ activate เฉยๆ ไม่ reload ทันที (กันข้อมูลฟอร์มหาย) — กันเกิด reload วนซ้ำด้วย flag เดียวตามรูปแบบมาตรฐาน
     let refreshing = false
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (refreshing) return
+      if (refreshing || !pendingReloadAllowed) return
       refreshing = true
       window.location.reload()
     })
