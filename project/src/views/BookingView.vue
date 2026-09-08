@@ -238,7 +238,7 @@
         <div @click.stop class="w-full max-w-lg bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto animate-slide">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
             <div class="font-bold text-text">
-              {{ isReassignDispatch ? 'เปลี่ยนคนขับ/รถ' : 'ส่งงาน' }} {{ dispatchTarget.docNo }}
+              {{ isReassignDispatch ? 'เปลี่ยนคนขับ/รถ' : 'ส่งงาน' }} {{ dispatchTitle(dispatchTarget) }}
             </div>
             <button @click="dispatchTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
@@ -704,6 +704,15 @@ const inTransitBookings = computed(() => {
 const productLabel = (booking: Booking) => {
   const names = [...new Set(booking.items.map((i) => i.product).filter(Boolean))]
   return names.length ? names.join(', ') : '-'
+}
+
+/** หัวข้อ Dialog "ส่งงาน"/"เปลี่ยนคนขับ/รถ" — เดิมโชว์แค่เลขที่เอกสาร (docNo) อ่านไม่รู้เรื่องว่างานอะไร เปลี่ยนเป็น
+ *  ชื่อลูกค้า + หน้างาน + สินค้า ต่อกันเป็นประโยคแทน (ใช้ข้อมูลที่มีอยู่แล้วใน Booking/Item ไม่เพิ่ม field ใหม่) */
+const dispatchTitle = (booking: Booking | null) => {
+  if (!booking) return ''
+  const first = booking.items[0]
+  const parts = [booking.customer, first?.siteName, first?.product].filter(Boolean)
+  return parts.length ? parts.join(' · ') : booking.docNo
 }
 
 const destinationLabel = (booking: Booking) => {
