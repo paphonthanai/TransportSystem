@@ -107,8 +107,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, i) in productRows" :key="row.destinationName + row.product + i" :class="row.isExtra ? 'text-gray-500 italic' : ''">
-              <td class="border border-gray-400 px-2 py-1">{{ row.seq ?? '' }}</td>
+            <tr v-for="(row, i) in productRows" :key="row.destinationName + row.product + i">
+              <td class="border border-gray-400 px-2 py-1">{{ row.seq }}</td>
               <td class="border border-gray-400 px-2 py-1">
                 {{ row.destinationName }} ({{ row.province }} · {{ row.district }}) · {{ row.product }}
                 <span v-if="row.jobType" class="text-xs text-gray-600">· {{ row.jobType }}</span>
@@ -483,48 +483,45 @@ const productLabel = (b: Booking) => {
 }
 
 /**
- * แต่ละรายการสินค้าในงานนี้ ขึ้นแถวของตัวเองในตารางเอกสาร คนละแถวไม่รวมกัน — สินค้าอื่น (extraProducts) ของแต่ละ
- * รายการก็ขึ้นแถวของตัวเองต่อท้ายสินค้าหลักเช่นกัน (ติด prefix "+" ให้เห็นชัดว่าเป็นสินค้าอื่น ไม่ใช่รายการหลัก)
- * ไม่มีคอลัมน์ราคาในตารางนี้อยู่แล้ว จึงไม่กระทบยอดรวมไม่ว่าจะเพิ่มแถวสินค้าอื่นเข้าไปกี่แถวก็ตาม
+ * แต่ละรายการสินค้าในงานนี้ ขึ้นแถวของตัวเองในตารางเอกสาร คนละแถวไม่รวมกัน ระดับเดียวกันทุกแถว — สินค้าอื่น
+ * (extraProducts) ของแต่ละรายการก็ขึ้นเป็นแถวปกติต่อท้ายสินค้าหลักเช่นกัน (เลข # เรียงต่อเนื่อง ไม่ติด prefix
+ * "+ สินค้าอื่น" หรือแยกสไตล์พิเศษอีกต่อไป — แสดงเป็นรายการที่ N เหมือนรายการหลักทุกประการตาม requirement)
+ * ไม่มีคอลัมน์ราคาในตารางนี้อยู่แล้ว จึงไม่กระทบยอดรวมไม่ว่าจะเพิ่มแถวสินค้าอื่นเข้าไปกี่แถวก็ตาม ไม่แก้ข้อมูลใน
+ * Booking.items[]/extraProducts[] เพื่อการแสดงผลนี้เลย (ยังเก็บอยู่ที่เดิมใน Firestore ทุกประการ)
  */
 const productRows = computed(() => {
   if (!booking.value) return []
   let seq = 0
-  return booking.value.items.flatMap((item) => {
-    seq += 1
-    return [
-      {
-        seq,
-        product: item.product,
-        qty: item.qty,
-        unit: item.unit,
-        destinationName: item.siteName,
-        province: item.province,
-        district: item.district,
-        jobType: item.jobType,
-        isExtra: false,
-      },
-      ...(item.extraProducts || []).map((ep) => ({
-        seq: null as number | null,
-        product: `+ สินค้าอื่น: ${ep.product}`,
-        qty: ep.qty,
-        unit: ep.unit,
-        destinationName: item.siteName,
-        province: item.province,
-        district: item.district,
-        jobType: undefined,
-        isExtra: true,
-      })),
-    ]
-  })
+  return booking.value.items.flatMap((item) => [
+    {
+      seq: ++seq,
+      product: item.product,
+      qty: item.qty,
+      unit: item.unit,
+      destinationName: item.siteName,
+      province: item.province,
+      district: item.district,
+      jobType: item.jobType,
+    },
+    ...(item.extraProducts || []).map((ep) => ({
+      seq: ++seq,
+      product: ep.product,
+      qty: ep.qty,
+      unit: ep.unit,
+      destinationName: item.siteName,
+      province: item.province,
+      district: item.district,
+      jobType: item.jobType,
+    })),
+  ])
 })
 
-/** Row รวมท้ายตาราง: SUM(qty) ของ Booking.items[] หลักเท่านั้น (ไม่รวม extraProducts) จัดกลุ่มตามหน่วย — ไม่แก้ข้อมูลใน Booking.items[] */
+/** Row รวมท้ายตาราง: SUM(qty) ของทุกแถวที่แสดงจริงใน productRows (รายการหลัก + extraProducts ที่ตอนนี้แสดงเป็น
+ *  รายการปกติแล้ว) จัดกลุ่มตามหน่วย — ไม่แก้ข้อมูลใน Booking.items[] */
 const qtySummaryRows = computed(() => {
-  if (!booking.value) return []
   const byUnit = new Map<string, number>()
-  booking.value.items.forEach((item) => {
-    byUnit.set(item.unit, (byUnit.get(item.unit) || 0) + (item.qty || 0))
+  productRows.value.forEach((row) => {
+    byUnit.set(row.unit, (byUnit.get(row.unit) || 0) + (row.qty || 0))
   })
   return [...byUnit.entries()].map(([unit, qty]) => ({ unit, qty }))
 })
