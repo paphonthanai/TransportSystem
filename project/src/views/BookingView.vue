@@ -266,7 +266,14 @@
               <label class="block text-xs font-semibold text-muted mb-1">คนขับ</label>
               <select v-model="dispatchForm.driverName" class="input-field w-full">
                 <option value="">เลือกคนขับ...</option>
-                <option v-for="name in driverOptions" :key="name" :value="name">{{ driverOptionLabel(name) }}</option>
+                <option
+                  v-for="name in driverOptions"
+                  :key="name"
+                  :value="name"
+                  :style="{ backgroundColor: driverOptionColor(name) }"
+                >
+                  {{ driverOptionLabel(name) }}
+                </option>
               </select>
             </div>
             <div class="bg-surface-2 rounded-lg p-3 text-sm">
@@ -587,18 +594,28 @@ const driverTripNumberForBooking = (booking: Booking) => {
   return idx === -1 ? 1 : idx + 1
 }
 
-/** งานล่าสุดที่คนขับคนนี้กำลังวิ่งอยู่ (ยังไม่ DELIVERED) ถ้ามี ใช้บอกสถานะว่าง/ไม่ว่างตอนเลือกคนขับ */
-const activeBookingForDriver = (name: string) =>
+/** งาน (ทั้งหมด ไม่ใช่แค่ล่าสุด) ที่ "คนขับคนนี้" กำลังวิ่งอยู่ (ยังไม่ DELIVERED) ไม่รวมตัว Booking ที่กำลังจัดรถอยู่นี้
+ *  เอง (เหมือน activeBookingsForVehicle ทุกประการ — Requirement: dropdown คนขับใช้เกณฑ์สี/ป้ายชื่อแบบเดียวกับรถ) */
+const activeBookingsForDriver = (name: string) =>
   bookingStore.bookings
-    .filter((b) => b.driverName === name && ACTIVE_STATUSES.includes(b.status))
-    .sort((a, b) => new Date(b.dispatchedAt || b.createdAt).getTime() - new Date(a.dispatchedAt || a.createdAt).getTime())[0]
+    .filter((b) => b.driverName === name && b.id !== dispatchTarget.value?.id && ACTIVE_STATUSES.includes(b.status))
+    .sort((a, b) => new Date(b.dispatchedAt || b.createdAt).getTime() - new Date(a.dispatchedAt || a.createdAt).getTime())
 
-/** ป้ายชื่อคนขับใน dropdown บอกว่าว่างหรือกำลังวิ่งเที่ยวที่เท่าไหร่ เพื่อให้จัดคิวเที่ยวถัดไปล่วงหน้าได้อย่างตั้งใจ */
+/** ป้าย dropdown คนขับ — เดิมโชว์ "กำลังวิ่งเที่ยวที่ N (docNo)" เปลี่ยนเป็นจำนวนเที่ยว+ปลายทางของเที่ยวล่าสุดแทน
+ *  ให้ตรงรูปแบบเดียวกับ vehicleOptionLabel เป๊ะ (Requirement ใหม่) */
 const driverOptionLabel = (name: string) => {
-  const activeBooking = activeBookingForDriver(name)
-  if (!activeBooking) return `${name} — ว่าง`
-  const tripNo = driverTripNumberForBooking(activeBooking)
-  return `${name} — กำลังวิ่งเที่ยวที่ ${tripNo} (${activeBooking.docNo})`
+  const active = activeBookingsForDriver(name)
+  if (!active.length) return `${name} — ว่าง`
+  return `${name} — ${active.length} เที่ยว — ${destinationLabel(active[0])}`
+}
+
+/** สีพื้นหลังของแต่ละ <option> คนขับตามจำนวนเที่ยวที่มีอยู่ — เกณฑ์เดียวกับ vehicleOptionColor เป๊ะ
+ *  (0 เที่ยว=ขาว, 1 เที่ยว=เขียว, 2 เที่ยวขึ้นไป=แดง) ไม่เปลี่ยน Booking Status/logic จัดรถ/workflow มอบหมายงานใดๆ */
+const driverOptionColor = (name: string) => {
+  const count = activeBookingsForDriver(name).length
+  if (count >= 2) return '#fecaca'
+  if (count === 1) return '#bbf7d0'
+  return '#ffffff'
 }
 
 const formatShortDate = (date?: Date) =>
