@@ -57,6 +57,18 @@
         </div>
       </div>
 
+      <!-- iOS (ทุก browser — Chrome/Firefox บน iOS ก็ใช้ WebKit เหมือน Safari) ไม่มี beforeinstallprompt ให้กดปุ่ม
+           ติดตั้งตรงๆ ได้ ต้องแนะนำขั้นตอน manual แทน (ดู usePwa.ts) -->
+      <div v-else-if="showIosInstallHint" class="flex items-center justify-between gap-3 bg-white border border-border rounded-xl px-3.5 py-3">
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-text">ติดตั้งแอป Driver</div>
+          <div class="text-xs text-muted">แตะปุ่มแชร์ <span class="material-symbols-rounded text-sm align-middle">ios_share</span> แล้วเลือก "เพิ่มไปยังหน้าจอโฮม" เพื่อติดตั้ง</div>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button @click="dismissInstall" class="h-9 px-3 rounded-lg text-sm font-medium text-muted">ไว้ทีหลัง</button>
+        </div>
+      </div>
+
       <!-- My Jobs -->
       <div>
         <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">งานที่ได้รับมอบหมาย</div>
@@ -189,7 +201,7 @@ const authStore = useAuthStore()
 const driversStore = useDriversStore()
 
 // Phase F — PWA install prompt + update-available banners (ดู composables/usePwa.ts)
-const { showInstallBanner, promptInstall, dismissInstall } = usePwaInstall()
+const { showInstallBanner, showIosInstallHint, promptInstall, dismissInstall } = usePwaInstall()
 const { updateAvailable, applyUpdate } = usePwaUpdate()
 
 /** รายชื่อคนขับ ดึงจากสมุดรายชื่อจริง (Settings > พนักงานขับรถ) แทนรายชื่อตัวอย่างเดิม */

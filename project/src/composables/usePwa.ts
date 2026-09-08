@@ -7,10 +7,24 @@ import { ref } from 'vue'
  */
 const deferredInstallPrompt = ref<BeforeInstallPromptEvent | null>(null)
 const showInstallBanner = ref(false)
+/** iOS (ทุก browser — Chrome/Firefox/Edge บน iOS ก็ใช้ WebKit ของ Apple เหมือนกันหมด) ไม่มีทางยิง
+ *  'beforeinstallprompt' ได้เลย ต้องแนะนำ "แตะปุ่มแชร์ > เพิ่มไปยังหน้าจอโฮม" แบบ manual แทนปุ่มติดตั้งที่กดไม่ได้จริง */
+const showIosInstallHint = ref(false)
 const updateAvailable = ref(false)
 let waitingWorker: ServiceWorker | null = null
 
 const DISMISS_KEY = 'pwa_install_dismissed'
+
+const isIosDevice = () => /iPad|iPhone|iPod/.test(navigator.userAgent)
+const isStandaloneDisplay = () =>
+  (navigator as unknown as { standalone?: boolean }).standalone === true || window.matchMedia('(display-mode: standalone)').matches
+const isInstallDismissed = () => {
+  try {
+    return localStorage.getItem(DISMISS_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
@@ -20,6 +34,7 @@ interface BeforeInstallPromptEvent extends Event {
 export function usePwaInstall() {
   return {
     showInstallBanner,
+    showIosInstallHint,
     /** เรียกจากปุ่ม "ติดตั้ง" — ต้องเรียกตรงจาก user gesture เท่านั้น (ข้อจำกัดของ browser API เอง ไม่ใช่ของเรา) */
     async promptInstall() {
       if (!deferredInstallPrompt.value) return
@@ -31,6 +46,7 @@ export function usePwaInstall() {
     /** "ไว้ทีหลัง" — จำไว้ใน localStorage กันไม่ให้ banner โผล่ซ้ำทุกครั้งที่เปิดแอป (ตามที่ต้องไม่รบกวน Driver) */
     dismissInstall() {
       showInstallBanner.value = false
+      showIosInstallHint.value = false
       try {
         localStorage.setItem(DISMISS_KEY, '1')
       } catch {
@@ -55,16 +71,15 @@ export function usePwaUpdate() {
 export function initPwa() {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault()
-    let dismissed = false
-    try {
-      dismissed = localStorage.getItem(DISMISS_KEY) === '1'
-    } catch {
-      // localStorage ใช้ไม่ได้ — ถือว่ายังไม่เคยปิด banner
-    }
-    if (dismissed) return
+    if (isInstallDismissed()) return
     deferredInstallPrompt.value = e as BeforeInstallPromptEvent
     showInstallBanner.value = true
   })
+
+  // iOS (ทุก browser) ไม่มีทางยิง 'beforeinstallprompt' — เช็คตรงนี้ครั้งเดียวตอน bootstrap แทน
+  if (isIosDevice() && !isStandaloneDisplay() && !isInstallDismissed()) {
+    showIosInstallHint.value = true
+  }
 
   if (!('serviceWorker' in navigator)) return
 
