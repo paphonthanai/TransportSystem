@@ -6,10 +6,6 @@
         <span class="material-symbols-rounded">person_add</span>
         เพิ่มผู้ใช้งาน
       </button>
-      <button @click="runDriverIdSync" class="btn-secondary" title="จับคู่ driverId ให้บัญชี/งานเดิมที่ยังผูกด้วยชื่ออยู่">
-        <span class="material-symbols-rounded">sync</span>
-        ซิงก์ driverId ให้ข้อมูลเดิม
-      </button>
     </div>
 
     <div class="card-lg overflow-x-auto">
@@ -38,15 +34,15 @@
             </td>
             <td class="px-4 py-3 text-right whitespace-nowrap">
               <button @click="openEditDialog(user)" class="btn-sm">แก้ไข</button>
-              <button @click="openPasswordDialog(user)" class="btn-sm ml-1.5">ส่งลิงก์ตั้งรหัสผ่านใหม่</button>
-              <button
-                @click="toggleActive(user)"
-                :disabled="user.id === authStore.currentUser?.id"
-                :title="user.id === authStore.currentUser?.id ? 'ปิดใช้งานบัญชีตัวเองไม่ได้' : ''"
-                class="btn-sm ml-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {{ user.active ? 'ปิดใช้งาน' : 'เปิดใช้งาน' }}
-              </button>
+              <UserActionMenu
+                class="ml-1.5"
+                :user="user"
+                :can-hard-delete="isAdmin"
+                :is-self="user.id === authStore.currentUser?.id"
+                @reset-password="openPasswordDialog(user)"
+                @toggle-active="toggleActive(user)"
+                @delete="hardDeleteUser(user)"
+              />
             </td>
           </tr>
           <tr v-if="userStore.users.length === 0">
@@ -184,18 +180,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useUserStore, type UserProfile, type UserRole } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
-import { useBookingStore } from '@/stores/booking'
-import { matchDriverIds } from '@/utils/driverIdMigration'
 import { internalDriverEmail } from '@/utils/driverAuth'
+import UserActionMenu from '@/components/settings/UserActionMenu.vue'
 
 const userStore = useUserStore()
 const authStore = useAuthStore()
 const driversStore = useDriversStore()
-const bookingStore = useBookingStore()
+
+/** หน้านี้ทั้งหน้าเป็น ADMIN เท่านั้นอยู่แล้ว (ดู router meta) เช็คซ้ำตรงนี้เพื่อความชัดเจน/สอดคล้องกับรูปแบบเดียวกับ
+ *  Hard Delete Booking (isAdmin ใน BookingView.vue) — บังคับสิทธิ์จริงอีกชั้นที่ firestore.rules */
+const isAdmin = computed(() => authStore.role === 'ADMIN')
 
 const roleOptions: UserRole[] = ['ADMIN', 'STAFF', 'DISPATCHER', 'DRIVER', 'ACCOUNTING']
 const roleLabels: Record<UserRole, string> = {
@@ -426,28 +424,28 @@ const toggleActive = (user: UserProfile) => {
   userStore.setActive(user.id, !user.active)
 }
 
-/** จับคู่ driverId ย้อนหลังให้งาน/บัญชีคนขับเดิมที่ยังผูกด้วยชื่ออยู่ (ดู utils/driverIdMigration.ts) — เพิ่มข้อมูล
- * อย่างเดียว ไม่ลบ/ทับของเดิม ปลอดภัยกดซ้ำได้ รายงานสรุปพร้อมรายการที่ต้องตรวจสอบเองผ่าน alert */
-const runDriverIdSync = async () => {
-  const report = await matchDriverIds(bookingStore.bookings, driversStore.drivers, userStore.users)
-  const lines = [
-    `งานขนส่ง: จับคู่ใหม่ ${report.bookings.matched.length} · มีอยู่แล้ว ${report.bookings.alreadyLinked} · หาไม่เจอ ${report.bookings.unmatched.length} · กำกวม ${report.bookings.ambiguous.length}`,
-    `บัญชีคนขับ: จับคู่ใหม่ ${report.users.matched.length} · มีอยู่แล้ว ${report.users.alreadyLinked} · หาไม่เจอ ${report.users.unmatched.length} · กำกวม ${report.users.ambiguous.length}`,
-  ]
-  if (report.bookings.unmatched.length) {
-    lines.push('', 'งานที่หาคนขับไม่เจอ (ต้องตรวจสอบเอง):')
-    lines.push(...report.bookings.unmatched.slice(0, 10).map((b) => `- ${b.docNo}: "${b.driverName}"`))
+/**
+ * Hard Delete โปรไฟล์ผู้ใช้ถาวร — ADMIN เท่านั้น (บังคับสิทธิ์ซ้ำที่ userStore/firestore.rules) ห้ามลบตัวเอง
+ * สำคัญ: ลบได้แค่โปรไฟล์ Firestore เท่านั้น ไม่ใช่บัญชี Firebase Auth จริง (ลบบัญชี Auth ของคนอื่นต้องผ่าน Admin
+ * SDK/Cloud Function ซึ่งระบบนี้ไม่มี) ผลคือบัญชีนั้น login เข้า Firebase Auth ได้เฉยๆ แต่ไม่มีโปรไฟล์/role แล้ว
+ * จึงเข้าใช้งานอะไรในแอปไม่ได้อีกเลย — แจ้งไว้ชัดเจนใน confirm ก่อนลบเสมอ
+ */
+const hardDeleteUser = async (user: UserProfile) => {
+  if (!isAdmin.value || user.id === authStore.currentUser?.id) return
+  const confirmMessage =
+    `⚠️ ลบผู้ใช้งานถาวร\n\nชื่อ: ${user.name}\nEmail: ${user.email}\n\n` +
+    `การลบเป็นการลบถาวร ไม่สามารถกู้คืนได้ (ลบเฉพาะโปรไฟล์ในระบบ — บัญชี Firebase Auth เดิมจะยัง login ได้ ` +
+    `แต่ไม่มีโปรไฟล์/สิทธิ์แล้ว จึงเข้าใช้งานแอปไม่ได้อีกต่อไป)`
+  if (!confirm(confirmMessage)) return
+
+  try {
+    await userStore.hardDeleteUser(user.id)
+    alert(`ลบผู้ใช้งาน ${user.name} ถาวรสำเร็จแล้ว`)
+  } catch (err: any) {
+    alert(err?.message || 'ลบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง')
   }
-  if (report.bookings.ambiguous.length) {
-    lines.push('', 'งานที่ชื่อกำกวม เจอมากกว่า 1 คน (ต้องเลือกเอง):')
-    lines.push(...report.bookings.ambiguous.slice(0, 10).map((b) => `- ${b.docNo}: "${b.driverName}" (${b.candidates.length} คน)`))
-  }
-  if (report.users.unmatched.length) {
-    lines.push('', 'บัญชีคนขับที่หาคนขับไม่เจอ (ต้องผูกเอง):')
-    lines.push(...report.users.unmatched.slice(0, 10).map((u) => `- ${u.email}: "${u.name}"`))
-  }
-  alert(lines.join('\n'))
 }
+
 </script>
 
 <style scoped>

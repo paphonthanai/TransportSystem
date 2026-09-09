@@ -47,7 +47,11 @@ service cloud.firestore {
       // ดู authStore.updateOwnCredentials / DriverAppView.vue) แก้ได้เฉพาะ email เท่านั้น ห้ามแตะ role/active/driverId เอง
       allow update: if isSignedIn() && request.auth.uid == userId &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email', 'updatedAt']);
-      allow delete: if false; // ลบบัญชีจริงต้องผ่าน Firebase Auth (Admin SDK) — ที่นี่ปิดใช้งานผ่าน active:false แทน
+      // Hard Delete โปรไฟล์ (PM-requested) — ลบเอกสาร /users/{uid} นี้ถาวร ADMIN เท่านั้น ห้ามลบบัญชีตัวเอง
+      // หมายเหตุสำคัญ: นี่ลบได้แค่ "โปรไฟล์" ใน Firestore เท่านั้น ไม่ใช่บัญชี Firebase Auth (email/password) จริง —
+      // การลบบัญชี Auth ของคนอื่นต้องผ่าน Admin SDK/Cloud Function ซึ่งระบบนี้ไม่มี ผลคือบัญชีนั้นจะ login ผ่าน
+      // Firebase Auth ได้เฉยๆ แต่ไม่มีโปรไฟล์/role แล้ว จึงเข้าใช้งานอะไรในแอปไม่ได้อีกเลย (ดู UserManagementView.vue)
+      allow delete: if hasRole(['ADMIN']) && request.auth.uid != userId;
     }
 
     match /customers/{customerId} {

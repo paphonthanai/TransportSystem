@@ -60,6 +60,12 @@ export const useUserStore = defineStore('users', () => {
     if (user) user.active = active
   }
 
+  /** ลบโปรไฟล์ถาวร (Hard Delete) — ลบแค่โปรไฟล์ Firestore เท่านั้น ไม่ใช่บัญชี Firebase Auth จริง (ดู userRepository.ts) */
+  async function hardDeleteUser(uid: string) {
+    await userRepository.remove(uid)
+    users.value = users.value.filter((u) => u.id !== uid)
+  }
+
   return {
     users,
     loading,
@@ -68,5 +74,6 @@ export const useUserStore = defineStore('users', () => {
     addLocalCopy,
     updateProfile,
     setActive,
+    hardDeleteUser,
   }
 })
