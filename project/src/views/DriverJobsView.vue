@@ -85,7 +85,7 @@
           class="w-full text-left bg-white border border-border rounded-2xl p-4 mb-3 last:mb-0 active:bg-surface-2 transition-colors"
         >
           <div class="flex items-center justify-between mb-2 gap-2">
-            <div class="font-bold text-primary text-base truncate">{{ job.docNo }}</div>
+            <div class="font-bold text-primary text-base truncate">{{ bookingTitle(job) }}</div>
             <span class="material-symbols-rounded text-muted text-xl flex-shrink-0">chevron_right</span>
           </div>
           <div class="flex items-center gap-1.5 flex-wrap mb-1.5">
@@ -124,7 +124,7 @@
         <div v-if="recentJobs.length === 0" class="text-center py-6 text-muted text-sm">ยังไม่มีประวัติเที่ยวงาน</div>
         <div v-for="job in recentJobs" :key="job.id" class="flex items-center justify-between py-3 border-b border-border last:border-0">
           <div class="min-w-0">
-            <div class="text-base font-semibold text-text truncate">{{ job.docNo }} · {{ destinationLabel(job) }}</div>
+            <div class="text-base font-semibold text-text truncate">{{ bookingTitle(job) }}</div>
             <div class="text-xs text-muted">{{ formatDate(job.completedAt) }}</div>
           </div>
           <div class="text-base font-bold text-green-600 whitespace-nowrap">{{ formatBaht(job.finalAllowance ?? job.allowance) }}</div>
@@ -193,6 +193,7 @@ import type { Booking } from '@/types'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import { isDriverVisibleBooking } from '@/utils/driverJobs'
 import { deliveryProgress } from '@/utils/deliveryProgress'
+import { bookingTitle } from '@/utils/bookingTitle'
 import { usePwaInstall, usePwaUpdate } from '@/composables/usePwa'
 
 const router = useRouter()

@@ -9,7 +9,7 @@
           <button @click="router.push('/driver-app')" class="w-11 h-11 -ml-2 rounded-lg hover:bg-white/10 active:bg-white/20 flex items-center justify-center">
             <span class="material-symbols-rounded text-xl">arrow_back</span>
           </button>
-          <div class="font-bold text-lg flex-1 truncate">{{ job?.docNo || 'ไม่พบงาน' }}</div>
+          <div class="font-bold text-lg flex-1 truncate">{{ job ? bookingTitle(job) : 'ไม่พบงาน' }}</div>
           <span
             v-if="job"
             class="text-xs font-semibold px-2 py-1 rounded-full bg-white/20 flex-shrink-0"
@@ -261,7 +261,7 @@
         <div @click.stop class="w-full bg-white rounded-t-3xl shadow-2xl pb-[env(safe-area-inset-bottom)]">
           <div class="w-10 h-1.5 bg-border rounded-full mx-auto mt-3 mb-1"></div>
           <div class="flex items-center justify-between px-5 py-3 border-b border-border">
-            <div class="font-bold text-text text-lg truncate">ดำเนินการเสร็จสิ้น {{ finishTarget.docNo }}</div>
+            <div class="font-bold text-text text-lg truncate">ดำเนินการเสร็จสิ้น {{ bookingTitle(finishTarget) }}</div>
             <button @click="closeFinishJob" class="w-11 h-11 -mr-2 flex-shrink-0 rounded-lg hover:bg-surface-2 flex items-center justify-center">
               <span class="material-symbols-rounded text-xl">close</span>
             </button>
@@ -299,6 +299,7 @@ import type { Booking, JobItem } from '@/types'
 import { bookingStatusLabel } from '@/utils/bookingStatus'
 import { isDriverVisibleBooking, nextPickup as nextPickupItems, nextDelivery as nextDeliveryItems } from '@/utils/driverJobs'
 import { deliveryProgress, pickupProgress } from '@/utils/deliveryProgress'
+import { bookingTitle } from '@/utils/bookingTitle'
 
 const props = defineProps<{ id: string }>()
 
