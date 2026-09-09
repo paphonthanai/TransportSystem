@@ -46,7 +46,12 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="booking in inProgressBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+            <tr
+              v-for="booking in inProgressBookings"
+              :key="booking.id"
+              :style="customerRowStyle(booking)"
+              class="border-b border-border hover:bg-surface-2 transition-colors"
+            >
               <td class="px-4 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
               <td class="px-4 py-3 text-text">{{ booking.driverName || '-' }}</td>
               <td class="px-4 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
@@ -158,7 +163,12 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="booking in inTransitBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+            <tr
+              v-for="booking in inTransitBookings"
+              :key="booking.id"
+              :style="customerRowStyle(booking)"
+              class="border-b border-border hover:bg-surface-2 transition-colors"
+            >
               <td class="px-4 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
               <td class="px-4 py-3 text-text">{{ booking.driverName || '-' }}</td>
               <td class="px-4 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
@@ -520,6 +530,7 @@ import { useFuelRateStore } from '@/stores/fuelRates'
 import { useOriginsStore } from '@/stores/origins'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import type { Booking, BookingCategory, BookingJobType, BookingStatus, DebtAdjustment, JobItem, Vehicle } from '@/types'
+import { bookingTitle } from '@/utils/bookingTitle'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
 import { parseGpsInput } from '@/utils/gps'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
@@ -706,14 +717,8 @@ const productLabel = (booking: Booking) => {
   return names.length ? names.join(', ') : '-'
 }
 
-/** หัวข้อ Dialog "ส่งงาน"/"เปลี่ยนคนขับ/รถ" — เดิมโชว์แค่เลขที่เอกสาร (docNo) อ่านไม่รู้เรื่องว่างานอะไร เปลี่ยนเป็น
- *  ชื่อลูกค้า + หน้างาน + สินค้า ต่อกันเป็นประโยคแทน (ใช้ข้อมูลที่มีอยู่แล้วใน Booking/Item ไม่เพิ่ม field ใหม่) */
-const dispatchTitle = (booking: Booking | null) => {
-  if (!booking) return ''
-  const first = booking.items[0]
-  const parts = [booking.customer, first?.siteName, first?.product].filter(Boolean)
-  return parts.length ? parts.join(' · ') : booking.docNo
-}
+/** หัวข้อ Dialog "ส่งงาน"/"เปลี่ยนคนขับ/รถ" — reuse bookingTitle() ตัวเดียวกับที่ฝั่งคนขับใช้ (ดู utils/bookingTitle.ts) */
+const dispatchTitle = (booking: Booking | null) => (booking ? bookingTitle(booking) : '')
 
 const destinationLabel = (booking: Booking) => {
   if (!booking.items.length) return '-'
@@ -746,6 +751,13 @@ const productColumns = (booking: Booking) => {
 /** ตัวย่อ 3 ตัว + สีประจำลูกค้า (Requirement ข้อ 2/5) — หา CustomerRecord จากชื่อลูกค้าที่ผูกกับ Booking (ไม่มี id
  *  บน Booking โดยตรง เหมือนจุดอื่นๆ ที่ join ด้วยชื่อลูกค้าอยู่แล้วในระบบนี้) */
 const customerRecordFor = (booking: Booking) => customerStore.customers.find((c) => c.name === booking.customer)
+
+/** สีพื้นหลังทั้งแถวตามสีที่ตั้งไว้ให้ลูกค้ารายนั้น (CustomerRecord.color) — ใช้ค่าเดียวกับจุดสี/ตัวย่อ 3 ตัวที่มีอยู่แล้ว
+ *  แค่ผสม alpha ~15% ไม่ใช้สีเต็มความเข้ม กันตัวหนังสือ (text-text/text-muted เดิม) อ่านไม่ออกไม่ว่าจะเลือกสีเข้มแค่ไหน */
+const customerRowStyle = (booking: Booking) => {
+  const color = customerRecordFor(booking)?.color
+  return color ? { backgroundColor: `${color}26` } : {}
+}
 
 /** เปิดดูหมายเหตุแบบเต็มจากปุ่ม "!" ท้ายแถวใน Booking List (Requirement ข้อ 2) */
 const noteTarget = ref<Booking | null>(null)
