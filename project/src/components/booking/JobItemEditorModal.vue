@@ -49,9 +49,16 @@
               </datalist>
               <div v-if="draft.province && draft.district && standardLiters === null" class="flex items-center gap-2 mt-1">
                 <span class="text-[10px] text-amber-600">ยังไม่มีข้อมูลน้ำมันสำหรับพื้นที่นี้</span>
-                <a href="/settings/fuel" target="_blank" rel="noopener" class="text-[10px] font-semibold text-primary hover:underline whitespace-nowrap">
+                <a
+                  v-if="isAdmin"
+                  href="/settings/fuel"
+                  target="_blank"
+                  rel="noopener"
+                  class="text-[10px] font-semibold text-primary hover:underline whitespace-nowrap"
+                >
                   ตั้งค่าน้ำมัน →
                 </a>
+                <span v-else class="text-[10px] text-muted whitespace-nowrap">แจ้ง Admin ให้ตั้งค่าน้ำมันสำหรับพื้นที่นี้</span>
               </div>
             </div>
             <div v-if="corridorWarning" class="md:col-span-2 text-xs text-amber-600">
@@ -177,6 +184,7 @@ import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { useBookingStore } from '@/stores/booking'
+import { useAuthStore } from '@/stores/auth'
 import type { BookingJobType, JobItem, PricingMode } from '@/types'
 import type { Product } from '@/stores/inventory'
 import { parseGpsInput } from '@/utils/gps'
@@ -225,6 +233,11 @@ const inventoryStore = useInventoryStore()
 const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
 const bookingStore = useBookingStore()
+const authStore = useAuthStore()
+
+/** ทางลัด "ตั้งค่าน้ำมัน" พาไป /settings/fuel ซึ่งเป็นหน้า ADMIN เท่านั้น (ดู router/index.ts) — role อื่นกดไปก็เจอ
+ *  หน้า Unauthorized เฉยๆ จึงโชว์ปุ่มเฉพาะ ADMIN เท่านั้น role อื่นเห็นข้อความให้ไปแจ้ง Admin แทน */
+const isAdmin = computed(() => authStore.role === 'ADMIN')
 
 const jobTypeOptions: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
 
