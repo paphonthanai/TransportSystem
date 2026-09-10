@@ -36,6 +36,13 @@ export const useAppStore = defineStore('app', () => {
   const currentScreen = ref('dashboard')
   const sidebarOpen = ref(window.innerWidth > 768)
 
+  /** ขนาดตัวอักษรทั้งแอป (PM-requested — Driver App > ตั้งค่าบัญชี > ตั้งค่า UI) ใช้กลไกเดียวกับ isDarkMode คือตั้ง
+   *  attribute บน <html> แล้วให้ CSS (styles/main.css) แปลงเป็น font-size จริง กระทบทั้งแอปเหมือน dark mode ไม่ใช่แค่
+   *  Driver App เพราะเป็น setting ระดับบัญชีผู้ใช้ ไม่ใช่ route */
+  type TextScale = 'sm' | 'base' | 'lg'
+  const storedTextScale = localStorage.getItem('textScale')
+  const textScale = ref<TextScale>(storedTextScale === 'sm' || storedTextScale === 'lg' ? storedTextScale : 'base')
+
   const fullMenu: MenuItem[] = [
     { id: '1', icon: 'dashboard', label: 'Dashboard', route: '/' },
     {
@@ -149,8 +156,15 @@ export const useAppStore = defineStore('app', () => {
     currentScreen.value = screen
   }
 
-  // initialize theme attribute on load
+  const setTextScale = (scale: TextScale) => {
+    textScale.value = scale
+    localStorage.setItem('textScale', scale)
+    document.documentElement.setAttribute('data-text-scale', scale)
+  }
+
+  // initialize theme + text-scale attributes on load
   document.documentElement.setAttribute('data-theme', isDarkMode.value ? 'dark' : 'light')
+  document.documentElement.setAttribute('data-text-scale', textScale.value)
 
   return {
     isDarkMode,
@@ -158,8 +172,10 @@ export const useAppStore = defineStore('app', () => {
     sidebarOpen,
     menu,
     darkIcon,
+    textScale,
     toggleDarkMode,
     toggleSidebar,
     setCurrentScreen,
+    setTextScale,
   }
 })

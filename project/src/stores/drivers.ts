@@ -176,6 +176,28 @@ export const useDriversStore = defineStore('drivers', () => {
     if (driver) await updateDriver(driverId, { ...driver, code: newCode })
   }
 
+  /** อ่าน DriverRecord ของ "ตัวเอง" ตรงๆ ด้วย get() เดี่ยว (ไม่ผ่าน drivers.value/list() ที่คนขับไม่มีสิทธิ์ — ดู
+   *  setAuthEmail ด้านบน) ใช้เปิดหน้า "ตั้งค่าบัญชี" ฝั่ง Driver App ให้เห็นข้อมูลติดต่อปัจจุบันของตัวเองก่อนแก้ไข */
+  async function fetchOwnDriver(driverId: string): Promise<DriverRecord | null> {
+    return driverRepository.get(driverId)
+  }
+
+  /**
+   * บันทึกข้อมูลติดต่อของ "ตัวเอง" จากหน้า Driver App (เบอร์โทร/LINE/ผู้ติดต่อฉุกเฉิน) — allowlist เฉพาะฟิลด์เหล่านี้
+   * ตรงกับ firestore.rules ที่เปิดให้ตรงกันเป๊ะ ห้ามขยายรับฟิลด์อื่นเพิ่มจากนี้โดยไม่แก้ rules คู่กันเสมอ
+   */
+  async function updateOwnDriverContact(
+    driverId: string,
+    data: Partial<Pick<DriverRecord, 'phone' | 'lineId' | 'emergencyContact' | 'emergencyRelation'>>
+  ) {
+    const driver = await driverRepository.get(driverId)
+    if (!driver) return
+    const merged = { ...driver, ...data }
+    await driverRepository.update(driverId, sanitizeDriver(merged))
+    const index = drivers.value.findIndex((d) => d.id === driverId)
+    if (index !== -1) drivers.value[index] = { ...drivers.value[index], ...data }
+  }
+
   return {
     drivers,
     loading,
@@ -187,6 +209,8 @@ export const useDriversStore = defineStore('drivers', () => {
     sanitizeDriver,
     resolveLoginEmail,
     setAuthEmail,
+    fetchOwnDriver,
+    updateOwnDriverContact,
     verifyDriverLogin,
     createDriverLoginCredentials,
     getDriverLoginCredentials,

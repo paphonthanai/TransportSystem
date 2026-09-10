@@ -1,7 +1,7 @@
 <template>
   <!-- Full-bleed mobile shell เหมือน DriverJobsView.vue — header/main เต็มความกว้างจอ ไม่ใช่การ์ดลอย
        ปุ่ม action หลักของแต่ละ step ย้ายไปอยู่แถบล่างสุดแบบ sticky (thumb-reach ดีสุดสำหรับใช้มือเดียว) -->
-  <div class="min-h-screen bg-surface-2 flex flex-col">
+  <div class="driver-app-scale min-h-screen bg-surface-2 flex flex-col">
     <!-- Header -->
     <header class="sticky top-0 z-10 bg-gradient-to-r from-primary to-blue-700 text-white shadow-md flex-shrink-0">
       <div class="px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">

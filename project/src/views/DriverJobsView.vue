@@ -2,7 +2,7 @@
   <!-- Full-bleed mobile shell — ไม่มีการ์ดลอยกลางจอแบบเดิม (max-w-sm+rounded+shadow) ใช้พื้นที่จอเต็มเหมือนแอปมือถือจริง
        เผื่อพื้นที่ safe-area บน/ล่างไว้ตั้งแต่ตอนนี้ (env(safe-area-inset-*)) แม้ยังไม่ได้ติดตั้ง PWA manifest จริง
        เพื่อให้พร้อมต่อยอดเป็น PWA/bottom navigation ได้ทันทีในอนาคตโดยไม่ต้องรื้อ layout ซ้ำ -->
-  <div class="min-h-screen bg-surface-2 flex flex-col">
+  <div class="driver-app-scale min-h-screen bg-surface-2 flex flex-col">
     <!-- Header: sticky เต็มความกว้าง ไม่ใช่การ์ดลอย -->
     <header class="sticky top-0 z-10 bg-gradient-to-r from-primary to-blue-700 text-white shadow-md flex-shrink-0">
       <div class="px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
@@ -146,39 +146,121 @@
               <span class="material-symbols-rounded text-xl">close</span>
             </button>
           </div>
-          <div class="p-5 space-y-4">
-            <div class="text-sm text-muted">
-              เพิ่ม/เปลี่ยนอีเมลจริงแทนอีเมลภายในที่ระบบตั้งให้อัตโนมัติ หรือเปลี่ยน PIN — เว้นว่างช่องไหนไว้ถ้าไม่ต้องการเปลี่ยน ต้องกรอก PIN ปัจจุบันเพื่อยืนยันตัวตนก่อนเสมอ
+
+          <!-- Tabs: บัญชี (ข้อมูลติดต่อ + อีเมล/PIN) / ตั้งค่า UI (ธีม + ขนาดตัวอักษร) -->
+          <div class="flex px-5 pt-3 gap-4 border-b border-border">
+            <button
+              @click="settingsTab = 'account'"
+              :class="['pb-2 text-sm font-semibold border-b-2 -mb-px', settingsTab === 'account' ? 'text-primary border-primary' : 'text-muted border-transparent']"
+            >
+              บัญชี
+            </button>
+            <button
+              @click="settingsTab = 'ui'"
+              :class="['pb-2 text-sm font-semibold border-b-2 -mb-px', settingsTab === 'ui' ? 'text-primary border-primary' : 'text-muted border-transparent']"
+            >
+              ตั้งค่า UI
+            </button>
+          </div>
+
+          <div v-if="settingsTab === 'account'" class="p-5 space-y-6">
+            <div class="space-y-3">
+              <div class="text-xs font-bold text-muted uppercase tracking-wide">ข้อมูลติดต่อ</div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">เบอร์โทรศัพท์มือถือ</label>
+                <input v-model="contactForm.phone" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">ไอดี Line</label>
+                <input v-model="contactForm.lineId" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">ผู้ติดต่อกรณีฉุกเฉิน</label>
+                <input v-model="contactForm.emergencyContact" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">ความสัมพันธ์</label>
+                <input v-model="contactForm.emergencyRelation" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
+              </div>
+              <div v-if="contactError" class="text-sm text-red-600 flex items-center gap-1">
+                <span class="material-symbols-rounded text-base">error</span>
+                {{ contactError }}
+              </div>
+              <div v-if="contactSuccess" class="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                บันทึกสำเร็จ
+              </div>
+              <button
+                @click="saveContactInfo"
+                :disabled="contactSaving"
+                class="w-full h-11 rounded-lg bg-primary text-white text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {{ contactSaving ? 'กำลังบันทึก...' : 'บันทึกข้อมูลติดต่อ' }}
+              </button>
             </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">PIN ปัจจุบัน (ยืนยันตัวตน)</label>
-              <input v-model="accountForm.currentPassword" type="password" placeholder="PIN/รหัสผ่านปัจจุบัน" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">อีเมลใหม่ (ไม่บังคับ)</label>
-              <input v-model="accountForm.newEmail" type="email" placeholder="เช่น somchai@gmail.com" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">PIN ใหม่ (ไม่บังคับ)</label>
-              <input v-model="accountForm.newPassword" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
-            </div>
-            <div v-if="accountError" class="text-sm text-red-600 flex items-center gap-1">
-              <span class="material-symbols-rounded text-base">error</span>
-              {{ accountError }}
-            </div>
-            <div v-if="accountSuccess" class="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-              บันทึกสำเร็จ
+
+            <div class="space-y-3 pt-4 border-t border-border">
+              <div class="text-xs font-bold text-muted uppercase tracking-wide">อีเมล / PIN เข้าสู่ระบบ</div>
+              <div class="text-sm text-muted">
+                เพิ่ม/เปลี่ยนอีเมลจริงแทนอีเมลภายในที่ระบบตั้งให้อัตโนมัติ หรือเปลี่ยน PIN — เว้นว่างช่องไหนไว้ถ้าไม่ต้องการเปลี่ยน ต้องกรอก PIN ปัจจุบันเพื่อยืนยันตัวตนก่อนเสมอ
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">PIN ปัจจุบัน (ยืนยันตัวตน)</label>
+                <input v-model="accountForm.currentPassword" type="password" placeholder="PIN/รหัสผ่านปัจจุบัน" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">อีเมลใหม่ (ไม่บังคับ)</label>
+                <input v-model="accountForm.newEmail" type="email" placeholder="เช่น somchai@gmail.com" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-muted mb-1">PIN ใหม่ (ไม่บังคับ)</label>
+                <input v-model="accountForm.newPassword" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
+              </div>
+              <div v-if="accountError" class="text-sm text-red-600 flex items-center gap-1">
+                <span class="material-symbols-rounded text-base">error</span>
+                {{ accountError }}
+              </div>
+              <div v-if="accountSuccess" class="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                บันทึกสำเร็จ
+              </div>
+              <button
+                @click="saveAccountSettings"
+                :disabled="!accountForm.currentPassword || accountSaving"
+                class="w-full h-11 rounded-lg border border-primary text-primary text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {{ accountSaving ? 'กำลังบันทึก...' : 'บันทึกอีเมล/PIN' }}
+              </button>
             </div>
           </div>
-          <div class="flex gap-3 px-5 py-4 border-t border-border">
-            <button @click="closeAccountSettings" class="flex-1 h-12 rounded-lg border border-border text-base font-medium text-text">ปิด</button>
-            <button
-              @click="saveAccountSettings"
-              :disabled="!accountForm.currentPassword || accountSaving"
-              class="flex-1 h-12 rounded-lg bg-primary text-white text-base font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {{ accountSaving ? 'กำลังบันทึก...' : 'บันทึก' }}
-            </button>
+
+          <div v-else class="p-5 space-y-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-sm font-semibold text-text">โหมดกลางคืน</div>
+                <div class="text-xs text-muted">ปรับสีพื้นหลัง/ตัวหนังสือให้เข้ากับแสงรอบตัว</div>
+              </div>
+              <button
+                @click="appStore.toggleDarkMode()"
+                :class="['w-14 h-8 rounded-full flex items-center px-1 transition-colors flex-shrink-0', appStore.isDarkMode ? 'bg-primary justify-end' : 'bg-border justify-start']"
+              >
+                <span class="w-6 h-6 rounded-full bg-white shadow"></span>
+              </button>
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-text mb-2">ขนาดตัวอักษร</div>
+              <div class="flex gap-2">
+                <button
+                  v-for="opt in textScaleOptions"
+                  :key="opt.value"
+                  @click="appStore.setTextScale(opt.value)"
+                  :class="[
+                    'flex-1 h-11 rounded-lg text-sm font-semibold border',
+                    appStore.textScale === opt.value ? 'bg-primary text-white border-primary' : 'bg-white text-text border-border',
+                  ]"
+                >
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -192,6 +274,7 @@ import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
+import { useAppStore } from '@/stores/app'
 import type { Booking } from '@/types'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import { isDriverVisibleBooking } from '@/utils/driverJobs'
@@ -203,6 +286,7 @@ const router = useRouter()
 const bookingStore = useBookingStore()
 const authStore = useAuthStore()
 const driversStore = useDriversStore()
+const appStore = useAppStore()
 
 // Phase F — PWA install prompt + update-available banners (ดู composables/usePwa.ts)
 const { showInstallBanner, showIosInstallHint, promptInstall, dismissInstall } = usePwaInstall()
@@ -292,18 +376,67 @@ const destinationLabel = (booking: Booking) => {
 const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
-// --- Account Settings: self-service เปลี่ยนอีเมล/PIN ของบัญชีตัวเอง (D1 — ดู authStore.updateOwnCredentials) ---
+// --- Account Settings: บัญชี (ข้อมูลติดต่อ + เปลี่ยนอีเมล/PIN) และ ตั้งค่า UI (ธีม/ขนาดตัวอักษร) ---
 const showAccountSettings = ref(false)
+const settingsTab = ref<'account' | 'ui'>('account')
+const textScaleOptions: { value: 'sm' | 'base' | 'lg'; label: string }[] = [
+  { value: 'sm', label: 'เล็ก' },
+  { value: 'base', label: 'ปกติ' },
+  { value: 'lg', label: 'ใหญ่' },
+]
+
 const accountForm = ref({ currentPassword: '', newEmail: '', newPassword: '' })
 const accountError = ref('')
 const accountSuccess = ref(false)
 const accountSaving = ref(false)
 
-const openAccountSettings = () => {
+// ข้อมูลติดต่อของตัวเอง (เบอร์โทร/LINE/ผู้ติดต่อฉุกเฉิน) — ฟิลด์ allowlist เดียวกับ firestore.rules เป๊ะ (ดู
+// driversStore.updateOwnDriverContact) ไม่มี PIN gate เพราะไม่ใช่ข้อมูล auth
+const contactForm = ref({ phone: '', lineId: '', emergencyContact: '', emergencyRelation: '' })
+const contactError = ref('')
+const contactSuccess = ref(false)
+const contactSaving = ref(false)
+
+const openAccountSettings = async () => {
+  settingsTab.value = 'account'
   accountForm.value = { currentPassword: '', newEmail: '', newPassword: '' }
   accountError.value = ''
   accountSuccess.value = false
+  contactError.value = ''
+  contactSuccess.value = false
   showAccountSettings.value = true
+
+  const driverId = authStore.profile?.driverId
+  if (driverId) {
+    const driver = await driversStore.fetchOwnDriver(driverId)
+    if (driver) {
+      contactForm.value = {
+        phone: driver.phone,
+        lineId: driver.lineId,
+        emergencyContact: driver.emergencyContact,
+        emergencyRelation: driver.emergencyRelation,
+      }
+    }
+  }
+}
+
+const saveContactInfo = async () => {
+  contactError.value = ''
+  contactSuccess.value = false
+  const driverId = authStore.profile?.driverId
+  if (!driverId) {
+    contactError.value = 'ไม่พบบัญชีคนขับที่ผูกไว้ — กรุณาติดต่อแอดมิน'
+    return
+  }
+  contactSaving.value = true
+  try {
+    await driversStore.updateOwnDriverContact(driverId, { ...contactForm.value })
+    contactSuccess.value = true
+  } catch (err: any) {
+    contactError.value = err?.message || 'บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
+  } finally {
+    contactSaving.value = false
+  }
 }
 
 const closeAccountSettings = () => {

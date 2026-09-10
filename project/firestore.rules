@@ -69,8 +69,13 @@ service cloud.firestore {
       // stores/auth.ts updateOwnCredentials) แก้ได้เฉพาะ field authEmail เท่านั้น ห้ามแตะ field อื่นของตัวเอง
       // หรือ record ของคนขับคนอื่นเลย
       allow read: if isSignedIn() && hasRole(['DRIVER']) && myDriverId() == driverId;
+      // เพิ่มขอบเขต self-service (PM-requested) ให้คนขับแก้ข้อมูลติดต่อของตัวเองได้จากหน้า "ตั้งค่าบัญชี" ใน Driver
+      // App — เฉพาะฟิลด์ที่ไม่กระทบความปลอดภัย/การเงินเท่านั้น (เบอร์โทร/LINE/ผู้ติดต่อฉุกเฉิน) ตั้งใจไม่รวม
+      // bankAccount/incomeAmount/commission ฯลฯ ไว้เป็นสิทธิ์ ADMIN เท่านั้นเสมอ กันความเสี่ยงคนขับเปลี่ยนเลขบัญชี
+      // รับเงินเดือนเองโดยไม่มีการตรวจสอบ (ความเสี่ยงทุจริต) — ชื่อ (firstName/lastName) ก็ตั้งใจไม่รวมเช่นกัน เพราะ
+      // ใช้เป็นข้อมูลอ้างอิงในเอกสาร/ประวัติงานเก่าที่ ADMIN ควรเป็นคนดูแลความถูกต้องแทน
       allow update: if isSignedIn() && hasRole(['DRIVER']) && myDriverId() == driverId &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['authEmail']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['authEmail', 'phone', 'lineId', 'emergencyContact', 'emergencyRelation']);
     }
 
     // Index สาธารณะเล็กๆ "รหัสคนขับ -> authEmail ปัจจุบัน" ใช้ resolve ตอน Login ก่อน authenticate เท่านั้น (ไม่มี

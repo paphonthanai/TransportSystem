@@ -26,6 +26,17 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
+/* ขนาดตัวอักษร Driver App (PM-requested, ดู stores/app.ts setTextScale) — ใช้ zoom แทนการตั้ง font-size บน <html>
+   เพราะ fontSize scale ใน tailwind.config.ts (ที่ text-sm/text-base/... ทั้งแอปอ้างอิง) เป็นค่า px ตายตัว ไม่ใช่ rem
+   ตั้ง font-size บน root เฉยๆ จึงไม่มีผลกับตัวหนังสือที่มี class ขนาดกำกับอยู่แล้ว (เกือบทุกจุดในแอป) zoom scale ทั้ง
+   บล็อกจริง ๆ แทน — ผูกกับ .driver-app-scale (root ของแต่ละหน้า Driver App) เท่านั้น ไม่กระทบฝั่งแอดมิน */
+[data-text-scale='sm'] .driver-app-scale {
+  zoom: 0.88;
+}
+[data-text-scale='lg'] .driver-app-scale {
+  zoom: 1.15;
+}
+
 * {
   box-sizing: border-box;
 }
