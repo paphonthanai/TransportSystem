@@ -26,11 +26,14 @@
           </div>
         </div>
         <div class="text-xs opacity-90 mb-3">ระบบสำหรับพนักงานขับรถ · มิตรกาญจน์</div>
-        <select
-          v-model="selectedDriver"
-          :disabled="isDriverRole"
-          class="w-full h-12 px-3 rounded-lg text-base font-semibold text-text bg-white/95 border-0 outline-none disabled:opacity-80"
-        >
+        <!-- บัญชีคนขับ (role DRIVER) อ่าน /drivers ได้แค่ record ตัวเอง (get) ไม่ใช่ทั้ง collection (list — ดู
+             firestore.rules) driverOptions/select จึงว่างเสมอสำหรับคนขับ โชว์เป็นข้อความชื่อตัวเองตรงๆ แทน (ค่า
+             selectedDriver เอง resolve ถูกต้องอยู่แล้วจาก authStore.userName ไม่ต้องพึ่ง drivers collection เลย)
+             ส่วน select แบบเลือกได้เก็บไว้ให้เฉพาะ ADMIN/DISPATCHER ที่สลับดูมุมมองคนขับต่างๆ (มีสิทธิ์ list ครบ) -->
+        <div v-if="isDriverRole" class="w-full h-12 px-3 rounded-lg text-base font-semibold text-text bg-white/95 flex items-center">
+          {{ selectedDriver }}
+        </div>
+        <select v-else v-model="selectedDriver" class="w-full h-12 px-3 rounded-lg text-base font-semibold text-text bg-white/95 border-0 outline-none">
           <option v-for="name in driverOptions" :key="name" :value="name">{{ name }}</option>
         </select>
       </div>
