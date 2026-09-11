@@ -27,6 +27,64 @@
         </div>
       </div>
     </div>
+
+    <!-- ตรวจสอบ/ซ่อม numberRegistry (Phase 1 Step 1 — แก้บัค "วางบิลรวมไม่ได้/เลขที่เอกสารถูกใช้ไปแล้ว") อ่านอย่างเดียว
+         จนกว่าจะกด "ซ่อม (Backfill)" — ต้องรันบน Production จริงผ่านหน้านี้เท่านั้น (ดู
+         salesDocumentsStore.checkDocumentNumberRegistryConsistency/backfillDocumentNumberRegistry) -->
+    <div class="card-lg space-y-4">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <div class="font-semibold text-text">ตรวจสอบความสอดคล้องของเลขที่เอกสาร (numberRegistry)</div>
+          <div class="text-xs text-muted mt-0.5">เทียบเลขที่เอกสารที่มีอยู่จริงกับทะเบียนเลขถาวร ก่อนเปลี่ยนวิธีออกเลขที่ Billing/Tax Invoice</div>
+        </div>
+        <button @click="runCheck" class="btn-secondary">
+          <span class="material-symbols-rounded text-base">fact_check</span>
+          ตรวจสอบ
+        </button>
+      </div>
+
+      <div v-if="registryReport" class="space-y-3">
+        <div v-if="registryReport.notReady" class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          ข้อมูลเอกสารยังโหลดไม่เสร็จ กรุณารอสักครู่แล้วกด "ตรวจสอบ" ใหม่อีกครั้ง
+        </div>
+        <div v-else class="overflow-auto border border-border rounded-lg">
+          <table class="w-full text-sm">
+            <thead class="bg-surface-2 text-xs text-muted">
+              <tr>
+                <th class="text-left px-3 py-2 font-semibold">ประเภท</th>
+                <th class="text-right px-3 py-2 font-semibold">เอกสารที่มีอยู่จริง</th>
+                <th class="text-right px-3 py-2 font-semibold">sequence ปัจจุบัน</th>
+                <th class="text-right px-3 py-2 font-semibold">sequence ที่แนะนำ (ขั้นต่ำ)</th>
+                <th class="text-left px-3 py-2 font-semibold">เลขที่ยังไม่ได้ register</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in registryReport.perType" :key="t.type" class="border-t border-border">
+                <td class="px-3 py-2 text-text">{{ salesDocumentTypeLabel[t.type] }} ({{ t.prefix }})</td>
+                <td class="px-3 py-2 text-right text-text">{{ t.liveCount }}</td>
+                <td class="px-3 py-2 text-right text-text">{{ t.currentSequenceValue }}</td>
+                <td class="px-3 py-2 text-right" :class="t.recommendedMinSequence > t.currentSequenceValue ? 'text-red-600 font-semibold' : 'text-text'">
+                  {{ t.recommendedMinSequence }}
+                </td>
+                <td class="px-3 py-2">
+                  <span v-if="t.missingFromUsedNumbers.length === 0" class="text-xs text-green-700">ครบ</span>
+                  <span v-else class="text-xs text-red-600">{{ t.missingFromUsedNumbers.length }} เลข — {{ t.missingFromUsedNumbers.slice(0, 5).join(', ') }}{{ t.missingFromUsedNumbers.length > 5 ? ' ...' : '' }}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="!registryReport.notReady" class="flex items-center justify-between flex-wrap gap-3">
+          <div class="text-xs text-muted">
+            "ซ่อม" จะ register เลขที่ยังขาด + ดัน sequence ขึ้นให้ไม่ต่ำกว่าค่าที่แนะนำเท่านั้น ไม่ลด/ไม่ลบ/ไม่แก้เอกสารใดๆ ทั้งสิ้น
+          </div>
+          <button @click="runBackfill" class="btn-primary">
+            <span class="material-symbols-rounded text-base">build</span>
+            ซ่อม (Backfill)
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -34,9 +92,21 @@
 import { ref } from 'vue'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useOnboardingStore } from '@/stores/onboarding'
+import { useSalesDocumentsStore, type DocumentNumberRegistryConsistencyReport } from '@/stores/salesDocuments'
+import { salesDocumentTypeLabel } from '@/utils/salesDocumentStatus'
 
 const documentSettingsStore = useDocumentSettingsStore()
 const onboardingStore = useOnboardingStore()
+const salesDocumentsStore = useSalesDocumentsStore()
+
+const registryReport = ref<DocumentNumberRegistryConsistencyReport | null>(null)
+const runCheck = () => {
+  registryReport.value = salesDocumentsStore.checkDocumentNumberRegistryConsistency()
+}
+const runBackfill = () => {
+  if (!confirm('ยืนยัน Backfill numberRegistry? การกระทำนี้จะเพิ่มข้อมูลใน numberRegistry เท่านั้น ไม่แก้ไข/ลบเอกสารใดๆ')) return
+  registryReport.value = salesDocumentsStore.backfillDocumentNumberRegistry()
+}
 
 const docTypes: { key: 'invoice' | 'receipt' | 'wht' | 'billingList' | 'quotation' | 'cashSale' | 'purchaseOrder' | 'salesOrder'; label: string }[] = [
   { key: 'quotation', label: 'ใบเสนอราคา' },

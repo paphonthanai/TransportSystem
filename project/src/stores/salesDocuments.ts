@@ -275,6 +275,29 @@ export interface BillingVatBackfillReport {
   downstreamMismatches: BillingVatBackfillDownstreamMismatch[]
 }
 
+/** รายงานความสอดคล้องของ numberRegistry ต่อ 1 ประเภทเอกสาร (ดู checkDocumentNumberRegistryConsistency) */
+export interface DocumentNumberRegistryTypeReport {
+  type: SalesDocumentType
+  prefix: string
+  /** จำนวนเอกสารประเภทนี้ที่ยังมีชีวิตอยู่จริงตอนนี้ */
+  liveCount: number
+  /** เลขที่เอกสารที่ยังมีชีวิตอยู่จริง แต่ยังไม่เคยถูก register เข้า numberRegistry.usedNumbers — เสี่ยงมากกว่าการชนเลขปกติ
+   *  เพราะเอกสารใหม่ในอนาคตอาจถูกสร้างด้วยเลขซ้ำเป๊ะกับเอกสารที่ยังมีชีวิตอยู่นี้ได้เลย (ไม่ใช่แค่ชนกับเอกสารที่ถูกลบไปแล้ว) */
+  missingFromUsedNumbers: string[]
+  currentSequenceValue: number
+  /** ค่าต่ำสุดที่ sequences[type] ควรเป็น เพื่อกัน peekNextSequence/nextSequence ในอนาคตออกเลขชนกับเลขที่เคยออกไปแล้ว
+   *  (นับจาก usedNumbers ที่ prefix ตรงกับประเภทนี้ — ครอบคลุมทั้งเอกสารที่ยังอยู่และที่เคยถูกลบไปแล้ว "เท่าที่เคย register
+   *  ไว้จริง" เอกสารเก่าก่อนมี numberRegistry ที่ถูกลบไปแล้วก่อนวันนี้ ไม่มีทาง recover เลขนั้นกลับมานับได้ — ดู
+   *  หมายเหตุใน documentNumberRegistry.ts) */
+  recommendedMinSequence: number
+}
+
+export interface DocumentNumberRegistryConsistencyReport {
+  /** true ถ้าเรียกตอน salesDocuments ยังโหลดจาก Firestore ไม่เสร็จ — ยังไม่ได้ตรวจอะไรเลย ลองใหม่หลังโหลดเสร็จ */
+  notReady: boolean
+  perType: DocumentNumberRegistryTypeReport[]
+}
+
 export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   const documents = ref<SalesDocument[]>([])
   const items = ref<SalesDocumentItem[]>([])
@@ -2165,6 +2188,69 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return report
   }
 
+  /** ประเภทเอกสารขาย -> key ของ documentSettingsStore.settings.numbering ที่ตรงกัน (ใช้หา prefix ของแต่ละประเภท) —
+   *  ตั้งใจไม่รวม wht เพราะ WHTCertificate เป็นคนละ collection ไม่ได้อยู่ใน salesDocuments/numberRegistry เลย */
+  const salesDocTypeNumberingKey: Record<SalesDocumentType, 'quotation' | 'salesOrder' | 'billingList' | 'invoice' | 'receipt' | 'cashSale' | 'purchaseOrder'> = {
+    QUOTATION: 'quotation',
+    SALES_ORDER: 'salesOrder',
+    BILLING: 'billingList',
+    TAX_INVOICE: 'invoice',
+    RECEIPT: 'receipt',
+    CASH_SALE: 'cashSale',
+    PURCHASE_ORDER: 'purchaseOrder',
+  }
+
+  /**
+   * ตรวจสอบความสอดคล้องของ numberRegistry เทียบกับ salesDocuments ปัจจุบัน (Phase 1 Step 1 ของแผนแก้บัค "วางบิลรวมไม่ได้")
+   * — อ่านอย่างเดียว ไม่แก้ไขอะไรเลย ใช้ดูก่อนตัดสินใจว่าจะสลับ BillingFormView/TaxInvoiceFormView ไปใช้
+   * numberRegistry.peekNextSequence ตามแบบ ReceiptFormView.vue ได้อย่างปลอดภัยหรือยัง (ดู DocumentNumberingView.vue)
+   */
+  function checkDocumentNumberRegistryConsistency(): DocumentNumberRegistryConsistencyReport {
+    const numberRegistry = useDocumentNumberRegistryStore()
+    /** numberRegistry โหลดจาก Firestore แบบ async (useFirestoreSettings) — ถ้าหน้านี้เพิ่งเปิดมาสดๆ แล้วกด "ตรวจสอบ"
+     *  ทันทีก่อนโหลดเสร็จ จะเห็น usedNumbers/sequences เป็นค่า default ว่างเปล่าทั้งที่จริงมีข้อมูลอยู่แล้ว
+     *  (เคยเป็นปัญหาเดียวกับ previewNumber ของ ReceiptFormView.vue — ดู numberManuallyEdited comment ที่นั่น) */
+    if (loading.value || numberRegistry.loading) return { notReady: true, perType: [] }
+    const documentSettingsStore = useDocumentSettingsStore()
+    const usedNumbers = numberRegistry.usedNumbersSnapshot()
+    const perType = (Object.keys(salesDocTypeNumberingKey) as SalesDocumentType[]).map((type) => {
+      const prefix = documentSettingsStore.settings.numbering[salesDocTypeNumberingKey[type]].prefix
+      const liveDocs = documents.value.filter((d) => d.type === type)
+      const missingFromUsedNumbers = liveDocs.filter((d) => !numberRegistry.isNumberUsed(d.number)).map((d) => d.number)
+      /** จำนวนเลขที่เคย register ไว้แล้วของ prefix นี้ (รวมทั้งที่ยังมีชีวิตอยู่และที่ถูกลบไปแล้ว "เท่าที่เคย register จริง")
+       *  ใช้ prefix แทน type เพราะ usedNumbers เป็น map แบนไม่มี field type ของตัวเอง — ในทางปฏิบัติ prefix แต่ละ
+       *  ประเภทไม่ซ้ำกันอยู่แล้ว (ดู documentSettings.ts defaultSettings) จึงกรองด้วย prefix ได้ตรงประเภทแน่นอน */
+      const registeredCountForPrefix = Object.keys(usedNumbers).filter((n) => n.startsWith(prefix)).length
+      return {
+        type,
+        prefix,
+        liveCount: liveDocs.length,
+        missingFromUsedNumbers,
+        currentSequenceValue: numberRegistry.sequenceValue(type),
+        recommendedMinSequence: Math.max(liveDocs.length, registeredCountForPrefix),
+      }
+    })
+    return { notReady: false, perType }
+  }
+
+  /**
+   * Backfill numberRegistry จากเอกสารที่ยังมีชีวิตอยู่จริงตอนนี้ — (1) register เลขที่เอกสารที่ยังไม่เคยถูกจดไว้
+   * (2) ดัน sequences[type] ขึ้นให้ไม่ต่ำกว่าจำนวนที่ปลอดภัย ไม่มีการลดค่าใดๆ ลง ไม่มีการลบ/แก้เอกสารใน salesDocuments เลย
+   * แตะแค่ numberRegistry เท่านั้น — ตาม Phase 1 Step 1 (ต้องรันจริงบน Production ผ่านหน้านี้เท่านั้น ไม่ใช่ script ภายนอก)
+   * ข้อจำกัดที่ทราบ: เอกสารเก่าก่อนมี numberRegistry ที่ถูกลบไปแล้วก่อนหน้านี้ ไม่มีทาง recover เลขนั้นมา register ได้อีก
+   * (ไม่มีร่องรอยเหลืออยู่เลยหลังลบ) — Backfill นี้ปิดช่องว่างได้แค่สำหรับเอกสารที่ยังมีชีวิตอยู่ ณ ตอนรันเท่านั้น
+   */
+  function backfillDocumentNumberRegistry(): DocumentNumberRegistryConsistencyReport {
+    const before = checkDocumentNumberRegistryConsistency()
+    if (before.notReady) return before
+    const numberRegistry = useDocumentNumberRegistryStore()
+    before.perType.forEach((t) => {
+      t.missingFromUsedNumbers.forEach((n) => numberRegistry.registerNumber(n))
+      numberRegistry.ensureMinSequence(t.type, t.recommendedMinSequence)
+    })
+    return checkDocumentNumberRegistryConsistency()
+  }
+
   /** ยกเลิกใบวางบิลที่ยังไม่ออกใบแจ้งหนี้ — คืนสถานะงานขนส่งที่ผูกอยู่กลับเป็นว่าง (billingNoteDocId) แล้วลบเอกสารทิ้ง
    *  ไม่แตะ taxInvoiceDocId/receiptDocId ของงานเดียวกัน (เป็นอิสระต่อกัน) */
   function cancelBillingNote(id: string) {
@@ -2751,6 +2837,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     createBillingFromBookings,
     createTaxInvoiceFromBookings,
     backfillBillingVatFromBookings,
+    checkDocumentNumberRegistryConsistency,
+    backfillDocumentNumberRegistry,
     createBillingManual,
     updateBillingManual,
     createInvoiceFromBilling,

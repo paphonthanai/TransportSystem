@@ -61,5 +61,32 @@ export const useDocumentNumberRegistryStore = defineStore('documentNumberRegistr
     data.value.usedNumbers[number.trim()] = true
   }
 
-  return { loading, error, nextSequence, peekNextSequence, isNumberUsed, registerNumber }
+  /** ค่าตัวนับปัจจุบันของประเภทเอกสารนี้ (อ่านอย่างเดียว) — ใช้ตรวจสอบความสอดคล้องก่อน migrate ฟอร์มอื่นมาใช้
+   *  peekNextSequence/nextSequence (ดู checkDocumentNumberRegistryConsistency ใน stores/salesDocuments.ts) */
+  function sequenceValue(docType: string): number {
+    return data.value.sequences[docType] ?? 0
+  }
+
+  /** สำเนาอ่านอย่างเดียวของ usedNumbers ทั้งหมด — ใช้ตรวจสอบความสอดคล้อง (ไม่ใช้แก้ไขตรงๆ จากภายนอก store นี้) */
+  function usedNumbersSnapshot(): Readonly<Record<string, boolean>> {
+    return { ...data.value.usedNumbers }
+  }
+
+  /** ดันตัวนับของประเภทเอกสารนี้ขึ้นให้ไม่ต่ำกว่า min เท่านั้น (ไม่มีวันลดค่าลง) — ใช้ตอน Backfill เพื่อกัน
+   *  peekNextSequence/nextSequence ออกเลขที่ชนกับเอกสารที่มีอยู่จริง/เคยออกไปแล้ว (ดู backfillDocumentNumberRegistry) */
+  function ensureMinSequence(docType: string, min: number) {
+    if ((data.value.sequences[docType] ?? 0) < min) data.value.sequences[docType] = min
+  }
+
+  return {
+    loading,
+    error,
+    nextSequence,
+    peekNextSequence,
+    isNumberUsed,
+    registerNumber,
+    sequenceValue,
+    usedNumbersSnapshot,
+    ensureMinSequence,
+  }
 })
