@@ -1270,7 +1270,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const numbering = documentSettingsStore.settings.numbering.billingList
     const manualNumber = data.number?.trim()
     if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
-    const seq = bookingStore.batches.length + documents.value.filter((d) => d.type === 'BILLING').length + 1
+    /** ใช้ numberRegistry.nextSequence แทนสูตรนับ documents.value.filter(...).length + 1 เดิม (Phase 1 Step 3-4 —
+     *  แก้บัค "เลขที่เอกสารถูกใช้ไปแล้ว" ที่เกิดจากนับ array ปัจจุบันซึ่งย้อนกลับได้เมื่อมีเอกสารถูกลบ/ยกเลิกไป ดู
+     *  createReceiptManual ด้านบนที่ใช้ pattern นี้อยู่แล้ว) เดินหน้าอย่างเดียวไม่มีวันย้อนกลับ ไม่ชนกับเลขที่เคยออกไปแล้ว
+     *  แม้เอกสารต้นทางจะถูกลบไปแล้วก็ตาม — ต้อง Backfill numberRegistry ให้ตรงกับเอกสารจริงก่อนใช้งานจริง (ดู
+     *  DocumentNumberingView.vue "ตรวจสอบความสอดคล้องของเลขที่เอกสาร") */
+    const seq = numberRegistry.nextSequence('BILLING')
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const now = new Date()
     const issueDate = data.date || now
@@ -1407,7 +1412,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const manualNumber = data.number?.trim()
     if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
     const numbering = documentSettingsStore.settings.numbering.invoice
-    const seq = bookingStore.documents.length + documents.value.filter((d) => d.type === 'TAX_INVOICE').length + 1
+    /** ใช้ numberRegistry.nextSequence แทนสูตรนับเดิม (Phase 1 Step 3-4 — ดูคอมเมนต์เดียวกันใน createBillingManual)
+     *  ตั้งใจแก้เฉพาะฟังก์ชันนี้ (ที่ TaxInvoiceFormView.vue เรียกจริง) — createInvoiceFromQuotation/
+     *  createInvoiceFromBilling/createTaxInvoiceFromBookings ยังใช้สูตรเดิมอยู่ นอก scope ที่ได้รับอนุมัติรอบนี้ */
+    const seq = numberRegistry.nextSequence('TAX_INVOICE')
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const issueDate = data.date || new Date()
     const creditDays = data.creditDays ?? 30
@@ -2751,8 +2759,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
 
   function createCashSale(data: { customer: string; items: Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>>; reference?: string }): SalesDocument {
     const documentSettingsStore = useDocumentSettingsStore()
+    const numberRegistry = useDocumentNumberRegistryStore()
     const numbering = documentSettingsStore.settings.numbering.cashSale
-    const seq = documents.value.filter((d) => d.type === 'CASH_SALE').length + 1
+    /** ใช้ numberRegistry.nextSequence แทนสูตรนับเดิม (Phase 1 Step 5 — ดูคอมเมนต์เดียวกันใน createBillingManual)
+     *  เดิมฟังก์ชันนี้ไม่เคย registerNumber() เลยด้วยซ้ำ (ไม่มีจุดไหนเรียกจาก UI ในตอนนี้) เพิ่มให้ครบตาม pattern
+     *  เดียวกับ createReceiptManual ไว้เผื่ออนาคตมีหน้าจอเรียกใช้จริง */
+    const seq = numberRegistry.nextSequence('CASH_SALE')
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const now = new Date()
     const doc: SalesDocument = {
@@ -2770,6 +2782,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
     documents.value.unshift(doc)
     addItemsToDocument(doc.id, data.items)
+    numberRegistry.registerNumber(doc.number)
     useBookingStore().addLog('สร้างเอกสาร ' + doc.number, { docId: doc.id })
     return doc
   }

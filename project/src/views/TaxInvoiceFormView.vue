@@ -4,7 +4,8 @@
       <div class="flex items-end gap-3">
         <div>
           <label class="field-label">เลขที่เอกสาร</label>
-          <input v-model="documentNumber" class="input-field h-9 px-2 font-mono text-sm w-40" />
+          <input v-model="documentNumber" class="input-field h-9 px-2 font-mono text-sm w-40" :class="{ '!border-red-500': numberDuplicate }" />
+          <div v-if="numberDuplicate" class="text-[11px] text-red-500 mt-0.5">❌ เลขที่เอกสารนี้ถูกใช้แล้ว</div>
         </div>
         <div>
           <label class="field-label">วันที่</label>
@@ -323,9 +324,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentItem } from '@/stores/salesDocuments'
+import { useDocumentNumberRegistryStore } from '@/stores/documentNumberRegistry'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
@@ -345,6 +347,7 @@ import type { Booking } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
+const numberRegistry = useDocumentNumberRegistryStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
@@ -670,10 +673,12 @@ const dueDate = computed(() => {
   return d
 })
 
+/** ใช้ numberRegistry.peekNextSequence แทนสูตรนับ salesDocumentsStore.documents.filter(...).length + 1 เดิม (Phase 1
+ *  Step 4 — แก้บัคเดียวกับ BillingFormView.vue แบบเดียวกับ ReceiptFormView.vue ที่ใช้ pattern นี้อยู่แล้ว) */
 const previewNumber = computed(() => {
   if (editingDoc) return editingDoc.number
   const numbering = documentSettingsStore.settings.numbering.invoice
-  const seq = salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE').length + 1
+  const seq = numberRegistry.peekNextSequence('TAX_INVOICE')
   const now = new Date()
   const yyyy = now.getFullYear()
   const mm = String(now.getMonth() + 1).padStart(2, '0')
@@ -681,10 +686,28 @@ const previewNumber = computed(() => {
   return `${numbering.prefix}${yyyy}${mm}${dd}${documentSettingsStore.padNumber(seq, numbering.padding)}`
 })
 
-/** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ */
+/** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ — sync ตาม previewNumber ต่อไปจน
+ *  กว่า numberRegistry จะโหลดเสร็จและผู้ใช้ยังไม่ได้พิมพ์ทับเอง (pattern เดียวกับ ReceiptFormView.vue/BillingFormView.vue) */
+const numberManuallyEdited = ref(false)
 const documentNumber = ref(previewNumber.value)
+watch(previewNumber, (val) => {
+  if (!numberManuallyEdited.value) documentNumber.value = val
+})
+watch(documentNumber, (val) => {
+  if (val !== previewNumber.value) numberManuallyEdited.value = true
+})
 
-const canSubmit = computed(() => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0))
+/** เลขที่เอกสารนี้เคยถูกใช้ไปแล้วหรือไม่ — เตือนแบบ real-time ก่อนกด "บันทึกเอกสาร" (pattern เดียวกับ ReceiptFormView.vue) */
+const numberDuplicate = computed(() => {
+  const n = documentNumber.value.trim()
+  if (!n) return false
+  if (editingDoc && n === editingDoc.number) return false
+  return numberRegistry.isNumberUsed(n)
+})
+
+const canSubmit = computed(
+  () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
+)
 
 /** เงินสด = เครดิต 0 วัน (ครบกำหนดวันเดียวกัน), เครดิต (ไม่แสดงวันที่) = ไม่บันทึกจำนวนวัน/วันครบกำหนดเลย */
 const resolvedCreditDays = computed<number | undefined>(() => {
@@ -704,6 +727,10 @@ const currentId = ref<string | undefined>(editingId)
  *  "บันทึกเอกสาร" และปุ่มลัดในแถบเครื่องมือ (พิมพ์/แชร์/ดาวน์โหลด) ที่ต้องมีเอกสารจริงก่อนถึงจะทำงานได้ */
 const saveAndGetDoc = () => {
   if (!canSubmit.value) return null
+  if (numberDuplicate.value) {
+    alert(`เลขที่เอกสาร ${documentNumber.value.trim()} ถูกใช้ไปแล้ว กรุณาเปลี่ยนเลขที่เอกสาร`)
+    return null
+  }
   const items: Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>> = rows.value.map((r) => ({
     productId: r.productId,
     description: r.description || r.unit,

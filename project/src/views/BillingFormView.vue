@@ -4,7 +4,8 @@
       <div class="flex items-end gap-3">
         <div>
           <label class="field-label">เลขที่เอกสาร</label>
-          <input v-model="documentNumber" class="input-field h-9 px-2 font-mono text-sm w-40" />
+          <input v-model="documentNumber" class="input-field h-9 px-2 font-mono text-sm w-40" :class="{ '!border-red-500': numberDuplicate }" />
+          <div v-if="numberDuplicate" class="text-[11px] text-red-500 mt-0.5">❌ เลขที่เอกสารนี้ถูกใช้แล้ว</div>
         </div>
         <div>
           <label class="field-label">วันที่</label>
@@ -325,9 +326,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentItem } from '@/stores/salesDocuments'
+import { useDocumentNumberRegistryStore } from '@/stores/documentNumberRegistry'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
@@ -347,6 +349,7 @@ import type { Booking } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
+const numberRegistry = useDocumentNumberRegistryStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
@@ -664,10 +667,13 @@ const dueDate = computed(() => {
   return d
 })
 
+/** ใช้ numberRegistry.peekNextSequence แทนสูตรนับ salesDocumentsStore.documents.filter(...).length + 1 เดิม (Phase 1
+ *  Step 3 — แก้บัค "เลขที่เอกสารถูกใช้ไปแล้ว" ที่นับ array ปัจจุบันซึ่งย้อนกลับได้เมื่อมีใบวางบิลถูกลบ/ยกเลิกไป
+ *  แบบเดียวกับ ReceiptFormView.vue ที่ใช้ pattern นี้อยู่แล้ว) — ไม่ mutate ตัวนับจริง แค่ดูตัวอย่างเฉยๆ */
 const previewNumber = computed(() => {
   if (editingDoc) return editingDoc.number
   const numbering = documentSettingsStore.settings.numbering.billingList
-  const seq = salesDocumentsStore.documents.filter((d) => d.type === 'BILLING').length + 1
+  const seq = numberRegistry.peekNextSequence('BILLING')
   const now = new Date()
   const yyyy = now.getFullYear()
   const mm = String(now.getMonth() + 1).padStart(2, '0')
@@ -675,12 +681,35 @@ const previewNumber = computed(() => {
   return `${numbering.prefix}${yyyy}${mm}${dd}${documentSettingsStore.padNumber(seq, numbering.padding)}`
 })
 
-/** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ */
+/** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ
+ *  previewNumber ตอนเปิดหน้าครั้งแรกอาจยังไม่ใช่เลขจริง เพราะ documentNumberRegistry โหลดจาก Firestore แบบ async
+ *  (ตอน setup ยังไม่มีข้อมูล seq ล่าสุด) จึงต้อง sync documentNumber ตาม previewNumber ต่อไปเรื่อยๆ จนกว่าจะโหลดเสร็จ
+ *  และผู้ใช้ยังไม่ได้พิมพ์ทับเอง (numberManuallyEdited) — พอโหลดเสร็จ (ค่า sequence จริงมาแล้ว) ก็จะอัปเดตให้เป็นเลขที่ถูกต้องอัตโนมัติ
+ *  (pattern เดียวกับ ReceiptFormView.vue เป๊ะ) */
+const numberManuallyEdited = ref(false)
 const documentNumber = ref(previewNumber.value)
+watch(previewNumber, (val) => {
+  if (!numberManuallyEdited.value) documentNumber.value = val
+})
+watch(documentNumber, (val) => {
+  if (val !== previewNumber.value) numberManuallyEdited.value = true
+})
+
 /** แสดง error ตอนบันทึกไม่สำเร็จ (เช่น เลขที่เอกสารซ้ำ — createBillingManual/updateBillingManual คืน null) */
 const saveError = ref('')
 
-const canSubmit = computed(() => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0))
+/** เลขที่เอกสารนี้เคยถูกใช้ไปแล้วหรือไม่ (เช็คทั้งเอกสารที่ยังอยู่และที่ถูกลบไปแล้ว) — ยกเว้นเลขเดิมของเอกสารที่กำลังแก้ไขอยู่นี้เอง
+ *  เตือนแบบ real-time ก่อนกด "บันทึกเอกสาร" (pattern เดียวกับ ReceiptFormView.vue) */
+const numberDuplicate = computed(() => {
+  const n = documentNumber.value.trim()
+  if (!n) return false
+  if (editingDoc && n === editingDoc.number) return false
+  return numberRegistry.isNumberUsed(n)
+})
+
+const canSubmit = computed(
+  () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
+)
 
 /** เงินสด = เครดิต 0 วัน (ครบกำหนดวันเดียวกัน), เครดิต (ไม่แสดงวันที่) = ไม่บันทึกจำนวนวัน/วันครบกำหนดเลย */
 const resolvedCreditDays = computed<number | undefined>(() => {
@@ -700,6 +729,10 @@ const currentId = ref<string | undefined>(editingId)
  *  "บันทึกเอกสาร" และปุ่มลัดในแถบเครื่องมือ (พิมพ์/แชร์/ดาวน์โหลด) ที่ต้องมีเอกสารจริงก่อนถึงจะทำงานได้ */
 const saveAndGetDoc = () => {
   if (!canSubmit.value) return null
+  if (numberDuplicate.value) {
+    saveError.value = `เลขที่เอกสาร ${documentNumber.value.trim()} ถูกใช้ไปแล้ว กรุณาเปลี่ยนเลขที่เอกสาร`
+    return null
+  }
   const items: Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>> = rows.value.map((r) => ({
     productId: r.productId,
     description: r.description || r.unit,
