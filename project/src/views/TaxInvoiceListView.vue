@@ -291,7 +291,15 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
     case 'RESET': {
       if (!confirm(`ยืนยัน Reset ใบแจ้งหนี้ ${doc.number} กลับเป็นร่าง?`)) break
       const result = salesDocumentsStore.resetTaxInvoice(doc.id)
-      if (!result.ok && result.message) alert(result.message)
+      if (!result.ok && result.message) {
+        alert(result.message)
+        break
+      }
+      // resetTaxInvoice เปลี่ยน status เป็น DRAFT จริง (แก้ไขได้ทันที) แต่ถ้า statusFilter ที่ผู้ใช้เลือกดูอยู่ไม่ใช่
+      // "ร่าง"/"แสดงทั้งหมด" (เช่นกำลังดูแท็บ "ส่งแล้ว") แถวนี้จะหายไปจากตารางทันทีเพราะไม่ตรง filteredDocs อีกต่อไป —
+      // ดูเหมือน Reset แล้ว "แก้ไขไม่ได้" ทั้งที่จริงข้อมูลสมบูรณ์และแก้ไขได้แล้ว (PM-reported) สลับ filter ให้เห็นแถวทันที
+      if (statusFilter.value !== 'all' && statusFilter.value !== 'DRAFT') statusFilter.value = 'all'
+      alert(`Reset สำเร็จ — ใบแจ้งหนี้ ${doc.number} เปลี่ยนเป็นสถานะ "ร่าง" แล้ว กดปุ่มแก้ไข (ไอคอนดินสอ) ที่แถวนี้เพื่อแก้ไขข้อมูลได้ทันที`)
       break
     }
     case 'DELETE': {
