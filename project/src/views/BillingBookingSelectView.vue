@@ -34,12 +34,15 @@
       <div v-if="bookingCategories.length > 1" class="text-[11px] text-muted">ลูกค้ารายนี้มีงานมากกว่าหนึ่งประเภท ต้องวางบิลแยกทีละประเภท (Feed) เสมอ</div>
 
       <div v-if="bookingCategory" class="border border-border rounded-lg overflow-x-auto bg-surface">
-        <table class="w-full text-sm min-w-[900px]">
+        <table class="w-full text-sm min-w-[1200px]">
           <thead class="bg-surface-2 text-xs text-muted">
             <tr>
               <th class="px-3 py-2 w-8"></th>
               <th class="text-left px-3 py-2 font-semibold w-10">ลำดับ</th>
               <th class="text-left px-3 py-2 font-semibold">ชื่อสินค้า/รายละเอียด</th>
+              <th class="text-left px-3 py-2 font-semibold">ทะเบียน</th>
+              <th class="text-left px-3 py-2 font-semibold">ชนิดปูน</th>
+              <th class="text-left px-3 py-2 font-semibold">เลขตั๋ว</th>
               <th class="text-right px-3 py-2 font-semibold">จำนวน</th>
               <th class="text-left px-3 py-2 font-semibold">หน่วย</th>
               <th class="text-right px-3 py-2 font-semibold">ราคาต่อหน่วย</th>
@@ -56,6 +59,9 @@
               </td>
               <td class="px-3 py-2 text-muted">{{ idx + 1 }}</td>
               <td class="px-3 py-2 text-text">{{ bookingDescription(b) }}</td>
+              <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
+              <td class="px-3 py-2 text-text">{{ bookingProducts(b) }}</td>
+              <td class="px-3 py-2 text-text">{{ b.docNo }}</td>
               <td class="px-3 py-2 text-right text-text">1</td>
               <td class="px-3 py-2 text-text">เที่ยว</td>
               <td class="px-3 py-2 text-right text-text">{{ formatBaht(bookingTotal(b)) }}</td>
@@ -65,7 +71,7 @@
               <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(bookingTotal(b)) }}</td>
             </tr>
             <tr v-if="eligibleBookings.length === 0">
-              <td colspan="10" class="px-3 py-6 text-center text-muted">ลูกค้ารายนี้ไม่มีงานประเภทนี้ที่รอวางบิล</td>
+              <td colspan="13" class="px-3 py-6 text-center text-muted">ลูกค้ารายนี้ไม่มีงานประเภทนี้ที่รอวางบิล</td>
             </tr>
           </tbody>
         </table>
@@ -126,6 +132,12 @@ const bookingDescription = (b: Booking) => {
   const dest = bookingDestination(b)
   const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
   return products ? `${dest} — ${products}` : dest
+}
+/** ชนิดปูน (Phase 3 — PM-requested column) — ข้อมูลเดียวกับที่ผสมอยู่ใน bookingDescription ด้านบนอยู่แล้ว
+ *  (b.items[].product) แค่แยกออกมาเป็นคอลัมน์ของตัวเอง ไม่มี field/schema ใหม่ */
+const bookingProducts = (b: Booking) => {
+  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  return products || '-'
 }
 const bookingTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)
 
