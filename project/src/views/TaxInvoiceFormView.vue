@@ -330,7 +330,6 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentItem, type DocumentNumberReuseCheck } from '@/stores/salesDocuments'
-import { useDocumentNumberRegistryStore } from '@/stores/documentNumberRegistry'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
@@ -350,7 +349,6 @@ import type { Booking } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
-const numberRegistry = useDocumentNumberRegistryStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
@@ -676,17 +674,18 @@ const dueDate = computed(() => {
   return d
 })
 
-/** ใช้ numberRegistry.peekNextSequence แทนสูตรนับ salesDocumentsStore.documents.filter(...).length + 1 เดิม (Phase 1
- *  Step 4 — แก้บัคเดียวกับ BillingFormView.vue แบบเดียวกับ ReceiptFormView.vue ที่ใช้ pattern นี้อยู่แล้ว) */
+/** ใช้ salesDocumentsStore.peekNextDocumentNumber แทน numberRegistry.peekNextSequence เดิม (กติกาใหม่ — ดูคอมเมนต์
+ *  เดียวกับ BillingFormView.vue) ใบแจ้งหนี้ใช้ prefix 'INV' ร่วมกับระบบเก่า bookingStore.documents ด้วย จึงต้องส่ง
+ *  extraNumbers เข้าไปกันชนข้ามระบบเหมือนที่ store ทำตอนสร้างจริง */
 const previewNumber = computed(() => {
   if (editingDoc) return editingDoc.number
   const numbering = documentSettingsStore.settings.numbering.invoice
-  const seq = numberRegistry.peekNextSequence('TAX_INVOICE')
-  const now = new Date()
-  const yyyy = now.getFullYear()
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
-  return `${numbering.prefix}${yyyy}${mm}${dd}${documentSettingsStore.padNumber(seq, numbering.padding)}`
+  return salesDocumentsStore.peekNextDocumentNumber(
+    'TAX_INVOICE',
+    numbering.prefix,
+    numbering.padding,
+    bookingStore.documents.map((d) => d.number)
+  )
 })
 
 /** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ — sync ตาม previewNumber ต่อไปจน

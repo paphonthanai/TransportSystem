@@ -487,6 +487,43 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return `${prefix}${yyyy}${mm}${dd}${String(seq).padStart(padding, '0')}`
   }
 
+  /**
+   * กติกาใหม่ (แทนที่ documentNumberRegistry.nextSequence/peekNextSequence เดิมทั้งหมด — ดูคอมเมนต์ deprecation ที่
+   * documentNumberRegistry.ts): auto-generate เลขที่เอกสารต้องหา "เลขรันน้อยที่สุดที่ไม่มี Active Document ถือครองอยู่"
+   * ไม่ใช่ตัวนับที่เดินหน้าอย่างเดียว — สแกนเอกสารที่ยัง Active อยู่ (documents.value) ทั้งหมดของ docType นี้ ไม่สนว่า
+   * วันที่ฝังอยู่ในเลขที่เอกสารนั้นจะเป็นวันไหน (ตามที่ PM ยืนยัน scope แบบ global ไม่ผูกกับวันที่ที่ออกเอกสาร) แล้วคืน
+   * จำนวนเต็มบวกตัวแรก (เริ่มที่ 1) ที่ยังไม่มีเอกสาร Active ใดถือครอง เอกสารที่ถูกยกเลิก/ลบไปแล้ว (hard delete ตามเดิม)
+   * จะไม่ถูกนับว่า "ถือครอง" อีกต่อไป จึงทำให้เลขที่ว่างแล้วถูกเสนอกลับมาใช้ได้ทันทีโดยไม่ต้องพิมพ์เอง
+   * เลขที่เอกสารที่ไม่ตรง pattern "prefix + วันที่ 8 หลัก + เลขรัน" (เช่น ผู้ใช้เคยพิมพ์เลขเองแบบอิสระ) จะถูกข้ามไปเฉยๆ
+   * ไม่นับเป็นเลขรันที่ถูกถือครอง เพราะไม่ใช่ส่วนหนึ่งของชุดเลข auto-generate นี้
+   */
+  function nextFreeSequence(salesDocType: SalesDocument['type'], prefix: string, extraNumbers: string[] = []): number {
+    const pattern = new RegExp(`^${prefix}\\d{8}(\\d+)$`)
+    const occupied = new Set<number>()
+    for (const d of documents.value) {
+      if (d.type !== salesDocType) continue
+      const m = d.number.match(pattern)
+      if (!m) continue
+      occupied.add(parseInt(m[1], 10))
+    }
+    /** ใบแจ้งหนี้ (TAX_INVOICE) ใช้ prefix 'INV' ร่วมกับระบบเก่า bookingStore.documents (LegacySalesDocument) ที่ยังมี
+     *  เอกสารค้างอยู่ — ต้องนับเลขที่ถูกใช้ในระบบเก่านี้ด้วยกันเป็น "ถือครองแล้ว" กันชนข้ามระบบ (สืบทอดมาจากสูตรนับเดิม) */
+    for (const num of extraNumbers) {
+      const m = num.match(pattern)
+      if (!m) continue
+      occupied.add(parseInt(m[1], 10))
+    }
+    let n = 1
+    while (occupied.has(n)) n++
+    return n
+  }
+
+  /** เลขที่เอกสาร auto-generate ตัวถัดไปแบบเต็ม (prefix+วันที่+เลขรัน) ใช้ได้ทั้งตอนแสดงตัวอย่างในฟอร์มก่อนบันทึก
+   *  และตอนสร้างเอกสารจริง เพราะ nextFreeSequence ไม่ mutate ค่าอะไรเลย (คำนวณจากเอกสาร Active ปัจจุบันสดๆ ทุกครั้ง) */
+  function peekNextDocumentNumber(salesDocType: SalesDocument['type'], prefix: string, padding: number, extraNumbers: string[] = []): string {
+    return generateDocNumber(prefix, nextFreeSequence(salesDocType, prefix, extraNumbers), padding, new Date())
+  }
+
   /** รวมค่า override (จากหน้า QuotationConvertView.vue) เข้ากับข้อมูลต้นทางของใบเสนอราคา ก่อนสร้างเอกสารใหม่ */
   function resolveConvertInputs(doc: SalesDocument, overrides?: QuotationConvertOverrides) {
     const customer = overrides?.customer?.trim() || doc.customer
@@ -577,7 +614,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   }): SalesDocument {
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.quotation
-    const seq = documents.value.filter((d) => d.type === 'QUOTATION').length + 1
+    const seq = nextFreeSequence('QUOTATION', numbering.prefix)
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const now = new Date()
     const issueDate = data.date || now
@@ -751,7 +788,11 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const documentSettingsStore = useDocumentSettingsStore()
     const bookingStore = useBookingStore()
     const numbering = documentSettingsStore.settings.numbering.invoice
-    const seq = bookingStore.documents.length + documents.value.filter((d) => d.type === 'TAX_INVOICE').length + 1
+    const seq = nextFreeSequence(
+      'TAX_INVOICE',
+      numbering.prefix,
+      bookingStore.documents.map((d) => d.number)
+    )
     const { customer, reference, itemRows, amount, discountTotal, vatRate, vatAmount } = resolveConvertInputs(doc, overrides)
     const issueDate = new Date()
     const creditDays = overrides?.creditDays ?? doc.creditDays ?? 30
@@ -795,7 +836,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (!doc || (doc.status !== 'APPROVED' && doc.status !== 'WAITING_APPROVAL')) return null
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.cashSale
-    const seq = documents.value.filter((d) => d.type === 'CASH_SALE').length + 1
+    const seq = nextFreeSequence('CASH_SALE', numbering.prefix)
     const { customer, reference, itemRows, amount, discountTotal, vatRate, vatAmount } = resolveConvertInputs(doc, overrides)
     const now = new Date()
     const cashSale: SalesDocument = {
@@ -834,7 +875,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const documentSettingsStore = useDocumentSettingsStore()
     const bookingStore = useBookingStore()
     const numbering = documentSettingsStore.settings.numbering.billingList
-    const seq = bookingStore.batches.length + documents.value.filter((d) => d.type === 'BILLING').length + 1
+    const seq = nextFreeSequence('BILLING', numbering.prefix)
     const { customer, reference, itemRows, amount, discountTotal, vatRate, vatAmount } = resolveConvertInputs(doc, overrides)
     const now = new Date()
     const billing: SalesDocument = {
@@ -871,7 +912,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (!doc || (doc.status !== 'APPROVED' && doc.status !== 'WAITING_APPROVAL')) return null
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.purchaseOrder
-    const seq = documents.value.filter((d) => d.type === 'PURCHASE_ORDER').length + 1
+    const seq = nextFreeSequence('PURCHASE_ORDER', numbering.prefix)
     const { customer, reference, itemRows, amount, discountTotal, vatRate, vatAmount } = resolveConvertInputs(doc, overrides)
     const now = new Date()
     const po: SalesDocument = {
@@ -916,7 +957,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   }): SalesDocument {
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.salesOrder
-    const seq = documents.value.filter((d) => d.type === 'SALES_ORDER').length + 1
+    const seq = nextFreeSequence('SALES_ORDER', numbering.prefix)
     const now = new Date()
     /** คำนวณ VAT ระดับเอกสารจาก item.amount/item.vatRate ของแต่ละรายการ (item.amount คำนวณหักส่วนลดไว้แล้ว) —
      *  เดิม createSalesOrderForBooking ไม่เคยเซ็ต vatAmount/vatRate ระดับเอกสารเลย ทำให้พิมพ์ใบสั่งสินค้าแล้ว
@@ -1282,23 +1323,16 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function createBillingManual(data: ManualDocumentFormData): SalesDocument | null {
     if (!isDirectBookingClaimEligibleForBilling(data)) return null
     const documentSettingsStore = useDocumentSettingsStore()
-    const numberRegistry = useDocumentNumberRegistryStore()
     const bookingStore = useBookingStore()
     const numbering = documentSettingsStore.settings.numbering.billingList
     const manualNumber = data.number?.trim()
-    /** Phase 4: แทนที่จะปฏิเสธทันทีถ้าเลขนี้เคยถูกใช้แล้ว (Phase 1 เดิม) ตรวจก่อนว่า "reuse" ได้ปลอดภัยไหม —
-     *  ปลอดภัย = ไม่มี Active Document ถือเลขนี้อยู่ + ไม่มี reference ค้างชี้ Document ID เดิมของเลขนี้ */
+    /** กติกาปัจจุบัน: Document Number ไม่ซ้ำกันเฉพาะ Active Documents เท่านั้น ไม่เกี่ยวกับประวัติการเคยใช้ */
     let reuseCheck: DocumentNumberReuseCheck | undefined
     if (manualNumber) {
       reuseCheck = checkDocumentNumberReuseEligibility(manualNumber)
       if (!reuseCheck.eligible) return null
     }
-    /** ใช้ numberRegistry.nextSequence แทนสูตรนับ documents.value.filter(...).length + 1 เดิม (Phase 1 Step 3-4 —
-     *  แก้บัค "เลขที่เอกสารถูกใช้ไปแล้ว" ที่เกิดจากนับ array ปัจจุบันซึ่งย้อนกลับได้เมื่อมีเอกสารถูกลบ/ยกเลิกไป ดู
-     *  createReceiptManual ด้านบนที่ใช้ pattern นี้อยู่แล้ว) เดินหน้าอย่างเดียวไม่มีวันย้อนกลับ ไม่ชนกับเลขที่เคยออกไปแล้ว
-     *  แม้เอกสารต้นทางจะถูกลบไปแล้วก็ตาม — ต้อง Backfill numberRegistry ให้ตรงกับเอกสารจริงก่อนใช้งานจริง (ดู
-     *  DocumentNumberingView.vue "ตรวจสอบความสอดคล้องของเลขที่เอกสาร") */
-    const seq = numberRegistry.nextSequence('BILLING')
+    const seq = nextFreeSequence('BILLING', numbering.prefix)
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const now = new Date()
     const issueDate = data.date || now
@@ -1341,7 +1375,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     addItemsToDocument(billing.id, data.items)
     linkManualDocToSource(billing, data)
     claimDirectBookingsForBilling(billing, data)
-    numberRegistry.registerNumber(billing.number)
     bookingStore.addLog('สร้างเอกสาร ' + billing.number, { docId: billing.id })
     const auditLogStore = useAuditLogStore()
     auditLogStore
@@ -1367,12 +1400,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function updateBillingManual(id: string, data: ManualDocumentFormData): SalesDocument | null {
     const doc = documents.value.find((d) => d.id === id && d.type === 'BILLING')
     if (!doc || doc.status !== 'BILLING_PENDING') return null
-    const numberRegistry = useDocumentNumberRegistryStore()
     const manualNumber = data.number?.trim()
-    /** Audit fix (Phase 1 ข้อ 2): เดิมเช็คแค่ numberRegistry.isNumberUsed() ตรงๆ ซึ่งไม่รู้จักแนวคิด reuse เลย —
-     *  บล็อกแม้เลขนั้นเป็นของเอกสารที่ถูกยกเลิก/ลบไปแล้วและ reuse ได้อย่างปลอดภัย เปลี่ยนมาใช้
-     *  checkDocumentNumberReuseEligibility() แบบเดียวกับ createBillingManual — ยกเว้นเลขเดิมของเอกสารตัวเองเหมือนเดิม
-     *  (manualNumber !== doc.number) ไม่สร้าง Document ID ใหม่ใดๆ ในนี้ (แก้ไข doc เดิม in-place ตามเดิมทุกประการ) */
+    /** กติกาปัจจุบัน: ไม่ block ตามประวัติการเคยใช้ ตรวจแค่ว่ามี Active Document อื่นถือเลขนี้อยู่หรือไม่ (ยกเว้นเลขเดิม
+     *  ของเอกสารตัวเอง) ไม่สร้าง Document ID ใหม่ใดๆ ในนี้ (แก้ไข doc เดิม in-place ตามเดิมทุกประการ) */
     if (manualNumber && manualNumber !== doc.number) {
       const reuseCheck = checkDocumentNumberReuseEligibility(manualNumber)
       if (!reuseCheck.eligible) return null
@@ -1382,7 +1412,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.amount = amount
     if (manualNumber && manualNumber !== doc.number) {
       doc.number = manualNumber
-      numberRegistry.registerNumber(manualNumber)
     }
     if (data.date) doc.date = data.date
     doc.creditDays = data.creditDays
@@ -1443,7 +1472,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
 
   function createTaxInvoiceManual(data: ManualDocumentFormData): SalesDocument | null {
     const documentSettingsStore = useDocumentSettingsStore()
-    const numberRegistry = useDocumentNumberRegistryStore()
     const bookingStore = useBookingStore()
     if (data.sourceBillingId) {
       const billing = documents.value.find((d) => d.id === data.sourceBillingId && d.type === 'BILLING')
@@ -1456,17 +1484,18 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
     if (!isDirectBookingClaimEligibleForTaxInvoice(data)) return null
     const manualNumber = data.number?.trim()
-    /** Phase 4: ตรวจ reuse eligibility แทนการปฏิเสธทันที — ดูคอมเมนต์เดียวกันใน createBillingManual */
+    /** กติกาปัจจุบัน: ตรวจแค่ว่ามี Active Document ถือเลขนี้อยู่หรือไม่ — ดูคอมเมนต์เดียวกันใน createBillingManual */
     let reuseCheck: DocumentNumberReuseCheck | undefined
     if (manualNumber) {
       reuseCheck = checkDocumentNumberReuseEligibility(manualNumber)
       if (!reuseCheck.eligible) return null
     }
     const numbering = documentSettingsStore.settings.numbering.invoice
-    /** ใช้ numberRegistry.nextSequence แทนสูตรนับเดิม (Phase 1 Step 3-4 — ดูคอมเมนต์เดียวกันใน createBillingManual)
-     *  ตั้งใจแก้เฉพาะฟังก์ชันนี้ (ที่ TaxInvoiceFormView.vue เรียกจริง) — createInvoiceFromQuotation/
-     *  createInvoiceFromBilling/createTaxInvoiceFromBookings ยังใช้สูตรเดิมอยู่ นอก scope ที่ได้รับอนุมัติรอบนี้ */
-    const seq = numberRegistry.nextSequence('TAX_INVOICE')
+    const seq = nextFreeSequence(
+      'TAX_INVOICE',
+      numbering.prefix,
+      bookingStore.documents.map((d) => d.number)
+    )
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const issueDate = data.date || new Date()
     const creditDays = data.creditDays ?? 30
@@ -1511,7 +1540,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     addItemsToDocument(invoice.id, data.items)
     linkManualDocToSource(invoice, data)
     claimDirectBookingsForTaxInvoice(invoice, data)
-    numberRegistry.registerNumber(invoice.number)
     bookingStore.addLog('สร้างเอกสาร ' + invoice.number, { docId: invoice.id })
     const auditLogStore = useAuditLogStore()
     auditLogStore
@@ -1537,9 +1565,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function updateTaxInvoiceManual(id: string, data: ManualDocumentFormData): SalesDocument | null {
     const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
     if (!doc || doc.status !== 'DRAFT') return null
-    const numberRegistry = useDocumentNumberRegistryStore()
     const manualNumber = data.number?.trim()
-    /** Audit fix (Phase 1 ข้อ 2) — เหมือน updateBillingManual เป๊ะ ดูคอมเมนต์ที่นั่น */
+    /** เหมือน updateBillingManual เป๊ะ ดูคอมเมนต์ที่นั่น */
     if (manualNumber && manualNumber !== doc.number) {
       const reuseCheck = checkDocumentNumberReuseEligibility(manualNumber)
       if (!reuseCheck.eligible) return null
@@ -1553,7 +1580,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.amount = amount
     if (manualNumber && manualNumber !== doc.number) {
       doc.number = manualNumber
-      numberRegistry.registerNumber(manualNumber)
     }
     doc.date = issueDate
     doc.creditDays = creditDays
@@ -1598,10 +1624,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const trimmed = newNumber.trim()
     if (!trimmed) return { ok: false, message: 'กรุณากรอกเลขที่เอกสาร' }
     if (trimmed === doc.number) return { ok: true }
-    const numberRegistry = useDocumentNumberRegistryStore()
-    if (numberRegistry.isNumberUsed(trimmed)) return { ok: false, message: `เลขที่เอกสาร ${trimmed} ถูกใช้ไปแล้ว` }
+    const reuseCheck = checkDocumentNumberReuseEligibility(trimmed)
+    if (!reuseCheck.eligible) return { ok: false, message: reuseCheck.reason }
     doc.number = trimmed
-    numberRegistry.registerNumber(trimmed)
     useBookingStore().addLog(`เปลี่ยนเลขที่เอกสารเป็น ${trimmed}`, { docId: doc.id })
     return { ok: true }
   }
@@ -1636,11 +1661,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function createReceiptManual(data: ManualDocumentFormData): SalesDocument | null {
     if (!isDirectBookingClaimEligibleForReceipt(data)) return null
     const documentSettingsStore = useDocumentSettingsStore()
-    const numberRegistry = useDocumentNumberRegistryStore()
     const numbering = documentSettingsStore.settings.numbering.receipt
     const manualNumber = data.number?.trim()
-    if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
-    const seq = numberRegistry.nextSequence('RECEIPT')
+    if (manualNumber && !checkDocumentNumberReuseEligibility(manualNumber).eligible) return null
+    const seq = nextFreeSequence('RECEIPT', numbering.prefix)
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const now = new Date()
     const issueDate = data.date || now
@@ -1681,7 +1705,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, data.items)
     claimDirectBookingsForReceipt(receipt, data)
-    numberRegistry.registerNumber(receipt.number)
     useBookingStore().addLog('สร้างเอกสาร ' + receipt.number, { docId: receipt.id })
     return receipt
   }
@@ -1695,15 +1718,13 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function updateReceiptManual(id: string, data: ManualDocumentFormData): SalesDocument | null {
     const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
     if (!doc || doc.sourceDocumentIds?.length || (doc.status !== 'DRAFT' && doc.status !== 'PAID')) return null
-    const numberRegistry = useDocumentNumberRegistryStore()
     const manualNumber = data.number?.trim()
-    if (manualNumber && manualNumber !== doc.number && numberRegistry.isNumberUsed(manualNumber)) return null
+    if (manualNumber && manualNumber !== doc.number && !checkDocumentNumberReuseEligibility(manualNumber).eligible) return null
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     doc.customer = data.customer
     doc.amount = amount
     if (manualNumber && manualNumber !== doc.number) {
       doc.number = manualNumber
-      numberRegistry.registerNumber(manualNumber)
     }
     if (data.date) doc.date = data.date
     doc.reference = data.reference
@@ -1828,10 +1849,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (!sameCustomer || !sameCategory || !allEligible || !allPodApproved) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
-    const numberRegistry = useDocumentNumberRegistryStore()
     const numbering = documentSettingsStore.settings.numbering.billingList
     const manualNumber = overrides?.number?.trim()
-    if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
+    if (manualNumber && !checkDocumentNumberReuseEligibility(manualNumber).eligible) return null
     const customer = overrides?.customer?.trim() || targetBookings[0].customer
     const reference = overrides?.reference ?? targetBookings.map(bookingReferenceDoc).join(', ')
     const dateFrom = targetBookings[0].shipDate || targetBookings[0].createdAt
@@ -1839,11 +1859,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const rows = overrides?.items ?? billingRowsFromBookings(targetBookings)
     const { amount, discountTotal, vatRate, vatAmount, whtAmount } = computeDocumentTotals(rows)
     const now = new Date()
-    /** ใช้สูตรนับจากเอกสารที่มีอยู่จริงเหมือนเดิม (ไม่เปลี่ยนไปใช้ numberRegistry.nextSequence ที่นับต่อเนื่องไม่รีเซ็ต) —
-     *  เอกสารจริงที่มีอยู่ก่อนหน้านี้ไม่เคย register เข้า numberRegistry เลย ถ้าเปลี่ยนตัวนับตรงนี้ไปพร้อมกัน เสี่ยงเลขชนกับ
-     *  เอกสารเดิมที่ออกไปแล้ววันเดียวกันในช่วงเปลี่ยนผ่าน — คงสูตรเดิมไว้ ใช้ numberRegistry แค่ตรวจ/จอง "เลขที่พิมพ์เอง"
-     *  ซ้ำเท่านั้น (ตามข้อกำหนด ต้องตรวจเลขซ้ำก่อน Save) ไม่ใช่เปลี่ยนกลไกนับเลขอัตโนมัติ */
-    const seq = bookingStore.batches.length + documents.value.filter((d) => d.type === 'BILLING').length + 1
+    const seq = nextFreeSequence('BILLING', numbering.prefix)
     const billing: SalesDocument = {
       id: genId('sdoc'),
       type: 'BILLING',
@@ -1879,7 +1895,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     targetBookings.forEach((b) => {
       b.billingNoteDocId = billing.id
     })
-    numberRegistry.registerNumber(billing.number)
     bookingStore.addLog('สร้างเอกสาร ' + billing.number, { docId: billing.id })
     return billing
   }
@@ -1908,11 +1923,14 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (!sameCustomer || !sameCategory || !allEligible || !allPodApproved) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
-    const numberRegistry = useDocumentNumberRegistryStore()
     const numbering = documentSettingsStore.settings.numbering.invoice
     const manualNumber = overrides?.number?.trim()
-    if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
-    const seq = bookingStore.documents.length + documents.value.filter((d) => d.type === 'TAX_INVOICE').length + 1
+    if (manualNumber && !checkDocumentNumberReuseEligibility(manualNumber).eligible) return null
+    const seq = nextFreeSequence(
+      'TAX_INVOICE',
+      numbering.prefix,
+      bookingStore.documents.map((d) => d.number)
+    )
     const customer = overrides?.customer?.trim() || targetBookings[0].customer
     const rows = overrides?.items ?? billingRowsFromBookings(targetBookings)
     const { amount, discountTotal, vatRate, vatAmount, whtAmount } = computeDocumentTotals(rows)
@@ -1958,7 +1976,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     targetBookings.forEach((b) => {
       b.taxInvoiceDocId = invoice.id
     })
-    numberRegistry.registerNumber(invoice.number)
     bookingStore.addLog('สร้างเอกสาร ' + invoice.number, { docId: invoice.id })
     return invoice
   }
@@ -1978,7 +1995,11 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (linkedBookings.some((b) => b!.taxInvoiceDocId)) return null
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.invoice
-    const seq = bookingStore.documents.length + documents.value.filter((d) => d.type === 'TAX_INVOICE').length + 1
+    const seq = nextFreeSequence(
+      'TAX_INVOICE',
+      numbering.prefix,
+      bookingStore.documents.map((d) => d.number)
+    )
     const { customer, reference, itemRows, amount, discountTotal, vatRate, vatAmount } = resolveConvertInputs(doc, overrides)
     const issueDate = new Date()
     const creditDays = overrides?.creditDays ?? doc.creditDays ?? 30
@@ -2049,11 +2070,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (!sameCustomer || !allEligible || !allPodApproved) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
-    const numberRegistry = useDocumentNumberRegistryStore()
     const numbering = documentSettingsStore.settings.numbering.receipt
     const manualNumber = overrides?.number?.trim()
-    if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
-    const seq = numberRegistry.nextSequence('RECEIPT')
+    if (manualNumber && !checkDocumentNumberReuseEligibility(manualNumber).eligible) return null
+    const seq = nextFreeSequence('RECEIPT', numbering.prefix)
     const customer = overrides?.customer?.trim() || targetBookings[0].customer
     const reference = overrides?.reference ?? targetBookings.map(bookingReferenceDoc).join(', ')
     const dateFrom = targetBookings[0].shipDate || targetBookings[0].createdAt
@@ -2089,7 +2109,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     Object.assign(receipt, resolveContactSnapshot(customer, overrides?.contactId))
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, rows)
-    numberRegistry.registerNumber(receipt.number)
     targetBookings.forEach((b) => {
       b.receiptDocId = receipt.id
     })
@@ -2283,6 +2302,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    * ตรวจสอบความสอดคล้องของ numberRegistry เทียบกับ salesDocuments ปัจจุบัน (Phase 1 Step 1 ของแผนแก้บัค "วางบิลรวมไม่ได้")
    * — อ่านอย่างเดียว ไม่แก้ไขอะไรเลย ใช้ดูก่อนตัดสินใจว่าจะสลับ BillingFormView/TaxInvoiceFormView ไปใช้
    * numberRegistry.peekNextSequence ตามแบบ ReceiptFormView.vue ได้อย่างปลอดภัยหรือยัง (ดู DocumentNumberingView.vue)
+   *
+   * DEPRECATED (กติกาใหม่): เลิกใช้ numberRegistry เป็นแหล่งความจริงของเลขที่เอกสารแล้ว (ดู nextFreeSequence/
+   * peekNextDocumentNumber ด้านบน — สแกน documents.value หาเลขว่างสดๆ ทุกครั้งแทน) เครื่องมือนี้กับ
+   * backfillDocumentNumberRegistry() ด้านล่างจึงไม่มีผลต่อการออกเลขที่เอกสารอีกต่อไป เหลือไว้เป็นเครื่องมือ diagnostic
+   * เดิมเฉยๆ (ไม่ลบเพราะยังมี DocumentNumberingView.vue เรียกใช้อยู่) ไม่ต้องพึ่งพาผลลัพธ์จากฟังก์ชันนี้ในการตัดสินใจใดๆ
+   * เกี่ยวกับเลขที่เอกสารอีกแล้ว
    */
   function checkDocumentNumberRegistryConsistency(): DocumentNumberRegistryConsistencyReport {
     const numberRegistry = useDocumentNumberRegistryStore()
@@ -2639,11 +2664,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (!sameCustomer || !allEligible) return null
     if (sourceDocsClaimedByOtherReceipts(sourceIds).length > 0) return null
     const documentSettingsStore = useDocumentSettingsStore()
-    const numberRegistry = useDocumentNumberRegistryStore()
     const numbering = documentSettingsStore.settings.numbering.receipt
     const manualNumber = overrides?.number?.trim()
-    if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
-    const seq = numberRegistry.nextSequence('RECEIPT')
+    if (manualNumber && !checkDocumentNumberReuseEligibility(manualNumber).eligible) return null
+    const seq = nextFreeSequence('RECEIPT', numbering.prefix)
     const customer = overrides?.customer?.trim() || targetDocs[0].customer
     const reference = overrides?.reference ?? targetDocs.map((d) => d.number).join(', ')
     const { amount, discountTotal, vatRate, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
@@ -2679,7 +2703,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     Object.assign(receipt, resolveContactSnapshot(customer, overrides?.contactId ?? targetDocs[0].contactId))
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, receiptItemRowsFromSourceDocs(targetDocs))
-    numberRegistry.registerNumber(receipt.number)
     if (sourceType === 'BILLING') {
       targetDocs.forEach((billing) => {
         billing.status = 'BILLED'
@@ -2898,12 +2921,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
 
   function createCashSale(data: { customer: string; items: Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>>; reference?: string }): SalesDocument {
     const documentSettingsStore = useDocumentSettingsStore()
-    const numberRegistry = useDocumentNumberRegistryStore()
     const numbering = documentSettingsStore.settings.numbering.cashSale
-    /** ใช้ numberRegistry.nextSequence แทนสูตรนับเดิม (Phase 1 Step 5 — ดูคอมเมนต์เดียวกันใน createBillingManual)
-     *  เดิมฟังก์ชันนี้ไม่เคย registerNumber() เลยด้วยซ้ำ (ไม่มีจุดไหนเรียกจาก UI ในตอนนี้) เพิ่มให้ครบตาม pattern
-     *  เดียวกับ createReceiptManual ไว้เผื่ออนาคตมีหน้าจอเรียกใช้จริง */
-    const seq = numberRegistry.nextSequence('CASH_SALE')
+    const seq = nextFreeSequence('CASH_SALE', numbering.prefix)
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const now = new Date()
     const doc: SalesDocument = {
@@ -2921,7 +2940,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
     documents.value.unshift(doc)
     addItemsToDocument(doc.id, data.items)
-    numberRegistry.registerNumber(doc.number)
     useBookingStore().addLog('สร้างเอกสาร ' + doc.number, { docId: doc.id })
     return doc
   }
@@ -2992,6 +3010,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     checkDocumentNumberRegistryConsistency,
     backfillDocumentNumberRegistry,
     checkDocumentNumberReuseEligibility,
+    nextFreeSequence,
+    peekNextDocumentNumber,
     createBillingManual,
     updateBillingManual,
     createInvoiceFromBilling,

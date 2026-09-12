@@ -195,18 +195,21 @@ describe('Phase 4: Document Number Reuse', () => {
     expect(check.previousDocumentId).toBe(original.id)
   })
 
-  it('11. allocation never produces two live documents with the same number, across repeated reuse cycles', async () => {
+  it('11. (rule change) repeated cancel-then-create cycles reuse the same freed number every time, always with a fresh Document ID; parallel live creates never collide', async () => {
     const salesDocs = useSalesDocumentsStore()
-    const seenNumbers = new Set<string>()
+    const seenIds = new Set<string>()
+    let firstNumber: string | undefined
     for (let i = 0; i < 5; i++) {
       const doc = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
-      expect(seenNumbers.has(doc.number)).toBe(false)
-      seenNumbers.add(doc.number)
+      if (firstNumber) expect(doc.number).toBe(firstNumber) // เลขว่างเดิมถูกนำกลับมาใช้ทุกรอบ ไม่เดินหน้าต่อ
+      firstNumber = doc.number
+      expect(seenIds.has(doc.id)).toBe(false) // Document ID ต้องใหม่เสมอ ไม่ซ้ำของรอบก่อน
+      seenIds.add(doc.id)
       salesDocs.cancelBillingNote(doc.id)
       await flush()
     }
 
-    // สร้างหลายใบพร้อมกันโดยไม่ยกเลิกเลย (auto-number ล้วน) ก็ต้องไม่ชนกันเองเช่นกัน
+    // สร้างหลายใบพร้อมกันโดยไม่ยกเลิกเลย (auto-number ล้วน) ก็ต้องไม่ชนกันเองเช่นกัน (ทุกใบยัง Active อยู่พร้อมกัน)
     const liveDocs = [1, 2, 3].map(() => salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!)
     const liveNumbers = liveDocs.map((d) => d.number)
     expect(new Set(liveNumbers).size).toBe(liveDocs.length)

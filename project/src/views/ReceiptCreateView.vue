@@ -10,7 +10,10 @@
             class="input-field h-9 px-2 font-mono text-sm w-40"
             :class="{ 'opacity-70': editingId, 'border-red-400': numberDuplicate }"
           />
-          <div v-if="numberDuplicate" class="text-xs text-red-600 mt-0.5">เลขที่นี้ถูกใช้ไปแล้ว</div>
+          <div v-if="numberDuplicate" class="text-xs text-red-600 mt-0.5">{{ numberReuseCheck.reason || 'เลขที่นี้ถูกใช้ไปแล้ว' }}</div>
+          <div v-else-if="numberReusable" class="text-xs text-amber-600 mt-0.5">
+            เลขนี้เคยใช้กับเอกสารที่ถูกยกเลิก/ลบไปแล้ว (Document ID เดิม: {{ numberReuseCheck.previousDocumentId }}) — บันทึกได้ปกติ
+          </div>
         </div>
         <div>
           <label class="field-label">วันที่</label>
@@ -216,9 +219,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useSalesDocumentsStore, type ReceiptSourceType } from '@/stores/salesDocuments'
+import { useSalesDocumentsStore, type ReceiptSourceType, type DocumentNumberReuseCheck } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
-import { useDocumentNumberRegistryStore } from '@/stores/documentNumberRegistry'
 import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
 import { useAuthStore } from '@/stores/auth'
@@ -235,7 +237,6 @@ const route = useRoute()
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
-const numberRegistry = useDocumentNumberRegistryStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
 const authStore = useAuthStore()
@@ -364,12 +365,7 @@ const openPicker = (type: ReceiptSourceType) => {
 const previewNumber = computed(() => {
   if (editingDoc.value) return editingDoc.value.number
   const numbering = documentSettingsStore.settings.numbering.receipt
-  const seq = numberRegistry.peekNextSequence('RECEIPT')
-  const now = new Date()
-  const yyyy = now.getFullYear()
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
-  return `${numbering.prefix}${yyyy}${mm}${dd}${documentSettingsStore.padNumber(seq, numbering.padding)}`
+  return salesDocumentsStore.peekNextDocumentNumber('RECEIPT', numbering.prefix, numbering.padding)
 })
 
 /** เลขที่เอกสารแก้ไขเองได้ตอนสร้างใหม่ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ (เหมือน ReceiptFormView.vue)
@@ -383,12 +379,14 @@ watch(documentNumber, (val) => {
   if (val !== previewNumber.value) numberManuallyEdited.value = true
 })
 
-const numberDuplicate = computed(() => {
-  if (editingId) return false
+const numberReuseCheck = computed<DocumentNumberReuseCheck>(() => {
+  if (editingId) return { eligible: true }
   const n = documentNumber.value.trim()
-  if (!n) return false
-  return numberRegistry.isNumberUsed(n)
+  if (!n) return { eligible: true }
+  return salesDocumentsStore.checkDocumentNumberReuseEligibility(n)
 })
+const numberDuplicate = computed(() => !numberReuseCheck.value.eligible)
+const numberReusable = computed(() => numberReuseCheck.value.eligible && !!numberReuseCheck.value.previousDocumentId)
 
 const canSubmit = computed(() => customerName.value.trim().length > 0 && sourceIds.value.length > 0 && !numberDuplicate.value)
 
@@ -403,7 +401,7 @@ const saveAndGetDoc = () => {
   if (!canSubmit.value) return null
   submitError.value = ''
   if (!currentId.value && numberDuplicate.value) {
-    submitError.value = 'เลขที่เอกสารนี้ถูกใช้ไปแล้ว'
+    submitError.value = numberReuseCheck.value.reason || 'เลขที่เอกสารนี้ถูกใช้ไปแล้ว'
     return null
   }
   const overrides = {

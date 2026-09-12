@@ -5,7 +5,10 @@
         <div>
           <label class="field-label">เลขที่เอกสาร</label>
           <input v-model="documentNumber" class="input-field h-9 px-2 font-mono text-sm w-40" :class="{ '!border-red-500': numberDuplicate }" />
-          <div v-if="numberDuplicate" class="text-[11px] text-red-500 mt-0.5">❌ เลขที่เอกสารนี้ถูกใช้แล้ว</div>
+          <div v-if="numberDuplicate" class="text-[11px] text-red-500 mt-0.5">❌ {{ numberReuseCheck.reason || 'เลขที่เอกสารนี้ถูกใช้แล้ว' }}</div>
+          <div v-else-if="numberReusable" class="text-[11px] text-amber-600 mt-0.5">
+            ℹ️ เลขนี้เคยใช้กับเอกสารที่ถูกยกเลิก/ลบไปแล้ว (Document ID เดิม: {{ numberReuseCheck.previousDocumentId }}) — บันทึกได้ปกติ ระบบจะสร้างเป็นเอกสารใหม่
+          </div>
         </div>
         <div>
           <label class="field-label">วันที่รับชำระ</label>
@@ -309,9 +312,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useSalesDocumentsStore, type SalesDocumentItem } from '@/stores/salesDocuments'
+import { useSalesDocumentsStore, type SalesDocumentItem, type DocumentNumberReuseCheck } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
-import { useDocumentNumberRegistryStore } from '@/stores/documentNumberRegistry'
 import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
 import { useInventoryStore } from '@/stores/inventory'
@@ -331,7 +333,6 @@ const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const bookingStore = useBookingStore()
-const numberRegistry = useDocumentNumberRegistryStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
 const inventoryStore = useInventoryStore()
@@ -618,12 +619,7 @@ watch(
 const previewNumber = computed(() => {
   if (editingDoc.value) return editingDoc.value.number
   const numbering = documentSettingsStore.settings.numbering.receipt
-  const seq = numberRegistry.peekNextSequence('RECEIPT')
-  const now = new Date()
-  const yyyy = now.getFullYear()
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
-  return `${numbering.prefix}${yyyy}${mm}${dd}${documentSettingsStore.padNumber(seq, numbering.padding)}`
+  return salesDocumentsStore.peekNextDocumentNumber('RECEIPT', numbering.prefix, numbering.padding)
 })
 
 /** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ
@@ -639,13 +635,16 @@ watch(documentNumber, (val) => {
   if (val !== previewNumber.value) numberManuallyEdited.value = true
 })
 
-/** เลขที่เอกสารนี้เคยถูกใช้ไปแล้วหรือไม่ (เช็คทั้งเอกสารที่ยังอยู่และที่ถูกลบไปแล้ว) — ยกเว้นเลขเดิมของเอกสารที่กำลังแก้ไขอยู่นี้เอง */
-const numberDuplicate = computed(() => {
+/** ตรวจตามกติกาปัจจุบัน: ไม่ซ้ำกันเฉพาะ Active Documents เท่านั้น (เหมือน BillingFormView.vue/TaxInvoiceFormView.vue) —
+ *  ยกเว้นเลขเดิมของเอกสารที่กำลังแก้ไขอยู่นี้เอง */
+const numberReuseCheck = computed<DocumentNumberReuseCheck>(() => {
   const n = documentNumber.value.trim()
-  if (!n) return false
-  if (editingDoc.value && n === editingDoc.value.number) return false
-  return numberRegistry.isNumberUsed(n)
+  if (!n) return { eligible: true }
+  if (editingDoc.value && n === editingDoc.value.number) return { eligible: true }
+  return salesDocumentsStore.checkDocumentNumberReuseEligibility(n)
 })
+const numberDuplicate = computed(() => !numberReuseCheck.value.eligible)
+const numberReusable = computed(() => numberReuseCheck.value.eligible && !!numberReuseCheck.value.previousDocumentId)
 
 const canSubmit = computed(
   () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
@@ -662,7 +661,7 @@ const currentId = ref<string | undefined>(editingId)
 const saveAndGetDoc = () => {
   if (!canSubmit.value) return null
   if (numberDuplicate.value) {
-    alert('❌ เลขที่เอกสารนี้ถูกใช้แล้ว')
+    alert(`❌ ${numberReuseCheck.value.reason || 'เลขที่เอกสารนี้ถูกใช้แล้ว'}`)
     return null
   }
   const items: Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>> = rows.value.map((r) => ({
@@ -710,14 +709,23 @@ const saveAndGetDoc = () => {
     contactId: contactId.value,
     bookingIds: [...alreadyPickedBookingIds.value],
   }
+  /** result เป็น null ได้จากอีกเหตุผลที่ไม่เกี่ยวกับเลขที่เอกสารเลย (เช่น งานขนส่งที่เลือกถูกดึงไปออกใบเสร็จอื่นแล้ว/
+   *  สถานะเอกสารไม่ให้แก้ไข) เช็ค numberDuplicate ตอนนี้เพื่อแยกให้ถูกว่าจะโทษเรื่องเลขหรือเรื่องอื่น (เหมือน
+   *  BillingFormView.vue) */
   if (currentId.value) {
     const updated = salesDocumentsStore.updateReceiptManual(currentId.value, payload)
-    if (!updated) alert('❌ เลขที่เอกสารนี้ถูกใช้แล้ว')
+    if (!updated) {
+      alert(numberDuplicate.value ? `❌ ${numberReuseCheck.value.reason || 'เลขที่เอกสารนี้ถูกใช้แล้ว'}` : '❌ บันทึกไม่สำเร็จ — เอกสารนี้อาจไม่สามารถแก้ไขได้แล้ว')
+    }
     return updated
   }
   const created = salesDocumentsStore.createReceiptManual(payload)
   if (!created) {
-    alert('❌ เลขที่เอกสารนี้ถูกใช้แล้ว')
+    alert(
+      numberDuplicate.value
+        ? `❌ ${numberReuseCheck.value.reason || 'เลขที่เอกสารนี้ถูกใช้แล้ว'}`
+        : '❌ บันทึกไม่สำเร็จ — งานขนส่งที่เลือกอาจถูกดึงไปออกใบเสร็จอื่นไปแล้ว หรือลูกค้า/สถานะ POD ของงานขนส่งที่เลือกไม่ตรงตามเงื่อนไข กรุณาตรวจสอบงานขนส่งที่เลือกอีกครั้ง'
+    )
     return null
   }
   currentId.value = created.id

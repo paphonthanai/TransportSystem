@@ -332,7 +332,6 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentItem, type DocumentNumberReuseCheck } from '@/stores/salesDocuments'
-import { useDocumentNumberRegistryStore } from '@/stores/documentNumberRegistry'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { useContactStore } from '@/stores/contacts'
@@ -352,7 +351,6 @@ import type { Booking } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
-const numberRegistry = useDocumentNumberRegistryStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const contactStore = useContactStore()
@@ -670,18 +668,13 @@ const dueDate = computed(() => {
   return d
 })
 
-/** ใช้ numberRegistry.peekNextSequence แทนสูตรนับ salesDocumentsStore.documents.filter(...).length + 1 เดิม (Phase 1
- *  Step 3 — แก้บัค "เลขที่เอกสารถูกใช้ไปแล้ว" ที่นับ array ปัจจุบันซึ่งย้อนกลับได้เมื่อมีใบวางบิลถูกลบ/ยกเลิกไป
- *  แบบเดียวกับ ReceiptFormView.vue ที่ใช้ pattern นี้อยู่แล้ว) — ไม่ mutate ตัวนับจริง แค่ดูตัวอย่างเฉยๆ */
+/** ใช้ salesDocumentsStore.peekNextDocumentNumber แทน numberRegistry.peekNextSequence เดิม (กติกาใหม่ — เลขน้อยที่สุด
+ *  ที่ไม่มี Active Document ถือครองอยู่ ไม่ใช่ตัวนับเดินหน้าอย่างเดียว ดูคอมเมนต์ที่ documentNumberRegistry.ts) —
+ *  ไม่ mutate อะไรเลย สแกน documents ปัจจุบันสดๆ ทุกครั้ง แค่ดูตัวอย่างเฉยๆ */
 const previewNumber = computed(() => {
   if (editingDoc) return editingDoc.number
   const numbering = documentSettingsStore.settings.numbering.billingList
-  const seq = numberRegistry.peekNextSequence('BILLING')
-  const now = new Date()
-  const yyyy = now.getFullYear()
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
-  return `${numbering.prefix}${yyyy}${mm}${dd}${documentSettingsStore.padNumber(seq, numbering.padding)}`
+  return salesDocumentsStore.peekNextDocumentNumber('BILLING', numbering.prefix, numbering.padding)
 })
 
 /** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate แล้วผู้ใช้พิมพ์ทับได้อิสระ

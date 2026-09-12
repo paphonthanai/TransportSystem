@@ -24,7 +24,7 @@ describe('document numbering does not self-collide (Billing/Tax Invoice/Cash Sal
     expect(first.number).not.toBe(second.number)
   })
 
-  it('regression: create -> cancel -> create again does not regenerate a colliding Billing number', () => {
+  it('(rule change) create -> cancel -> create again auto-generates the now-free Billing number back, with a new Document ID', () => {
     const salesDocs = useSalesDocumentsStore()
     const first = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
     const firstNumber = first.number
@@ -33,8 +33,10 @@ describe('document numbering does not self-collide (Billing/Tax Invoice/Cash Sal
 
     const second = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
 
-    expect(second.number).not.toBe(firstNumber)
+    // กติกาปัจจุบัน: เลขไม่มี Active Document ถือครองแล้ว = auto-generate นำกลับมาใช้ได้ทันที (เลขน้อยที่สุดที่ว่าง)
+    expect(second.number).toBe(firstNumber)
     expect(second).not.toBeNull()
+    expect(second.id).not.toBe(first.id)
   })
 
   it('createTaxInvoiceManual twice in a row produces two different, non-colliding numbers', () => {
@@ -45,7 +47,7 @@ describe('document numbering does not self-collide (Billing/Tax Invoice/Cash Sal
     expect(first.number).not.toBe(second.number)
   })
 
-  it('regression: create -> delete -> create again does not regenerate a colliding Tax Invoice number', () => {
+  it('(rule change) create -> delete -> create again auto-generates the now-free Tax Invoice number back, with a new Document ID', () => {
     const salesDocs = useSalesDocumentsStore()
     const first = salesDocs.createTaxInvoiceManual({ customer: 'ลูกค้า A', items: oneItem })!
     const firstNumber = first.number
@@ -54,7 +56,8 @@ describe('document numbering does not self-collide (Billing/Tax Invoice/Cash Sal
 
     const second = salesDocs.createTaxInvoiceManual({ customer: 'ลูกค้า A', items: oneItem })!
 
-    expect(second.number).not.toBe(firstNumber)
+    expect(second.number).toBe(firstNumber)
+    expect(second.id).not.toBe(first.id)
   })
 
   it('createCashSale twice in a row produces two different numbers and registers both', () => {
@@ -63,6 +66,23 @@ describe('document numbering does not self-collide (Billing/Tax Invoice/Cash Sal
     const second = salesDocs.createCashSale({ customer: 'ลูกค้า A', items: oneItem })
 
     expect(first.number).not.toBe(second.number)
+  })
+
+  it('(new algorithm) auto-generate always picks the smallest free sequence number, not just the most recently freed one', () => {
+    const salesDocs = useSalesDocumentsStore()
+    // สร้าง 3 ใบ (seq 1,2,3 ตามลำดับ) แล้วยกเลิกใบกลาง (seq 2) ทิ้ง — เหลือ 1,3 Active อยู่ ตัวที่ 2 ว่าง
+    const doc1 = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    const doc2 = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    const doc3 = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    expect(doc1.number).toMatch(/0001$/)
+    expect(doc2.number).toMatch(/0002$/)
+    expect(doc3.number).toMatch(/0003$/)
+    salesDocs.cancelBillingNote(doc2.id)
+
+    // auto-generate ตัวถัดไปต้องได้เลขว่างที่น้อยที่สุด (0002 ที่เพิ่งว่าง) ไม่ใช่ 0004 (เดินหน้าต่อจาก 3)
+    const doc4 = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    expect(doc4.number).toBe(doc2.number)
+    expect(doc4.id).not.toBe(doc2.id)
   })
 })
 
@@ -105,18 +125,18 @@ describe('Phase 1 verification: create -> cancel -> create cycle preserves every
     expect(doc.number).toMatch(/^VB\d{8}0001$/)
   })
 
-  it('case 2-3: cancelling a document keeps auto-generated numbers moving forward without colliding', () => {
+  it('(rule change) case 2-3: cancelling a document frees its number so the next auto-generate reuses it, with a new Document ID', () => {
     const salesDocs = useSalesDocumentsStore()
     const cancelled = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
     const cancelledNumber = cancelled.number
     salesDocs.cancelBillingNote(cancelled.id)
 
-    // case 3: ปล่อยให้ระบบออกเลขอัตโนมัติต่อ (ไม่ระบุ number เอง) ต้องได้เลขใหม่ที่ไม่ชนเลขที่ถูกยกเลิกไปแล้ว
-    // (ตั้งแต่ Phase 4 เป็นต้นไป "พิมพ์เลขเดิมเองตรงๆ" ไม่ถูกปฏิเสธทันทีอีกต่อไปแล้ว — กลายเป็นกรณี reuse ที่อนุญาตได้
-    // ถ้าปลอดภัย ดู salesDocuments.documentNumberReuse.test.ts สำหรับพฤติกรรม reuse โดยละเอียด)
+    // กติกาปัจจุบัน: ไม่มี Active Document ถือเลขนี้อยู่แล้ว -> เลขนี้เป็น "เลขน้อยที่สุดที่ว่าง" ทันที auto-generate
+    // ตัวถัดไปจึงได้เลขเดิมกลับมา (ไม่ใช่เดินหน้าต่อแบบตัวนับเดิมอีกแล้ว) แต่ Document ID ต้องเป็นใบใหม่เสมอ
     const next = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
     expect(next).not.toBeNull()
-    expect(next.number).not.toBe(cancelledNumber)
+    expect(next.number).toBe(cancelledNumber)
+    expect(next.id).not.toBe(cancelled.id)
   })
 
   it('case 4: an unrelated pre-existing document (and its line items) stay byte-for-byte unchanged', () => {
