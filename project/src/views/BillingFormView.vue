@@ -791,7 +791,14 @@ const saveAndGetDoc = () => {
   }
   const result = currentId.value ? salesDocumentsStore.updateBillingManual(currentId.value, payload) : salesDocumentsStore.createBillingManual(payload)
   if (!result) {
-    saveError.value = `เลขที่เอกสาร ${documentNumber.value.trim()} ถูกใช้ไปแล้ว กรุณาเปลี่ยนเลขที่เอกสาร`
+    /** Audit fix: ก่อนหน้านี้โทษ "เลขที่เอกสารซ้ำ" ทุกครั้งที่ result เป็น null ทั้งที่ createBillingManual/
+     *  updateBillingManual คืน null ได้จากอีกเหตุผลที่ไม่เกี่ยวกับเลขเลย (isDirectBookingClaimEligibleForBilling —
+     *  งานขนส่งถูกใบวางบิลอื่นจับจองไปแล้ว/ลูกค้า-ประเภทงานไม่ตรง/POD ยังไม่ผ่าน) เช็ค numberDuplicate ตอนนี้ (คำนวณสด
+     *  จากค่าล่าสุด ไม่มีอะไรเปลี่ยนไปตั้งแต่ก่อนเรียก store เพราะ store ไม่ได้ลงทะเบียนเลขไปแล้วเมื่อคืน null) เพื่อ
+     *  แยกให้ถูกว่าจะโทษเรื่องเลขหรือเรื่องงานขนส่ง */
+    saveError.value = numberDuplicate.value
+      ? numberReuseCheck.value.reason || `เลขที่เอกสาร ${documentNumber.value.trim()} ถูกใช้ไปแล้ว กรุณาเปลี่ยนเลขที่เอกสาร`
+      : 'บันทึกไม่สำเร็จ — งานขนส่งที่เลือกอาจถูกดึงไปออกใบวางบิลอื่นไปแล้ว หรือลูกค้า/ประเภทงาน/สถานะ POD ของงานขนส่งที่เลือกไม่ตรงตามเงื่อนไข กรุณาตรวจสอบงานขนส่งที่เลือกอีกครั้ง'
     return null
   }
   saveError.value = ''

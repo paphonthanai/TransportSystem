@@ -1369,7 +1369,14 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (!doc || doc.status !== 'BILLING_PENDING') return null
     const numberRegistry = useDocumentNumberRegistryStore()
     const manualNumber = data.number?.trim()
-    if (manualNumber && manualNumber !== doc.number && numberRegistry.isNumberUsed(manualNumber)) return null
+    /** Audit fix (Phase 1 ข้อ 2): เดิมเช็คแค่ numberRegistry.isNumberUsed() ตรงๆ ซึ่งไม่รู้จักแนวคิด reuse เลย —
+     *  บล็อกแม้เลขนั้นเป็นของเอกสารที่ถูกยกเลิก/ลบไปแล้วและ reuse ได้อย่างปลอดภัย เปลี่ยนมาใช้
+     *  checkDocumentNumberReuseEligibility() แบบเดียวกับ createBillingManual — ยกเว้นเลขเดิมของเอกสารตัวเองเหมือนเดิม
+     *  (manualNumber !== doc.number) ไม่สร้าง Document ID ใหม่ใดๆ ในนี้ (แก้ไข doc เดิม in-place ตามเดิมทุกประการ) */
+    if (manualNumber && manualNumber !== doc.number) {
+      const reuseCheck = checkDocumentNumberReuseEligibility(manualNumber)
+      if (!reuseCheck.eligible) return null
+    }
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     doc.customer = data.customer
     doc.amount = amount
@@ -1532,7 +1539,11 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (!doc || doc.status !== 'DRAFT') return null
     const numberRegistry = useDocumentNumberRegistryStore()
     const manualNumber = data.number?.trim()
-    if (manualNumber && manualNumber !== doc.number && numberRegistry.isNumberUsed(manualNumber)) return null
+    /** Audit fix (Phase 1 ข้อ 2) — เหมือน updateBillingManual เป๊ะ ดูคอมเมนต์ที่นั่น */
+    if (manualNumber && manualNumber !== doc.number) {
+      const reuseCheck = checkDocumentNumberReuseEligibility(manualNumber)
+      if (!reuseCheck.eligible) return null
+    }
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const issueDate = data.date || doc.date
     const creditDays = data.creditDays ?? 30
@@ -2352,22 +2363,23 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
 
   /**
    * ตรวจสอบว่าเลขที่เอกสารนี้ "reuse" ได้ปลอดภัยไหม (Phase 4 — Document Number Reuse)
-   * เรียกก่อนสร้างเอกสารทุกครั้งที่ผู้ใช้พิมพ์เลขที่เอกสารเอง (manualNumber) — ดู createBillingManual/
-   * createTaxInvoiceManual ด้านล่าง หลักการ:
-   * 1. เลขที่ยังไม่เคยถูกใช้เลย -> ไม่ใช่กรณี reuse ตั้งแต่แรก อนุญาตตามปกติ (พฤติกรรมเดิมจาก Phase 1 ไม่เปลี่ยน)
-   * 2. มี Active (live) Document ถือเลขนี้อยู่ตอนนี้ -> block เสมอ (ห้ามมี Active ซ้ำกันในเวลาเดียวกันในเลขเดียวกัน)
-   * 3. ไม่มี Active Document ถือเลขนี้แล้ว (ถูกยกเลิก/ลบไปแล้ว) -> ตรวจ reference ที่อาจยังค้างชี้ Document ID เดิม
-   *    อยู่ก่อนอนุญาต (defense-in-depth เผื่อ cascade cleanup เดิมของ cancel/delete พลาดจุดใดจุดหนึ่งไป) — ถ้าไม่พบ
-   *    reference ค้างเลย ถือว่าปลอดภัย อนุญาตให้ reuse ได้ (สร้าง Document ID ใหม่เสมอ ไม่มีทางได้ Document ID เดิม
-   *    กลับมาเพราะ genId() สุ่มใหม่ทุกครั้งอยู่แล้ว)
+   * เรียกก่อนสร้าง/แก้ไขเอกสารทุกครั้งที่ผู้ใช้พิมพ์เลขที่เอกสารเอง — ดู createBillingManual/createTaxInvoiceManual/
+   * updateBillingManual/updateTaxInvoiceManual ลำดับการตรวจ (ตรงตาม flow ที่กำหนดไว้ ห้ามสลับลำดับ):
+   * 1. มี Active (live) Document ถือเลขนี้อยู่ตอนนี้หรือไม่ — เช็คจากเอกสารที่ยังมีชีวิตอยู่จริงโดยตรง (documents.value)
+   *    ไม่ใช่จาก numberRegistry.isNumberUsed() — ถ้ามี ให้ BLOCK เสมอ (ห้ามมี Active ซ้ำกันในเวลาเดียวกันในเลขเดียวกัน)
+   * 2. ไม่มี Active แล้ว — เคยมีเลขนี้ในระบบหรือไม่ (isNumberUsed() ใช้ตอบคำถามนี้ "เคยมีประวัติหรือไม่" เท่านั้น
+   *    ไม่ใช่ตัวตัดสินหลักว่าเลขนี้ใช้ไม่ได้) ถ้าไม่เคยมีเลย -> ALLOW เป็นเลขใหม่ตามปกติ
+   * 3. เคยมีประวัติ (ถูกยกเลิก/ลบไปแล้ว) — ตรวจ reference ที่อาจยังค้างชี้ Document ID เดิมอยู่ก่อนอนุญาต
+   *    (defense-in-depth เผื่อ cascade cleanup เดิมของ cancel/delete พลาดจุดใดจุดหนึ่งไป) — ถ้ามี reference ค้าง
+   *    -> BLOCK, ถ้าไม่พบเลย -> ALLOW REUSE (สร้าง Document ID ใหม่เสมอ ไม่มีทางได้ Document ID เดิมกลับมาเพราะ
+   *    genId() สุ่มใหม่ทุกครั้งอยู่แล้ว)
    * ไม่แก้ relationship/reference ใดๆ เองในฟังก์ชันนี้เลย (อ่านอย่างเดียว) ตามข้อกำหนด "ห้ามแก้ relationship เดิมเพื่อให้ reuse ผ่าน"
    */
   function checkDocumentNumberReuseEligibility(number: string): DocumentNumberReuseCheck {
     const trimmed = number.trim()
     if (!trimmed) return { eligible: false, reason: 'กรุณากรอกเลขที่เอกสาร' }
-    const numberRegistry = useDocumentNumberRegistryStore()
-    if (!numberRegistry.isNumberUsed(trimmed)) return { eligible: true }
 
+    // Step 1: มี Active Document ถือเลขนี้อยู่หรือไม่ — ต้องเช็คก่อนเสมอ ไม่ใช้ isNumberUsed() ตัดสินตรงนี้
     const liveDoc = documents.value.find((d) => d.number === trimmed)
     if (liveDoc) {
       return {
@@ -2377,8 +2389,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       }
     }
 
-    /** ไม่มี Active Document ถือเลขนี้แล้ว — หา Document ID เดิมที่เคยใช้เลขนี้จาก Audit Log (อาจไม่มีค่าถ้าเอกสารเดิม
-     *  ถูกลบไปก่อนระบบจะมี Audit Log เลย — ยอมรับได้ตามที่ระบุไว้ ไม่ block เพราะเหตุนี้อย่างเดียว) */
+    // Step 2: ไม่มี Active แล้ว — เคยมีเลขนี้ในระบบหรือไม่ (isNumberUsed() แค่บอกว่า "เคยมีประวัติ" เท่านั้น)
+    const numberRegistry = useDocumentNumberRegistryStore()
+    if (!numberRegistry.isNumberUsed(trimmed)) return { eligible: true }
+
+    // Step 3: เคยมีประวัติแต่ไม่มี Active แล้ว — หา Document ID เดิมที่เคยใช้เลขนี้จาก Audit Log (อาจไม่มีค่าถ้าเอกสารเดิม
+    // ถูกลบไปก่อนระบบจะมี Audit Log เลย — ยอมรับได้ตามที่ระบุไว้ ไม่ block เพราะเหตุนี้อย่างเดียว) แล้วตรวจ reference ค้าง
     const auditLogStore = useAuditLogStore()
     const lastEntry = auditLogStore.findLatestByDocumentNumber(trimmed)
     const previousDocumentId = lastEntry?.documentId

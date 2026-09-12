@@ -229,4 +229,126 @@ describe('Phase 4: Document Number Reuse', () => {
     expect(entry?.action).toBe('REUSE_DOCUMENT_NUMBER')
     expect(entry?.previousDocumentId).toBe(original.id)
   })
+
+  it('12. checkDocumentNumberReuseEligibility does not treat a never-used auto-generated number as a duplicate (regression: VB...0010 false-reject bug)', () => {
+    const salesDocs = useSalesDocumentsStore()
+    // เลขที่ auto-generate ใหม่เอี่ยม ไม่เคยมีใน numberRegistry.usedNumbers และไม่มีเอกสาร live ใดถืออยู่เลย
+    const freshNumber = 'VB209912999999'
+
+    const check = salesDocs.checkDocumentNumberReuseEligibility(freshNumber)
+
+    expect(check.eligible).toBe(true)
+    expect(check.previousDocumentId).toBeUndefined()
+  })
+})
+
+/**
+ * Phase 2 (sub-plan หลัง Phase 4) — Document ID / Document Number UPDATE flow ตาม flowchart ที่ PM กำหนดตรงๆ:
+ * เลขเดิมของตัวเอง -> ALLOW, เลข Active ของเอกสารอื่น -> BLOCK, เลขเก่าที่ reuse ได้ -> ALLOW (คง Document ID เดิม
+ * ไม่สร้างใหม่), เลขเก่าที่มี reference ค้าง -> BLOCK
+ */
+describe('Phase 2: Document Number UPDATE flow (updateBillingManual / updateTaxInvoiceManual)', () => {
+  it('update keeping own current number is always allowed and keeps the same Document ID', () => {
+    const salesDocs = useSalesDocumentsStore()
+    const doc = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+
+    const updated = salesDocs.updateBillingManual(doc.id, { customer: 'ลูกค้า A (แก้ไข)', items: oneItem, number: doc.number })
+
+    expect(updated).not.toBeNull()
+    expect(updated!.id).toBe(doc.id)
+    expect(updated!.number).toBe(doc.number)
+  })
+
+  it('update to a number another live Document is actively using is blocked (Document ID unchanged, update rejected)', () => {
+    const salesDocs = useSalesDocumentsStore()
+    const docA = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    const docB = salesDocs.createBillingManual({ customer: 'ลูกค้า B', items: oneItem })!
+
+    const result = salesDocs.updateBillingManual(docB.id, { customer: 'ลูกค้า B', items: oneItem, number: docA.number })
+
+    expect(result).toBeNull()
+    const stillDocB = salesDocs.documents.find((d) => d.id === docB.id)!
+    expect(stillDocB.number).not.toBe(docA.number)
+  })
+
+  it('update to an old reuse-eligible number is allowed, without creating a new Document ID', async () => {
+    const salesDocs = useSalesDocumentsStore()
+    const cancelled = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    await flush()
+    salesDocs.cancelBillingNote(cancelled.id)
+    await flush()
+    const docB = salesDocs.createBillingManual({ customer: 'ลูกค้า B', items: oneItem })!
+
+    const updated = salesDocs.updateBillingManual(docB.id, { customer: 'ลูกค้า B', items: oneItem, number: cancelled.number })
+
+    expect(updated).not.toBeNull()
+    expect(updated!.id).toBe(docB.id) // UPDATE ต้องคง Document ID เดิมเสมอ ห้ามสร้างใหม่
+    expect(updated!.number).toBe(cancelled.number)
+  })
+
+  it('update to an old number with a dangling reference is blocked', async () => {
+    const bookingStore = useBookingStore()
+    const salesDocs = useSalesDocumentsStore()
+    const cancelled = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    await flush()
+    salesDocs.cancelBillingNote(cancelled.id)
+    await flush()
+    const danglingBooking = makeBooking({ billingNoteDocId: cancelled.id })
+    bookingStore.bookings.push(danglingBooking)
+    const docB = salesDocs.createBillingManual({ customer: 'ลูกค้า B', items: oneItem })!
+
+    const result = salesDocs.updateBillingManual(docB.id, { customer: 'ลูกค้า B', items: oneItem, number: cancelled.number })
+
+    expect(result).toBeNull()
+    const stillDocB = salesDocs.documents.find((d) => d.id === docB.id)!
+    expect(stillDocB.number).not.toBe(cancelled.number)
+  })
+
+  it('Tax Invoice: update UPDATE flow matches Billing exactly (own number allowed, active-elsewhere blocked, reuse-eligible allowed with same Document ID)', async () => {
+    const salesDocs = useSalesDocumentsStore()
+    const docA = salesDocs.createTaxInvoiceManual({ customer: 'ลูกค้า A', items: oneItem })!
+    const docB = salesDocs.createTaxInvoiceManual({ customer: 'ลูกค้า B', items: oneItem })!
+
+    expect(salesDocs.updateTaxInvoiceManual(docB.id, { customer: 'ลูกค้า B', items: oneItem, number: docB.number })).not.toBeNull()
+    expect(salesDocs.updateTaxInvoiceManual(docB.id, { customer: 'ลูกค้า B', items: oneItem, number: docA.number })).toBeNull()
+
+    await flush()
+    salesDocs.cancelTaxInvoice(docA.id)
+    await flush()
+    const updated = salesDocs.updateTaxInvoiceManual(docB.id, { customer: 'ลูกค้า B', items: oneItem, number: docA.number })
+    expect(updated).not.toBeNull()
+    expect(updated!.id).toBe(docB.id)
+    expect(updated!.number).toBe(docA.number)
+  })
+})
+
+/**
+ * Phase 1 (sub-plan หลัง Phase 4) — audit fix: BillingFormView.vue เดิม fallback message เหมารวมทุกกรณีที่
+ * createBillingManual คืน null ว่าเป็น "เลขที่เอกสารซ้ำ" ทั้งที่บางครั้งเป็นเพราะงานขนส่งที่เลือกไม่ผ่านเงื่อนไข claim
+ * (isDirectBookingClaimEligibleForBilling) ซึ่งไม่เกี่ยวกับเลขที่เอกสารเลย — เทสต์นี้ยืนยันว่า store แยกสองกรณีนี้ออก
+ * จากกันได้จริงที่ระดับ return value (View ใช้ numberDuplicate computed แยกจาก null เฉยๆ เพื่อเลือกข้อความที่ถูกต้อง)
+ */
+describe('Phase 1 fix: null return from createBillingManual is distinguishable by cause', () => {
+  it('booking-claim ineligibility returns null even when the document number itself is fresh and eligible', () => {
+    const bookingStore = useBookingStore()
+    const salesDocs = useSalesDocumentsStore()
+    // งานขนส่งถูก claim ไปแล้วโดยใบวางบิลอื่น (billingNoteDocId มีค่าแล้ว) — ทำให้ isDirectBookingClaimEligibleForBilling
+    // คืน false โดยที่เลขที่เอกสารที่จะใช้ (ไม่ระบุ number เลย -> auto) ไม่มีปัญหาอะไรเลย
+    const claimedBooking = makeBooking({ customer: 'ลูกค้า A', status: 'DELIVERED', billingNoteDocId: 'sdoc_someone_else' })
+    bookingStore.bookings.push(claimedBooking)
+
+    const result = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem, bookingIds: [claimedBooking.id] })
+
+    expect(result).toBeNull()
+    // ยืนยันว่าสาเหตุที่แท้จริงไม่ใช่เลขที่เอกสารซ้ำ — เลขที่ auto ยังไม่ถูกจองเลยด้วยซ้ำเพราะ return null ตั้งแต่ก่อนเรียก nextSequence()
+  })
+
+  it('a genuinely duplicate/blocked document number still returns null via the reuse-eligibility path', () => {
+    const salesDocs = useSalesDocumentsStore()
+    const live = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+
+    const result = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem, number: live.number })
+
+    expect(result).toBeNull()
+  })
 })
