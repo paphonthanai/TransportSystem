@@ -1352,7 +1352,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         action: reuseCheck?.previousDocumentId ? 'REUSE_DOCUMENT_NUMBER' : 'CREATE',
         ...currentActor(),
         reason: reuseCheck?.previousDocumentId
-          ? `นำเลขที่เอกสารเดิมกลับมาใช้ซ้ำ — เอกสารเดิม (Document ID: ${reuseCheck.previousDocumentId}) ถูกยกเลิก/ลบไปแล้ว ไม่มี reference ค้างอยู่`
+          ? `นำเลขที่เอกสารเดิมกลับมาใช้ซ้ำ — เอกสารเดิม (Document ID: ${reuseCheck.previousDocumentId}) ไม่มี Active Document ถือเลขนี้อยู่แล้ว`
           : undefined,
         previousDocumentId: reuseCheck?.previousDocumentId,
       })
@@ -1522,7 +1522,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         action: reuseCheck?.previousDocumentId ? 'REUSE_DOCUMENT_NUMBER' : 'CREATE',
         ...currentActor(),
         reason: reuseCheck?.previousDocumentId
-          ? `นำเลขที่เอกสารเดิมกลับมาใช้ซ้ำ — เอกสารเดิม (Document ID: ${reuseCheck.previousDocumentId}) ถูกยกเลิก/ลบไปแล้ว ไม่มี reference ค้างอยู่`
+          ? `นำเลขที่เอกสารเดิมกลับมาใช้ซ้ำ — เอกสารเดิม (Document ID: ${reuseCheck.previousDocumentId}) ไม่มี Active Document ถือเลขนี้อยู่แล้ว`
           : undefined,
         previousDocumentId: reuseCheck?.previousDocumentId,
       })
@@ -2362,24 +2362,22 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   }
 
   /**
-   * ตรวจสอบว่าเลขที่เอกสารนี้ "reuse" ได้ปลอดภัยไหม (Phase 4 — Document Number Reuse)
+   * ตรวจสอบว่าเลขที่เอกสารนี้ใช้ได้ไหม (กติกาใหม่จาก PM — แทนที่ Phase 4 เดิมทั้งหมด)
+   * แกนกฎ: "Document Number ต้องไม่ซ้ำกันเฉพาะ Active Documents" / "Document ID ต้องไม่ซ้ำกันตลอดกาล"
    * เรียกก่อนสร้าง/แก้ไขเอกสารทุกครั้งที่ผู้ใช้พิมพ์เลขที่เอกสารเอง — ดู createBillingManual/createTaxInvoiceManual/
-   * updateBillingManual/updateTaxInvoiceManual ลำดับการตรวจ (ตรงตาม flow ที่กำหนดไว้ ห้ามสลับลำดับ):
-   * 1. มี Active (live) Document ถือเลขนี้อยู่ตอนนี้หรือไม่ — เช็คจากเอกสารที่ยังมีชีวิตอยู่จริงโดยตรง (documents.value)
-   *    ไม่ใช่จาก numberRegistry.isNumberUsed() — ถ้ามี ให้ BLOCK เสมอ (ห้ามมี Active ซ้ำกันในเวลาเดียวกันในเลขเดียวกัน)
-   * 2. ไม่มี Active แล้ว — เคยมีเลขนี้ในระบบหรือไม่ (isNumberUsed() ใช้ตอบคำถามนี้ "เคยมีประวัติหรือไม่" เท่านั้น
-   *    ไม่ใช่ตัวตัดสินหลักว่าเลขนี้ใช้ไม่ได้) ถ้าไม่เคยมีเลย -> ALLOW เป็นเลขใหม่ตามปกติ
-   * 3. เคยมีประวัติ (ถูกยกเลิก/ลบไปแล้ว) — ตรวจ reference ที่อาจยังค้างชี้ Document ID เดิมอยู่ก่อนอนุญาต
-   *    (defense-in-depth เผื่อ cascade cleanup เดิมของ cancel/delete พลาดจุดใดจุดหนึ่งไป) — ถ้ามี reference ค้าง
-   *    -> BLOCK, ถ้าไม่พบเลย -> ALLOW REUSE (สร้าง Document ID ใหม่เสมอ ไม่มีทางได้ Document ID เดิมกลับมาเพราะ
-   *    genId() สุ่มใหม่ทุกครั้งอยู่แล้ว)
-   * ไม่แก้ relationship/reference ใดๆ เองในฟังก์ชันนี้เลย (อ่านอย่างเดียว) ตามข้อกำหนด "ห้ามแก้ relationship เดิมเพื่อให้ reuse ผ่าน"
+   * updateBillingManual/updateTaxInvoiceManual
+   * CREATE: 1. มี Active Document ใช้เลขนี้อยู่ไหม -> มี = BLOCK, ไม่มี = ALLOW แล้วสร้าง Document ID ใหม่เสมอ
+   * UPDATE: เลขเดิมของตัวเอง -> ALLOW เสมอ (ไม่ผ่านฟังก์ชันนี้เลย ดู manualNumber !== doc.number ที่ call site),
+   *         เลขที่จะเปลี่ยนไปมี Active ของเอกสารอื่นถืออยู่ -> BLOCK, ไม่มี Active -> ALLOW คง Document ID เดิมเสมอ
+   * ไม่เช็คว่าเลขนี้ "เคยมี" มาก่อนหรือไม่ และไม่ใช้ numberRegistry.isNumberUsed() ในการตัดสินใจนี้เลย ตามที่ PM ระบุ
+   * ตรงๆ — ประวัติการเคยใช้ไม่ใช่เงื่อนไข BLOCK อีกต่อไป (ไม่มีการตรวจ dangling reference ของ Document ID เก่าด้วย
+   * เพราะกติกาใหม่ไม่ต้องพึ่งประวัติเลย)
+   * ไม่แก้ relationship/reference ใดๆ เองในฟังก์ชันนี้เลย (อ่านอย่างเดียว)
    */
   function checkDocumentNumberReuseEligibility(number: string): DocumentNumberReuseCheck {
     const trimmed = number.trim()
     if (!trimmed) return { eligible: false, reason: 'กรุณากรอกเลขที่เอกสาร' }
 
-    // Step 1: มี Active Document ถือเลขนี้อยู่หรือไม่ — ต้องเช็คก่อนเสมอ ไม่ใช้ isNumberUsed() ตัดสินตรงนี้
     const liveDoc = documents.value.find((d) => d.number === trimmed)
     if (liveDoc) {
       return {
@@ -2389,44 +2387,11 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       }
     }
 
-    // Step 2: ไม่มี Active แล้ว — เคยมีเลขนี้ในระบบหรือไม่ (isNumberUsed() แค่บอกว่า "เคยมีประวัติ" เท่านั้น)
-    const numberRegistry = useDocumentNumberRegistryStore()
-    if (!numberRegistry.isNumberUsed(trimmed)) return { eligible: true }
-
-    // Step 3: เคยมีประวัติแต่ไม่มี Active แล้ว — หา Document ID เดิมที่เคยใช้เลขนี้จาก Audit Log (อาจไม่มีค่าถ้าเอกสารเดิม
-    // ถูกลบไปก่อนระบบจะมี Audit Log เลย — ยอมรับได้ตามที่ระบุไว้ ไม่ block เพราะเหตุนี้อย่างเดียว) แล้วตรวจ reference ค้าง
+    /** ไม่มี Active Document ถือเลขนี้แล้ว -> ALLOW ทันที (ไม่ต้องเช็คประวัติ) previousDocumentId ด้านล่างเป็นแค่
+     *  ข้อมูลประกอบสำหรับ Audit Log เท่านั้น (แยกป้าย CREATE vs REUSE_DOCUMENT_NUMBER) ไม่มีผลต่อ ALLOW/BLOCK แต่อย่างใด */
     const auditLogStore = useAuditLogStore()
     const lastEntry = auditLogStore.findLatestByDocumentNumber(trimmed)
-    const previousDocumentId = lastEntry?.documentId
-
-    if (previousDocumentId) {
-      const bookingStore = useBookingStore()
-      const danglingBooking = bookingStore.bookings.find(
-        (b) => b.billingNoteDocId === previousDocumentId || b.taxInvoiceDocId === previousDocumentId || b.receiptDocId === previousDocumentId
-      )
-      if (danglingBooking) {
-        return {
-          eligible: false,
-          reason: `พบงานขนส่ง ${danglingBooking.docNo} ยังอ้างอิง Document ID เดิม (${previousDocumentId}) ของเลขนี้อยู่ ไม่สามารถใช้ซ้ำได้จนกว่าจะแก้ไข reference นี้ก่อน`,
-          previousDocumentId,
-        }
-      }
-      const danglingDoc = documents.value.find(
-        (d) =>
-          d.parentDocumentId === previousDocumentId ||
-          (d.sourceDocumentIds || []).includes(previousDocumentId) ||
-          (d.convertedToDocumentIds || []).includes(previousDocumentId)
-      )
-      if (danglingDoc) {
-        return {
-          eligible: false,
-          reason: `พบเอกสาร ${danglingDoc.number} ยังอ้างอิง Document ID เดิม (${previousDocumentId}) ของเลขนี้อยู่ ไม่สามารถใช้ซ้ำได้`,
-          previousDocumentId,
-        }
-      }
-    }
-
-    return { eligible: true, previousDocumentId }
+    return { eligible: true, previousDocumentId: lastEntry?.documentId }
   }
 
   /** ยกเลิกใบวางบิลที่ยังไม่ออกใบแจ้งหนี้ — คืนสถานะงานขนส่งที่ผูกอยู่กลับเป็นว่าง (billingNoteDocId) แล้วลบเอกสารทิ้ง

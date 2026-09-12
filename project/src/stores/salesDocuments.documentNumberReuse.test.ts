@@ -177,7 +177,7 @@ describe('Phase 4: Document Number Reuse', () => {
     expect(check.previousDocumentId).toBe(live.id)
   })
 
-  it('10b. reuse is blocked (defense-in-depth) when a booking still dangles a reference to the old Document ID', async () => {
+  it('10b. (rule change) a dangling reference to the old Document ID no longer blocks reuse — only an Active Document holding the number can block', async () => {
     const bookingStore = useBookingStore()
     const salesDocs = useSalesDocumentsStore()
     const original = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
@@ -185,13 +185,13 @@ describe('Phase 4: Document Number Reuse', () => {
     salesDocs.cancelBillingNote(original.id)
     await flush()
     // จำลอง edge case ที่ cleanup ปกติพลาดไป (ไม่ใช่ path ปกติของ cancelBillingNote ที่เคลียร์ billingNoteDocId ให้เองอยู่แล้ว)
+    // กติกาใหม่: Document Number ไม่ซ้ำกันเฉพาะ Active Documents เท่านั้น ไม่ตรวจ reference ค้างของ Document ID เก่าอีกต่อไป
     const danglingBooking = makeBooking({ billingNoteDocId: original.id })
     bookingStore.bookings.push(danglingBooking)
 
     const check = salesDocs.checkDocumentNumberReuseEligibility(original.number)
 
-    expect(check.eligible).toBe(false)
-    expect(check.reason).toContain(danglingBooking.docNo)
+    expect(check.eligible).toBe(true)
     expect(check.previousDocumentId).toBe(original.id)
   })
 
@@ -286,7 +286,7 @@ describe('Phase 2: Document Number UPDATE flow (updateBillingManual / updateTaxI
     expect(updated!.number).toBe(cancelled.number)
   })
 
-  it('update to an old number with a dangling reference is blocked', async () => {
+  it('(rule change) update to an old number with a dangling reference is allowed — no Active Document holds it, so it is not blocked', async () => {
     const bookingStore = useBookingStore()
     const salesDocs = useSalesDocumentsStore()
     const cancelled = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
@@ -297,11 +297,11 @@ describe('Phase 2: Document Number UPDATE flow (updateBillingManual / updateTaxI
     bookingStore.bookings.push(danglingBooking)
     const docB = salesDocs.createBillingManual({ customer: 'ลูกค้า B', items: oneItem })!
 
-    const result = salesDocs.updateBillingManual(docB.id, { customer: 'ลูกค้า B', items: oneItem, number: cancelled.number })
+    const updated = salesDocs.updateBillingManual(docB.id, { customer: 'ลูกค้า B', items: oneItem, number: cancelled.number })
 
-    expect(result).toBeNull()
-    const stillDocB = salesDocs.documents.find((d) => d.id === docB.id)!
-    expect(stillDocB.number).not.toBe(cancelled.number)
+    expect(updated).not.toBeNull()
+    expect(updated!.id).toBe(docB.id) // UPDATE ต้องคง Document ID เดิมเสมอ ห้ามสร้างใหม่
+    expect(updated!.number).toBe(cancelled.number)
   })
 
   it('Tax Invoice: update UPDATE flow matches Billing exactly (own number allowed, active-elsewhere blocked, reuse-eligible allowed with same Document ID)', async () => {
