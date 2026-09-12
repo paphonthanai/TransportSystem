@@ -91,3 +91,71 @@ describe('combined Billing via the actual production path (createBillingManual +
     expect(b2.billingNoteDocId).toBe(billing.id)
   })
 })
+
+/**
+ * PM-requested verification pass for the Phase 1 Step 3-5 fix (5 explicit cases, asserted one-by-one so a future
+ * regression points at exactly which guarantee broke): create -> next number, cancel -> number not reused in
+ * Phase 1, create again -> no collision, unrelated existing documents/items stay untouched, and Document ID
+ * references still resolve to the correct (new) document after the cancel+recreate cycle.
+ */
+describe('Phase 1 verification: create -> cancel -> create cycle preserves everything else', () => {
+  it('case 1: creating a document assigns the next sequence number', () => {
+    const salesDocs = useSalesDocumentsStore()
+    const doc = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    expect(doc.number).toMatch(/^VB\d{8}0001$/)
+  })
+
+  it('case 2-3: cancelling a document does not free its number for reuse, and the next create does not collide', () => {
+    const salesDocs = useSalesDocumentsStore()
+    const cancelled = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    const cancelledNumber = cancelled.number
+    salesDocs.cancelBillingNote(cancelled.id)
+
+    // case 2: เลขที่ถูกยกเลิกยังคงถูก "จอง" ไว้ถาวรใน numberRegistry (ตามข้อกำหนด Phase 1 — ยังไม่ทำ Document Number
+    // Reuse ซึ่งเป็นงานของ Phase 4) ต่อให้พิมพ์เลขนี้ซ้ำเองตรงๆ ก็ต้องถูกปฏิเสธ
+    const manualReuseAttempt = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem, number: cancelledNumber })
+    expect(manualReuseAttempt).toBeNull()
+
+    // case 3: ปล่อยให้ระบบออกเลขอัตโนมัติต่อ (ไม่ระบุ number เอง) ต้องได้เลขใหม่ที่ไม่ชนเลขที่ถูกยกเลิกไปแล้ว
+    const next = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    expect(next).not.toBeNull()
+    expect(next.number).not.toBe(cancelledNumber)
+  })
+
+  it('case 4: an unrelated pre-existing document (and its line items) stay byte-for-byte unchanged', () => {
+    const salesDocs = useSalesDocumentsStore()
+    const controlDoc = salesDocs.createBillingManual({ customer: 'ลูกค้าควบคุม (ไม่เกี่ยวข้อง)', items: oneItem, reference: 'CONTROL-REF' })!
+    const controlSnapshot = JSON.stringify(controlDoc)
+    const controlItemsSnapshot = JSON.stringify(salesDocs.itemsForDocument(controlDoc.id))
+
+    // ทำ cycle สร้าง->ยกเลิก->สร้างใหม่ ของเอกสารอื่นที่ไม่เกี่ยวข้องกันเลย
+    const other = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
+    salesDocs.cancelBillingNote(other.id)
+    salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })
+
+    const controlDocAfter = salesDocs.documents.find((d) => d.id === controlDoc.id)
+    expect(controlDocAfter).toBeDefined()
+    expect(JSON.stringify(controlDocAfter)).toBe(controlSnapshot)
+    expect(JSON.stringify(salesDocs.itemsForDocument(controlDoc.id))).toBe(controlItemsSnapshot)
+  })
+
+  it('case 5: Document ID references still resolve correctly after a cancel + recreate cycle (never fall back to documentNo)', () => {
+    const bookingStore = useBookingStore()
+    const salesDocs = useSalesDocumentsStore()
+    const booking = makeBooking({ customer: 'ลูกค้า A', status: 'IN_TRANSIT' })
+    bookingStore.bookings.push(booking)
+
+    const firstBilling = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem, bookingIds: [booking.id] })!
+    expect(booking.billingNoteDocId).toBe(firstBilling.id)
+
+    salesDocs.cancelBillingNote(firstBilling.id)
+    // ยกเลิกแล้วต้องคืนสถานะการอ้างอิงของ booking กลับเป็นว่าง ไม่ค้างชี้ไปที่ Document ID ที่ถูกลบไปแล้ว
+    expect(booking.billingNoteDocId).toBeUndefined()
+
+    const secondBilling = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem, bookingIds: [booking.id] })!
+    // อ้างอิงใหม่ต้องชี้ไปที่ Document ID ของเอกสารใหม่ (คนละ id กับเอกสารที่ถูกยกเลิกไปแล้วเป๊ะ) แม้จะเป็น booking เดิม
+    expect(booking.billingNoteDocId).toBe(secondBilling.id)
+    expect(booking.billingNoteDocId).not.toBe(firstBilling.id)
+    expect(secondBilling.id).not.toBe(firstBilling.id)
+  })
+})
