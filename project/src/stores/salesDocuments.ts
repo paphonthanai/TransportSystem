@@ -10,6 +10,8 @@ import { computeRowAmount, computeRowDiscountBaht, computeRowVat, computeDocumen
 import { sortBookingsForDocumentMerge } from '@/utils/bookingMergeSort'
 import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
 import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
+import { useAuditLogStore } from './auditLog'
+import { useAuthStore } from './auth'
 import type { Booking, BillingStatus } from '@/types'
 
 export type SalesDocumentType = 'QUOTATION' | 'SALES_ORDER' | 'BILLING' | 'TAX_INVOICE' | 'RECEIPT' | 'CASH_SALE' | 'PURCHASE_ORDER'
@@ -296,6 +298,21 @@ export interface DocumentNumberRegistryConsistencyReport {
   /** true ถ้าเรียกตอน salesDocuments ยังโหลดจาก Firestore ไม่เสร็จ — ยังไม่ได้ตรวจอะไรเลย ลองใหม่หลังโหลดเสร็จ */
   notReady: boolean
   perType: DocumentNumberRegistryTypeReport[]
+}
+
+/**
+ * ผลตรวจสอบว่าเลขที่เอกสารนี้ "reuse" ได้ปลอดภัยไหม (Phase 4) — ดู checkDocumentNumberReuseEligibility
+ * - เลขที่ยังไม่เคยถูกใช้เลย: eligible=true, previousDocumentId=undefined (ไม่ใช่กรณี reuse ตั้งแต่แรก)
+ * - เลขที่มี Active Document ถือครองอยู่ตอนนี้: eligible=false เสมอ (ห้ามมี Active ซ้ำกันในเวลาเดียวกัน)
+ * - เลขที่เคยถูกใช้แต่ไม่มี Active Document ถือครองแล้ว: eligible=true ถ้าไม่พบ reference ที่ยังค้างชี้ Document ID
+ *   เดิมอยู่ (ตรวจจาก booking.billingNoteDocId/taxInvoiceDocId/receiptDocId และ parentDocumentId/sourceDocumentIds/
+ *   convertedToDocumentIds ของเอกสารอื่น) — previousDocumentId มาจาก Audit Log ล่าสุดของเลขนี้ (อาจไม่มีค่าถ้าเอกสาร
+ *   เดิมถูกลบไปก่อนที่ระบบจะมี Audit Log เลย — เป็นข้อจำกัดที่ยอมรับได้ตามที่ระบุไว้ ไม่ใช่บัค)
+ */
+export interface DocumentNumberReuseCheck {
+  eligible: boolean
+  reason?: string
+  previousDocumentId?: string
 }
 
 export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
@@ -1269,7 +1286,13 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const bookingStore = useBookingStore()
     const numbering = documentSettingsStore.settings.numbering.billingList
     const manualNumber = data.number?.trim()
-    if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
+    /** Phase 4: แทนที่จะปฏิเสธทันทีถ้าเลขนี้เคยถูกใช้แล้ว (Phase 1 เดิม) ตรวจก่อนว่า "reuse" ได้ปลอดภัยไหม —
+     *  ปลอดภัย = ไม่มี Active Document ถือเลขนี้อยู่ + ไม่มี reference ค้างชี้ Document ID เดิมของเลขนี้ */
+    let reuseCheck: DocumentNumberReuseCheck | undefined
+    if (manualNumber) {
+      reuseCheck = checkDocumentNumberReuseEligibility(manualNumber)
+      if (!reuseCheck.eligible) return null
+    }
     /** ใช้ numberRegistry.nextSequence แทนสูตรนับ documents.value.filter(...).length + 1 เดิม (Phase 1 Step 3-4 —
      *  แก้บัค "เลขที่เอกสารถูกใช้ไปแล้ว" ที่เกิดจากนับ array ปัจจุบันซึ่งย้อนกลับได้เมื่อมีเอกสารถูกลบ/ยกเลิกไป ดู
      *  createReceiptManual ด้านบนที่ใช้ pattern นี้อยู่แล้ว) เดินหน้าอย่างเดียวไม่มีวันย้อนกลับ ไม่ชนกับเลขที่เคยออกไปแล้ว
@@ -1320,6 +1343,22 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     claimDirectBookingsForBilling(billing, data)
     numberRegistry.registerNumber(billing.number)
     bookingStore.addLog('สร้างเอกสาร ' + billing.number, { docId: billing.id })
+    const auditLogStore = useAuditLogStore()
+    auditLogStore
+      .record({
+        documentId: billing.id,
+        documentNo: billing.number,
+        documentType: 'BILLING',
+        action: reuseCheck?.previousDocumentId ? 'REUSE_DOCUMENT_NUMBER' : 'CREATE',
+        ...currentActor(),
+        reason: reuseCheck?.previousDocumentId
+          ? `นำเลขที่เอกสารเดิมกลับมาใช้ซ้ำ — เอกสารเดิม (Document ID: ${reuseCheck.previousDocumentId}) ถูกยกเลิก/ลบไปแล้ว ไม่มี reference ค้างอยู่`
+          : undefined,
+        previousDocumentId: reuseCheck?.previousDocumentId,
+      })
+      .catch((err: any) => {
+        error.value = err?.message || 'บันทึกประวัติเอกสาร (Audit Log) ไป Firestore ไม่สำเร็จ'
+      })
     return billing
   }
 
@@ -1410,7 +1449,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
     if (!isDirectBookingClaimEligibleForTaxInvoice(data)) return null
     const manualNumber = data.number?.trim()
-    if (manualNumber && numberRegistry.isNumberUsed(manualNumber)) return null
+    /** Phase 4: ตรวจ reuse eligibility แทนการปฏิเสธทันที — ดูคอมเมนต์เดียวกันใน createBillingManual */
+    let reuseCheck: DocumentNumberReuseCheck | undefined
+    if (manualNumber) {
+      reuseCheck = checkDocumentNumberReuseEligibility(manualNumber)
+      if (!reuseCheck.eligible) return null
+    }
     const numbering = documentSettingsStore.settings.numbering.invoice
     /** ใช้ numberRegistry.nextSequence แทนสูตรนับเดิม (Phase 1 Step 3-4 — ดูคอมเมนต์เดียวกันใน createBillingManual)
      *  ตั้งใจแก้เฉพาะฟังก์ชันนี้ (ที่ TaxInvoiceFormView.vue เรียกจริง) — createInvoiceFromQuotation/
@@ -1462,6 +1506,22 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     claimDirectBookingsForTaxInvoice(invoice, data)
     numberRegistry.registerNumber(invoice.number)
     bookingStore.addLog('สร้างเอกสาร ' + invoice.number, { docId: invoice.id })
+    const auditLogStore = useAuditLogStore()
+    auditLogStore
+      .record({
+        documentId: invoice.id,
+        documentNo: invoice.number,
+        documentType: 'TAX_INVOICE',
+        action: reuseCheck?.previousDocumentId ? 'REUSE_DOCUMENT_NUMBER' : 'CREATE',
+        ...currentActor(),
+        reason: reuseCheck?.previousDocumentId
+          ? `นำเลขที่เอกสารเดิมกลับมาใช้ซ้ำ — เอกสารเดิม (Document ID: ${reuseCheck.previousDocumentId}) ถูกยกเลิก/ลบไปแล้ว ไม่มี reference ค้างอยู่`
+          : undefined,
+        previousDocumentId: reuseCheck?.previousDocumentId,
+      })
+      .catch((err: any) => {
+        error.value = err?.message || 'บันทึกประวัติเอกสาร (Audit Log) ไป Firestore ไม่สำเร็จ'
+      })
     return invoice
   }
 
@@ -2259,6 +2319,100 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return checkDocumentNumberRegistryConsistency()
   }
 
+  /** ข้อมูลผู้ทำรายการปัจจุบัน — snapshot ค่า ณ ตอนเขียน audit (ไม่ผูก live กับ authStore) ตาม pattern เดียวกับ
+   *  contactName/customerAddress ที่ snapshot ไว้บน SalesDocument เอง — ถ้า user ถูกเปลี่ยนชื่อ/role/ลบบัญชีภายหลัง
+   *  ประวัติเก่าต้องยังอ่านค่า ณ ตอนเกิดรายการได้ถูกต้องเสมอ */
+  function currentActor(): { actorUserId: string; actorName: string; actorRole: string } {
+    const authStore = useAuthStore()
+    return {
+      actorUserId: authStore.currentUser?.id || '',
+      actorName: authStore.userName,
+      actorRole: authStore.role || '',
+    }
+  }
+
+  /** บันทึก audit DELETE ตอนยกเลิก/ลบเอกสารขาย (Phase 4) — ใช้ร่วมกันทั้ง cancelBillingNote/deleteBillingNote/
+   *  cancelTaxInvoice/deleteTaxInvoice ไม่เปลี่ยน cascade/guard เดิมของฟังก์ชันเหล่านั้นแม้แต่บรรทัดเดียว แค่เพิ่ม
+   *  observability call ไว้ท้ายสุด (เหมือน bookingStore.addLog ที่มีอยู่แล้ว) — เอกสารนี้จะถูกลบจริงจาก
+   *  /salesDocuments ต่อจากนี้ (hard delete เดิมไม่เปลี่ยน) แต่ยัง "ค้นเจอได้" ผ่าน Audit Log entry นี้ตลอดไป */
+  function recordDeleteAudit(doc: SalesDocument) {
+    const auditLogStore = useAuditLogStore()
+    auditLogStore
+      .record({
+        documentId: doc.id,
+        documentNo: doc.number,
+        documentType: doc.type,
+        action: 'DELETE',
+        ...currentActor(),
+      })
+      .catch((err: any) => {
+        error.value = err?.message || 'บันทึกประวัติเอกสาร (Audit Log) ไป Firestore ไม่สำเร็จ'
+      })
+  }
+
+  /**
+   * ตรวจสอบว่าเลขที่เอกสารนี้ "reuse" ได้ปลอดภัยไหม (Phase 4 — Document Number Reuse)
+   * เรียกก่อนสร้างเอกสารทุกครั้งที่ผู้ใช้พิมพ์เลขที่เอกสารเอง (manualNumber) — ดู createBillingManual/
+   * createTaxInvoiceManual ด้านล่าง หลักการ:
+   * 1. เลขที่ยังไม่เคยถูกใช้เลย -> ไม่ใช่กรณี reuse ตั้งแต่แรก อนุญาตตามปกติ (พฤติกรรมเดิมจาก Phase 1 ไม่เปลี่ยน)
+   * 2. มี Active (live) Document ถือเลขนี้อยู่ตอนนี้ -> block เสมอ (ห้ามมี Active ซ้ำกันในเวลาเดียวกันในเลขเดียวกัน)
+   * 3. ไม่มี Active Document ถือเลขนี้แล้ว (ถูกยกเลิก/ลบไปแล้ว) -> ตรวจ reference ที่อาจยังค้างชี้ Document ID เดิม
+   *    อยู่ก่อนอนุญาต (defense-in-depth เผื่อ cascade cleanup เดิมของ cancel/delete พลาดจุดใดจุดหนึ่งไป) — ถ้าไม่พบ
+   *    reference ค้างเลย ถือว่าปลอดภัย อนุญาตให้ reuse ได้ (สร้าง Document ID ใหม่เสมอ ไม่มีทางได้ Document ID เดิม
+   *    กลับมาเพราะ genId() สุ่มใหม่ทุกครั้งอยู่แล้ว)
+   * ไม่แก้ relationship/reference ใดๆ เองในฟังก์ชันนี้เลย (อ่านอย่างเดียว) ตามข้อกำหนด "ห้ามแก้ relationship เดิมเพื่อให้ reuse ผ่าน"
+   */
+  function checkDocumentNumberReuseEligibility(number: string): DocumentNumberReuseCheck {
+    const trimmed = number.trim()
+    if (!trimmed) return { eligible: false, reason: 'กรุณากรอกเลขที่เอกสาร' }
+    const numberRegistry = useDocumentNumberRegistryStore()
+    if (!numberRegistry.isNumberUsed(trimmed)) return { eligible: true }
+
+    const liveDoc = documents.value.find((d) => d.number === trimmed)
+    if (liveDoc) {
+      return {
+        eligible: false,
+        reason: `เลขที่เอกสาร ${trimmed} กำลังถูกใช้งานอยู่โดยเอกสารที่ยังมีชีวิตอยู่ (Document ID: ${liveDoc.id}) ไม่สามารถใช้ซ้ำได้`,
+        previousDocumentId: liveDoc.id,
+      }
+    }
+
+    /** ไม่มี Active Document ถือเลขนี้แล้ว — หา Document ID เดิมที่เคยใช้เลขนี้จาก Audit Log (อาจไม่มีค่าถ้าเอกสารเดิม
+     *  ถูกลบไปก่อนระบบจะมี Audit Log เลย — ยอมรับได้ตามที่ระบุไว้ ไม่ block เพราะเหตุนี้อย่างเดียว) */
+    const auditLogStore = useAuditLogStore()
+    const lastEntry = auditLogStore.findLatestByDocumentNumber(trimmed)
+    const previousDocumentId = lastEntry?.documentId
+
+    if (previousDocumentId) {
+      const bookingStore = useBookingStore()
+      const danglingBooking = bookingStore.bookings.find(
+        (b) => b.billingNoteDocId === previousDocumentId || b.taxInvoiceDocId === previousDocumentId || b.receiptDocId === previousDocumentId
+      )
+      if (danglingBooking) {
+        return {
+          eligible: false,
+          reason: `พบงานขนส่ง ${danglingBooking.docNo} ยังอ้างอิง Document ID เดิม (${previousDocumentId}) ของเลขนี้อยู่ ไม่สามารถใช้ซ้ำได้จนกว่าจะแก้ไข reference นี้ก่อน`,
+          previousDocumentId,
+        }
+      }
+      const danglingDoc = documents.value.find(
+        (d) =>
+          d.parentDocumentId === previousDocumentId ||
+          (d.sourceDocumentIds || []).includes(previousDocumentId) ||
+          (d.convertedToDocumentIds || []).includes(previousDocumentId)
+      )
+      if (danglingDoc) {
+        return {
+          eligible: false,
+          reason: `พบเอกสาร ${danglingDoc.number} ยังอ้างอิง Document ID เดิม (${previousDocumentId}) ของเลขนี้อยู่ ไม่สามารถใช้ซ้ำได้`,
+          previousDocumentId,
+        }
+      }
+    }
+
+    return { eligible: true, previousDocumentId }
+  }
+
   /** ยกเลิกใบวางบิลที่ยังไม่ออกใบแจ้งหนี้ — คืนสถานะงานขนส่งที่ผูกอยู่กลับเป็นว่าง (billingNoteDocId) แล้วลบเอกสารทิ้ง
    *  ไม่แตะ taxInvoiceDocId/receiptDocId ของงานเดียวกัน (เป็นอิสระต่อกัน) */
   function cancelBillingNote(id: string) {
@@ -2273,6 +2427,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
     documents.value = documents.value.filter((d) => d.id !== id)
     items.value = items.value.filter((i) => i.documentId !== id)
+    recordDeleteAudit(doc)
     return true
   }
 
@@ -2389,6 +2544,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
     documents.value = documents.value.filter((d) => d.id !== id)
     items.value = items.value.filter((i) => i.documentId !== id)
+    recordDeleteAudit(doc)
     return true
   }
 
@@ -2724,6 +2880,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     documents.value = documents.value.filter((d) => d.id !== id)
     items.value = items.value.filter((i) => i.documentId !== id)
     bookingStore.addLog('ลบเอกสาร ' + doc.number, { docId: id })
+    recordDeleteAudit(doc)
     return { ok: true }
   }
 
@@ -2754,6 +2911,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     documents.value = documents.value.filter((d) => d.id !== id)
     items.value = items.value.filter((i) => i.documentId !== id)
     bookingStore.addLog('ลบเอกสาร ' + doc.number, { docId: id })
+    recordDeleteAudit(doc)
     return { ok: true }
   }
 
@@ -2852,6 +3010,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     backfillBillingVatFromBookings,
     checkDocumentNumberRegistryConsistency,
     backfillDocumentNumberRegistry,
+    checkDocumentNumberReuseEligibility,
     createBillingManual,
     updateBillingManual,
     createInvoiceFromBilling,

@@ -5,7 +5,10 @@
         <div>
           <label class="field-label">เลขที่เอกสาร</label>
           <input v-model="documentNumber" class="input-field h-9 px-2 font-mono text-sm w-40" :class="{ '!border-red-500': numberDuplicate }" />
-          <div v-if="numberDuplicate" class="text-[11px] text-red-500 mt-0.5">❌ เลขที่เอกสารนี้ถูกใช้แล้ว</div>
+          <div v-if="numberDuplicate" class="text-[11px] text-red-500 mt-0.5">❌ {{ numberReuseCheck.reason || 'เลขที่เอกสารนี้ถูกใช้แล้ว' }}</div>
+          <div v-else-if="numberReusable" class="text-[11px] text-amber-600 mt-0.5">
+            ℹ️ เลขนี้เคยใช้กับเอกสารที่ถูกยกเลิก/ลบไปแล้ว (Document ID เดิม: {{ numberReuseCheck.previousDocumentId }}) — บันทึกได้ปกติ ระบบจะสร้างเป็นเอกสารใหม่
+          </div>
         </div>
         <div>
           <label class="field-label">วันที่</label>
@@ -328,7 +331,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useSalesDocumentsStore, type SalesDocumentItem } from '@/stores/salesDocuments'
+import { useSalesDocumentsStore, type SalesDocumentItem, type DocumentNumberReuseCheck } from '@/stores/salesDocuments'
 import { useDocumentNumberRegistryStore } from '@/stores/documentNumberRegistry'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
@@ -698,14 +701,21 @@ watch(documentNumber, (val) => {
 /** แสดง error ตอนบันทึกไม่สำเร็จ (เช่น เลขที่เอกสารซ้ำ — createBillingManual/updateBillingManual คืน null) */
 const saveError = ref('')
 
-/** เลขที่เอกสารนี้เคยถูกใช้ไปแล้วหรือไม่ (เช็คทั้งเอกสารที่ยังอยู่และที่ถูกลบไปแล้ว) — ยกเว้นเลขเดิมของเอกสารที่กำลังแก้ไขอยู่นี้เอง
- *  เตือนแบบ real-time ก่อนกด "บันทึกเอกสาร" (pattern เดียวกับ ReceiptFormView.vue) */
-const numberDuplicate = computed(() => {
+/** เลขที่เอกสารนี้เคยถูกใช้ไปแล้วหรือไม่ + ถ้าเคยใช้ "reuse" ได้ปลอดภัยไหม (Phase 4 — Document Number Reuse) —
+ *  ยกเว้นเลขเดิมของเอกสารที่กำลังแก้ไขอยู่นี้เอง เตือนแบบ real-time ก่อนกด "บันทึกเอกสาร" (pattern เดียวกับ
+ *  ReceiptFormView.vue เดิม ขยายให้แยกกรณี "ชนของจริง ห้ามใช้" ออกจากกรณี "เคยใช้แต่ reuse ได้")
+ *  ไม่ต้องเช็ค editingDoc เองตรงนี้แล้ว — checkDocumentNumberReuseEligibility คืน eligible=true ทันทีถ้าเลขนี้ไม่เคยถูก
+ *  register เลย แต่เอกสารที่กำลังแก้ไขอยู่จะยังคง "ถูก register" เป็นเลขของตัวเองอยู่ตลอดจนกว่าจะถูกลบ จึงต้องเช็คแยก
+ *  เหมือนเดิมสำหรับกรณีนี้โดยเฉพาะ */
+const numberReuseCheck = computed<DocumentNumberReuseCheck>(() => {
   const n = documentNumber.value.trim()
-  if (!n) return false
-  if (editingDoc && n === editingDoc.number) return false
-  return numberRegistry.isNumberUsed(n)
+  if (!n) return { eligible: true }
+  if (editingDoc && n === editingDoc.number) return { eligible: true }
+  return salesDocumentsStore.checkDocumentNumberReuseEligibility(n)
 })
+const numberDuplicate = computed(() => !numberReuseCheck.value.eligible)
+/** true เฉพาะกรณี "เคยใช้แต่ reuse ได้" — ไม่บล็อกการบันทึก แค่แจ้งให้ผู้ใช้รู้ว่าเลขนี้เคยผูกกับเอกสารอื่นมาก่อน */
+const numberReusable = computed(() => numberReuseCheck.value.eligible && !!numberReuseCheck.value.previousDocumentId)
 
 const canSubmit = computed(
   () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
@@ -730,7 +740,7 @@ const currentId = ref<string | undefined>(editingId)
 const saveAndGetDoc = () => {
   if (!canSubmit.value) return null
   if (numberDuplicate.value) {
-    saveError.value = `เลขที่เอกสาร ${documentNumber.value.trim()} ถูกใช้ไปแล้ว กรุณาเปลี่ยนเลขที่เอกสาร`
+    saveError.value = numberReuseCheck.value.reason || `เลขที่เอกสาร ${documentNumber.value.trim()} ถูกใช้ไปแล้ว กรุณาเปลี่ยนเลขที่เอกสาร`
     return null
   }
   const items: Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>> = rows.value.map((r) => ({

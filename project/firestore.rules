@@ -221,6 +221,15 @@ service cloud.firestore {
       allow read, write: if hasRole(['ADMIN']);
     }
 
+    // ประวัติถาวรของเอกสารขาย (Phase 4) — append-only โดยเจตนา: ห้าม update/delete เด็ดขาดแม้แต่ ADMIN บังคับที่ชั้น
+    // Rules เอง (ไม่ใช่แค่ข้อตกลงฝั่ง client) เพราะจุดประสงค์คือย้อนดูประวัติที่แก้ไข/ลบไม่ได้เลย — role ที่ create ได้
+    // ตรงกับ role ที่สร้าง/ลบ salesDocuments ได้ (ดู isSalesDocRestrictedType ด้านบน) เพราะ audit เขียนจากจุดเดียวกัน
+    match /auditLogs/{logId} {
+      allow read: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING', 'DISPATCHER']);
+      allow create: if hasRole(['ADMIN', 'ACCOUNTING', 'STAFF', 'DISPATCHER']);
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

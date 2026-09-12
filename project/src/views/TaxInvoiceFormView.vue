@@ -5,7 +5,10 @@
         <div>
           <label class="field-label">เลขที่เอกสาร</label>
           <input v-model="documentNumber" class="input-field h-9 px-2 font-mono text-sm w-40" :class="{ '!border-red-500': numberDuplicate }" />
-          <div v-if="numberDuplicate" class="text-[11px] text-red-500 mt-0.5">❌ เลขที่เอกสารนี้ถูกใช้แล้ว</div>
+          <div v-if="numberDuplicate" class="text-[11px] text-red-500 mt-0.5">❌ {{ numberReuseCheck.reason || 'เลขที่เอกสารนี้ถูกใช้แล้ว' }}</div>
+          <div v-else-if="numberReusable" class="text-[11px] text-amber-600 mt-0.5">
+            ℹ️ เลขนี้เคยใช้กับเอกสารที่ถูกยกเลิก/ลบไปแล้ว (Document ID เดิม: {{ numberReuseCheck.previousDocumentId }}) — บันทึกได้ปกติ ระบบจะสร้างเป็นเอกสารใหม่
+          </div>
         </div>
         <div>
           <label class="field-label">วันที่</label>
@@ -326,7 +329,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useSalesDocumentsStore, type SalesDocumentItem } from '@/stores/salesDocuments'
+import { useSalesDocumentsStore, type SalesDocumentItem, type DocumentNumberReuseCheck } from '@/stores/salesDocuments'
 import { useDocumentNumberRegistryStore } from '@/stores/documentNumberRegistry'
 import { useDocumentSettingsStore, type PriceDisplay } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
@@ -697,13 +700,16 @@ watch(documentNumber, (val) => {
   if (val !== previewNumber.value) numberManuallyEdited.value = true
 })
 
-/** เลขที่เอกสารนี้เคยถูกใช้ไปแล้วหรือไม่ — เตือนแบบ real-time ก่อนกด "บันทึกเอกสาร" (pattern เดียวกับ ReceiptFormView.vue) */
-const numberDuplicate = computed(() => {
+/** เลขที่เอกสารนี้เคยถูกใช้ไปแล้วหรือไม่ + ถ้าเคยใช้ "reuse" ได้ปลอดภัยไหม (Phase 4 — Document Number Reuse) —
+ *  เตือนแบบ real-time ก่อนกด "บันทึกเอกสาร" (pattern เดียวกับ BillingFormView.vue) */
+const numberReuseCheck = computed<DocumentNumberReuseCheck>(() => {
   const n = documentNumber.value.trim()
-  if (!n) return false
-  if (editingDoc && n === editingDoc.number) return false
-  return numberRegistry.isNumberUsed(n)
+  if (!n) return { eligible: true }
+  if (editingDoc && n === editingDoc.number) return { eligible: true }
+  return salesDocumentsStore.checkDocumentNumberReuseEligibility(n)
 })
+const numberDuplicate = computed(() => !numberReuseCheck.value.eligible)
+const numberReusable = computed(() => numberReuseCheck.value.eligible && !!numberReuseCheck.value.previousDocumentId)
 
 const canSubmit = computed(
   () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
@@ -728,7 +734,7 @@ const currentId = ref<string | undefined>(editingId)
 const saveAndGetDoc = () => {
   if (!canSubmit.value) return null
   if (numberDuplicate.value) {
-    alert(`เลขที่เอกสาร ${documentNumber.value.trim()} ถูกใช้ไปแล้ว กรุณาเปลี่ยนเลขที่เอกสาร`)
+    alert(numberReuseCheck.value.reason || `เลขที่เอกสาร ${documentNumber.value.trim()} ถูกใช้ไปแล้ว กรุณาเปลี่ยนเลขที่เอกสาร`)
     return null
   }
   const items: Array<Omit<SalesDocumentItem, 'id' | 'documentId' | 'sortOrder'>> = rows.value.map((r) => ({

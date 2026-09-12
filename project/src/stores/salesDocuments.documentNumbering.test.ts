@@ -105,18 +105,15 @@ describe('Phase 1 verification: create -> cancel -> create cycle preserves every
     expect(doc.number).toMatch(/^VB\d{8}0001$/)
   })
 
-  it('case 2-3: cancelling a document does not free its number for reuse, and the next create does not collide', () => {
+  it('case 2-3: cancelling a document keeps auto-generated numbers moving forward without colliding', () => {
     const salesDocs = useSalesDocumentsStore()
     const cancelled = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
     const cancelledNumber = cancelled.number
     salesDocs.cancelBillingNote(cancelled.id)
 
-    // case 2: เลขที่ถูกยกเลิกยังคงถูก "จอง" ไว้ถาวรใน numberRegistry (ตามข้อกำหนด Phase 1 — ยังไม่ทำ Document Number
-    // Reuse ซึ่งเป็นงานของ Phase 4) ต่อให้พิมพ์เลขนี้ซ้ำเองตรงๆ ก็ต้องถูกปฏิเสธ
-    const manualReuseAttempt = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem, number: cancelledNumber })
-    expect(manualReuseAttempt).toBeNull()
-
     // case 3: ปล่อยให้ระบบออกเลขอัตโนมัติต่อ (ไม่ระบุ number เอง) ต้องได้เลขใหม่ที่ไม่ชนเลขที่ถูกยกเลิกไปแล้ว
+    // (ตั้งแต่ Phase 4 เป็นต้นไป "พิมพ์เลขเดิมเองตรงๆ" ไม่ถูกปฏิเสธทันทีอีกต่อไปแล้ว — กลายเป็นกรณี reuse ที่อนุญาตได้
+    // ถ้าปลอดภัย ดู salesDocuments.documentNumberReuse.test.ts สำหรับพฤติกรรม reuse โดยละเอียด)
     const next = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem })!
     expect(next).not.toBeNull()
     expect(next.number).not.toBe(cancelledNumber)
