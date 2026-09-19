@@ -167,6 +167,10 @@
                     <button v-if="documentsForBooking(booking).receipt" @click="router.push(`/documents/${documentsForBooking(booking).receipt!.id}`)" class="btn-sm" title="ใบเสร็จรับเงิน">
                       <span class="material-symbols-rounded text-base">receipt</span>
                     </button>
+                    <button @click="resetBooking(booking)" class="btn-sm !border-amber-200 !bg-amber-50 !text-amber-700" title="รีเซตสถานะกลับไปแก้ไข">
+                      <span class="material-symbols-rounded text-base">undo</span>
+                      รีเซต
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -194,7 +198,7 @@ import { useRouter } from 'vue-router'
 import { useCompletedJobs, useCompletedJobsFilters, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
-import { documentClaimBadges, podReviewStatusLabel, podReviewStatusClass } from '@/utils/bookingStatus'
+import { documentClaimBadges, podReviewStatusLabel, podReviewStatusClass, bookingStatusLabel } from '@/utils/bookingStatus'
 import type { Booking } from '@/types'
 
 const router = useRouter()
@@ -265,6 +269,19 @@ const rejectPod = (booking: Booking) => {
   const note = prompt(`เหตุผลที่ตีกลับ POD ของงาน ${booking.docNo} (ไม่บังคับ):`)
   if (note === null) return
   bookingStore.reviewPod(booking.id, 'REJECTED', note.trim() || undefined)
+}
+
+/** งานที่หน้านี้แสดงเป็น DELIVERED เสมอ — Reset ถอยกลับไปเป็น DELIVERING หนึ่งขั้น (reuse bookingStore.resetBookingStatus
+ *  ตัวเดียวกับที่ SalesOrderListView.vue ใช้อยู่แล้ว) พองานพ้นสถานะ DELIVERED จะหลุดจากรายการหน้านี้ไปอยู่ในหน้า
+ *  "ตารางขนส่ง" (BookingView.vue) แทน ที่ซึ่งแก้ไขงานได้ (ดู BookingActionMenu.vue's v-if edit: status !== 'DELIVERED')
+ *  ไม่ลบข้อมูลการส่งของจริง (POD/ผู้รับ/เวลา) หรือแตะเอกสารขายที่ผูกอยู่เลย ตาม resetBookingStatus เดิมทุกประการ */
+const resetBooking = (booking: Booking) => {
+  const confirmed = confirm(
+    `ยืนยัน Reset สถานะงาน ${booking.docNo} จาก "${bookingStatusLabel.DELIVERED}" กลับไปเป็น "${bookingStatusLabel.DELIVERING}" เพื่อแก้ไข?\n\nข้อมูลการส่งของที่เกิดขึ้นจริงแล้ว (รูป POD/ชื่อผู้รับ/เวลาส่ง) จะไม่ถูกลบ และเอกสารวางบิล/ใบแจ้งหนี้/ใบเสร็จที่ผูกกับงานนี้ (ถ้ามี) จะไม่ถูกแตะต้องเลย — ต้องไปยกเลิก/แก้ไขจากหน้าเอกสารนั้นโดยตรงถ้าต้องการ\n\nหลัง Reset งานนี้จะย้ายไปแสดงที่หน้า "ตารางขนส่ง" แทน`
+  )
+  if (!confirmed) return
+  const result = bookingStore.resetBookingStatus(booking.id)
+  if (!result.ok && result.message) alert(result.message)
 }
 
 // --- เลือกหลายรายการ + ลบถาวรพร้อมกัน (เฉพาะ ADMIN) — หน้านี้เดิมไม่มีทางลบ Booking ได้เลยแม้แต่ทีละรายการ

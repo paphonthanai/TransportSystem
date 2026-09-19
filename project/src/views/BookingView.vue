@@ -27,14 +27,28 @@
 
     <!-- In-progress Table -->
     <div>
-      <div class="font-bold text-text mb-3">
-        งานที่กำลังดำเนินการ ({{ inProgressBookings.length }})
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <div class="font-bold text-text">
+          งานที่กำลังดำเนินการ ({{ inProgressBookings.length }})
+        </div>
+        <button
+          v-if="isAdmin && selectedInProgressIds.length > 0"
+          @click="bulkDeleteSelectedInProgress"
+          :disabled="bulkDeletingInProgress"
+          class="btn-sm !border-red-200 !bg-red-50 !text-red-700 disabled:opacity-50"
+        >
+          <span class="material-symbols-rounded text-base">delete_forever</span>
+          ลบถาวรที่เลือกไว้ ({{ selectedInProgressIds.length }})
+        </button>
       </div>
       <div class="card-lg overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
+              <th v-if="isAdmin" class="px-4 py-3 w-8">
+                <input type="checkbox" :checked="allInProgressSelected" @change="toggleSelectAllInProgress" />
+              </th>
               <th class="text-left px-4 py-3 font-semibold text-muted">เที่ยวที่</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">พขร.</th>
               <th class="text-left px-4 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
@@ -56,6 +70,13 @@
               :style="customerRowStyle(booking)"
               class="border-b border-border hover:bg-surface-2 transition-colors"
             >
+              <td v-if="isAdmin" class="px-4 py-3">
+                <input
+                  type="checkbox"
+                  :checked="!!selectedInProgress[booking.id]"
+                  @change="(e) => (selectedInProgress[booking.id] = (e.target as HTMLInputElement).checked)"
+                />
+              </td>
               <td class="px-4 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
               <td class="px-4 py-3 text-text">{{ booking.driverName || '-' }}</td>
               <td class="px-4 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
@@ -134,7 +155,7 @@
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
-              <td colspan="12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td :colspan="isAdmin ? 13 : 12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -1122,6 +1143,52 @@ const deleteBooking = async (booking: Booking) => {
   const pickedItems = booking.items.filter((i) => i.pickupStatus === 'PICKED_UP')
   if (pickedItems.length) inventoryStore.reverseDeliveryMovement(booking, pickedItems)
   alert(`ลบงาน ${booking.docNo} ถาวรสำเร็จแล้ว`)
+}
+
+// --- เลือกหลายรายการ + ลบถาวรพร้อมกัน (เฉพาะ ADMIN) — เหมือน CompletedJobsView.vue's selected/bulkDeleteSelected
+// ทุกประการ แต่แยกตัวแปร/ฟังก์ชันเป็นชุดของตัวเอง (selectedInProgress/bulkDeleteSelectedInProgress) เพราะทำงานกับ
+// inProgressBookings คนละรายการกับ completedBookings คนละหน้า
+const selectedInProgress = ref<Record<string, boolean>>({})
+const selectedInProgressIds = computed(() => Object.keys(selectedInProgress.value).filter((id) => selectedInProgress.value[id]))
+const allInProgressSelected = computed(
+  () => inProgressBookings.value.length > 0 && inProgressBookings.value.every((b) => selectedInProgress.value[b.id])
+)
+const toggleSelectAllInProgress = () => {
+  const next = !allInProgressSelected.value
+  inProgressBookings.value.forEach((b) => {
+    selectedInProgress.value[b.id] = next
+  })
+}
+
+const bulkDeletingInProgress = ref(false)
+const bulkDeleteSelectedInProgress = async () => {
+  if (!isAdmin.value || bulkDeletingInProgress.value) return
+  const targets = inProgressBookings.value.filter((b) => selectedInProgress.value[b.id])
+  if (!targets.length) return
+
+  const preview = targets.slice(0, 20).map((b) => `- ${b.docNo} (${b.customer || '-'})`).join('\n')
+  const more = targets.length > 20 ? `\n...และอีก ${targets.length - 20} รายการ` : ''
+  const confirmed = confirm(
+    `⚠️ ลบ Booking ถาวร ${targets.length} รายการ\n\n${preview}${more}\n\nการลบเป็นการลบถาวร ไม่สามารถกู้คืนได้ (รวมเอกสารที่อ้างอิงทุกรายการด้วย)`
+  )
+  if (!confirmed) return
+
+  bulkDeletingInProgress.value = true
+  let ok = 0
+  const failed: string[] = []
+  for (const booking of targets) {
+    const result = await bookingStore.hardDeleteBooking(booking.id)
+    if (result.ok) {
+      ok++
+      delete selectedInProgress.value[booking.id]
+      const pickedItems = booking.items.filter((i) => i.pickupStatus === 'PICKED_UP')
+      if (pickedItems.length) inventoryStore.reverseDeliveryMovement(booking, pickedItems)
+    } else {
+      failed.push(`${booking.docNo}: ${result.message || 'ไม่ทราบสาเหตุ'}`)
+    }
+  }
+  bulkDeletingInProgress.value = false
+  alert(`ลบสำเร็จ ${ok}/${targets.length} รายการ` + (failed.length ? `\n\nรายการที่ลบไม่สำเร็จ:\n${failed.join('\n')}` : ''))
 }
 
 // --- Complete job flow ---
