@@ -84,9 +84,15 @@
                 </span>
               </div>
             </div>
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">{{ form.role === 'DRIVER' ? 'Email (auto จากรหัสคนขับ ถ้าผูกไว้ — แก้ไขเองได้)' : 'Email' }}</label>
-              <input v-model="form.email" type="email" class="input-field w-full" :disabled="!!editingUser" />
+            <!-- บัญชี DRIVER ที่ผูกกับคนขับในสมุดรายชื่อแล้ว (ตอนสร้างใหม่) ไม่ต้องกรอก/เห็น Email เลย — ระบบสร้างอีเมลภายใน
+                 ให้เองจากรหัสคนขับเสมอ (ดู isDriverLinkedCreate/save()) ผู้ใช้กรอกแค่รหัสคนขับ + รหัสผ่านตัวเลขก็พอ
+                 ตามที่ต้องการ ไม่ให้แอดมินเห็นแล้วสับสน/พิมพ์ทับเป็นตัวเลขเปล่าจนหลุดรูปแบบอีเมลไป -->
+            <div v-if="isDriverLinkedCreate" class="text-[11px] text-muted bg-surface-2 border border-border rounded-lg px-2.5 py-2">
+              บัญชีนี้จะ login ด้วยรหัสคนขับ ({{ driversStore.drivers.find((d) => d.id === form.driverId)?.code }}) + รหัสผ่านด้านล่างเท่านั้น ไม่ต้องใช้ Email
+            </div>
+            <div v-else>
+              <label class="block text-xs font-semibold text-muted mb-1">Email</label>
+              <input v-model="form.email" type="email" autocomplete="off" class="input-field w-full" :disabled="!!editingUser" />
             </div>
             <div v-if="!editingUser">
               <label class="block text-xs font-semibold text-muted mb-1">
@@ -220,6 +226,10 @@ const saving = ref(false)
  *  รองรับ workflow เดิมที่จับคู่งานด้วยชื่อได้ต่อไปถ้าตั้งใจจริงๆ) */
 const confirmNoDriverLink = ref(false)
 
+/** บัญชี DRIVER ใหม่ (ไม่ใช่แก้ไขบัญชีเดิม) ที่ผูกกับคนขับในสมุดรายชื่อแล้ว — เคสนี้ไม่ต้องใช้ Email เลยตามที่ต้องการ
+ *  (ดู template ที่ซ่อนช่อง Email และ save() ที่คำนวณอีเมลภายในเองเสมอ ไม่พึ่ง form.email) */
+const isDriverLinkedCreate = computed(() => !editingUser.value && form.value.role === 'DRIVER' && !!form.value.driverId)
+
 /** ผูกคนขับ (ตอนสร้างบัญชีใหม่เท่านั้น) -> auto-fill Email เป็นอีเมลภายใน d{code}@drivers.internal ให้ทันที
  *  ไม่ทับ Email ที่แอดมินพิมพ์เองไปแล้วถ้าไม่ตรงกับค่าที่ auto-fill ไว้ก่อนหน้า (เผื่อแอดมินตั้งใจพิมพ์อีเมลจริงเอง) */
 let lastAutoFilledEmail = ''
@@ -352,7 +362,7 @@ const openEditDialog = (user: UserProfile) => {
 
 const save = async () => {
   formError.value = ''
-  if (!form.value.name.trim() || !form.value.email.trim()) {
+  if (!form.value.name.trim() || (!isDriverLinkedCreate.value && !form.value.email.trim())) {
     formError.value = 'กรุณากรอกชื่อและ Email'
     return
   }
@@ -360,12 +370,11 @@ const save = async () => {
     formError.value = 'กรุณาผูกกับคนขับในสมุดรายชื่อ หรือติ๊กยืนยันว่าต้องการสร้างบัญชีนี้โดยไม่ผูกกับคนขับ'
     return
   }
-  const isDriverLinkedCreate = !editingUser.value && form.value.role === 'DRIVER' && !!form.value.driverId
-  if (isDriverLinkedCreate && !/^\d{4,}$/.test(form.value.password.trim())) {
+  if (isDriverLinkedCreate.value && !/^\d{4,}$/.test(form.value.password.trim())) {
     formError.value = 'กรุณากรอกรหัสผ่านคนขับเป็นตัวเลขอย่างน้อย 4 หลัก'
     return
   }
-  if (!isDriverLinkedCreate && !editingUser.value && form.value.password.trim().length < 6) {
+  if (!isDriverLinkedCreate.value && !editingUser.value && form.value.password.trim().length < 6) {
     formError.value = 'กรุณากรอก Password อย่างน้อย 6 ตัวอักษร'
     return
   }
@@ -383,15 +392,19 @@ const save = async () => {
       // ไม่ใช่รหัสผ่าน Firebase Auth ตรงๆ อีกต่อไป: สุ่ม Auth Bootstrap Secret แยกต่างหาก (ดู
       // driversStore.createDriverLoginCredentials) แล้วใช้ค่านั้นสร้างบัญชี Firebase Auth จริงแทน — บัญชี DRIVER ที่
       // ไม่ผูกคนขับ (ไม่มี driverId) ยังใช้ form.password เป็นรหัสผ่าน Firebase Auth ตรงๆ เหมือนเดิมทุกประการ
+      const linkedDriver = isDriverLinkedCreate.value ? driversStore.drivers.find((d) => d.id === form.value.driverId) : undefined
       let firebaseAuthPassword = form.value.password
-      if (form.value.role === 'DRIVER' && form.value.driverId) {
-        const driver = driversStore.drivers.find((d) => d.id === form.value.driverId)
-        if (driver) firebaseAuthPassword = await driversStore.createDriverLoginCredentials(driver.id!, driver.code, form.value.password.replace(/\D/g, ''))
+      /** อีเมลที่ใช้จริง — เคส DRIVER ที่ผูกกับคนขับแล้ว คำนวณจากรหัสคนขับเสมอ ไม่พึ่ง form.email เลย (ช่อง Email ถูกซ่อน
+       *  ไปจาก UI แล้วในเคสนี้ — ดู template) กัน Firebase auth/invalid-email ถ้ามีค่าเก่าค้างอยู่ในฟอร์ม */
+      let effectiveEmail = form.value.email.trim()
+      if (linkedDriver) {
+        firebaseAuthPassword = await driversStore.createDriverLoginCredentials(linkedDriver.id!, linkedDriver.code, form.value.password.replace(/\D/g, ''))
+        effectiveEmail = internalDriverEmail(linkedDriver.code)
       }
-      const uid = await authStore.createStaffAccount(form.value.email, firebaseAuthPassword, form.value.name, form.value.role, form.value.driverId)
+      const uid = await authStore.createStaffAccount(effectiveEmail, firebaseAuthPassword, form.value.name, form.value.role, form.value.driverId)
       userStore.addLocalCopy({
         id: uid,
-        email: form.value.email.trim(),
+        email: effectiveEmail,
         name: form.value.name,
         role: form.value.role,
         active: true,
@@ -405,9 +418,8 @@ const save = async () => {
       }
       // เก็บอีเมลที่ใช้ล็อกอินจริงไว้ที่ DriverRecord ด้วย (โชว์ในหน้าแอดมินเท่านั้น — ไม่ใช่ตัวที่หน้า Login ใช้ resolve
       // เพราะยังเป็นค่า default ที่ derive ได้ตรงๆ จาก code อยู่แล้ว ไม่ต้องเขียน driverAuthEmails index ซ้ำ)
-      if (form.value.role === 'DRIVER' && form.value.driverId) {
-        const driver = driversStore.drivers.find((d) => d.id === form.value.driverId)
-        if (driver) await driversStore.updateDriver(driver.id!, { ...driver, authEmail: form.value.email.trim() })
+      if (linkedDriver) {
+        await driversStore.updateDriver(linkedDriver.id!, { ...linkedDriver, authEmail: effectiveEmail })
       }
     }
     showDialog.value = false
