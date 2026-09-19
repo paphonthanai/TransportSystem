@@ -34,7 +34,10 @@
                 <div v-else :style="{ background: driver.avatarBg }" class="w-9 h-9 rounded-full text-white flex items-center justify-center font-bold flex-shrink-0">
                   {{ driver.firstName.charAt(0) }}
                 </div>
-                <div class="font-semibold text-text">{{ fullName(driver) }}</div>
+                <div>
+                  <div class="font-semibold text-text">{{ fullName(driver) }}</div>
+                  <div v-if="driver.nickname" class="text-xs text-muted">ชื่อเล่น: {{ driver.nickname }}</div>
+                </div>
               </div>
             </td>
             <td class="px-4 py-3 text-muted">{{ assignedVehicleLabel(driver) }}</td>
@@ -82,7 +85,7 @@
             <div>
               <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">ข้อมูลพนักงาน</div>
               <div class="flex gap-4 flex-col md:flex-row">
-                <div class="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="flex-1 grid grid-cols-2 md:grid-cols-5 gap-3">
                   <div>
                     <label class="block text-xs font-semibold text-muted mb-1">รหัสพนักงาน</label>
                     <input v-model="form.code" class="input-field w-full" />
@@ -100,6 +103,10 @@
                   <div>
                     <label class="block text-xs font-semibold text-muted mb-1">นามสกุล</label>
                     <input v-model="form.lastName" class="input-field w-full" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-muted mb-1">ชื่อเล่น</label>
+                    <input v-model="form.nickname" placeholder="เช่น โบ้อ้วน" class="input-field w-full" />
                   </div>
                 </div>
                 <div class="w-full md:w-28 flex-shrink-0">
@@ -440,6 +447,7 @@ const emptyForm = (): DriverRecord => ({
   prefix: 'นาย',
   firstName: '',
   lastName: '',
+  nickname: '',
   idCard: '',
   licenseNo: '',
   licenseType: 'ท.1',

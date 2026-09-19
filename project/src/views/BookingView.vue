@@ -654,6 +654,26 @@ const isAdmin = computed(() => authStore.role === 'ADMIN')
 /** หาคนขับจากชื่อเต็ม รองรับทั้งแบบมีคำนำหน้าและไม่มี (เดิมเคยอยู่ใน driversStore.findDriverByVehicle) */
 const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
 
+/** หาคนขับจาก "ชื่อเล่น" (ใช้เฉพาะตอนนำเข้า Excel — ไฟล์จัดคิวจริงกรอกชื่อเล่นแทนชื่อจริงเสมอ ต่างจาก findDriverByName
+ *  ด้านบนที่จับคู่ชื่อเต็ม) ต้องเชื่อมกับทะเบียนรถที่ประจำคนขับคนนั้นด้วยเสมอกันชื่อเล่นซ้ำกัน — ถ้าเจอชื่อเล่นตรงกันคนเดียว
+ *  และไม่มีทะเบียนรถมาเทียบเลย ก็ยังเชื่อชื่อเล่นได้ (ไม่มีอะไรให้ขัดแย้ง) แต่ถ้ามีทะเบียนรถมาด้วย ต้องตรงกับรถที่ประจำ
+ *  คนขับคนนั้นจริงเท่านั้น ไม่งั้นถือว่าข้อมูลไม่ตรงกับที่ผูกในระบบ คืน undefined (ให้ผู้เรียกเว้นว่างไว้ ไม่เดาสุ่ม) */
+const matchDriverForImport = (nickname: string, plate: string) => {
+  const candidates = driversStore.drivers.filter((d) => d.nickname.trim() === nickname.trim())
+  if (candidates.length === 0) return undefined
+  const plateTrimmed = plate.trim()
+  if (candidates.length === 1) {
+    if (!plateTrimmed) return candidates[0]
+    const vehicle = vehiclesStore.vehicleForDriver(candidates[0].code)
+    return vehicle && vehicle.plate.trim() === plateTrimmed ? candidates[0] : undefined
+  }
+  if (!plateTrimmed) return undefined
+  return candidates.find((d) => {
+    const vehicle = vehiclesStore.vehicleForDriver(d.code)
+    return vehicle && vehicle.plate.trim() === plateTrimmed
+  })
+}
+
 const searchQuery = ref('')
 
 const isCements = computed(() => props.fleet === 'cements')
@@ -1163,6 +1183,7 @@ const confirmComplete = () => {
 // ห้ามข้าม/บล็อกแถวเด็ดขาดแม้ข้อมูลน้ำมัน/ปลายทาง/ราคาจะไม่ครบ ให้สร้างงานได้เสมอแล้วแปะหมายเหตุ (note) ไว้ให้ไปกรอกเพิ่มทีหลัง
 const IMPORT_HEADERS = {
   driverName: 'พขร.',
+  vehicleRegistration: 'ทะเบียนรถ',
   plate: 'คอนเฟิร์ม',
   docRef: 'เลขที่เอกสาร',
   customer: 'บมจ./บจก./ร้าน/หจก.',
@@ -1193,6 +1214,7 @@ interface ImportRowResult {
   siteName: string
   district: string
   province: string
+  siteContactName: string
   phone: string
   product: string
   qty: number
@@ -1201,6 +1223,7 @@ interface ImportRowResult {
   fuelLiters: number
   status: BookingStatus
   statusRaw: string
+  deliveredAt?: Date
   note: string
   warnings: string[]
 }
@@ -1222,11 +1245,42 @@ const closeImportModal = () => {
   importModalOpen.value = false
 }
 
-/** สร้างไฟล์ตัวอย่างคอลัมน์ตรงกับชีทงานจริงที่ใช้อยู่ (ตรงกับ IMPORT_HEADERS ที่ parse จริงด้านล่างทุกคอลัมน์)
- *  แถวแรกเป็นหัวเรื่องบอกวันที่ส่งงาน (parse โดย handleImportFile) แถวที่สองถึงเป็นหัวคอลัมน์จริง */
+/** คอลัมน์แรกสุดของชีทงานจริงเสมอ (ทั้งไฟล์ที่มี Row หัวเรื่อง+วันที่ และไฟล์ที่ไม่มี) ใช้เช็คใน handleImportFile ว่า
+ *  Row แรกของไฟล์ที่อัปโหลดเป็นหัวคอลัมน์เลย (ไม่มีหัวเรื่อง) หรือเป็นหัวเรื่อง/วันที่ส่งงานที่ต้องข้ามไปอีก 1 แถว */
+const IMPORT_HEADER_MARKER = 'ลำดับ'
+
+/** ลำดับคอลัมน์ทั้งหมดของชีทงานจริง รวมคอลัมน์ที่ไม่ได้ใช้เก็บข้อมูล (ลำดับ/เที่ยวที่ — เที่ยวที่คำนวณสดเสมอ ดู
+ *  driverTripNumberForBooking) ไว้ด้วย เพื่อให้ Template ที่ดาวน์โหลดหน้าตาตรงกับไฟล์งานจริงเป๊ะ และ Row แรกของ
+ *  Template ขึ้นต้นด้วย "ลำดับ" เหมือนไฟล์จริงที่ไม่มีหัวเรื่อง (ดู IMPORT_HEADER_MARKER) */
+const IMPORT_COLUMN_ORDER = [
+  IMPORT_HEADER_MARKER,
+  'เที่ยวที่',
+  IMPORT_HEADERS.driverName,
+  IMPORT_HEADERS.vehicleRegistration,
+  IMPORT_HEADERS.plate,
+  IMPORT_HEADERS.docRef,
+  IMPORT_HEADERS.customer,
+  IMPORT_HEADERS.ticketChecked,
+  IMPORT_HEADERS.time,
+  IMPORT_HEADERS.siteName,
+  IMPORT_HEADERS.districtProvince,
+  IMPORT_HEADERS.phone,
+  IMPORT_HEADERS.product,
+  IMPORT_HEADERS.qty,
+  IMPORT_HEADERS.allowance,
+  IMPORT_HEADERS.price,
+  IMPORT_HEADERS.fuel,
+  IMPORT_HEADERS.status,
+  IMPORT_HEADERS.note,
+]
+
+/** สร้างไฟล์ตัวอย่างคอลัมน์ตรงกับชีทงานจริงที่ใช้อยู่ทุกคอลัมน์ (รวมคอลัมน์ที่ไม่ได้ใช้จริงด้วย ดู IMPORT_COLUMN_ORDER)
+ *  ไม่มีแถวหัวเรื่อง/วันที่ส่งงาน — ถ้าอยากได้แบบมีวันที่ ให้เพิ่มแถวนั้นเองเหนือแถวหัวคอลัมน์นี้ (ระบบรองรับทั้ง 2 แบบ) */
 const downloadImportTemplate = () => {
-  const headerRow = Object.values(IMPORT_HEADERS)
   const sampleRow = [
+    1,
+    '',
+    '',
     '',
     '',
     '',
@@ -1244,7 +1298,7 @@ const downloadImportTemplate = () => {
     bookingStatusLabel.WAITING_DISPATCH,
     '',
   ]
-  const worksheet = XLSX.utils.aoa_to_sheet([['ตารางงานจัดงานปูน ส่งวันที่ DD-MM-YY (วัน)'], headerRow, sampleRow])
+  const worksheet = XLSX.utils.aoa_to_sheet([IMPORT_COLUMN_ORDER, sampleRow])
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1')
   XLSX.writeFile(workbook, 'Booking_Import_Template.xlsx')
@@ -1266,6 +1320,25 @@ const parseShipDateFromTitle = (text: string): Date | undefined => {
  *  ข้อมูลส่วนไหนขาด/จับคู่ไม่ได้ (คนขับไม่พบในทะเบียน, น้ำมัน/ปลายทางไม่มีเรท, สถานะไม่ตรง ฯลฯ) จะถูกสะสมไว้ใน warnings
  *  แล้วต่อท้ายเข้า note ของ Booking ให้ออฟฟิศไปตรวจ/กรอกเพิ่มทีหลัง แถวที่ไม่มีข้อมูลอะไรเลย (isEmpty) จะถูกข้ามตอนสร้างจริง
  *  เพราะถือเป็นแถวว่างท้ายชีท ไม่ใช่ข้อมูลที่ตั้งใจกรอก */
+/** ดึงช่วง/จุดเวลา (เช่น "08.00 - 17.00" หรือ "07:14") ออกจากข้อความที่อาจมีข้อความอื่นปนมาด้วย (เช่น "ย้ำ!! ตราประทับ")
+ *  คืนทั้งเวลาที่เจอ (ถ้ามี) และข้อความส่วนที่เหลือ (ไม่รวมเวลา) ไว้ไปต่อเป็นหมายเหตุแทนการทิ้งไป */
+const extractTimeAndText = (raw: string): { time: string; text: string } => {
+  const match = raw.match(/\d{1,2}[.:]\d{2}(?:\s*-\s*\d{1,2}[.:]\d{2})?/)
+  const time = match ? match[0].replace(/\s+/g, '') : ''
+  const text = (match ? raw.replace(match[0], '') : raw).replace(/[\r\n]+/g, ' ').trim()
+  return { time, text }
+}
+
+/** แยกชื่อผู้ติดต่อออกจากเบอร์โทร ในกรณีที่ Excel กรอกปนกันมาในช่องเดียว (เช่น "ผรม.กรวีวัลย์ โฮมเวิร์ค\nช่างจอม 086-3347315")
+ *  เก็บเบอร์แรกที่เจอไว้ที่ sitePhone (ไว้ใช้กดโทรได้ตรงๆ) ส่วน contactName เก็บข้อความเต็มทั้งหมด (ขึ้นบรรทัดใหม่แทนด้วย ", ")
+ *  ไว้เผื่อมีมากกว่า 1 ชื่อ/เบอร์ในช่องเดียว — ไม่ทิ้งข้อมูลไหนไป แค่แยกเบอร์แรกออกมาเป็นฟิลด์ที่ใช้งานง่ายเพิ่ม */
+const splitContactPhone = (raw: string): { contactName: string; phone: string } => {
+  const phoneMatch = raw.match(/0[\d\-\s]{7,}\d/)
+  const phone = phoneMatch ? phoneMatch[0].replace(/[\s-]+/g, '') : ''
+  const contactName = raw.replace(/[\r\n]+/g, ', ').trim()
+  return { contactName, phone }
+}
+
 const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): ImportRowResult => {
   const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())
   const num = (v: unknown) => {
@@ -1274,12 +1347,18 @@ const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): Import
   }
 
   const driverName = str(raw[IMPORT_HEADERS.driverName])
-  const plate = str(raw[IMPORT_HEADERS.plate])
+  // ทะเบียนรถ = เลขทะเบียนจริง (มักยังไม่กรอกตอนจัดคิวล่วงหน้า), คอนเฟิร์ม = รหัสรถที่ใช้ยืนยันคิวเบื้องต้น —
+  // ใช้ทะเบียนรถก่อนถ้ามี ไม่งั้น fallback ไปโค้ดในคอนเฟิร์ม เพราะ Booking มีที่เก็บได้แค่ช่องเดียว (plate)
+  const plate = str(raw[IMPORT_HEADERS.vehicleRegistration]) || str(raw[IMPORT_HEADERS.plate])
   const docRef = str(raw[IMPORT_HEADERS.docRef])
   const customer = str(raw[IMPORT_HEADERS.customer])
-  const time = str(raw[IMPORT_HEADERS.time])
+  // คอลัมน์ "time" ในไฟล์จริงมักมีข้อความอื่นปนมากับเวลา (เช่น "ย้ำ!! ตราประทับ") — แยกเวลาไว้ใช้เป็น loadingTime
+  // จริงๆ ส่วนข้อความที่เหลือไปต่อแถวหมายเหตุแทนที่จะทิ้ง
+  const { time, text: timeExtraText } = extractTimeAndText(str(raw[IMPORT_HEADERS.time]))
   const siteName = str(raw[IMPORT_HEADERS.siteName])
-  const phone = str(raw[IMPORT_HEADERS.phone])
+  // คอลัมน์ "เบอร์" มักกรอกชื่อผู้ติดต่อ+เบอร์โทรปนกันมาในช่องเดียว — แยกเบอร์ออกมาเป็น field ใช้งานง่าย
+  // (sitePhone) ส่วนข้อความเต็มเก็บไว้ที่ siteContactName ไม่ให้ข้อมูลหาย
+  const { contactName: siteContactName, phone } = splitContactPhone(str(raw[IMPORT_HEADERS.phone]))
   const product = str(raw[IMPORT_HEADERS.product])
   const qty = num(raw[IMPORT_HEADERS.qty])
   const allowance = num(raw[IMPORT_HEADERS.allowance])
@@ -1295,8 +1374,8 @@ const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): Import
 
   const warnings: string[] = []
 
-  const matchedDriver = driverName ? findDriverByName(driverName) : undefined
-  if (driverName && !matchedDriver) warnings.push('ไม่พบชื่อคนขับในทะเบียน')
+  const matchedDriver = driverName ? matchDriverForImport(driverName, plate) : undefined
+  if (driverName && !matchedDriver) warnings.push(`ชื่อเล่นคนขับ "${driverName}" ไม่ตรงกับที่ผูกไว้ในระบบ (เทียบกับทะเบียนรถแล้ว) — เว้นคนขับว่างไว้ก่อน`)
 
   if (!allowance) warnings.push('ต้องกรอกเพิ่ม: เบี้ยเลี้ยง')
   if (!price) warnings.push('ต้องกรอกเพิ่ม: ราคาปูน')
@@ -1309,16 +1388,34 @@ const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): Import
     warnings.push('ตรวจสอบข้อมูลน้ำมัน/ปลายทาง')
   }
 
+  // "สถานะขนส่งสินค้า" บางไฟล์กรอกเป็นเวลาที่ส่งของเสร็จ (เช่น "07:14") แทนสถานะข้อความ — ถือว่าจบงานแล้ว (DELIVERED)
+  // ที่เวลานั้น ยังคงพยายาม match กับป้ายสถานะข้อความปกติก่อนเสมอ (ของเดิม) แล้วค่อย fallback มาเช็คว่าเป็นเวลาไหม
   const matchedStatusEntry = Object.entries(bookingStatusLabel).find(([, label]) => label === statusRaw)
-  const status = (matchedStatusEntry?.[0] as BookingStatus | undefined) ?? 'WAITING_DISPATCH'
-  if (statusRaw && !matchedStatusEntry) warnings.push(`สถานะจาก Excel ไม่ตรงกับระบบ: "${statusRaw}"`)
+  const statusTimeMatch = statusRaw.match(/(\d{1,2})[:.](\d{2})/)
+  let status: BookingStatus = 'WAITING_DISPATCH'
+  let deliveredAt: Date | undefined
+  if (matchedStatusEntry) {
+    status = matchedStatusEntry[0] as BookingStatus
+  } else if (statusTimeMatch) {
+    status = 'DELIVERED'
+    if (importShipDate.value) {
+      deliveredAt = new Date(importShipDate.value)
+      deliveredAt.setHours(Number(statusTimeMatch[1]), Number(statusTimeMatch[2]), 0, 0)
+    } else {
+      warnings.push(`ส่งของสำเร็จเวลา ${statusRaw} (ไม่มีวันที่จากไฟล์ ระบุเวลาส่งของให้ไม่ได้ครบ)`)
+    }
+  } else if (statusRaw) {
+    warnings.push(`สถานะจาก Excel ไม่ตรงกับระบบ: "${statusRaw}"`)
+  }
 
-  const note = [noteRaw, ...warnings].filter(Boolean).join(' | ')
+  const note = [timeExtraText, noteRaw, ...warnings].filter(Boolean).join(' | ')
 
   return {
     rowNumber,
     isEmpty,
-    driverName,
+    // ถ้าจับคู่ชื่อเล่น+ทะเบียนรถไม่ได้ ให้เว้นชื่อคนขับว่างไว้เลย (ไม่ใช้ชื่อเล่นดิบจากไฟล์ตรงๆ เพราะ driverName ของ
+    // Booking ใช้คำนวณเงินเดือนจริง ต้องเป็นชื่อ-นามสกุลที่ยืนยันแล้วเท่านั้น) — ชื่อเล่นดิบยังอยู่ใน warnings/note ด้านบน
+    driverName: matchedDriver ? driversStore.fullName(matchedDriver) : '',
     driverId: matchedDriver?.id,
     plate,
     docRef,
@@ -1328,6 +1425,7 @@ const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): Import
     siteName,
     district,
     province,
+    siteContactName,
     phone,
     product,
     qty,
@@ -1336,11 +1434,16 @@ const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): Import
     fuelLiters,
     status,
     statusRaw,
+    deliveredAt,
     note,
     warnings,
   }
 }
 
+/** รองรับไฟล์ทั้ง 2 แบบ: (1) Row แรกเป็นหัวคอลัมน์เลย (ไม่มีหัวเรื่อง/วันที่) และ (2) Row แรกเป็นหัวเรื่อง+วันที่ส่งงาน
+ *  แล้ว Row ที่สองถึงเป็นหัวคอลัมน์จริง — เช็คจากคอลัมน์แรกสุดของ Row แรก: ถ้าไม่ใช่ "ลำดับ" (IMPORT_HEADER_MARKER)
+ *  ถือว่าเป็นหัวเรื่อง ต้องข้ามไปอีก 1 แถวถึงจะถึงหัวคอลัมน์จริง (เดิม fix ค่า range=1 ตายตัวเสมอ ทำให้ไฟล์แบบ (1)
+ *  ถูกอ่านหัวคอลัมน์ผิดแถวไปเป็นข้อมูลแถวแรกแทน แล้วสร้างงานไม่ได้เลยเพราะ mapping ทุกคอลัมน์เพี้ยนหมด) */
 const handleImportFile = async (e: Event) => {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
@@ -1349,11 +1452,13 @@ const handleImportFile = async (e: Event) => {
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, { type: 'array' })
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
-  const titleRow = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })[0] || []
-  importShipDate.value = parseShipDateFromTitle(titleRow.join(' '))
-  // range: 1 = ข้าม Row แรก (หัวเรื่อง/วันที่ส่งงาน) แล้วใช้แถวถัดไปเป็นหัวคอลัมน์จริง ข้อมูลเริ่มแถวที่ 3
-  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', range: 1 })
-  importRows.value = raw.map((r, idx) => parseImportRow(r, idx + 3))
+  const allRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
+  const firstCell = String(allRows[0]?.[0] ?? '').trim()
+  const hasTitleRow = firstCell !== IMPORT_HEADER_MARKER
+  importShipDate.value = hasTitleRow ? parseShipDateFromTitle((allRows[0] || []).join(' ')) : undefined
+  const headerRowIndex = hasTitleRow ? 1 : 0
+  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', range: headerRowIndex })
+  importRows.value = raw.map((r, idx) => parseImportRow(r, idx + headerRowIndex + 2))
   input.value = ''
 }
 
@@ -1377,7 +1482,10 @@ const confirmImport = () => {
         siteName: row.siteName,
         province: row.province,
         district: row.district,
+        siteContactName: row.siteContactName || undefined,
         sitePhone: row.phone || undefined,
+        deliveryStatus: row.status === 'DELIVERED' ? 'DELIVERED' : undefined,
+        deliveredAt: row.deliveredAt,
       },
     ]
     const newBooking = bookingStore.addBooking({
@@ -1403,6 +1511,7 @@ const confirmImport = () => {
       note: row.note || undefined,
     })
     newBooking.status = row.status
+    if (row.status === 'DELIVERED' && row.deliveredAt) newBooking.completedAt = row.deliveredAt
     const amount = row.qty * row.price
     const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
       bookingId: newBooking.id,

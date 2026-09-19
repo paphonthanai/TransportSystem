@@ -17,6 +17,10 @@ export interface DriverRecord {
   prefix: string
   firstName: string
   lastName: string
+  /** ชื่อเล่นที่หน้างานเรียกกันจริง (เช่น "โบ้อ้วน", "นัน") — ต่างจากชื่อ-นามสกุลจริงที่ใช้ในเอกสาร/บัญชีเงินเดือน
+   *  ใช้จับคู่คนขับตอนนำเข้า Excel เป็นหลัก เพราะไฟล์จัดคิวจริงมักกรอกชื่อเล่นแทนชื่อจริง (ดู matchDriverForImport
+   *  ใน BookingView.vue) ต้องเชื่อมกับทะเบียนรถที่ประจำคนขับคนนั้นด้วยเสมอกันชื่อเล่นซ้ำกันระหว่างคนขับหลายคน */
+  nickname: string
   idCard: string
   licenseNo: string
   licenseType: LicenseType

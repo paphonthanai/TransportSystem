@@ -268,9 +268,35 @@ export const useBookingStore = defineStore('booking', () => {
     return nextDailyRunningNo('RL', bookings.value.map((b) => b.releaseNo))
   }
 
-  /** เลขที่ใบสั่งงาน (PO) ที่ระบบออกให้อัตโนมัติ — ผู้ใช้ยังแก้ไขเองได้หลังจากนี้ */
+  /**
+   * เลขที่ใบสั่งงาน (PO) ที่ระบบออกให้อัตโนมัติ รูปแบบ PO + วันที่สร้าง (YYYYMMDD) + เลขรัน — ผู้ใช้ยังแก้ไขเองได้เสมอ
+   * (แค่ prefill ตอนเปิดฟอร์ม ไม่ได้ถือครองเลขไว้ล่วงหน้า เหมือน docNo/nextFreeSequence เอกสารขาย) ต่างจาก nextReleaseNo
+   * ตรงที่เลขรันนับแยกตาม "ปี" ที่สร้างเท่านั้น (ไม่ใช่รายวันเป๊ะๆ) — ขึ้นปีใหม่ (yyyy เปลี่ยน) ถึงจะเริ่มนับ 0001 ใหม่
+   * ปกติ pad 4 หลัก (0001-9999) ใช้หลัก "เลขว่างที่เล็กที่สุด" ในปีนั้นเสมอ (เติมเลขที่ถูกลบ/แก้ไปได้ ไม่ใช่ตัวนับเดินหน้าเรื่อยๆ)
+   * ถ้าปีนั้นออกจนครบ 1-9999 หมดแล้วเท่านั้น (Case 2) ถึงขยับไป pad 5 หลัก โดยเริ่มนับใหม่จาก 00001 อีกรอบ (ไม่ต่อจาก 10000)
+   * ถือเป็นคนละ pool กับชุด 4 หลักโดยเจตนา แยกนับด้วยความยาวของเลขที่จับได้จาก regex (4 หลัก vs 5 หลักขึ้นไป)
+   */
   function nextPoNo() {
-    return nextDailyRunningNo('PO', bookings.value.map((b) => b.po))
+    const now = new Date()
+    const yyyy = now.getFullYear()
+    const datePart = `${yyyy}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    const yearRe = new RegExp(`^PO${yyyy}\\d{4}(\\d+)$`)
+    const occupied4 = new Set<number>()
+    const occupied5 = new Set<number>()
+    bookings.value.forEach((b) => {
+      const m = b.po?.match(yearRe)
+      if (!m) return
+      const digits = m[1]
+      const n = parseInt(digits, 10)
+      if (digits.length <= 4) occupied4.add(n)
+      else occupied5.add(n)
+    })
+    let seq = 1
+    while (seq <= 9999 && occupied4.has(seq)) seq++
+    if (seq <= 9999) return `PO${datePart}${String(seq).padStart(4, '0')}`
+    let seq5 = 1
+    while (occupied5.has(seq5)) seq5++
+    return `PO${datePart}${String(seq5).padStart(5, '0')}`
   }
 
   function addBooking(data: Omit<Booking, 'id' | 'status' | 'createdAt'> & { createdAt?: Date }) {
