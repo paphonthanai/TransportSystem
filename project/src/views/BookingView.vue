@@ -548,9 +548,9 @@
 
             <template v-else>
               <div class="bg-surface-2 rounded-lg p-3 text-sm flex items-center gap-4 flex-wrap">
-                <span class="font-semibold text-text">อ่านได้ {{ importRows.length }} แถว</span>
-                <span class="text-green-600">จะสร้าง {{ importableGroups.length }} งาน</span>
-                <span v-if="importSkippedRowCount" class="text-red-600">ข้าม {{ importSkippedRowCount }} แถว (ข้อมูลไม่ครบ/ไม่มีข้อมูลน้ำมัน)</span>
+                <span class="font-semibold text-text">อ่านได้ {{ importableRows.length }} แถว</span>
+                <span class="text-green-600">จะสร้าง {{ importableRows.length }} งาน</span>
+                <span v-if="importWarningRowCount" class="text-amber-600">{{ importWarningRowCount }} แถวมีข้อมูลไม่ครบ — จะสร้างงานให้ก่อนแล้วแปะหมายเหตุไว้ให้กรอกเพิ่ม</span>
               </div>
 
               <div class="overflow-x-auto border border-border rounded-lg max-h-72">
@@ -558,27 +558,29 @@
                   <thead class="bg-surface-2 sticky top-0">
                     <tr>
                       <th class="text-left px-2 py-1.5">แถว</th>
-                      <th class="text-left px-2 py-1.5">กลุ่มงาน</th>
+                      <th class="text-left px-2 py-1.5">พขร.</th>
+                      <th class="text-left px-2 py-1.5">คอนเฟิร์ม</th>
                       <th class="text-left px-2 py-1.5">ลูกค้า</th>
-                      <th class="text-left px-2 py-1.5">ปลายทาง</th>
-                      <th class="text-left px-2 py-1.5">สินค้า</th>
-                      <th class="text-right px-2 py-1.5">ปริมาณ</th>
-                      <th class="text-left px-2 py-1.5">หน่วย</th>
+                      <th class="text-left px-2 py-1.5">สถานที่ส่ง</th>
+                      <th class="text-left px-2 py-1.5">ชนิดปูน</th>
+                      <th class="text-right px-2 py-1.5">ตัน</th>
                       <th class="text-left px-2 py-1.5">สถานะ</th>
+                      <th class="text-left px-2 py-1.5">หมายเหตุ</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="row in importRows" :key="row.rowNumber" class="border-t border-border" :class="row.error ? 'bg-red-50' : ''">
+                    <tr v-for="row in importableRows" :key="row.rowNumber" class="border-t border-border" :class="row.warnings.length ? 'bg-amber-50' : ''">
                       <td class="px-2 py-1.5">{{ row.rowNumber }}</td>
-                      <td class="px-2 py-1.5">{{ row.groupKey.startsWith('__row_') ? '-' : row.groupKey }}</td>
+                      <td class="px-2 py-1.5">{{ row.driverName || '-' }}</td>
+                      <td class="px-2 py-1.5">{{ row.plate || '-' }}</td>
                       <td class="px-2 py-1.5">{{ row.customer || '-' }}</td>
                       <td class="px-2 py-1.5">{{ row.siteName || '-' }}</td>
                       <td class="px-2 py-1.5">{{ row.product || '-' }}</td>
                       <td class="px-2 py-1.5 text-right">{{ row.qty }}</td>
-                      <td class="px-2 py-1.5">{{ row.unit || '-' }}</td>
+                      <td class="px-2 py-1.5">{{ bookingStatusLabel[row.status] }}</td>
                       <td class="px-2 py-1.5">
-                        <span v-if="row.error" class="text-red-600">ข้าม — {{ row.error }}</span>
-                        <span v-else class="text-green-600">พร้อมสร้าง</span>
+                        <span v-if="row.warnings.length" class="text-amber-700">{{ row.warnings.join(', ') }}</span>
+                        <span v-else class="text-green-600">ครบถ้วน</span>
                       </td>
                     </tr>
                   </tbody>
@@ -590,11 +592,11 @@
             <button @click="closeImportModal" class="btn-secondary">ยกเลิก</button>
             <button
               @click="confirmImport"
-              :disabled="!importableGroups.length"
+              :disabled="!importableRows.length"
               class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-base">save</span>
-              ยืนยันสร้างงาน ({{ importableGroups.length }} งาน)
+              ยืนยันสร้างงาน ({{ importableRows.length }} งาน)
             </button>
           </div>
         </div>
@@ -1150,40 +1152,52 @@ const confirmComplete = () => {
   completeTarget.value = null
 }
 
-// --- นำเข้า Booking หลายงานจากไฟล์ Excel (Requirement: "Import Excel เพื่อสร้างงาน") ---
-// 1 แถว Excel = 1 JobItem เสมอ ไม่ merge/dedup — แถวที่มี "กลุ่มงาน" เดียวกันจะถูกรวมเป็น Item หลายรายการของ Booking
-// เดียวกัน (เพราะ 1 Booking รองรับหลาย items[] อยู่แล้วตาม schema ปัจจุบัน) แถวที่ไม่กรอกกลุ่มงานเลย = แยกเป็นคนละ
-// Booking ต่อแถว ทุกแถวยังต้องผ่าน validation ปลายทาง+น้ำมันเดียวกับข้อ 2 (fuelRateStore.findRate) ก่อนเสมอ
+// --- นำเข้า Booking จากไฟล์ Excel งานจริง (Requirement: "Import Excel เพื่อสร้างงาน" ตามคอลัมน์ที่หน้างานใช้อยู่จริง) ---
+// 1 แถว Excel = 1 Booking เสมอ (ไม่มีคอลัมน์กลุ่มงานแล้วเหมือนเทมเพลตเดิม) — เจตนาของฟีเจอร์นี้เปลี่ยนจาก "สร้างงานใหม่
+// จากข้อมูลที่ครบถ้วน" เป็น "นำข้อมูลงานจริง (ที่อาจกรอกไม่ครบ/มีสถานะไปไกลแล้ว) เข้าระบบให้ได้ก่อน" ตามที่ตกลงกันไว้:
+// ห้ามข้าม/บล็อกแถวเด็ดขาดแม้ข้อมูลน้ำมัน/ปลายทาง/ราคาจะไม่ครบ ให้สร้างงานได้เสมอแล้วแปะหมายเหตุ (note) ไว้ให้ไปกรอกเพิ่มทีหลัง
 const IMPORT_HEADERS = {
-  group: 'กลุ่มงาน',
-  customer: 'ลูกค้า',
-  po: 'PO',
-  siteName: 'ปลายทาง',
-  province: 'จังหวัด',
-  district: 'อำเภอ',
-  product: 'สินค้า',
-  qty: 'ปริมาณ',
-  unit: 'หน่วย',
-  jobType: 'ประเภทงาน',
-  contactName: 'ผู้ติดต่อหน้างาน',
-  phone: 'เบอร์โทรหน้างาน',
+  driverName: 'พขร.',
+  plate: 'คอนเฟิร์ม',
+  docRef: 'เลขที่เอกสาร',
+  customer: 'บมจ./บจก./ร้าน/หจก.',
+  ticketChecked: 'เช็คตั๋ว',
+  time: 'time',
+  siteName: 'สถานที่ส่งสินค้า',
+  districtProvince: 'อำเภอ/จังหวัด',
+  phone: 'เบอร์',
+  product: 'ชนิดปูน',
+  qty: 'จำนวนตัน',
+  allowance: 'เบี้ยเลี้ยง',
+  price: 'ราคาปูน',
+  fuel: 'น้ำมัน',
+  status: 'สถานะขนส่งสินค้า',
+  note: 'หมายเหตุ',
 } as const
 
 interface ImportRowResult {
   rowNumber: number
-  groupKey: string
+  isEmpty: boolean
+  driverName: string
+  driverId?: string
+  plate: string
+  docRef: string
   customer: string
-  po: string
+  ticketChecked: boolean
+  time: string
   siteName: string
-  province: string
   district: string
+  province: string
+  phone: string
   product: string
   qty: number
-  unit: string
-  jobType: BookingJobType
-  siteContactName: string
-  sitePhone: string
-  error: string | null
+  allowance: number
+  price: number
+  fuelLiters: number
+  status: BookingStatus
+  statusRaw: string
+  note: string
+  warnings: string[]
 }
 
 const importModalOpen = ref(false)
@@ -1199,68 +1213,106 @@ const closeImportModal = () => {
   importModalOpen.value = false
 }
 
-/** สร้างไฟล์ตัวอย่างคอลัมน์ที่ระบบรองรับจริง (ไม่เดาคอลัมน์เอง — ตรงกับ IMPORT_HEADERS ที่ parse จริงด้านล่าง) */
+/** สร้างไฟล์ตัวอย่างคอลัมน์ตรงกับชีทงานจริงที่ใช้อยู่ (ตรงกับ IMPORT_HEADERS ที่ parse จริงด้านล่างทุกคอลัมน์) */
 const downloadImportTemplate = () => {
   exportRowsToExcel('Booking_Import_Template', [
     {
-      [IMPORT_HEADERS.group]: 'GRP001',
+      [IMPORT_HEADERS.driverName]: '',
+      [IMPORT_HEADERS.plate]: '',
+      [IMPORT_HEADERS.docRef]: '',
       [IMPORT_HEADERS.customer]: 'ตัวอย่าง บริษัท จำกัด',
-      [IMPORT_HEADERS.po]: '',
+      [IMPORT_HEADERS.ticketChecked]: '',
+      [IMPORT_HEADERS.time]: '',
       [IMPORT_HEADERS.siteName]: 'ชื่อหน้างาน',
-      [IMPORT_HEADERS.province]: '',
-      [IMPORT_HEADERS.district]: '',
+      [IMPORT_HEADERS.districtProvince]: 'อำเภอ/จังหวัด',
+      [IMPORT_HEADERS.phone]: '',
       [IMPORT_HEADERS.product]: '',
       [IMPORT_HEADERS.qty]: 0,
-      [IMPORT_HEADERS.unit]: '',
-      [IMPORT_HEADERS.jobType]: 'ลงมือ',
-      [IMPORT_HEADERS.contactName]: '',
-      [IMPORT_HEADERS.phone]: '',
+      [IMPORT_HEADERS.allowance]: 0,
+      [IMPORT_HEADERS.price]: 0,
+      [IMPORT_HEADERS.fuel]: '',
+      [IMPORT_HEADERS.status]: bookingStatusLabel.WAITING_DISPATCH,
+      [IMPORT_HEADERS.note]: '',
     },
   ])
 }
 
-const VALID_JOB_TYPES: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
-
-/** ตรวจแถวเดียวจาก Excel — เคารพ validation ปลายทาง+น้ำมันข้อ 2 ด้วย (fuelRateStore.findRate) ถ้าไม่ผ่านข้อไหนก็ตาม
- *  ให้ error ไม่ใช่ null แถวนั้นจะถูกข้ามไปตอนสร้าง Booking (ไม่ throw ไม่หยุดทั้งไฟล์) */
-const validateImportRow = (raw: Record<string, unknown>, rowNumber: number): ImportRowResult => {
+/** แปลงแถว Excel ดิบเป็นข้อมูลที่ใช้สร้าง Booking ได้ทันที — ไม่มี error ที่บล็อกการสร้างงานอีกต่อไป (ตามที่ตกลง)
+ *  ข้อมูลส่วนไหนขาด/จับคู่ไม่ได้ (คนขับไม่พบในทะเบียน, น้ำมัน/ปลายทางไม่มีเรท, สถานะไม่ตรง ฯลฯ) จะถูกสะสมไว้ใน warnings
+ *  แล้วต่อท้ายเข้า note ของ Booking ให้ออฟฟิศไปตรวจ/กรอกเพิ่มทีหลัง แถวที่ไม่มีข้อมูลอะไรเลย (isEmpty) จะถูกข้ามตอนสร้างจริง
+ *  เพราะถือเป็นแถวว่างท้ายชีท ไม่ใช่ข้อมูลที่ตั้งใจกรอก */
+const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): ImportRowResult => {
   const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())
-  const customer = str(raw[IMPORT_HEADERS.customer])
-  const siteName = str(raw[IMPORT_HEADERS.siteName])
-  const province = str(raw[IMPORT_HEADERS.province])
-  const district = str(raw[IMPORT_HEADERS.district])
-  const product = str(raw[IMPORT_HEADERS.product])
-  const unit = str(raw[IMPORT_HEADERS.unit])
-  const qtyRaw = raw[IMPORT_HEADERS.qty]
-  const qty = typeof qtyRaw === 'number' ? qtyRaw : Number(str(qtyRaw))
-  const jobTypeRaw = str(raw[IMPORT_HEADERS.jobType]) as BookingJobType
-  const jobType = VALID_JOB_TYPES.includes(jobTypeRaw) ? jobTypeRaw : 'ลงมือ'
-  const groupKey = str(raw[IMPORT_HEADERS.group]) || `__row_${rowNumber}`
+  const num = (v: unknown) => {
+    const n = typeof v === 'number' ? v : Number(str(v))
+    return Number.isFinite(n) ? n : 0
+  }
 
-  let error: string | null = null
-  if (!customer) error = 'ไม่มีชื่อลูกค้า'
-  else if (!siteName) error = 'ไม่มีปลายทาง (ชื่อหน้างาน)'
-  else if (!province || !district) error = 'ไม่มีจังหวัด/อำเภอของปลายทาง'
-  else if (!product) error = 'ไม่มีชื่อสินค้า'
-  else if (!unit) error = 'ไม่มีหน่วย'
-  else if (!Number.isFinite(qty) || qty <= 0) error = 'ปริมาณต้องเป็นตัวเลขมากกว่า 0'
-  else if (!fuelRateStore.findRate(province, district)) error = 'ไม่มีข้อมูลน้ำมันสำหรับปลายทางนี้'
+  const driverName = str(raw[IMPORT_HEADERS.driverName])
+  const plate = str(raw[IMPORT_HEADERS.plate])
+  const docRef = str(raw[IMPORT_HEADERS.docRef])
+  const customer = str(raw[IMPORT_HEADERS.customer])
+  const time = str(raw[IMPORT_HEADERS.time])
+  const siteName = str(raw[IMPORT_HEADERS.siteName])
+  const phone = str(raw[IMPORT_HEADERS.phone])
+  const product = str(raw[IMPORT_HEADERS.product])
+  const qty = num(raw[IMPORT_HEADERS.qty])
+  const allowance = num(raw[IMPORT_HEADERS.allowance])
+  const price = num(raw[IMPORT_HEADERS.price])
+  const noteRaw = str(raw[IMPORT_HEADERS.note])
+  const statusRaw = str(raw[IMPORT_HEADERS.status])
+
+  const [districtRaw, provinceRaw] = str(raw[IMPORT_HEADERS.districtProvince]).split('/')
+  const district = (districtRaw || '').trim()
+  const province = (provinceRaw || '').trim()
+
+  const isEmpty = !driverName && !customer && !siteName && !product
+
+  const warnings: string[] = []
+
+  const matchedDriver = driverName ? findDriverByName(driverName) : undefined
+  if (driverName && !matchedDriver) warnings.push('ไม่พบชื่อคนขับในทะเบียน')
+
+  if (!allowance) warnings.push('ต้องกรอกเพิ่ม: เบี้ยเลี้ยง')
+  if (!price) warnings.push('ต้องกรอกเพิ่ม: ราคาปูน')
+
+  let fuelLiters = num(raw[IMPORT_HEADERS.fuel])
+  if (!fuelLiters && province && district) {
+    fuelLiters = fuelRateStore.findRate(province, district)?.liters || 0
+  }
+  if (!fuelLiters || !province || !district) {
+    warnings.push('ตรวจสอบข้อมูลน้ำมัน/ปลายทาง')
+  }
+
+  const matchedStatusEntry = Object.entries(bookingStatusLabel).find(([, label]) => label === statusRaw)
+  const status = (matchedStatusEntry?.[0] as BookingStatus | undefined) ?? 'WAITING_DISPATCH'
+  if (statusRaw && !matchedStatusEntry) warnings.push(`สถานะจาก Excel ไม่ตรงกับระบบ: "${statusRaw}"`)
+
+  const note = [noteRaw, ...warnings].filter(Boolean).join(' | ')
 
   return {
     rowNumber,
-    groupKey,
+    isEmpty,
+    driverName,
+    driverId: matchedDriver?.id,
+    plate,
+    docRef,
     customer,
-    po: str(raw[IMPORT_HEADERS.po]),
+    ticketChecked: !!str(raw[IMPORT_HEADERS.ticketChecked]),
+    time,
     siteName,
-    province,
     district,
+    province,
+    phone,
     product,
-    qty: Number.isFinite(qty) ? qty : 0,
-    unit,
-    jobType,
-    siteContactName: str(raw[IMPORT_HEADERS.contactName]),
-    sitePhone: str(raw[IMPORT_HEADERS.phone]),
-    error,
+    qty,
+    allowance,
+    price,
+    fuelLiters,
+    status,
+    statusRaw,
+    note,
+    warnings,
   }
 }
 
@@ -1273,95 +1325,68 @@ const handleImportFile = async (e: Event) => {
   const workbook = XLSX.read(buffer, { type: 'array' })
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
-  importRows.value = raw.map((r, idx) => validateImportRow(r, idx + 2)) // แถว Excel จริง (1 = header, ข้อมูลเริ่มแถว 2)
+  importRows.value = raw.map((r, idx) => parseImportRow(r, idx + 2)) // แถว Excel จริง (1 = header, ข้อมูลเริ่มแถว 2)
   input.value = ''
 }
 
-interface ImportGroup {
-  groupKey: string
-  customer: string
-  po: string
-  rows: ImportRowResult[]
-  items: JobItem[]
-  fuelLiters: number
-  skipReason: string | null
-}
+const importableRows = computed(() => importRows.value.filter((r) => !r.isEmpty))
+const importWarningRowCount = computed(() => importableRows.value.filter((r) => r.warnings.length > 0).length)
 
-/** จัดกลุ่มแถวที่ผ่าน validation แล้วเท่านั้นเป็นคนละ Booking ตาม "กลุ่มงาน" — ภายในกลุ่มเดียวกันแต่ละแถวยังเป็น
- *  JobItem อิสระของตัวเอง (id ไม่ซ้ำ ไม่ merge/dedup) กลุ่มที่คำนวณน้ำมันมาตรฐานได้ 0 (เคารพ validation ข้อ 2:
- *  ปลายทาง+น้ำมัน ห้ามสร้างงานเด็ดขาด) จะถูกข้ามทั้งกลุ่ม ไม่สร้าง Booking นั้นเลย — reuse fuelRateStore.standardFuelLiters
- *  ตัวเดียวกับที่ computedFuel ด้านบนใช้ ไม่สร้าง logic คำนวณน้ำมันซ้ำ */
-const importGroups = computed<ImportGroup[]>(() => {
-  const validRows = importRows.value.filter((r) => !r.error)
-  const byGroup = new Map<string, ImportRowResult[]>()
-  validRows.forEach((r) => {
-    const list = byGroup.get(r.groupKey) || []
-    list.push(r)
-    byGroup.set(r.groupKey, list)
-  })
-  return [...byGroup.entries()].map(([groupKey, rows], groupIdx) => {
-    const items: JobItem[] = rows.map((r, itemIdx) => ({
-      id: `item${Date.now()}${groupIdx}${itemIdx}${Math.random().toString(36).slice(2, 4)}`,
-      product: r.product,
-      qty: r.qty,
-      unit: r.unit,
-      jobType: r.jobType,
-      siteName: r.siteName,
-      province: r.province,
-      district: r.district,
-      siteContactName: r.siteContactName || undefined,
-      sitePhone: r.sitePhone || undefined,
-    }))
-    const fuelLiters = fuelRateStore.standardFuelLiters(items, 'SINGLE_DESTINATION')
-    return {
-      groupKey,
-      customer: rows[0].customer,
-      po: rows[0].po,
-      rows,
-      items,
-      fuelLiters,
-      skipReason: fuelLiters <= 0 ? 'ไม่มีข้อมูลน้ำมันสำหรับปลายทางนี้' : null,
-    }
-  })
-})
-
-const importableGroups = computed(() => importGroups.value.filter((g) => !g.skipReason))
-const importSkippedRowCount = computed(() => importRows.value.filter((r) => r.error).length)
-
-/** สร้าง Booking จริงทีละกลุ่ม — payload/ขั้นตอนเดียวกับ saveAllItems ทุกประการ (รวมใบสั่งสินค้าคู่กันเสมอ ตาม
- *  invariant เดิมของระบบ) ต่างกันแค่ราคา/ค่าเที่ยว/เบี้ยเลี้ยงที่ Excel ไม่มีคอลัมน์ให้ ตั้งเป็น 0 ไว้ก่อน (แก้ไขได้
- *  อิสระตอน WAITING_DISPATCH เหมือน Booking ที่สร้างด้วยมือทุกงาน) */
+/** สร้าง Booking จริงทีละแถว — เลขที่เอกสาร/ใบปล่อยรถยังออกอัตโนมัติตามปกติเสมอ (ไม่ใช้เลขจาก Excel ตรงๆ กันชนกับ
+ *  เลขที่ระบบเคยออกไปแล้ว) ส่วนเลขที่เอกสารจาก Excel เก็บไว้ที่ booking.reference เพื่ออ้างอิงย้อนหลังเท่านั้น
+ *  สถานะงาน (status) เซ็ตตรงจากที่ import มาได้เลยเพราะ addBooking บังคับ WAITING_DISPATCH เสมอ (ดู stores/booking.ts) —
+ *  จึงต้องเซ็ตทับหลังสร้างเสร็จ ไม่ backfill timestamp อื่น (dispatchedAt/completedAt ฯลฯ) ให้เพราะเป็นข้อมูลนำเข้า ไม่ใช่
+ *  งานที่เดินผ่าน flow จริง */
 const confirmImport = () => {
-  if (!importableGroups.value.length) return
-  importableGroups.value.forEach((group) => {
+  if (!importableRows.value.length) return
+  importableRows.value.forEach((row) => {
+    const items: JobItem[] = [
+      {
+        id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+        product: row.product,
+        qty: row.qty,
+        unit: 'ตัน',
+        siteName: row.siteName,
+        province: row.province,
+        district: row.district,
+        sitePhone: row.phone || undefined,
+      },
+    ]
     const newBooking = bookingStore.addBooking({
       category: props.fleet,
       docNo: bookingStore.nextDocNo(props.fleet),
       releaseNo: bookingStore.nextReleaseNo(),
-      po: group.po || undefined,
-      customer: group.customer,
-      items: group.items,
-      allowance: 0,
+      reference: row.docRef || undefined,
+      customer: row.customer,
+      items,
+      allowance: row.allowance,
       tripFee: 0,
       agreedPrice: 0,
       vatRate: documentSettingsStore.settings.vatRate,
       pricingMode: 'SINGLE_DESTINATION',
-      fuelLiters: group.fuelLiters,
+      fuelLiters: row.fuelLiters,
       fuelRate: fuelRateStore.settings.todayPricePerLiter,
-      plate: '',
+      plate: row.plate || undefined,
+      driverName: row.driverName || undefined,
+      driverId: row.driverId,
+      loadingTime: row.time || undefined,
+      ticketChecked: row.ticketChecked || undefined,
+      note: row.note || undefined,
     })
+    newBooking.status = row.status
+    const amount = row.qty * row.price
     const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
       bookingId: newBooking.id,
       customer: newBooking.customer,
-      amount: 0,
-      reference: newBooking.po,
+      amount,
+      reference: newBooking.reference,
       items: [
         {
-          description: salesOrderLineDescription(group.items),
-          qty: 1,
-          unit: 'เที่ยว',
-          unitPrice: 0,
-          amount: 0,
+          description: salesOrderLineDescription(items),
+          qty: row.qty,
+          unit: 'ตัน',
+          unitPrice: row.price,
+          amount,
           discountMode: 'percent',
         },
       ],
