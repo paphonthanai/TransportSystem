@@ -547,6 +547,11 @@
             </div>
 
             <template v-else>
+              <div class="rounded-lg p-3 text-sm flex items-center gap-2" :class="importShipDate ? 'bg-primary/10 text-primary' : 'bg-red-50 text-red-600'">
+                <span class="material-symbols-rounded text-base">event</span>
+                <span v-if="importShipDate">วันที่ลงงานที่จับได้จากหัวไฟล์: <strong>{{ formatShortDate(importShipDate) }}</strong> (ใช้กับทุกงานในไฟล์นี้)</span>
+                <span v-else>ไม่พบวันที่ส่งงานใน Row แรกของไฟล์ — งานที่สร้างจะไม่มีวันที่ลงงาน กรุณากรอกเพิ่มภายหลัง</span>
+              </div>
               <div class="bg-surface-2 rounded-lg p-3 text-sm flex items-center gap-4 flex-wrap">
                 <span class="font-semibold text-text">อ่านได้ {{ importableRows.length }} แถว</span>
                 <span class="text-green-600">จะสร้าง {{ importableRows.length }} งาน</span>
@@ -1203,38 +1208,58 @@ interface ImportRowResult {
 const importModalOpen = ref(false)
 const importRows = ref<ImportRowResult[]>([])
 const importFileName = ref('')
+/** วันที่ลงงาน (booking.loadingDate) ของทุกแถวในไฟล์นี้ — ดึงมาจาก Row แรกของไฟล์ (แถวหัวเรื่องเหนือแถวหัวคอลัมน์)
+ *  เช่น "ตารางงานจัดงานปูน ส่งวันที่ 19-09-69 (ศุกร์ >> เสาร์)" เอาเฉพาะวันที่แรกที่เจอ ไม่ใช่ช่วงวันทั้งหมด */
+const importShipDate = ref<Date | undefined>()
 
 const openImportModal = () => {
   importRows.value = []
   importFileName.value = ''
+  importShipDate.value = undefined
   importModalOpen.value = true
 }
 const closeImportModal = () => {
   importModalOpen.value = false
 }
 
-/** สร้างไฟล์ตัวอย่างคอลัมน์ตรงกับชีทงานจริงที่ใช้อยู่ (ตรงกับ IMPORT_HEADERS ที่ parse จริงด้านล่างทุกคอลัมน์) */
+/** สร้างไฟล์ตัวอย่างคอลัมน์ตรงกับชีทงานจริงที่ใช้อยู่ (ตรงกับ IMPORT_HEADERS ที่ parse จริงด้านล่างทุกคอลัมน์)
+ *  แถวแรกเป็นหัวเรื่องบอกวันที่ส่งงาน (parse โดย handleImportFile) แถวที่สองถึงเป็นหัวคอลัมน์จริง */
 const downloadImportTemplate = () => {
-  exportRowsToExcel('Booking_Import_Template', [
-    {
-      [IMPORT_HEADERS.driverName]: '',
-      [IMPORT_HEADERS.plate]: '',
-      [IMPORT_HEADERS.docRef]: '',
-      [IMPORT_HEADERS.customer]: 'ตัวอย่าง บริษัท จำกัด',
-      [IMPORT_HEADERS.ticketChecked]: '',
-      [IMPORT_HEADERS.time]: '',
-      [IMPORT_HEADERS.siteName]: 'ชื่อหน้างาน',
-      [IMPORT_HEADERS.districtProvince]: 'อำเภอ/จังหวัด',
-      [IMPORT_HEADERS.phone]: '',
-      [IMPORT_HEADERS.product]: '',
-      [IMPORT_HEADERS.qty]: 0,
-      [IMPORT_HEADERS.allowance]: 0,
-      [IMPORT_HEADERS.price]: 0,
-      [IMPORT_HEADERS.fuel]: '',
-      [IMPORT_HEADERS.status]: bookingStatusLabel.WAITING_DISPATCH,
-      [IMPORT_HEADERS.note]: '',
-    },
-  ])
+  const headerRow = Object.values(IMPORT_HEADERS)
+  const sampleRow = [
+    '',
+    '',
+    '',
+    'ตัวอย่าง บริษัท จำกัด',
+    '',
+    '',
+    'ชื่อหน้างาน',
+    'อำเภอ/จังหวัด',
+    '',
+    '',
+    0,
+    0,
+    0,
+    '',
+    bookingStatusLabel.WAITING_DISPATCH,
+    '',
+  ]
+  const worksheet = XLSX.utils.aoa_to_sheet([['ตารางงานจัดงานปูน ส่งวันที่ DD-MM-YY (วัน)'], headerRow, sampleRow])
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1')
+  XLSX.writeFile(workbook, 'Booking_Import_Template.xlsx')
+}
+
+/** อ่านวันที่แรกที่เจอในข้อความหัวเรื่อง รูปแบบ DD-MM-YY/YYYY (พ.ศ.) เช่น "19-09-69" หรือ "19/09/2569" — เอาแค่วันที่แรก
+ *  แม้หัวเรื่องจะมีช่วงวันที่ (เช่น "(ศุกร์ >> เสาร์)") ต่อท้ายก็ตาม ปีที่กรอก 2 หลักถือเป็น พ.ศ. ย่อ (69 = 2569) */
+const parseShipDateFromTitle = (text: string): Date | undefined => {
+  const match = text.match(/(\d{1,2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{2,4})/)
+  if (!match) return undefined
+  const day = Number(match[1])
+  const month = Number(match[2])
+  const beYear = Number(match[3]) < 100 ? Number(match[3]) + 2500 : Number(match[3])
+  const date = new Date(beYear - 543, month - 1, day)
+  return Number.isNaN(date.getTime()) ? undefined : date
 }
 
 /** แปลงแถว Excel ดิบเป็นข้อมูลที่ใช้สร้าง Booking ได้ทันที — ไม่มี error ที่บล็อกการสร้างงานอีกต่อไป (ตามที่ตกลง)
@@ -1324,8 +1349,11 @@ const handleImportFile = async (e: Event) => {
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, { type: 'array' })
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
-  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
-  importRows.value = raw.map((r, idx) => parseImportRow(r, idx + 2)) // แถว Excel จริง (1 = header, ข้อมูลเริ่มแถว 2)
+  const titleRow = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })[0] || []
+  importShipDate.value = parseShipDateFromTitle(titleRow.join(' '))
+  // range: 1 = ข้าม Row แรก (หัวเรื่อง/วันที่ส่งงาน) แล้วใช้แถวถัดไปเป็นหัวคอลัมน์จริง ข้อมูลเริ่มแถวที่ 3
+  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', range: 1 })
+  importRows.value = raw.map((r, idx) => parseImportRow(r, idx + 3))
   input.value = ''
 }
 
@@ -1369,6 +1397,7 @@ const confirmImport = () => {
       plate: row.plate || undefined,
       driverName: row.driverName || undefined,
       driverId: row.driverId,
+      loadingDate: importShipDate.value,
       loadingTime: row.time || undefined,
       ticketChecked: row.ticketChecked || undefined,
       note: row.note || undefined,
