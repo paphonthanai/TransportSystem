@@ -67,16 +67,16 @@
               <input v-model="form.name" class="input-field w-full" />
             </div>
             <div v-if="form.role === 'DRIVER'">
-              <label class="block text-xs font-semibold text-muted mb-1">ผูกกับคนขับในสมุดรายชื่อ{{ editingUser ? '' : ' (แนะนำ — auto-fill Email จากรหัสคนขับ)' }}</label>
+              <label class="block text-xs font-semibold text-muted mb-1">ผูกกับคนขับในสมุดรายชื่อ{{ editingUser ? '' : ' (แนะนำ — ไม่ต้องใช้ Email)' }}</label>
               <select v-model="form.driverId" class="input-field w-full">
                 <option :value="undefined">-- ไม่ผูก (จับคู่งานด้วยชื่อแบบเดิม) --</option>
                 <option v-for="d in driversStore.drivers" :key="d.id" :value="d.id">{{ driversStore.fullName(d) }} ({{ d.code }})</option>
               </select>
-              <div class="text-[11px] text-muted mt-1">ผูกไว้แล้วงานที่จ่ายให้คนขับคนนี้จะขึ้นในแอปคนขับแม่นยำ ไม่พึ่งชื่อบัญชีตรงกับสมุดรายชื่อเป๊ะอีกต่อไป และคนขับ login ด้วยรหัสคนขับ + PIN แทน Email ได้ทันที</div>
+              <div class="text-[11px] text-muted mt-1">ผูกไว้แล้วงานที่จ่ายให้คนขับคนนี้จะขึ้นในแอปคนขับแม่นยำ ไม่พึ่งชื่อบัญชีตรงกับสมุดรายชื่อเป๊ะอีกต่อไป และคนขับ login ด้วยรหัสคนขับ + รหัสผ่านคนขับแทน Email ได้ทันที</div>
               <div v-if="!form.driverId" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mt-2 flex items-start gap-1.5">
                 <span class="material-symbols-rounded text-sm flex-shrink-0">warning</span>
                 <span>
-                  ยังไม่ได้ผูกกับคนขับในสมุดรายชื่อ — งานที่จ่ายให้บัญชีนี้จะจับคู่ด้วยการเทียบชื่อเท่านั้น (ผิดพลาดง่ายกว่า) และคนขับจะ login ด้วยรหัสคนขับ + PIN ไม่ได้ ต้องใช้ Email เต็มแทน
+                  ยังไม่ได้ผูกกับคนขับในสมุดรายชื่อ — งานที่จ่ายให้บัญชีนี้จะจับคู่ด้วยการเทียบชื่อเท่านั้น (ผิดพลาดง่ายกว่า) และคนขับจะ login ด้วยรหัสคนขับ + รหัสผ่านคนขับไม่ได้ ต้องใช้ Email เต็มแทน
                   <label class="flex items-center gap-1.5 mt-1.5 cursor-pointer font-semibold">
                     <input v-model="confirmNoDriverLink" type="checkbox" class="w-3.5 h-3.5" />
                     เข้าใจแล้ว ต้องการสร้างบัญชีนี้โดยไม่ผูกกับคนขับ
