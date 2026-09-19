@@ -1,7 +1,11 @@
 <template>
   <div class="space-y-6">
     <!-- Create Button -->
-    <div class="flex justify-end">
+    <div class="flex justify-end gap-2">
+      <button @click="openImportModal" class="btn-secondary">
+        <span class="material-symbols-rounded text-base">upload_file</span>
+        นำเข้า Excel
+      </button>
       <button @click="router.push(`/booking/${props.fleet}/new`)" class="btn-primary">
         <span class="material-symbols-rounded">add</span>
         สร้างงาน
@@ -514,6 +518,89 @@
       </div>
     </Teleport>
 
+    <!-- นำเข้า Booking จาก Excel -->
+    <Teleport to="body" v-if="importModalOpen">
+      <div @click="closeImportModal" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
+        <div @click.stop class="w-full max-w-3xl bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
+            <div class="font-bold text-text">นำเข้างานขนส่งจาก Excel</div>
+            <button @click="closeImportModal" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+          <div class="px-6 py-5 space-y-4">
+            <div class="flex items-center gap-2 flex-wrap">
+              <label class="btn-secondary cursor-pointer">
+                <span class="material-symbols-rounded text-base">folder_open</span>
+                เลือกไฟล์ Excel
+                <input type="file" accept=".xlsx,.xls" class="hidden" @change="handleImportFile" />
+              </label>
+              <span v-if="importFileName" class="text-sm text-muted">{{ importFileName }}</span>
+              <button type="button" @click="downloadImportTemplate" class="btn-secondary ml-auto">
+                <span class="material-symbols-rounded text-base">download</span>
+                ดาวน์โหลด Template
+              </button>
+            </div>
+
+            <div v-if="importRows.length === 0" class="text-sm text-muted text-center py-6">
+              ยังไม่ได้เลือกไฟล์ — เลือกไฟล์ Excel ที่มีคอลัมน์ตาม Template ด้านบน
+            </div>
+
+            <template v-else>
+              <div class="bg-surface-2 rounded-lg p-3 text-sm flex items-center gap-4 flex-wrap">
+                <span class="font-semibold text-text">อ่านได้ {{ importRows.length }} แถว</span>
+                <span class="text-green-600">จะสร้าง {{ importableGroups.length }} งาน</span>
+                <span v-if="importSkippedRowCount" class="text-red-600">ข้าม {{ importSkippedRowCount }} แถว (ข้อมูลไม่ครบ/ไม่มีข้อมูลน้ำมัน)</span>
+              </div>
+
+              <div class="overflow-x-auto border border-border rounded-lg max-h-72">
+                <table class="w-full text-xs">
+                  <thead class="bg-surface-2 sticky top-0">
+                    <tr>
+                      <th class="text-left px-2 py-1.5">แถว</th>
+                      <th class="text-left px-2 py-1.5">กลุ่มงาน</th>
+                      <th class="text-left px-2 py-1.5">ลูกค้า</th>
+                      <th class="text-left px-2 py-1.5">ปลายทาง</th>
+                      <th class="text-left px-2 py-1.5">สินค้า</th>
+                      <th class="text-right px-2 py-1.5">ปริมาณ</th>
+                      <th class="text-left px-2 py-1.5">หน่วย</th>
+                      <th class="text-left px-2 py-1.5">สถานะ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in importRows" :key="row.rowNumber" class="border-t border-border" :class="row.error ? 'bg-red-50' : ''">
+                      <td class="px-2 py-1.5">{{ row.rowNumber }}</td>
+                      <td class="px-2 py-1.5">{{ row.groupKey.startsWith('__row_') ? '-' : row.groupKey }}</td>
+                      <td class="px-2 py-1.5">{{ row.customer || '-' }}</td>
+                      <td class="px-2 py-1.5">{{ row.siteName || '-' }}</td>
+                      <td class="px-2 py-1.5">{{ row.product || '-' }}</td>
+                      <td class="px-2 py-1.5 text-right">{{ row.qty }}</td>
+                      <td class="px-2 py-1.5">{{ row.unit || '-' }}</td>
+                      <td class="px-2 py-1.5">
+                        <span v-if="row.error" class="text-red-600">ข้าม — {{ row.error }}</span>
+                        <span v-else class="text-green-600">พร้อมสร้าง</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+          <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-border sticky bottom-0 bg-surface">
+            <button @click="closeImportModal" class="btn-secondary">ยกเลิก</button>
+            <button
+              @click="confirmImport"
+              :disabled="!importableGroups.length"
+              class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span class="material-symbols-rounded text-base">save</span>
+              ยืนยันสร้างงาน ({{ importableGroups.length }} งาน)
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
   </div>
 </template>
 
@@ -529,10 +616,14 @@ import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { useOriginsStore } from '@/stores/origins'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
+import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import type { Booking, BookingCategory, BookingJobType, BookingStatus, DebtAdjustment, JobItem, Vehicle } from '@/types'
 import { bookingTitle } from '@/utils/bookingTitle'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
 import { parseGpsInput } from '@/utils/gps'
+import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
+import { exportRowsToExcel } from '@/utils/exportExcel'
+import * as XLSX from 'xlsx'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 
 const props = defineProps<{ fleet: BookingCategory }>()
@@ -546,6 +637,7 @@ const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
 const originsStore = useOriginsStore()
 const salesDocumentsStore = useSalesDocumentsStore()
+const documentSettingsStore = useDocumentSettingsStore()
 const authStore = useAuthStore()
 
 /** เฉพาะ ADMIN เท่านั้นที่เห็นปุ่ม "ลบถาวร" (Hard Delete Booking) — ซ่อนที่ UI ชั้นแรก บังคับสิทธิ์ซ้ำอีกชั้นที่
@@ -1056,6 +1148,227 @@ const confirmComplete = () => {
   /** Phase 2: เลิกสร้างใบวางบิลอัตโนมัติตอนจบงาน — Booking ต้องไม่เป็น Trigger ของ Billing อีกต่อไป
    *  ผู้ใช้ต้องไปสร้างใบวางบิลเองที่หน้า "ใบวางบิล" (รวมหลายงาน) หรือปุ่ม "ออกใบวางบิล" ที่หน้าใบสั่งสินค้า (เดี่ยว) */
   completeTarget.value = null
+}
+
+// --- นำเข้า Booking หลายงานจากไฟล์ Excel (Requirement: "Import Excel เพื่อสร้างงาน") ---
+// 1 แถว Excel = 1 JobItem เสมอ ไม่ merge/dedup — แถวที่มี "กลุ่มงาน" เดียวกันจะถูกรวมเป็น Item หลายรายการของ Booking
+// เดียวกัน (เพราะ 1 Booking รองรับหลาย items[] อยู่แล้วตาม schema ปัจจุบัน) แถวที่ไม่กรอกกลุ่มงานเลย = แยกเป็นคนละ
+// Booking ต่อแถว ทุกแถวยังต้องผ่าน validation ปลายทาง+น้ำมันเดียวกับข้อ 2 (fuelRateStore.findRate) ก่อนเสมอ
+const IMPORT_HEADERS = {
+  group: 'กลุ่มงาน',
+  customer: 'ลูกค้า',
+  po: 'PO',
+  siteName: 'ปลายทาง',
+  province: 'จังหวัด',
+  district: 'อำเภอ',
+  product: 'สินค้า',
+  qty: 'ปริมาณ',
+  unit: 'หน่วย',
+  jobType: 'ประเภทงาน',
+  contactName: 'ผู้ติดต่อหน้างาน',
+  phone: 'เบอร์โทรหน้างาน',
+} as const
+
+interface ImportRowResult {
+  rowNumber: number
+  groupKey: string
+  customer: string
+  po: string
+  siteName: string
+  province: string
+  district: string
+  product: string
+  qty: number
+  unit: string
+  jobType: BookingJobType
+  siteContactName: string
+  sitePhone: string
+  error: string | null
+}
+
+const importModalOpen = ref(false)
+const importRows = ref<ImportRowResult[]>([])
+const importFileName = ref('')
+
+const openImportModal = () => {
+  importRows.value = []
+  importFileName.value = ''
+  importModalOpen.value = true
+}
+const closeImportModal = () => {
+  importModalOpen.value = false
+}
+
+/** สร้างไฟล์ตัวอย่างคอลัมน์ที่ระบบรองรับจริง (ไม่เดาคอลัมน์เอง — ตรงกับ IMPORT_HEADERS ที่ parse จริงด้านล่าง) */
+const downloadImportTemplate = () => {
+  exportRowsToExcel('Booking_Import_Template', [
+    {
+      [IMPORT_HEADERS.group]: 'GRP001',
+      [IMPORT_HEADERS.customer]: 'ตัวอย่าง บริษัท จำกัด',
+      [IMPORT_HEADERS.po]: '',
+      [IMPORT_HEADERS.siteName]: 'ชื่อหน้างาน',
+      [IMPORT_HEADERS.province]: '',
+      [IMPORT_HEADERS.district]: '',
+      [IMPORT_HEADERS.product]: '',
+      [IMPORT_HEADERS.qty]: 0,
+      [IMPORT_HEADERS.unit]: '',
+      [IMPORT_HEADERS.jobType]: 'ลงมือ',
+      [IMPORT_HEADERS.contactName]: '',
+      [IMPORT_HEADERS.phone]: '',
+    },
+  ])
+}
+
+const VALID_JOB_TYPES: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
+
+/** ตรวจแถวเดียวจาก Excel — เคารพ validation ปลายทาง+น้ำมันข้อ 2 ด้วย (fuelRateStore.findRate) ถ้าไม่ผ่านข้อไหนก็ตาม
+ *  ให้ error ไม่ใช่ null แถวนั้นจะถูกข้ามไปตอนสร้าง Booking (ไม่ throw ไม่หยุดทั้งไฟล์) */
+const validateImportRow = (raw: Record<string, unknown>, rowNumber: number): ImportRowResult => {
+  const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())
+  const customer = str(raw[IMPORT_HEADERS.customer])
+  const siteName = str(raw[IMPORT_HEADERS.siteName])
+  const province = str(raw[IMPORT_HEADERS.province])
+  const district = str(raw[IMPORT_HEADERS.district])
+  const product = str(raw[IMPORT_HEADERS.product])
+  const unit = str(raw[IMPORT_HEADERS.unit])
+  const qtyRaw = raw[IMPORT_HEADERS.qty]
+  const qty = typeof qtyRaw === 'number' ? qtyRaw : Number(str(qtyRaw))
+  const jobTypeRaw = str(raw[IMPORT_HEADERS.jobType]) as BookingJobType
+  const jobType = VALID_JOB_TYPES.includes(jobTypeRaw) ? jobTypeRaw : 'ลงมือ'
+  const groupKey = str(raw[IMPORT_HEADERS.group]) || `__row_${rowNumber}`
+
+  let error: string | null = null
+  if (!customer) error = 'ไม่มีชื่อลูกค้า'
+  else if (!siteName) error = 'ไม่มีปลายทาง (ชื่อหน้างาน)'
+  else if (!province || !district) error = 'ไม่มีจังหวัด/อำเภอของปลายทาง'
+  else if (!product) error = 'ไม่มีชื่อสินค้า'
+  else if (!unit) error = 'ไม่มีหน่วย'
+  else if (!Number.isFinite(qty) || qty <= 0) error = 'ปริมาณต้องเป็นตัวเลขมากกว่า 0'
+  else if (!fuelRateStore.findRate(province, district)) error = 'ไม่มีข้อมูลน้ำมันสำหรับปลายทางนี้'
+
+  return {
+    rowNumber,
+    groupKey,
+    customer,
+    po: str(raw[IMPORT_HEADERS.po]),
+    siteName,
+    province,
+    district,
+    product,
+    qty: Number.isFinite(qty) ? qty : 0,
+    unit,
+    jobType,
+    siteContactName: str(raw[IMPORT_HEADERS.contactName]),
+    sitePhone: str(raw[IMPORT_HEADERS.phone]),
+    error,
+  }
+}
+
+const handleImportFile = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  importFileName.value = file.name
+  const buffer = await file.arrayBuffer()
+  const workbook = XLSX.read(buffer, { type: 'array' })
+  const sheet = workbook.Sheets[workbook.SheetNames[0]]
+  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+  importRows.value = raw.map((r, idx) => validateImportRow(r, idx + 2)) // แถว Excel จริง (1 = header, ข้อมูลเริ่มแถว 2)
+  input.value = ''
+}
+
+interface ImportGroup {
+  groupKey: string
+  customer: string
+  po: string
+  rows: ImportRowResult[]
+  items: JobItem[]
+  fuelLiters: number
+  skipReason: string | null
+}
+
+/** จัดกลุ่มแถวที่ผ่าน validation แล้วเท่านั้นเป็นคนละ Booking ตาม "กลุ่มงาน" — ภายในกลุ่มเดียวกันแต่ละแถวยังเป็น
+ *  JobItem อิสระของตัวเอง (id ไม่ซ้ำ ไม่ merge/dedup) กลุ่มที่คำนวณน้ำมันมาตรฐานได้ 0 (เคารพ validation ข้อ 2:
+ *  ปลายทาง+น้ำมัน ห้ามสร้างงานเด็ดขาด) จะถูกข้ามทั้งกลุ่ม ไม่สร้าง Booking นั้นเลย — reuse fuelRateStore.standardFuelLiters
+ *  ตัวเดียวกับที่ computedFuel ด้านบนใช้ ไม่สร้าง logic คำนวณน้ำมันซ้ำ */
+const importGroups = computed<ImportGroup[]>(() => {
+  const validRows = importRows.value.filter((r) => !r.error)
+  const byGroup = new Map<string, ImportRowResult[]>()
+  validRows.forEach((r) => {
+    const list = byGroup.get(r.groupKey) || []
+    list.push(r)
+    byGroup.set(r.groupKey, list)
+  })
+  return [...byGroup.entries()].map(([groupKey, rows], groupIdx) => {
+    const items: JobItem[] = rows.map((r, itemIdx) => ({
+      id: `item${Date.now()}${groupIdx}${itemIdx}${Math.random().toString(36).slice(2, 4)}`,
+      product: r.product,
+      qty: r.qty,
+      unit: r.unit,
+      jobType: r.jobType,
+      siteName: r.siteName,
+      province: r.province,
+      district: r.district,
+      siteContactName: r.siteContactName || undefined,
+      sitePhone: r.sitePhone || undefined,
+    }))
+    const fuelLiters = fuelRateStore.standardFuelLiters(items, 'SINGLE_DESTINATION')
+    return {
+      groupKey,
+      customer: rows[0].customer,
+      po: rows[0].po,
+      rows,
+      items,
+      fuelLiters,
+      skipReason: fuelLiters <= 0 ? 'ไม่มีข้อมูลน้ำมันสำหรับปลายทางนี้' : null,
+    }
+  })
+})
+
+const importableGroups = computed(() => importGroups.value.filter((g) => !g.skipReason))
+const importSkippedRowCount = computed(() => importRows.value.filter((r) => r.error).length)
+
+/** สร้าง Booking จริงทีละกลุ่ม — payload/ขั้นตอนเดียวกับ saveAllItems ทุกประการ (รวมใบสั่งสินค้าคู่กันเสมอ ตาม
+ *  invariant เดิมของระบบ) ต่างกันแค่ราคา/ค่าเที่ยว/เบี้ยเลี้ยงที่ Excel ไม่มีคอลัมน์ให้ ตั้งเป็น 0 ไว้ก่อน (แก้ไขได้
+ *  อิสระตอน WAITING_DISPATCH เหมือน Booking ที่สร้างด้วยมือทุกงาน) */
+const confirmImport = () => {
+  if (!importableGroups.value.length) return
+  importableGroups.value.forEach((group) => {
+    const newBooking = bookingStore.addBooking({
+      category: props.fleet,
+      docNo: bookingStore.nextDocNo(props.fleet),
+      releaseNo: bookingStore.nextReleaseNo(),
+      po: group.po || undefined,
+      customer: group.customer,
+      items: group.items,
+      allowance: 0,
+      tripFee: 0,
+      agreedPrice: 0,
+      vatRate: documentSettingsStore.settings.vatRate,
+      pricingMode: 'SINGLE_DESTINATION',
+      fuelLiters: group.fuelLiters,
+      fuelRate: fuelRateStore.settings.todayPricePerLiter,
+      plate: '',
+    })
+    const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
+      bookingId: newBooking.id,
+      customer: newBooking.customer,
+      amount: 0,
+      reference: newBooking.po,
+      items: [
+        {
+          description: salesOrderLineDescription(group.items),
+          qty: 1,
+          unit: 'เที่ยว',
+          unitPrice: 0,
+          amount: 0,
+          discountMode: 'percent',
+        },
+      ],
+    })
+    newBooking.sourceDocumentId = salesOrderDoc.id
+  })
+  closeImportModal()
 }
 
 </script>
