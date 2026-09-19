@@ -84,18 +84,22 @@
                 </span>
               </div>
             </div>
-            <!-- บัญชี DRIVER ที่ผูกกับคนขับในสมุดรายชื่อแล้ว (ตอนสร้างใหม่) ไม่ต้องกรอก/เห็น Email เลย — ระบบสร้างอีเมลภายใน
-                 ให้เองจากรหัสคนขับเสมอ (ดู isDriverLinkedCreate/save()) แสดงเป็นช่อง "Driver ID" (อ่านอย่างเดียว มาจาก
-                 คนขับที่เลือกไว้ด้านบน) แบบเดียวกับหน้าแก้ไขผู้ใช้งาน แทนที่จะพูดถึง Email เลย ผู้ใช้กรอกแค่รหัสผ่าน
-                 ตัวเลขด้านล่างก็พอ ไม่ให้แอดมินเห็นคำว่า Email แล้วสับสน/พิมพ์ทับเป็นตัวเลขเปล่าจนหลุดรูปแบบอีเมลไป -->
+            <!-- บัญชี DRIVER ที่ผูกกับคนขับในสมุดรายชื่อแล้ว (ตอนสร้างใหม่) — ใช้ Layout เดียวกับหน้าแก้ไขผู้ใช้งานทุกประการ:
+                 Email แสดงอ่านอย่างเดียว (คำนวณจากรหัสคนขับ ไม่ให้แก้ไข กันหลุดรูปแบบอีเมลเหมือนที่เคยเป็นปัญหา) ตามด้วย
+                 กล่อง "Driver Login Credentials" ที่มีช่อง Driver ID อ่านอย่างเดียว (ตอนสร้างใหม่ยังไม่มีปุ่ม
+                 เปลี่ยน Driver ID/รหัสผ่าน เพราะยังไม่มีบัญชีจริงให้แก้ — ปุ่มพวกนั้นมีเฉพาะตอนแก้ไขบัญชีที่มีอยู่แล้ว) -->
             <div v-if="isDriverLinkedCreate">
-              <label class="block text-xs font-semibold text-muted mb-1">Driver ID (รหัสคนขับ)</label>
-              <input :value="driversStore.drivers.find((d) => d.id === form.driverId)?.code" disabled class="input-field w-full bg-surface-2" />
-              <div class="text-[11px] text-muted mt-1">บัญชีนี้จะ login ด้วยรหัสคนขับนี้ + รหัสผ่านด้านล่างเท่านั้น ไม่ต้องใช้ Email</div>
+              <label class="block text-xs font-semibold text-muted mb-1">Email</label>
+              <input :value="internalDriverEmail(linkedDriverCode || '')" disabled class="input-field w-full bg-surface-2" />
             </div>
             <div v-else>
               <label class="block text-xs font-semibold text-muted mb-1">Email</label>
               <input v-model="form.email" type="email" autocomplete="off" class="input-field w-full" :disabled="!!editingUser" />
+            </div>
+            <div v-if="isDriverLinkedCreate" class="border-t border-border pt-3 mt-1">
+              <div class="text-xs font-bold text-text mb-2">Driver Login Credentials</div>
+              <label class="block text-xs font-semibold text-muted mb-1">Driver ID (รหัสคนขับ)</label>
+              <input :value="linkedDriverCode" disabled class="input-field w-full bg-surface-2" />
             </div>
             <div v-if="!editingUser">
               <label class="block text-xs font-semibold text-muted mb-1">
@@ -229,9 +233,13 @@ const saving = ref(false)
  *  รองรับ workflow เดิมที่จับคู่งานด้วยชื่อได้ต่อไปถ้าตั้งใจจริงๆ) */
 const confirmNoDriverLink = ref(false)
 
-/** บัญชี DRIVER ใหม่ (ไม่ใช่แก้ไขบัญชีเดิม) ที่ผูกกับคนขับในสมุดรายชื่อแล้ว — เคสนี้ไม่ต้องใช้ Email เลยตามที่ต้องการ
- *  (ดู template ที่ซ่อนช่อง Email และ save() ที่คำนวณอีเมลภายในเองเสมอ ไม่พึ่ง form.email) */
+/** บัญชี DRIVER ใหม่ (ไม่ใช่แก้ไขบัญชีเดิม) ที่ผูกกับคนขับในสมุดรายชื่อแล้ว — เคสนี้แสดง Email เป็นอ่านอย่างเดียว (คำนวณ
+ *  จากรหัสคนขับเสมอ ไม่ให้แอดมินพิมพ์ทับเอง กันหลุดรูปแบบอีเมลเหมือนที่เคยเป็นปัญหา) พร้อม Driver ID แบบเดียวกับหน้า
+ *  แก้ไขผู้ใช้งานทุกประการ (ดู template) — save() ก็คำนวณอีเมลภายในเองเสมอ ไม่พึ่ง form.email เช่นกัน */
 const isDriverLinkedCreate = computed(() => !editingUser.value && form.value.role === 'DRIVER' && !!form.value.driverId)
+
+/** รหัสคนขับของคนขับที่เลือกผูกไว้ (ถ้ามี) — ใช้แสดง Email/Driver ID แบบอ่านอย่างเดียวตอนสร้างบัญชีใหม่ */
+const linkedDriverCode = computed(() => driversStore.drivers.find((d) => d.id === form.value.driverId)?.code)
 
 /** ผูกคนขับ (ตอนสร้างบัญชีใหม่เท่านั้น) -> auto-fill Email เป็นอีเมลภายใน d{code}@drivers.internal ให้ทันที
  *  ไม่ทับ Email ที่แอดมินพิมพ์เองไปแล้วถ้าไม่ตรงกับค่าที่ auto-fill ไว้ก่อนหน้า (เผื่อแอดมินตั้งใจพิมพ์อีเมลจริงเอง) */
