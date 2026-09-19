@@ -28,21 +28,26 @@
           <thead class="bg-surface-2 text-xs text-muted">
             <tr>
               <th class="px-3 py-2 w-8"></th>
-              <th class="text-left px-3 py-2 font-semibold w-10">ลำดับ</th>
+              <th class="text-left px-3 py-2 font-semibold w-10 cursor-pointer select-none" @click="toggleSort('index')">
+                ลำดับ<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('index') }}</span>
+              </th>
               <th class="text-left px-3 py-2 font-semibold">ชื่อสินค้า/รายละเอียด</th>
               <th class="text-left px-3 py-2 font-semibold">ทะเบียน</th>
               <th class="text-left px-3 py-2 font-semibold">ชนิดปูน</th>
-              <th class="text-left px-3 py-2 font-semibold">เลขที่ PO</th>
-              <th class="text-left px-3 py-2 font-semibold">วันที่ส่งงาน</th>
+              <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('po')">
+                เลขที่ PO<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('po') }}</span>
+              </th>
+              <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('shipDate')">
+                วันที่ส่งงาน<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('shipDate') }}</span>
+              </th>
               <th class="text-right px-3 py-2 font-semibold">จำนวน</th>
               <th class="text-left px-3 py-2 font-semibold">หน่วย</th>
               <th class="text-right px-3 py-2 font-semibold">ราคาต่อหน่วย</th>
-              <th class="text-right px-3 py-2 font-semibold">ส่วนลด</th>
               <th class="text-right px-3 py-2 font-semibold">ราคารวม</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(b, idx) in eligibleBookings" :key="b.id" class="border-t border-border">
+            <tr v-for="(b, idx) in sortedEligibleBookings" :key="b.id" class="border-t border-border">
               <td class="px-3 py-2">
                 <input type="checkbox" :checked="pickerSelectedIds.has(b.id)" @change="toggleBooking(b.id)" class="w-4 h-4" />
               </td>
@@ -55,11 +60,10 @@
               <td class="px-3 py-2 text-right text-text">1</td>
               <td class="px-3 py-2 text-text">เที่ยว</td>
               <td class="px-3 py-2 text-right text-text">{{ formatBaht(bookingTotal(b)) }}</td>
-              <td class="px-3 py-2 text-right text-text">{{ b.discountMode === 'fixed' ? formatBaht(b.discountAmount || 0) : `${b.discountPercent || 0}%` }}</td>
               <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(bookingTotal(b)) }}</td>
             </tr>
             <tr v-if="eligibleBookings.length === 0">
-              <td colspan="12" class="px-3 py-6 text-center text-muted">ลูกค้ารายนี้ไม่มีงานที่รอรับเงิน</td>
+              <td colspan="11" class="px-3 py-6 text-center text-muted">ลูกค้ารายนี้ไม่มีงานที่รอรับเงิน</td>
             </tr>
           </tbody>
         </table>
@@ -74,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
@@ -95,6 +99,34 @@ const pickerSelectedIds = ref<Set<string>>(new Set())
 const eligibleBookings = computed<Booking[]>(() => {
   if (!customerName.value.trim()) return []
   return bookingStore.bookings.filter((b) => b.customer === customerName.value && isBookingBillable(b))
+})
+
+/** เรียงลำดับตารางตามคอลัมน์ที่คลิก (ลำดับ/เลขที่ PO/วันที่ส่งงาน) — 'ลำดับ' หมายถึงลำดับเดิมจากการ query เรียง
+ *  ปกติ/ย้อนกลับ ไม่ใช่ field จริงในข้อมูล ค่าเริ่มต้น (sortKey ว่าง) = เรียงตามลำดับเดิมเสมอ */
+type SortKey = 'index' | 'po' | 'shipDate'
+const sortKey = ref<SortKey | null>(null)
+const sortDir = ref<'asc' | 'desc'>('asc')
+const toggleSort = (key: SortKey) => {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDir.value = 'asc'
+  }
+}
+const sortIcon = (key: SortKey) => (sortKey.value !== key ? 'unfold_more' : sortDir.value === 'asc' ? 'arrow_upward' : 'arrow_downward')
+const sortedEligibleBookings = computed(() => {
+  const list = [...eligibleBookings.value]
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  if (sortKey.value === 'po') list.sort((a, b) => (a.po || '').localeCompare(b.po || '') * dir)
+  else if (sortKey.value === 'shipDate') list.sort((a, b) => (new Date(a.shipDate || 0).getTime() - new Date(b.shipDate || 0).getTime()) * dir)
+  else if (sortKey.value === 'index' && dir === -1) list.reverse()
+  return list
+})
+/** เปลี่ยนลูกค้า = บริบทใหม่ทั้งหมด ล้างการเรียงเดิมทิ้งด้วย ไม่งั้นค้างเรียงข้ามลูกค้าดูสับสน */
+watch(customerName, () => {
+  sortKey.value = null
+  sortDir.value = 'asc'
 })
 
 const toggleBooking = (id: string) => {
