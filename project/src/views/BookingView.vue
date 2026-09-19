@@ -659,7 +659,9 @@ const findDriverByName = (name: string) => driversStore.drivers.find((d) => driv
  *  และไม่มีทะเบียนรถมาเทียบเลย ก็ยังเชื่อชื่อเล่นได้ (ไม่มีอะไรให้ขัดแย้ง) แต่ถ้ามีทะเบียนรถมาด้วย ต้องตรงกับรถที่ประจำ
  *  คนขับคนนั้นจริงเท่านั้น ไม่งั้นถือว่าข้อมูลไม่ตรงกับที่ผูกในระบบ คืน undefined (ให้ผู้เรียกเว้นว่างไว้ ไม่เดาสุ่ม) */
 const matchDriverForImport = (nickname: string, plate: string) => {
-  const candidates = driversStore.drivers.filter((d) => d.nickname.trim() === nickname.trim())
+  // (d.nickname || '') กันพัง — คนขับที่บันทึกไว้ก่อนฟีเจอร์นี้มีอยู่ใน Firestore จริงโดยไม่มี field นี้เลย (undefined
+  // ไม่ใช่ '') เพราะ driverRepository.getAll() ไม่ได้ผ่าน sanitizeDriver() (ต่างจากตอนแก้ไขผ่านฟอร์มที่ผ่านเสมอ)
+  const candidates = driversStore.drivers.filter((d) => (d.nickname || '').trim() === nickname.trim())
   if (candidates.length === 0) return undefined
   const plateTrimmed = plate.trim()
   if (candidates.length === 1) {
