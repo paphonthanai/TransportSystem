@@ -32,13 +32,12 @@
               <th class="text-left px-3 py-2 font-semibold">ชื่อสินค้า/รายละเอียด</th>
               <th class="text-left px-3 py-2 font-semibold">ทะเบียน</th>
               <th class="text-left px-3 py-2 font-semibold">ชนิดปูน</th>
-              <th class="text-left px-3 py-2 font-semibold">เลขตั๋ว</th>
+              <th class="text-left px-3 py-2 font-semibold">เลขที่ PO</th>
+              <th class="text-left px-3 py-2 font-semibold">วันที่ส่งงาน</th>
               <th class="text-right px-3 py-2 font-semibold">จำนวน</th>
               <th class="text-left px-3 py-2 font-semibold">หน่วย</th>
               <th class="text-right px-3 py-2 font-semibold">ราคาต่อหน่วย</th>
               <th class="text-right px-3 py-2 font-semibold">ส่วนลด</th>
-              <th class="text-right px-3 py-2 font-semibold">ภาษี (%)</th>
-              <th class="text-right px-3 py-2 font-semibold">หัก ณ ที่จ่าย</th>
               <th class="text-right px-3 py-2 font-semibold">ราคารวม</th>
             </tr>
           </thead>
@@ -51,17 +50,16 @@
               <td class="px-3 py-2 text-text">{{ bookingDescription(b) }}</td>
               <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ bookingProducts(b) }}</td>
-              <td class="px-3 py-2 text-text">{{ b.docNo }}</td>
+              <td class="px-3 py-2 text-text">{{ b.po || '-' }}</td>
+              <td class="px-3 py-2 text-text">{{ formatDateShort(b.shipDate) }}</td>
               <td class="px-3 py-2 text-right text-text">1</td>
               <td class="px-3 py-2 text-text">เที่ยว</td>
               <td class="px-3 py-2 text-right text-text">{{ formatBaht(bookingTotal(b)) }}</td>
               <td class="px-3 py-2 text-right text-text">{{ b.discountMode === 'fixed' ? formatBaht(b.discountAmount || 0) : `${b.discountPercent || 0}%` }}</td>
-              <td class="px-3 py-2 text-right text-text">{{ b.vatRate || 0 }}%</td>
-              <td class="px-3 py-2 text-right text-text">-</td>
               <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(bookingTotal(b)) }}</td>
             </tr>
             <tr v-if="eligibleBookings.length === 0">
-              <td colspan="13" class="px-3 py-6 text-center text-muted">ลูกค้ารายนี้ไม่มีงานที่รอรับเงิน</td>
+              <td colspan="12" class="px-3 py-6 text-center text-muted">ลูกค้ารายนี้ไม่มีงานที่รอรับเงิน</td>
             </tr>
           </tbody>
         </table>
@@ -122,6 +120,16 @@ const bookingProducts = (b: Booking) => {
   return products || '-'
 }
 const bookingTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)
+/** วันที่ส่งงาน แบบย่อ วว/ดด/ปป (พ.ศ. 2 หลัก) เช่น "14/08/69" — รูปแบบเดียวกับ formatDateShort ใน InvoiceDocumentView.vue
+ *  (คอลัมน์วันที่ส่งในตารางรายเที่ยว) */
+const formatDateShort = (date?: Date) => {
+  if (!date) return '-'
+  const d = new Date(date)
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const yy = String((d.getFullYear() + 543) % 100).padStart(2, '0')
+  return `${dd}/${mm}/${yy}`
+}
 
 const selectedTotal = computed(() => eligibleBookings.value.filter((b) => pickerSelectedIds.value.has(b.id)).reduce((sum, b) => sum + bookingTotal(b), 0))
 
