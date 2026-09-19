@@ -85,10 +85,13 @@
               </div>
             </div>
             <!-- บัญชี DRIVER ที่ผูกกับคนขับในสมุดรายชื่อแล้ว (ตอนสร้างใหม่) ไม่ต้องกรอก/เห็น Email เลย — ระบบสร้างอีเมลภายใน
-                 ให้เองจากรหัสคนขับเสมอ (ดู isDriverLinkedCreate/save()) ผู้ใช้กรอกแค่รหัสคนขับ + รหัสผ่านตัวเลขก็พอ
-                 ตามที่ต้องการ ไม่ให้แอดมินเห็นแล้วสับสน/พิมพ์ทับเป็นตัวเลขเปล่าจนหลุดรูปแบบอีเมลไป -->
-            <div v-if="isDriverLinkedCreate" class="text-[11px] text-muted bg-surface-2 border border-border rounded-lg px-2.5 py-2">
-              บัญชีนี้จะ login ด้วยรหัสคนขับ ({{ driversStore.drivers.find((d) => d.id === form.driverId)?.code }}) + รหัสผ่านด้านล่างเท่านั้น ไม่ต้องใช้ Email
+                 ให้เองจากรหัสคนขับเสมอ (ดู isDriverLinkedCreate/save()) แสดงเป็นช่อง "Driver ID" (อ่านอย่างเดียว มาจาก
+                 คนขับที่เลือกไว้ด้านบน) แบบเดียวกับหน้าแก้ไขผู้ใช้งาน แทนที่จะพูดถึง Email เลย ผู้ใช้กรอกแค่รหัสผ่าน
+                 ตัวเลขด้านล่างก็พอ ไม่ให้แอดมินเห็นคำว่า Email แล้วสับสน/พิมพ์ทับเป็นตัวเลขเปล่าจนหลุดรูปแบบอีเมลไป -->
+            <div v-if="isDriverLinkedCreate">
+              <label class="block text-xs font-semibold text-muted mb-1">Driver ID (รหัสคนขับ)</label>
+              <input :value="driversStore.drivers.find((d) => d.id === form.driverId)?.code" disabled class="input-field w-full bg-surface-2" />
+              <div class="text-[11px] text-muted mt-1">บัญชีนี้จะ login ด้วยรหัสคนขับนี้ + รหัสผ่านด้านล่างเท่านั้น ไม่ต้องใช้ Email</div>
             </div>
             <div v-else>
               <label class="block text-xs font-semibold text-muted mb-1">Email</label>
