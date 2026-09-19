@@ -51,12 +51,26 @@
 
     <!-- Table -->
     <div>
-      <div class="font-bold text-text mb-3">งานที่เสร็จสิ้นทั้งหมด ({{ completedBookings.length }})</div>
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <div class="font-bold text-text">งานที่เสร็จสิ้นทั้งหมด ({{ completedBookings.length }})</div>
+        <button
+          v-if="isAdmin && selectedIds.length > 0"
+          @click="bulkDeleteSelected"
+          :disabled="bulkDeleting"
+          class="btn-sm !border-red-200 !bg-red-50 !text-red-700 disabled:opacity-50"
+        >
+          <span class="material-symbols-rounded text-base">delete_forever</span>
+          ลบถาวรที่เลือกไว้ ({{ selectedIds.length }})
+        </button>
+      </div>
       <div class="card-lg overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-surface-2 border-b border-border">
               <tr>
+                <th v-if="isAdmin" class="px-4 py-3 w-8">
+                  <input type="checkbox" :checked="allVisibleSelected" @change="toggleSelectAll" />
+                </th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">กองรถ</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
@@ -73,6 +87,13 @@
             </thead>
             <tbody>
               <tr v-for="booking in completedBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+                <td v-if="isAdmin" class="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    :checked="!!selected[booking.id]"
+                    @change="(e) => (selected[booking.id] = (e.target as HTMLInputElement).checked)"
+                  />
+                </td>
                 <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
                 <td class="px-4 py-3">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', booking.category === 'cements' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700']">
@@ -150,7 +171,7 @@
                 </td>
               </tr>
               <tr v-if="completedBookings.length === 0">
-                <td colspan="12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับตัวกรอง</td>
+                <td :colspan="isAdmin ? 13 : 12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับตัวกรอง</td>
               </tr>
             </tbody>
           </table>
@@ -172,11 +193,17 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCompletedJobs, useCompletedJobsFilters, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
+import { useAuthStore } from '@/stores/auth'
 import { documentClaimBadges, podReviewStatusLabel, podReviewStatusClass } from '@/utils/bookingStatus'
 import type { Booking } from '@/types'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
+const authStore = useAuthStore()
+
+/** เฉพาะ ADMIN เท่านั้นที่เห็นช่อง checkbox เลือกหลายรายการ + ปุ่มลบถาวร — ตาม convention เดียวกับ BookingView.vue's
+ *  isAdmin (ซ่อนที่ UI ชั้นแรก บังคับสิทธิ์ซ้ำอีกชั้นที่ bookingStore.hardDeleteBooking และ Firestore Rules) */
+const isAdmin = computed(() => authStore.role === 'ADMIN')
 
 const filters = useCompletedJobsFilters()
 /** สถานะเอกสารทั้ง 3 ประเภทเป็นอิสระต่อกัน (ดู documentClaimBadges) — ตัวกรองนี้จึงเลือกได้ทีละ "ด้าน" (วางบิล/ใบแจ้งหนี้/ใบเสร็จ x ดำเนินการแล้ว/ยัง) ไม่ใช่ enum เดียวแบบเดิม */
@@ -238,6 +265,48 @@ const rejectPod = (booking: Booking) => {
   const note = prompt(`เหตุผลที่ตีกลับ POD ของงาน ${booking.docNo} (ไม่บังคับ):`)
   if (note === null) return
   bookingStore.reviewPod(booking.id, 'REJECTED', note.trim() || undefined)
+}
+
+// --- เลือกหลายรายการ + ลบถาวรพร้อมกัน (เฉพาะ ADMIN) — หน้านี้เดิมไม่มีทางลบ Booking ได้เลยแม้แต่ทีละรายการ
+// (ต่างจาก BookingView.vue's BookingActionMenu ที่มีปุ่มลบถาวรต่อแถวอยู่แล้ว) เพิ่ม checkbox ต่อแถวไว้เลือกได้หลายอัน
+// แล้วลบทีเดียว กันต้องกดยืนยัน popup ทีละรายการเวลามีของค้างต้องเคลียร์เยอะๆ (เช่น ข้อมูลทดสอบจาก import ผิดพลาด)
+const selected = ref<Record<string, boolean>>({})
+const selectedIds = computed(() => Object.keys(selected.value).filter((id) => selected.value[id]))
+const allVisibleSelected = computed(() => completedBookings.value.length > 0 && completedBookings.value.every((b) => selected.value[b.id]))
+const toggleSelectAll = () => {
+  const next = !allVisibleSelected.value
+  completedBookings.value.forEach((b) => {
+    selected.value[b.id] = next
+  })
+}
+
+const bulkDeleting = ref(false)
+const bulkDeleteSelected = async () => {
+  if (!isAdmin.value || bulkDeleting.value) return
+  const targets = completedBookings.value.filter((b) => selected.value[b.id])
+  if (!targets.length) return
+
+  const preview = targets.slice(0, 20).map((b) => `- ${b.docNo} (${b.customer || '-'})`).join('\n')
+  const more = targets.length > 20 ? `\n...และอีก ${targets.length - 20} รายการ` : ''
+  const confirmed = confirm(
+    `⚠️ ลบ Booking ถาวร ${targets.length} รายการ\n\n${preview}${more}\n\nการลบเป็นการลบถาวร ไม่สามารถกู้คืนได้ (รวมเอกสารที่อ้างอิงทุกรายการด้วย)`
+  )
+  if (!confirmed) return
+
+  bulkDeleting.value = true
+  let ok = 0
+  const failed: string[] = []
+  for (const booking of targets) {
+    const result = await bookingStore.hardDeleteBooking(booking.id)
+    if (result.ok) {
+      ok++
+      delete selected.value[booking.id]
+    } else {
+      failed.push(`${booking.docNo}: ${result.message || 'ไม่ทราบสาเหตุ'}`)
+    }
+  }
+  bulkDeleting.value = false
+  alert(`ลบสำเร็จ ${ok}/${targets.length} รายการ` + (failed.length ? `\n\nรายการที่ลบไม่สำเร็จ:\n${failed.join('\n')}` : ''))
 }
 </script>
 
