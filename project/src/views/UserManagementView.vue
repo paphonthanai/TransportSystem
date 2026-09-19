@@ -70,7 +70,7 @@
               <label class="block text-xs font-semibold text-muted mb-1">ผูกกับคนขับในสมุดรายชื่อ{{ editingUser ? '' : ' (แนะนำ — ไม่ต้องใช้ Email)' }}</label>
               <select v-model="form.driverId" class="input-field w-full">
                 <option :value="undefined">-- ไม่ผูก (จับคู่งานด้วยชื่อแบบเดิม) --</option>
-                <option v-for="d in driversStore.drivers" :key="d.id" :value="d.id">{{ driversStore.fullName(d) }} ({{ d.code }})</option>
+                <option v-for="d in availableDriversToLink" :key="d.id" :value="d.id">{{ driversStore.fullName(d) }} ({{ d.code }})</option>
               </select>
               <div class="text-[11px] text-muted mt-1">ผูกไว้แล้วงานที่จ่ายให้คนขับคนนี้จะขึ้นในแอปคนขับแม่นยำ ไม่พึ่งชื่อบัญชีตรงกับสมุดรายชื่อเป๊ะอีกต่อไป และคนขับ login ด้วยรหัสคนขับ + รหัสผ่านคนขับแทน Email ได้ทันที</div>
               <div v-if="!form.driverId" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mt-2 flex items-start gap-1.5">
@@ -240,6 +240,13 @@ const isDriverLinkedCreate = computed(() => !editingUser.value && form.value.rol
 
 /** รหัสคนขับของคนขับที่เลือกผูกไว้ (ถ้ามี) — ใช้แสดง Email/Driver ID แบบอ่านอย่างเดียวตอนสร้างบัญชีใหม่ */
 const linkedDriverCode = computed(() => driversStore.drivers.find((d) => d.id === form.value.driverId)?.code)
+
+/** คนขับที่มีบัญชีผู้ใช้งานอื่นผูกอยู่แล้ว (ไม่นับบัญชีที่กำลังแก้ไขอยู่นี้เอง) — ตัดออกจากตัวเลือกในดรอปดาวน์ "ผูกกับ
+ *  คนขับ" เลย กันไม่ให้เลือกซ้ำแล้วไปเจอ "มี Email นี้อยู่ในระบบแล้ว" ตอนกดบันทึกทีหลัง (ควรรู้ตั้งแต่ตอนเลือก) */
+const availableDriversToLink = computed(() => {
+  const usedElsewhere = new Set(userStore.users.filter((u) => u.driverId && u.id !== editingUser.value?.id).map((u) => u.driverId))
+  return driversStore.drivers.filter((d) => !usedElsewhere.has(d.id))
+})
 
 /** ผูกคนขับ (ตอนสร้างบัญชีใหม่เท่านั้น) -> auto-fill Email เป็นอีเมลภายใน d{code}@drivers.internal ให้ทันที
  *  ไม่ทับ Email ที่แอดมินพิมพ์เองไปแล้วถ้าไม่ตรงกับค่าที่ auto-fill ไว้ก่อนหน้า (เผื่อแอดมินตั้งใจพิมพ์อีเมลจริงเอง) */
