@@ -547,10 +547,10 @@
             </div>
 
             <template v-else>
-              <div class="rounded-lg p-3 text-sm flex items-center gap-2" :class="importShipDate ? 'bg-primary/10 text-primary' : 'bg-red-50 text-red-600'">
+              <div class="rounded-lg p-3 text-sm flex items-center gap-2" :class="importShipDate ? 'bg-primary/10 text-primary' : 'bg-surface-2 text-muted'">
                 <span class="material-symbols-rounded text-base">event</span>
                 <span v-if="importShipDate">วันที่ลงงานที่จับได้จากหัวไฟล์: <strong>{{ formatShortDate(importShipDate) }}</strong> (ใช้กับทุกงานในไฟล์นี้)</span>
-                <span v-else>ไม่พบวันที่ส่งงานใน Row แรกของไฟล์ — งานที่สร้างจะไม่มีวันที่ลงงาน กรุณากรอกเพิ่มภายหลัง</span>
+                <span v-else>ไม่พบวันที่ส่งงานใน Row แรกของไฟล์ — ข้ามไป สร้างงานตามปกติโดยไม่ใส่วันที่ลงงาน</span>
               </div>
               <div class="bg-surface-2 rounded-lg p-3 text-sm flex items-center gap-4 flex-wrap">
                 <span class="font-semibold text-text">อ่านได้ {{ importableRows.length }} แถว</span>
