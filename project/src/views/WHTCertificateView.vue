@@ -226,11 +226,13 @@
 import { ref, computed } from 'vue'
 import { useWHTCertificateStore } from '@/stores/whtCertificate'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useDriversStore } from '@/stores/drivers'
 import { bahtText } from '@/utils/companyInfo'
 import type { WHTCertificate, WHTPayeeType } from '@/types'
 
 const whtStore = useWHTCertificateStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const driversStore = useDriversStore()
 const certificates = computed(() => whtStore.certificates)
 
 const payeeTypeLabel: Record<WHTPayeeType, string> = {
@@ -240,12 +242,19 @@ const payeeTypeLabel: Record<WHTPayeeType, string> = {
   other: 'อื่นๆ',
 }
 
-const drivers = [
-  { name: 'สมชาย ทองดี', idCard: '1-2345-67890-12-3', address: '12/4 ต.ปากน้ำ อ.เมือง จ.สระบุรี' },
-  { name: 'ประเสริฐ มั่นคง', idCard: '1-2345-67891-23-4', address: '45 ต.บางพลี อ.บางพลี จ.สมุทรปราการ' },
-  { name: 'วิรัตน์ ใจกล้า', idCard: '1-2345-67892-34-5', address: '78 ต.หน้าเมือง อ.เมือง จ.ราชบุรี' },
-  { name: 'สมหมาย เพียรงาน', idCard: '1-2345-67893-45-6', address: '90 ต.หัวรอ อ.พระนครศรีอยุธยา จ.พระนครศรีอยุธยา' },
-]
+/** รายชื่อคนขับจริงจากทะเบียนคนขับ (ไม่ใช่ข้อมูลตัวอย่าง) — เอาเฉพาะคนที่ยังทำงานอยู่ (employmentStatus === 'active')
+ *  เหมือนตัวเลือกคนขับที่อื่นในระบบ (ดู BookingCreateView.vue/DriversView.vue) */
+const drivers = computed(() =>
+  driversStore.drivers
+    .filter((d) => d.employmentStatus === 'active')
+    .map((d) => ({
+      name: `${d.prefix}${d.firstName} ${d.lastName}`.trim(),
+      idCard: d.idCard,
+      address: [d.address, d.subDistrict && `ต.${d.subDistrict}`, d.district && `อ.${d.district}`, d.province && `จ.${d.province}`, d.zipCode]
+        .filter(Boolean)
+        .join(' '),
+    }))
+)
 
 const whtAmount = (cert: WHTCertificate) => Math.round(((cert.grossAmount || 0) * (cert.whtRate || 0)) / 100)
 
@@ -293,7 +302,7 @@ const onPayeeTypeChange = () => {
 }
 
 const applyDriverPreset = () => {
-  const driver = drivers.find((d) => d.name === selectedDriverName.value)
+  const driver = drivers.value.find((d) => d.name === selectedDriverName.value)
   if (!driver) return
   form.value.payeeName = driver.name
   form.value.payeeAddress = driver.address

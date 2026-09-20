@@ -8,13 +8,20 @@
     <div class="card-lg">
       <div class="font-bold text-text mb-3">สถานะงานที่วางบิลได้</div>
       <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-        <label v-for="status in allStatuses" :key="status" class="flex items-center gap-2 text-sm text-text cursor-pointer">
-          <input type="checkbox" :checked="isStatusAllowed(status)" @change="toggleStatus(status)" class="w-4 h-4" />
+        <label v-for="status in allStatuses" :key="status" class="flex items-center gap-2 text-sm text-text" :class="isMandatory(status) ? 'opacity-70' : 'cursor-pointer'">
+          <input
+            type="checkbox"
+            :checked="isStatusAllowed(status)"
+            :disabled="isMandatory(status)"
+            @change="toggleStatus(status)"
+            class="w-4 h-4"
+          />
           {{ bookingStatusLabel[status] }}
+          <span v-if="isMandatory(status)" class="text-xs text-muted">(บังคับของระบบ แก้ไม่ได้)</span>
         </label>
       </div>
-      <div v-if="billingRuleStore.rule.allowedJobStatus.length === 0" class="text-xs text-red-600 mt-2">
-        ต้องเลือกอย่างน้อย 1 สถานะ ไม่เช่นนั้นจะไม่มีงานใดวางบิลได้เลย
+      <div class="text-xs text-muted mt-2">
+        "ส่งของสำเร็จ" และ "อยู่ระหว่างขนส่ง" เป็นเงื่อนไขบังคับของระบบวางบิลจริง ปิดไม่ได้ — เลือกเพิ่มสถานะอื่นได้ตามต้องการ
       </div>
     </div>
 
@@ -25,7 +32,10 @@
         <input v-model="billingRuleStore.rule.requirePOD" type="checkbox" class="w-4 h-4 mt-0.5" />
         <span class="text-sm text-text">
           ต้องมี POD ครบทุกรายการ
-          <span class="block text-xs text-muted">ทุกสินค้าในงานต้องส่งสำเร็จและมีรูปหลักฐานการส่ง (POD) ครบก่อนจึงจะวางบิลได้</span>
+          <span class="block text-xs text-muted">
+            แจ้งเตือนก่อนวางบิลว่าบางรายการยังไม่มีรูปหลักฐานการส่ง (POD) ครบ — เป็นคำเตือนเท่านั้น ไม่บล็อกการวางบิล
+            (เงื่อนไข POD ต้องผ่านการอนุมัติจากออฟฟิศเป็นเงื่อนไขบังคับตอนออกใบเสร็จ/รับชำระเงินแทน)
+          </span>
         </span>
       </label>
 
@@ -37,11 +47,11 @@
         </span>
       </label>
 
-      <label class="flex items-start gap-3 cursor-pointer">
-        <input v-model="billingRuleStore.rule.requireApproval" type="checkbox" class="w-4 h-4 mt-0.5" />
+      <label class="flex items-start gap-3 opacity-60">
+        <input :checked="billingRuleStore.rule.requireApproval" type="checkbox" disabled class="w-4 h-4 mt-0.5" />
         <span class="text-sm text-text">
           ต้องผ่านการอนุมัติก่อน
-          <span class="block text-xs text-amber-600">แอปนี้ยังไม่มีระบบอนุมัติงาน หากเปิดใช้เงื่อนไขนี้ จะไม่มีงานใดวางบิลได้เลยจนกว่าจะมีฟีเจอร์อนุมัติจริง</span>
+          <span class="block text-xs text-amber-600">ฟีเจอร์ในอนาคต (Future Feature) — แอปนี้ยังไม่มีระบบอนุมัติงาน จึงยังไม่มีผลใดๆ กับการวางบิลจริงในตอนนี้</span>
         </span>
       </label>
     </div>
@@ -49,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { useBillingRuleStore } from '@/stores/billingRule'
+import { useBillingRuleStore, MANDATORY_BILLING_STATUSES } from '@/stores/billingRule'
 import { bookingStatusLabel } from '@/utils/bookingStatus'
 import type { BookingStatus } from '@/types'
 
@@ -57,9 +67,12 @@ const billingRuleStore = useBillingRuleStore()
 
 const allStatuses = Object.keys(bookingStatusLabel) as BookingStatus[]
 
-const isStatusAllowed = (status: BookingStatus) => billingRuleStore.rule.allowedJobStatus.includes(status)
+const isMandatory = (status: BookingStatus) => MANDATORY_BILLING_STATUSES.includes(status)
+
+const isStatusAllowed = (status: BookingStatus) => isMandatory(status) || billingRuleStore.rule.allowedJobStatus.includes(status)
 
 const toggleStatus = (status: BookingStatus) => {
+  if (isMandatory(status)) return
   const list = billingRuleStore.rule.allowedJobStatus
   const idx = list.indexOf(status)
   if (idx === -1) list.push(status)

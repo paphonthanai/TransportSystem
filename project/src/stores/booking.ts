@@ -868,7 +868,7 @@ export const useBookingStore = defineStore('booking', () => {
     booking.finalAllowance = booking.finalAllowance ?? booking.allowance
     booking.status = 'DELIVERED'
     booking.completedAt = new Date()
-    // งานที่จบผ่านแอปคนขับต้องรอออฟฟิศตรวจสอบ POD ก่อนเสมอ ห้ามสร้างใบวางบิลจนกว่าจะ APPROVED (ดู reviewPod ด้านล่าง + createBillingFromBookings)
+    // งานที่จบผ่านแอปคนขับต้องรอออฟฟิศตรวจสอบ POD ก่อนเสมอ ห้ามสร้างใบแจ้งหนี้/ใบเสร็จจนกว่าจะ APPROVED (ไม่บล็อกใบวางบิล — ดู reviewPod ด้านล่าง + createTaxInvoiceFromBookings/createReceiptFromBookings)
     booking.podReviewStatus = 'PENDING_REVIEW'
     booking.podReviewNote = undefined
     addLog(`จบงาน ${booking.docNo} (คนขับยืนยันดำเนินการเสร็จสิ้น) — รอออฟฟิศตรวจสอบ POD`, { bookingId: booking.id })
@@ -876,7 +876,7 @@ export const useBookingStore = defineStore('booking', () => {
 
   /**
    * ออฟฟิศตรวจสอบ POD ของงานที่คนขับจบงานผ่านแอป (PENDING_REVIEW) แล้วอนุมัติ/ตีกลับ
-   * ต้อง APPROVED ก่อนถึงจะสร้างใบวางบิลได้ (ดู createBillingFromBookings ใน salesDocuments.ts)
+   * ต้อง APPROVED ก่อนถึงจะสร้างใบแจ้งหนี้/ใบเสร็จได้ (ดู createTaxInvoiceFromBookings/createReceiptFromBookings ใน salesDocuments.ts — ใบวางบิลไม่เช็คเงื่อนไขนี้)
    */
   /** สลับสถานะเช็คตั๋วจาก Booking List โดยตรง — เป็นอิสระจาก BookingStatus/BillingStatus/PodReviewStatus เดิมทั้งหมด
    *  (ดู Booking.ticketChecked ใน types/index.ts) ไม่มี business rule อื่นผูกกับค่านี้ */

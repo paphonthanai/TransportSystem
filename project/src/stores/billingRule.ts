@@ -13,9 +13,14 @@ export interface BillingRule {
   requireApproval: boolean
 }
 
+/** สถานะที่วางบิลได้เสมอ ไม่ว่าตั้งค่า "เงื่อนไขวางบิล" จะเป็นอย่างไร — เป็น Business Rule ตายตัวของระบบวางบิลจริง
+ *  (/billing-notes, ดู salesDocuments.ts) ไม่ให้แอดมินปิดจากหน้าตั้งค่าได้ ตั้งค่าในหน้า "เงื่อนไขวางบิล" มีผลแค่กับ
+ *  สถานะอื่นนอกเหนือจากสองตัวนี้เท่านั้น (เปิดเพิ่มได้ ปิดสองตัวนี้ไม่ได้) */
+export const MANDATORY_BILLING_STATUSES: BookingStatus[] = ['DELIVERED', 'IN_TRANSIT']
+
 function defaultRule(): BillingRule {
   return {
-    allowedJobStatus: ['DELIVERED'],
+    allowedJobStatus: [],
     requirePOD: false,
     requirePrice: false,
     requireApproval: false,
@@ -24,6 +29,10 @@ function defaultRule(): BillingRule {
 
 export const useBillingRuleStore = defineStore('billingRule', () => {
   const { data: rule, loading, error } = useFirestoreSettings<BillingRule>('billingRule', defaultRule)
+
+  /** สถานะนี้วางบิลได้ไหมตามเงื่อนไขที่ตั้งไว้ — รวม MANDATORY_BILLING_STATUSES เข้าไปเสมอโดยไม่สนใจค่าที่ตั้งไว้ */
+  const isStatusBillable = (status: BookingStatus): boolean =>
+    MANDATORY_BILLING_STATUSES.includes(status) || rule.value.allowedJobStatus.includes(status)
 
   const hasAllPods = (booking: Booking) =>
     booking.items.length > 0 && booking.items.every((i) => i.deliveryStatus === 'DELIVERED' && !!i.podImage)
@@ -35,7 +44,7 @@ export const useBillingRuleStore = defineStore('billingRule', () => {
 
   /** เหตุผลที่งานนี้ยังวางบิลไม่ได้ตาม rule ปัจจุบัน — คืนค่า null ถ้าพร้อมวางบิลแล้ว */
   const eligibilityReason = (booking: Booking): string | null => {
-    if (!rule.value.allowedJobStatus.includes(booking.status)) {
+    if (!isStatusBillable(booking.status)) {
       return 'สถานะงานยังไม่เข้าเงื่อนไขที่กำหนดให้วางบิลได้'
     }
     if (rule.value.requirePOD && !hasAllPods(booking)) {
@@ -52,5 +61,5 @@ export const useBillingRuleStore = defineStore('billingRule', () => {
 
   const isEligible = (booking: Booking): boolean => eligibilityReason(booking) === null
 
-  return { rule, loading, error, isEligible, eligibilityReason }
+  return { rule, loading, error, isEligible, eligibilityReason, isStatusBillable, hasAllPods, priceMatches }
 })

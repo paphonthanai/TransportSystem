@@ -47,7 +47,8 @@ export type BillingStatus = 'UNBILLED' | 'IN_BATCH' | 'HOLD' | 'INVOICED' | 'PAI
  * สถานะตรวจสอบ POD ของออฟฟิศ — เป็นอิสระจาก BookingStatus โดยเจตนา (เหมือน BillingStatus) ไม่ผูกกับสถานะงานขนส่ง
  * ตั้งค่าเฉพาะตอนคนขับกด "ดำเนินการเสร็จสิ้น" ผ่านแอปคนขับเท่านั้น (ดู finishDriverJob ใน stores/booking.ts) —
  * งานที่ออฟฟิศเป็นคนจบเอง (completeJob) ไม่ผ่านขั้นตอนนี้ ค่าจะเป็น undefined เสมอ (ถือว่าผ่านแล้วโดยปริยาย)
- * PENDING_REVIEW: รอออฟฟิศตรวจสอบ POD — ห้ามสร้างใบวางบิลจนกว่าจะ APPROVED (ดู createBillingFromBookings)
+ * PENDING_REVIEW: รอออฟฟิศตรวจสอบ POD — ห้ามสร้างใบแจ้งหนี้ (createTaxInvoiceFromBookings) หรือใบเสร็จ/รับชำระเงิน
+ * (createReceiptFromBookings) จนกว่าจะ APPROVED ไม่บล็อกใบวางบิล (createBillingFromBookings ไม่เช็ค POD โดยเจตนา)
  * APPROVED / REJECTED: ออฟฟิศตรวจสอบแล้ว (ดู reviewPod ใน stores/booking.ts)
  */
 export type PodReviewStatus = 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED'

@@ -62,7 +62,12 @@
                 <input type="checkbox" :checked="pickerSelectedIds.has(b.id)" @change="toggleBooking(b.id)" class="w-4 h-4" />
               </td>
               <td class="px-3 py-2 text-muted">{{ idx + 1 }}</td>
-              <td class="px-3 py-2 text-text">{{ bookingDescription(b) }}</td>
+              <td class="px-3 py-2 text-text">
+                {{ bookingDescription(b) }}
+                <span v-if="billingWarning(b)" class="inline-flex items-center gap-0.5 text-amber-600 text-[11px] ml-1" :title="billingWarning(b) || ''">
+                  <span class="material-symbols-rounded text-xs">warning</span>{{ billingWarning(b) }}
+                </span>
+              </td>
               <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ bookingProducts(b) }}</td>
               <td class="px-3 py-2 text-text">{{ b.po || '-' }}</td>
@@ -92,15 +97,25 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useBillingRuleStore } from '@/stores/billingRule'
 import { categoryFeedLabel } from '@/utils/bookingStatus'
 import type { Booking, BookingCategory } from '@/types'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const billingRuleStore = useBillingRuleStore()
 
-/** เงื่อนไขเดียวกับ createBillingFromBookings/createBillingManual (claim ทางตรง) ทุกประการ */
-const isBookingBillable = (b: Booking) => (b.status === 'DELIVERED' || b.status === 'IN_TRANSIT') && !b.billingNoteDocId
+/** เงื่อนไขเดียวกับ createBillingFromBookings/createBillingManual (claim ทางตรง) ทุกประการ — สถานะงานอ่านจาก
+ *  billingRuleStore.isStatusBillable (DELIVERED/IN_TRANSIT บังคับเสมอ + สถานะอื่นที่แอดมินเปิดเพิ่มจาก "เงื่อนไขวางบิล") */
+const isBookingBillable = (b: Booking) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId
+
+/** แจ้งเตือนแบบไม่บล็อก (soft warning) ตามเงื่อนไขเพิ่มเติมที่แอดมินเปิดไว้ — ไม่ตัดงานออกจากรายการที่เลือกได้ */
+const billingWarning = (b: Booking): string | null => {
+  if (billingRuleStore.rule.requirePOD && !billingRuleStore.hasAllPods(b)) return 'POD ยังไม่ครบทุกรายการ'
+  if (billingRuleStore.rule.requirePrice && !billingRuleStore.priceMatches(b)) return 'ราคายังไม่ตรงกับที่ตกลงไว้'
+  return null
+}
 
 const eligibleCustomers = computed(() => [...new Set(bookingStore.bookings.filter(isBookingBillable).map((b) => b.customer))].sort())
 

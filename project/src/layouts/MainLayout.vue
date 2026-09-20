@@ -89,10 +89,14 @@
           <span class="material-symbols-rounded">{{ appStore.darkIcon }}</span>
         </button>
 
-        <!-- Notifications -->
-        <button class="relative w-10 h-10 rounded-lg border border-border bg-surface-2 text-text flex items-center justify-center hover:bg-border transition-all">
+        <!-- Notifications: ยังไม่มีระบบแจ้งเตือนจริงในระบบ (ไม่มี event/state ใดผูกกับปุ่มนี้) — ปิดใช้งานไว้ก่อน
+             ไม่ให้แสดงจุดแดงหลอกว่ามีแจ้งเตือนใหม่ ทั้งที่ไม่มีจริง -->
+        <button
+          disabled
+          title="ฟีเจอร์ในอนาคต — ระบบแจ้งเตือนยังไม่เปิดใช้งาน"
+          class="w-10 h-10 rounded-lg border border-border bg-surface-2 text-text flex items-center justify-center opacity-40 cursor-not-allowed"
+        >
           <span class="material-symbols-rounded">notifications</span>
-          <span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-600"></span>
         </button>
       </header>
 
