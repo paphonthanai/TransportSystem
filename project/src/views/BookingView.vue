@@ -2,6 +2,14 @@
   <div class="space-y-6">
     <!-- Create Button -->
     <div class="flex justify-end gap-2">
+      <button
+        @click="openReconcileModal"
+        class="btn-secondary"
+        title="อัปโหลดไฟล์ Excel ต้นฉบับ จับคู่กับงานที่มีอยู่แล้ว แล้วเติมค่าเที่ยว/เบี้ยเลี้ยง/น้ำมัน/จำนวนตันที่ยังว่าง/เป็น 0 ให้"
+      >
+        <span class="material-symbols-rounded text-base">build</span>
+        ซ่อมค่าเที่ยวงาน Import
+      </button>
       <button @click="openImportModal" class="btn-secondary">
         <span class="material-symbols-rounded text-base">upload_file</span>
         นำเข้า Excel
@@ -626,6 +634,98 @@
       </div>
     </Teleport>
 
+    <!-- ซ่อมค่าเที่ยวงาน Import จากไฟล์ Excel ต้นฉบับ -->
+    <Teleport to="body" v-if="reconcileModalOpen">
+      <div @click="closeReconcileModal" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
+        <div @click.stop class="w-full max-w-4xl bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
+            <div class="font-bold text-text">ซ่อมค่าเที่ยวงาน Import จากไฟล์ Excel</div>
+            <button @click="closeReconcileModal" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+          <div class="px-6 py-5 space-y-4">
+            <div class="text-xs text-muted">
+              อัปโหลดไฟล์ Excel ต้นฉบับที่เคยใช้ import งานเข้าระบบ — ระบบจะจับคู่แต่ละแถวกับงานที่มีอยู่แล้วโดยเทียบ
+              วันที่/ลูกค้า/ทะเบียนรถ/สินค้า/คนขับ (ต้องตรงกันอย่างน้อย 4 จาก 5 อย่าง) แล้วเติมเฉพาะช่องที่ยังว่าง/เป็น 0
+              อยู่เท่านั้น — <strong>ไม่เขียนทับข้อมูลที่มีอยู่แล้ว</strong> ไม่ว่าจะตรงกับไฟล์หรือไม่ก็ตาม
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <label class="btn-secondary cursor-pointer">
+                <span class="material-symbols-rounded text-base">folder_open</span>
+                เลือกไฟล์ Excel
+                <input type="file" accept=".xlsx,.xls" class="hidden" @change="handleReconcileFile" />
+              </label>
+              <span v-if="reconcileFileName" class="text-sm text-muted">{{ reconcileFileName }}</span>
+            </div>
+
+            <div v-if="reconcileRows.length === 0" class="text-sm text-muted text-center py-6">
+              ยังไม่ได้เลือกไฟล์
+            </div>
+
+            <template v-else>
+              <div class="rounded-lg p-3 text-sm flex items-center gap-2" :class="reconcileShipDate ? 'bg-primary/10 text-primary' : 'bg-surface-2 text-muted'">
+                <span class="material-symbols-rounded text-base">event</span>
+                <span v-if="reconcileShipDate">วันที่ลงงานที่จับได้จากหัวไฟล์: <strong>{{ formatShortDate(reconcileShipDate) }}</strong></span>
+                <span v-else>ไม่พบวันที่ส่งงานใน Row แรกของไฟล์ — จะไม่ใช้วันที่เป็นเงื่อนไขจับคู่</span>
+              </div>
+              <div class="bg-surface-2 rounded-lg p-3 text-sm flex items-center gap-4 flex-wrap">
+                <span class="font-semibold text-text">อ่านได้ {{ reconcileRows.length }} แถว</span>
+                <span class="text-primary">จับคู่กับงานที่มีอยู่ได้ {{ reconcileMatchedCount }} แถว</span>
+                <span class="text-green-600">จะซ่อมข้อมูล {{ reconcilePatchableCount }} งาน</span>
+              </div>
+
+              <div class="overflow-x-auto border border-border rounded-lg max-h-72">
+                <table class="w-full text-xs">
+                  <thead class="bg-surface-2 sticky top-0">
+                    <tr>
+                      <th class="text-left px-2 py-1.5">แถว</th>
+                      <th class="text-left px-2 py-1.5">ลูกค้า</th>
+                      <th class="text-left px-2 py-1.5">ทะเบียนรถ</th>
+                      <th class="text-left px-2 py-1.5">สินค้า</th>
+                      <th class="text-left px-2 py-1.5">คนขับ</th>
+                      <th class="text-left px-2 py-1.5">จับคู่กับงาน</th>
+                      <th class="text-left px-2 py-1.5">จะซ่อม</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="preview in reconcilePreview" :key="preview.row.rowNumber" class="border-t border-border">
+                      <td class="px-2 py-1.5">{{ preview.row.rowNumber }}</td>
+                      <td class="px-2 py-1.5">{{ preview.row.customer || '-' }}</td>
+                      <td class="px-2 py-1.5">{{ preview.row.plate || '-' }}</td>
+                      <td class="px-2 py-1.5">{{ preview.row.product || '-' }}</td>
+                      <td class="px-2 py-1.5">{{ preview.row.driverName || '-' }}</td>
+                      <td class="px-2 py-1.5">
+                        <span v-if="preview.booking" class="text-primary font-semibold">{{ preview.booking.docNo }} ({{ preview.matchScore }}/5)</span>
+                        <span v-else class="text-muted">ไม่พบข้อมูลที่ตรงกัน</span>
+                      </td>
+                      <td class="px-2 py-1.5">
+                        <span v-if="preview.patches.length" class="text-green-600">
+                          {{ preview.patches.map((p) => `${p.field}: ${p.from}→${p.to}`).join(', ') }}
+                        </span>
+                        <span v-else class="text-muted">-</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+          <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-border sticky bottom-0 bg-surface">
+            <button @click="closeReconcileModal" class="btn-secondary">ยกเลิก</button>
+            <button
+              @click="confirmReconcile"
+              :disabled="!reconcilePatchableCount || reconciling"
+              class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span class="material-symbols-rounded text-base">save</span>
+              {{ reconciling ? 'กำลังซ่อม...' : `ยืนยันซ่อมข้อมูล (${reconcilePatchableCount} งาน)` }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
   </div>
 </template>
 
@@ -648,6 +748,7 @@ import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStat
 import { parseGpsInput } from '@/utils/gps'
 import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
 import { exportRowsToExcel } from '@/utils/exportExcel'
+import { findReconcileMatches, computeReconcilePatches } from '@/utils/importReconciliation'
 import * as XLSX from 'xlsx'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 
@@ -1265,6 +1366,12 @@ interface ImportRowResult {
   siteContactName: string
   phone: string
   product: string
+  /** แยกจาก product ด้วยเครื่องหมาย "+" (เช่น "23 + 52" → ["23","52"]) — กรณีแถวเดียวมีหลายชนิดสินค้าปนกัน
+   *  ตัวแรกใช้เป็นสินค้าหลักของ Item เดิม ตัวที่เหลือไปเป็น extraProducts (ดู confirmImport) */
+  productCodes: string[]
+  /** สินค้าแต่ละชนิดคู่กับจำนวนตันของตัวเอง (จับคู่ตามตำแหน่งกับคอลัมน์จำนวนตันที่แยกด้วย + เหมือนกัน) — ใช้สร้าง
+   *  extraProducts ตอน confirmImport แทนการเดาแบ่ง qty รวมเท่าๆ กันทุกชนิด */
+  productQtyPairs: { product: string; qty: number }[]
   qty: number
   allowance: number
   price: number
@@ -1291,6 +1398,80 @@ const openImportModal = () => {
 }
 const closeImportModal = () => {
   importModalOpen.value = false
+}
+
+/** ซ่อมค่าเที่ยวงาน Import โดยอ้างอิงไฟล์ Excel ต้นฉบับจริง — คนละเครื่องมือกับ backfillImportedTripFee (ที่ทำงานอัตโนมัติ
+ *  อยู่แล้วเบื้องหลัง อาศัยยอดจากใบสั่งสินค้าที่มีอยู่) เครื่องมือนี้ใช้สำหรับเคสที่ใบสั่งสินค้าเองก็ผิดไปด้วย (เช่น
+ *  จำนวนตันเขียนแบบ "0.40 + 9.60" ทำให้ parse พลาดตั้งแต่ตอน import ครั้งแรก) จึงต้องย้อนไปเทียบกับไฟล์ต้นฉบับจริงแทน
+ *  จับคู่ด้วยการเทียบ วันที่/ลูกค้า/ทะเบียนรถ/สินค้า/คนขับ (ต้องตรงกันอย่างน้อย 4 ใน 5 อย่าง กันจับคู่ผิดงาน) แล้วเติม
+ *  เฉพาะ field ที่ยังว่าง/เป็น 0 อยู่เท่านั้น ไม่เขียนทับข้อมูลที่มีอยู่แล้วไม่ว่ากรณีใด */
+const reconcileModalOpen = ref(false)
+const reconcileFileName = ref('')
+const reconcileRows = ref<ImportRowResult[]>([])
+const reconcileShipDate = ref<Date | undefined>()
+const reconciling = ref(false)
+
+const openReconcileModal = () => {
+  reconcileFileName.value = ''
+  reconcileRows.value = []
+  reconcileShipDate.value = undefined
+  reconcileModalOpen.value = true
+}
+const closeReconcileModal = () => {
+  reconcileModalOpen.value = false
+}
+
+const handleReconcileFile = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  reconcileFileName.value = file.name
+  const buffer = await file.arrayBuffer()
+  const workbook = XLSX.read(buffer, { type: 'array' })
+  const sheet = workbook.Sheets[workbook.SheetNames[0]]
+  const allRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
+  const firstCell = String(allRows[0]?.[0] ?? '').trim()
+  const hasTitleRow = firstCell !== IMPORT_HEADER_MARKER
+  reconcileShipDate.value = hasTitleRow ? parseShipDateFromTitle((allRows[0] || []).join(' ')) : undefined
+  const headerRowIndex = hasTitleRow ? 1 : 0
+  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', range: headerRowIndex })
+  reconcileRows.value = raw.map((r, idx) => parseImportRow(r, idx + headerRowIndex + 2, reconcileShipDate.value)).filter((r) => !r.isEmpty)
+  input.value = ''
+}
+
+const reconcilePreview = computed(() =>
+  reconcileRows.value.map((row) => {
+    const matches = findReconcileMatches(row, bookingStore.bookings, reconcileShipDate.value)
+    const booking = matches[0]?.booking
+    const patches = booking ? computeReconcilePatches(row, booking) : []
+    return { row, booking, matchScore: matches[0]?.score ?? 0, patches }
+  })
+)
+const reconcileMatchedCount = computed(() => reconcilePreview.value.filter((r) => r.booking).length)
+const reconcilePatchableCount = computed(() => reconcilePreview.value.filter((r) => r.patches.length > 0).length)
+
+const confirmReconcile = () => {
+  if (!reconcilePatchableCount.value || reconciling.value) return
+  reconciling.value = true
+  try {
+    const details: string[] = []
+    reconcilePreview.value.forEach(({ booking, patches }) => {
+      if (!booking || patches.length === 0) return
+      const patch: { tripFee?: number; allowance?: number; fuelLiters?: number; itemQty?: number } = {}
+      patches.forEach((p) => {
+        if (p.field === 'ค่าเที่ยว') patch.tripFee = p.to
+        if (p.field === 'เบี้ยเลี้ยง') patch.allowance = p.to
+        if (p.field === 'น้ำมัน (ลิตร)') patch.fuelLiters = p.to
+        if (p.field === 'จำนวนตัน') patch.itemQty = p.to
+      })
+      const applied = bookingStore.applyImportReconciliation(booking.id, patch)
+      if (applied.length) details.push(`- ${booking.docNo}: ${applied.join(', ')}`)
+    })
+    alert(details.length ? `ซ่อมข้อมูลให้ ${details.length} งานแล้ว:\n${details.join('\n')}` : 'ไม่พบงานที่จับคู่ได้และมีข้อมูลว่าง/0 ให้ซ่อม')
+    closeReconcileModal()
+  } finally {
+    reconciling.value = false
+  }
 }
 
 /** คอลัมน์แรกสุดของชีทงานจริงเสมอ (ทั้งไฟล์ที่มี Row หัวเรื่อง+วันที่ และไฟล์ที่ไม่มี) ใช้เช็คใน handleImportFile ว่า
@@ -1387,7 +1568,7 @@ const splitContactPhone = (raw: string): { contactName: string; phone: string } 
   return { contactName, phone }
 }
 
-const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): ImportRowResult => {
+const parseImportRow = (raw: Record<string, unknown>, rowNumber: number, shipDateOverride?: Date): ImportRowResult => {
   const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())
   const num = (v: unknown) => {
     const n = typeof v === 'number' ? v : Number(str(v))
@@ -1408,7 +1589,30 @@ const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): Import
   // (sitePhone) ส่วนข้อความเต็มเก็บไว้ที่ siteContactName ไม่ให้ข้อมูลหาย
   const { contactName: siteContactName, phone } = splitContactPhone(str(raw[IMPORT_HEADERS.phone]))
   const product = str(raw[IMPORT_HEADERS.product])
-  const qty = num(raw[IMPORT_HEADERS.qty])
+  // "23 + 52" หรือ "52 + 13 + 23" หมายถึงหลายชนิดสินค้าปนมาในเที่ยวเดียว ไม่ใช่ชื่อสินค้าชื่อเดียวที่มีเครื่องหมาย +
+  // อยู่ในชื่อ — แยกออกเป็นรายการเดี่ยวๆ ไปแสดงแบบคอลัมน์ (ดู productColumns + JobItem.extraProducts) ยืนยันจากไฟล์จริง
+  // แล้วว่า "จำนวนตัน" ก็แยกด้วย + คู่กันตำแหน่งต่อตำแหน่งเช่นกัน (เช่น "23 + 13" คู่กับ "0.40 + 9.60")
+  const productCodes = product
+    .split('+')
+    .map((p) => p.trim())
+    .filter(Boolean)
+  // เดิม num() พาร์สค่าดิบทั้งก้อนตรงๆ ("0.40 + 9.60") ได้ NaN แล้ว fallback เป็น 0 เงียบๆ — เป็นสาเหตุจริงที่ทำให้
+  // งานที่มีสินค้าหลายชนิดในเที่ยวเดียว (จำนวนตันเขียนแบบ "0.40 + 9.60") ได้ tripFee/ยอดใบสั่งสินค้าเป็น 0 ทั้งที่ราคา
+  // ปูนกรอกมาถูกต้อง (ไม่มีคำเตือนราคาให้สังเกตด้วย) — แก้ด้วยการแยกตามเครื่องหมาย + แล้วรวมยอดจริงแทน (ค่าปกติที่ไม่มี +
+  // เลยก็ยังพาร์สได้ผลลัพธ์เดิมทุกประการ เพราะ split บนสตริงไม่มี + ได้ array 1 ตัวเท่ากับค่าเดิม)
+  const qtyStr = str(raw[IMPORT_HEADERS.qty])
+  const qtyParts = qtyStr
+    .split('+')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n))
+  const qty = qtyParts.length ? Math.round(qtyParts.reduce((sum, n) => sum + n, 0) * 100) / 100 : 0
+  /** จับคู่สินค้ากับจำนวนตันเป็นรายชนิด — ใช้ได้เฉพาะตอนจำนวนชิ้นตรงกันเป๊ะ (กรณีปกติ) ถ้าจำนวนไม่ตรงกัน (ข้อมูลกรอกมา
+   *  ไม่สมบูรณ์ เช่น เขียนโค้ดสินค้าปนเครื่องหมาย "-" จนแยกจำนวนชนิดผิด) ให้ยกยอดรวมทั้งหมดไปไว้ที่สินค้าตัวแรกก่อน
+   *  แทนการเดาแบ่งเอง แล้วเตือนให้ไปตรวจสอบเอง (ดู warnings ด้านล่าง) */
+  const productQtyPairs =
+    productCodes.length > 0 && productCodes.length === qtyParts.length
+      ? productCodes.map((p, i) => ({ product: p, qty: qtyParts[i] }))
+      : productCodes.map((p, i) => ({ product: p, qty: i === 0 ? qty : 0 }))
   const allowance = num(raw[IMPORT_HEADERS.allowance])
   const price = num(raw[IMPORT_HEADERS.price])
   const noteRaw = str(raw[IMPORT_HEADERS.note])
@@ -1430,6 +1634,9 @@ const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): Import
   // เดิมไม่เช็คว่าขาดจำนวนตันเลย — งานที่ Excel ไม่กรอกจำนวนตันมาจะเงียบๆ กลายเป็น 0 ตันโดยไม่มีคำเตือนใดๆ
   // (ต่างจากราคา/เบี้ยเลี้ยงที่เตือนอยู่แล้ว) ทำให้ผู้ใช้งงว่าทำไมน้ำหนัก/ราคาเป็น 0 ทั้งที่สินค้ากรอกมาถูกต้อง
   if (!qty) warnings.push('ต้องกรอกเพิ่ม: จำนวนตัน')
+  if (productCodes.length > 1 && productCodes.length !== qtyParts.length) {
+    warnings.push(`สินค้าหลายชนิดในเที่ยวเดียว (${productCodes.join(' + ')}) แต่จำนวนตันแยกไม่ตรงกับจำนวนชนิดสินค้า — ยกยอดรวมไปไว้ที่ "${productCodes[0]}" ก่อน ตรวจสอบแยกจำนวนตันต่อชนิดเองภายหลัง`)
+  }
 
   const fuelFromExcel = num(raw[IMPORT_HEADERS.fuel])
   const configuredFuelRate = province && district ? fuelRateStore.findRate(province, district)?.liters : undefined
@@ -1451,8 +1658,9 @@ const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): Import
     status = matchedStatusEntry[0] as BookingStatus
   } else if (statusTimeMatch) {
     status = 'DELIVERED'
-    if (importShipDate.value) {
-      deliveredAt = new Date(importShipDate.value)
+    const shipDate = shipDateOverride ?? importShipDate.value
+    if (shipDate) {
+      deliveredAt = new Date(shipDate)
       deliveredAt.setHours(Number(statusTimeMatch[1]), Number(statusTimeMatch[2]), 0, 0)
     } else {
       warnings.push(`ส่งของสำเร็จเวลา ${statusRaw} (ไม่มีวันที่จากไฟล์ ระบุเวลาส่งของให้ไม่ได้ครบ)`)
@@ -1481,6 +1689,8 @@ const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): Import
     siteContactName,
     phone,
     product,
+    productCodes,
+    productQtyPairs,
     qty,
     allowance,
     price,
@@ -1526,11 +1736,14 @@ const importWarningRowCount = computed(() => importableRows.value.filter((r) => 
 const confirmImport = () => {
   if (!importableRows.value.length) return
   importableRows.value.forEach((row) => {
+    // "23 + 52" ฯลฯ = หลายชนิดสินค้าในเที่ยวเดียว — ตัวแรกเป็นสินค้าหลักของ Item เดิม ตัวที่เหลือไปเป็น extraProducts
+    // (แสดงแบบคอลัมน์แยกกัน ดู productColumns) ใช้จำนวนตันแยกตามชนิดจริงจาก productQtyPairs (ไม่ใช่ยอดรวมซ้ำทุกชนิด)
+    const [mainPair, ...otherPairs] = row.productQtyPairs.length ? row.productQtyPairs : [{ product: row.product, qty: row.qty }]
     const items: JobItem[] = [
       {
         id: `item${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
-        product: row.product,
-        qty: row.qty,
+        product: mainPair.product,
+        qty: mainPair.qty,
         unit: 'ตัน',
         siteName: row.siteName,
         province: row.province,
@@ -1539,6 +1752,7 @@ const confirmImport = () => {
         sitePhone: row.phone || undefined,
         deliveryStatus: row.status === 'DELIVERED' ? 'DELIVERED' : undefined,
         deliveredAt: row.deliveredAt,
+        extraProducts: otherPairs.length ? otherPairs.map((p) => ({ product: p.product, qty: p.qty, unit: 'ตัน' })) : undefined,
       },
     ]
     const amount = row.qty * row.price

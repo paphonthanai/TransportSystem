@@ -3,6 +3,15 @@
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xs text-muted">ใบสั่งสินค้า &gt; {{ statusFilterLabel }}</div>
       <div class="flex items-center gap-2">
+        <button
+          @click="repairOldData"
+          :disabled="repairing"
+          class="btn-secondary disabled:opacity-50"
+          title="เรียกซ่อมข้อมูลใบสั่งสินค้า/ความสัมพันธ์กับ Booking รอบเดียวกับที่ทำงานอัตโนมัติอยู่แล้วเบื้องหลังทันที แล้วสรุปผลให้ดู"
+        >
+          <span class="material-symbols-rounded text-base">build</span>
+          {{ repairing ? 'กำลังตรวจสอบ...' : 'ตรวจสอบ/ซ่อมข้อมูลเดิม' }}
+        </button>
         <div class="relative">
         <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
           <span class="material-symbols-rounded text-base">add</span>
@@ -193,6 +202,37 @@ const sourceQuotationNumber = (doc: SalesDocument) => salesDocumentsStore.docume
 const createNew = (fleet: BookingCategory) => {
   createMenuOpen.value = false
   router.push({ name: 'BookingCreate', params: { fleet }, query: { source: 'sales_order' } })
+}
+
+/** เรียกฟังก์ชันซ่อมข้อมูลชุดเดียวกับที่ watch อัตโนมัติใน stores/salesDocuments.ts เรียกอยู่แล้วเบื้องหลังทุกครั้งที่
+ *  จำนวนงาน/เอกสารเปลี่ยน — ปุ่มนี้ไม่ได้ทำอะไรใหม่ที่ auto-repair ยังไม่ทำ แค่เรียกซ้ำทันที (idempotent ปลอดภัย)
+ *  แล้วสรุปผลให้ดูเป็น alert เพื่อให้ผู้ใช้ "เห็น" ว่าข้อมูลเก่าถูกซ่อมแล้วจริง เพราะ auto-repair เบื้องหลังไม่มี UI
+ *  แจ้งผลใดๆ เลย — เฉพาะ 3 อย่างที่เป็นเรื่องใบสั่งสินค้าโดยตรงเท่านั้น (ซ่อมค่าเที่ยวงาน Import ย้ายไปอยู่ที่หน้า
+ *  ตารางขนส่ง/BookingView.vue แทน เพราะข้อมูลที่แก้ (booking.tripFee) กับจุดที่เกิดปัญหา (Import Excel) อยู่ที่นั่น) */
+const repairing = ref(false)
+const repairOldData = () => {
+  repairing.value = true
+  try {
+    const created = salesDocumentsStore.backfillMissingSalesOrders()
+    const vatResult = salesDocumentsStore.repairSalesOrderVat()
+    const billingResult = salesDocumentsStore.syncBillingReadiness()
+
+    const lines: string[] = []
+    lines.push(created > 0 ? `สร้างใบสั่งสินค้าให้งานที่ขาดหายแล้ว ${created} ใบ` : 'ทุกงานมีใบสั่งสินค้าครบแล้ว ไม่มีรายการที่ต้องสร้างเพิ่ม')
+    lines.push(
+      vatResult.repaired.length > 0
+        ? `ซ่อมยอด VAT ของใบสั่งสินค้าเดิมแล้ว ${vatResult.repaired.length} ใบ: ${vatResult.repaired.map((r) => r.number).join(', ')}`
+        : `ไม่พบใบสั่งสินค้าที่ยอด VAT ค้าง (ตรวจแล้ว ${vatResult.checked} ใบ)`
+    )
+    lines.push(
+      billingResult.repaired.length > 0
+        ? `ซ่อมสถานะวางบิลที่ค้างจากระบบเดิมแล้ว ${billingResult.repaired.length} งาน: ${billingResult.repaired.map((r) => r.docNo).join(', ')}`
+        : `ไม่พบสถานะวางบิลที่ค้างจากระบบเดิม (ตรวจแล้ว ${billingResult.checked} งาน)`
+    )
+    alert(lines.join('\n\n'))
+  } finally {
+    repairing.value = false
+  }
 }
 
 /** งานนี้มีเอกสารระบบปัจจุบัน (BILLING/TAX_INVOICE/RECEIPT) อ้างอิงอยู่แล้วหรือยัง — ใช้ซ่อนตัวเลือก "ออกใบวางบิล"

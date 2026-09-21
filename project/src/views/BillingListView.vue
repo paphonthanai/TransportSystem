@@ -47,8 +47,12 @@
               <th class="px-3 py-3 w-8">
                 <input type="checkbox" :checked="allVisibleSelected" @change="toggleSelectAll" />
               </th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">วันที่</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('date')">
+                วันที่<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('date') }}</span>
+              </th>
+              <th class="text-left px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('number')">
+                เลขที่เอกสาร<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('number') }}</span>
+              </th>
               <th class="text-left px-3 py-3 font-semibold text-muted">ชื่อลูกค้า</th>
               <th class="text-right px-3 py-3 font-semibold text-muted">จำนวนงาน</th>
               <th class="text-right px-3 py-3 font-semibold text-muted">ยอดรวมสุทธิ</th>
@@ -180,20 +184,35 @@ const statusLabel: Partial<Record<SalesDocumentStatus, string>> = {
 
 const statusFilterLabel = computed(() => (statusFilter.value === 'all' ? 'แสดงทั้งหมด' : statusLabel[statusFilter.value] || 'แสดงทั้งหมด'))
 
-/** เรียงใหม่สุดขึ้นก่อนเสมอ (createdAt มาก→น้อย) แทนการพึ่งลำดับเดิมจาก store (unshift ตอนสร้างใหม่ในเซสชันเดียวกัน
- *  ทำให้เรียงถูกก็จริง แต่หลัง reload ลำดับจาก Firestore ไม่รับประกันว่าจะเรียงตามนี้เสมอ) */
-const allBilling = computed(() =>
-  salesDocumentsStore.documents.filter((d) => d.type === 'BILLING').sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-)
+const allBilling = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'BILLING'))
 
-const filteredDocs = computed(() =>
-  allBilling.value.filter((d) => {
+/** เรียงตามคอลัมน์ที่คลิก (วันที่/เลขที่เอกสาร) — ค่าเริ่มต้นวันที่ใหม่สุดก่อนเสมอ (ไม่พึ่งลำดับเดิมจาก store ที่ไม่รับประกัน
+ *  ลำดับหลัง reload) เหมือน BillingBookingSelectView.vue */
+type SortKey = 'date' | 'number'
+const sortKey = ref<SortKey>('date')
+const sortDir = ref<'asc' | 'desc'>('desc')
+const toggleSort = (key: SortKey) => {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDir.value = 'desc'
+  }
+}
+const sortIcon = (key: SortKey) => (sortKey.value !== key ? 'unfold_more' : sortDir.value === 'asc' ? 'arrow_upward' : 'arrow_downward')
+
+const filteredDocs = computed(() => {
+  const list = allBilling.value.filter((d) => {
     if (statusFilter.value !== 'all' && d.status !== statusFilter.value) return false
     const q = search.value.trim().toLowerCase()
     if (!q) return true
     return d.customer.toLowerCase().includes(q) || d.number.toLowerCase().includes(q)
   })
-)
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  return [...list].sort((a, b) =>
+    sortKey.value === 'number' ? a.number.localeCompare(b.number) * dir : (new Date(a.date).getTime() - new Date(b.date).getTime()) * dir
+  )
+})
 
 const page = ref(1)
 const perPage = ref(20)

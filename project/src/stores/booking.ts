@@ -328,6 +328,35 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
+   * ใช้เฉพาะเครื่องมือซ่อมค่าเที่ยวงาน Import จากไฟล์ Excel ต้นฉบับ (ดู BookingView.vue "ซ่อมค่าเที่ยวงาน Import")
+   * เติมเฉพาะ field ที่ยังว่าง/เป็น 0 อยู่เท่านั้น — ไม่เขียนทับข้อมูลที่มีอยู่แล้วไม่ว่ากรณีใด (กันเผลอเขียนทับข้อมูล
+   * ที่ถูกต้องอยู่แล้วด้วยค่าจากไฟล์ที่อาจผิด/มาจากงานคนละตัวที่จับคู่พลาด) คืนรายชื่อ field ที่ถูกเติมจริง
+   */
+  function applyImportReconciliation(id: string, patch: { tripFee?: number; allowance?: number; fuelLiters?: number; itemQty?: number }): string[] {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return []
+    const applied: string[] = []
+    if (patch.tripFee !== undefined && (booking.tripFee || 0) === 0 && patch.tripFee > 0) {
+      booking.tripFee = patch.tripFee
+      applied.push('ค่าเที่ยว')
+    }
+    if (patch.allowance !== undefined && !booking.allowance && patch.allowance > 0) {
+      booking.allowance = patch.allowance
+      applied.push('เบี้ยเลี้ยง')
+    }
+    if (patch.fuelLiters !== undefined && !booking.fuelLiters && patch.fuelLiters > 0) {
+      booking.fuelLiters = patch.fuelLiters
+      applied.push('น้ำมัน')
+    }
+    if (patch.itemQty !== undefined && booking.items[0] && !booking.items[0].qty && patch.itemQty > 0) {
+      booking.items[0].qty = patch.itemQty
+      applied.push('จำนวนตัน')
+    }
+    if (applied.length) addLog(`ซ่อมข้อมูลจากไฟล์ Excel ต้นฉบับที่ ${booking.docNo}: ${applied.join(', ')}`, { bookingId: booking.id })
+    return applied
+  }
+
+  /**
    * แก้ไขข้อมูลปฏิบัติงาน (น้ำมัน/ข้อมูลหน้างาน) ได้ทุกสถานะงาน
    * เพราะบางครั้งข้อมูลน้ำมันหรือเบอร์โทร/พิกัดหน้างานมาทีหลัง ไม่ต้องรอให้งานอยู่สถานะใดสถานะหนึ่ง
    */
@@ -1107,6 +1136,7 @@ export const useBookingStore = defineStore('booking', () => {
     deleteBooking,
     hardDeleteBooking,
     updateBookingPrice,
+    applyImportReconciliation,
     updateBookingOps,
     updateBookingFull,
     switchPricingMode,

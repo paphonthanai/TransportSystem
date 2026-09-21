@@ -1,0 +1,111 @@
+import { describe, it, expect } from 'vitest'
+import { findReconcileMatches, computeReconcilePatches, RECONCILE_MIN_MATCH, type ReconcileRowInput } from './importReconciliation'
+import { makeBooking, makeJobItem } from '../../tests/fixtures/booking'
+
+/** ข้อมูลจริงจากไฟล์ Excel ต้นฉบับที่ PM ใช้ import (สเปรดชีตไม่มีชื่อ (3).xlsx, Row 3) — ยืนยันแล้วว่านี่คือแถวจริงที่
+ *  ทำให้เกิดบั๊ก tripFee=0 เพราะคอลัมน์ "จำนวนตัน" เขียนเป็น "0.40 + 9.60" (แยกด้วย +) ทำให้ Number() เดิม parse ไม่ได้
+ *  แล้ว fallback เป็น 0 เงียบๆ ทั้งที่ "ราคาปูน" (3300) กรอกมาถูกต้อง */
+const row3FromRealFile: ReconcileRowInput = {
+  customer: 'FSM',
+  plate: '73-1124',
+  productCodes: ['23', '13'],
+  productQtyPairs: [
+    { product: '23', qty: 0.4 },
+    { product: '13', qty: 9.6 },
+  ],
+  driverName: 'หนึ่งใหม่',
+  qty: 10,
+  price: 3300,
+  allowance: 750,
+  fuelLiters: 38,
+}
+
+const shipDate = new Date(2026, 8, 22) // 22-09-69 ตามหัวไฟล์จริง
+
+describe('findReconcileMatches — จับคู่กับไฟล์จริงที่เคย import พลาด', () => {
+  it('จับคู่ได้เมื่อวันที่/ลูกค้า/ทะเบียนรถ/สินค้าหลัก/คนขับ ตรงกันครบ 5/5', () => {
+    const booking = makeBooking({
+      customer: 'FSM',
+      plate: '73-1124',
+      driverName: 'หนึ่งใหม่',
+      loadingDate: shipDate,
+      tripFee: 0,
+      allowance: 0,
+      items: [makeJobItem({ product: '23', qty: 0 })],
+    })
+    const matches = findReconcileMatches(row3FromRealFile, [booking], shipDate)
+    expect(matches).toHaveLength(1)
+    expect(matches[0].score).toBe(5)
+  })
+
+  it('ไม่จับคู่ (คะแนนต่ำกว่าเกณฑ์) เมื่อตรงกันแค่ลูกค้า+สินค้า แต่คนละวัน/คนละทะเบียนรถ/คนขับคนละคน', () => {
+    const unrelatedBooking = makeBooking({
+      customer: 'FSM',
+      plate: '99-9999',
+      driverName: 'คนอื่น',
+      loadingDate: new Date(2026, 8, 25),
+      items: [makeJobItem({ product: '23', qty: 5 })],
+    })
+    const matches = findReconcileMatches(row3FromRealFile, [unrelatedBooking], shipDate)
+    expect(matches).toHaveLength(0)
+  })
+
+  it('เกณฑ์ขั้นต่ำคือ 4 จาก 5 อย่าง — ตรงแค่ 3 อย่างไม่ถือว่าจับคู่ได้ (กันจับคู่ผิดงาน)', () => {
+    const booking = makeBooking({
+      customer: 'FSM',
+      plate: '73-1124',
+      driverName: 'คนละคน',
+      loadingDate: new Date(2026, 8, 1),
+      items: [makeJobItem({ product: '99', qty: 0 })],
+    })
+    const matches = findReconcileMatches(row3FromRealFile, [booking], shipDate)
+    expect(matches).toHaveLength(0)
+    expect(RECONCILE_MIN_MATCH).toBe(4)
+  })
+})
+
+describe('computeReconcilePatches — ใช้ยอดที่ parse ถูกต้องจากไฟล์ ไม่ใช่ค่า 0 ที่ค้างอยู่ในระบบจากบั๊กเดิม', () => {
+  it('เติมค่าเที่ยว/เบี้ยเลี้ยง/น้ำมัน/จำนวนตันที่ยังว่าง/0 อยู่ ด้วยค่าจากไฟล์ (10 ตัน x 3300 = 33000)', () => {
+    const booking = makeBooking({
+      tripFee: 0,
+      allowance: 0,
+      fuelLiters: undefined,
+      items: [makeJobItem({ product: '23', qty: 0 })],
+    })
+    const patches = computeReconcilePatches(row3FromRealFile, booking)
+    expect(patches).toEqual(
+      expect.arrayContaining([
+        { field: 'ค่าเที่ยว', from: 0, to: 33000 },
+        { field: 'เบี้ยเลี้ยง', from: 0, to: 750 },
+        { field: 'น้ำมัน (ลิตร)', from: 0, to: 38 },
+        { field: 'จำนวนตัน', from: 0, to: 0.4 },
+      ])
+    )
+  })
+
+  it('ไม่แตะ field ที่มีค่าอยู่แล้ว แม้จะไม่ตรงกับไฟล์ก็ตาม (กันเขียนทับข้อมูลที่ถูกต้องอยู่แล้ว)', () => {
+    const booking = makeBooking({
+      tripFee: 99999,
+      allowance: 500,
+      fuelLiters: 20,
+      items: [makeJobItem({ product: '23', qty: 5 })],
+    })
+    const patches = computeReconcilePatches(row3FromRealFile, booking)
+    expect(patches).toHaveLength(0)
+  })
+
+  it('เติมเฉพาะ field ที่ว่าง โดยไม่แตะ field อื่นที่มีค่าอยู่แล้วในงานเดียวกัน', () => {
+    const booking = makeBooking({
+      tripFee: 0,
+      allowance: 750, // มีอยู่แล้ว ไม่ควรถูกแตะ
+      fuelLiters: undefined,
+      items: [makeJobItem({ product: '23', qty: 0 })],
+    })
+    const patches = computeReconcilePatches(row3FromRealFile, booking)
+    const fields = patches.map((p) => p.field)
+    expect(fields).toContain('ค่าเที่ยว')
+    expect(fields).toContain('น้ำมัน (ลิตร)')
+    expect(fields).toContain('จำนวนตัน')
+    expect(fields).not.toContain('เบี้ยเลี้ยง')
+  })
+})
