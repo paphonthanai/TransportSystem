@@ -1284,6 +1284,33 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return { checked: documents.value.filter((d) => d.type === 'BILLING' || d.type === 'TAX_INVOICE' || d.type === 'RECEIPT').length, repaired }
   }
 
+  /**
+   * ซ่อมย้อนหลัง: งานที่นำเข้าจาก Excel Import เคยถูก set booking.tripFee/agreedPrice เป็น 0 ตายตัวเสมอ
+   * (บั๊กที่แก้แล้วใน BookingView.vue confirmImport — ราคาปูนจาก Excel เดิมถูกส่งไปคำนวณแค่ยอดใบสั่งสินค้าเท่านั้น
+   * ไม่เคยย้อนกลับมาที่ tripFee) ทำให้ยอดวางบิล/รายได้คนขับ-รถร่วมของงานเหล่านั้นเป็น 0 ทั้งที่ใบสั่งสินค้ามียอดถูกต้อง
+   * ฟังก์ชันนี้ซ่อมงานที่ import ไปแล้วก่อนหน้านี้ โดยเทียบเฉพาะงานที่ tripFee ยังเป็น 0 แต่ใบสั่งสินค้า (SALES_ORDER)
+   * ที่ผูกอยู่มียอด (amount) มากกว่า 0 — ไม่แตะงานที่ tripFee เป็น 0 เพราะยังไม่เคยกรอกราคาจริง (งานพวกนั้นใบสั่งสินค้า
+   * จะมียอด 0 เท่ากันเสมอ ไม่เข้าเงื่อนไขนี้) ทำงานซ้ำได้อย่างปลอดภัย (idempotent)
+   */
+  function backfillImportedTripFee(): { checked: number; repaired: { bookingId: string; docNo: string; from: number; to: number }[] } {
+    const bookingStore = useBookingStore()
+    const repaired: { bookingId: string; docNo: string; from: number; to: number }[] = []
+    let checked = 0
+    bookingStore.bookings.forEach((b) => {
+      if (!b.sourceDocumentId) return
+      const salesOrder = documents.value.find((d) => d.id === b.sourceDocumentId && d.type === 'SALES_ORDER')
+      if (!salesOrder) return
+      checked++
+      if ((b.tripFee || 0) === 0 && salesOrder.amount > 0) {
+        const from = b.tripFee || 0
+        b.tripFee = salesOrder.amount
+        repaired.push({ bookingId: b.id, docNo: b.docNo, from, to: salesOrder.amount })
+      }
+    })
+    if (repaired.length) bookingStore.addLog(`ซ่อมค่าเที่ยวงานที่ import จาก Excel (tripFee ว่างแต่ใบสั่งงานขนส่งมียอด) ${repaired.length} รายการ`)
+    return { checked, repaired }
+  }
+
   /** ลบระเบียนใบสั่งสินค้าออกจากรายการ (ไม่กระทบ Booking ที่ผูกอยู่ — งานขนส่งยังอยู่ตามปกติ) */
   function deleteSalesOrder(id: string) {
     const doc = documents.value.find((d) => d.id === id && d.type === 'SALES_ORDER')
@@ -2979,6 +3006,26 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     })
   }
 
+  /** เดิมต้องกดปุ่ม "ซิงก์ใบสั่งสินค้าที่ขาดหาย"/"ซิงก์ความสัมพันธ์ Booking"/"ซ่อมค่าเที่ยวงาน Import" เองที่หน้าใบสั่งสินค้า
+   *  — เปลี่ยนเป็นซ่อมอัตโนมัติทุกครั้งที่จำนวนงานขนส่ง/เอกสารเปลี่ยน (เช่น สร้างงานใหม่/import Excel/ออกเอกสารเพิ่ม)
+   *  แทน ไม่ต้องรอผู้ใช้เข้าหน้านั้นแล้วกดเอง เช็คด้วยความยาว array (ไม่ deep watch ทั้งก้อน) เพราะพอสำหรับดักจังหวะ
+   *  "มีงาน/เอกสารเพิ่มขึ้น" โดยไม่ยิงถี่เกินไปตอนแก้ไข field ย่อยของ document เดิม — ฟังก์ชันที่เรียกทั้งหมด idempotent
+   *  อยู่แล้ว ไม่มีผลข้างเคียง ข้าม (return) ตอน bookings ยังโหลดไม่เสร็จ (ว่างเปล่า) กันซ่อมผิดพลาดเหมือนกับที่
+   *  backfillBookingItemDescriptions ทำไว้แล้วด้านบน ต้องประกาศไว้ท้ายสุดของ setup นี้เสมอ (หลัง const/function ทุกตัว
+   *  ที่ใช้ เช่น genId) ไม่งั้น immediate:true จะยิงก่อนตัวแปรที่อ้างถึงถูกประกาศจริง (TDZ) */
+  const bookingStoreForAutoRepair = useBookingStore()
+  watch(
+    [() => bookingStoreForAutoRepair.bookings.length, () => documents.value.length],
+    () => {
+      if (bookingStoreForAutoRepair.bookings.length === 0) return
+      backfillMissingSalesOrders()
+      repairSalesOrderVat()
+      syncBillingReadiness()
+      backfillImportedTripFee()
+    },
+    { immediate: true }
+  )
+
   return {
     documents,
     items,
@@ -3006,6 +3053,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     repairReceiptReferences,
     syncBillingReadiness,
     backfillDocumentClaimFields,
+    backfillImportedTripFee,
     deleteSalesOrder,
     createBillingFromBookings,
     createTaxInvoiceFromBookings,

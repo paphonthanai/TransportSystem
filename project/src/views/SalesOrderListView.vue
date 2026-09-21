@@ -3,22 +3,6 @@
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xs text-muted">ใบสั่งสินค้า &gt; {{ statusFilterLabel }}</div>
       <div class="flex items-center gap-2">
-        <button
-          @click="syncMissingSalesOrders"
-          class="btn-secondary"
-          title="สร้างใบสั่งสินค้าให้กับงานขนส่งที่ยังไม่มีใบสั่งสินค้าผูกอยู่ + ซ่อมยอด VAT ของใบสั่งสินค้าเดิมที่สร้างไว้ก่อนระบบรองรับ VAT ระดับเอกสาร"
-        >
-          <span class="material-symbols-rounded text-base">sync</span>
-          ซิงก์ใบสั่งสินค้าที่ขาดหาย
-        </button>
-        <button
-          @click="syncBookingRelationship"
-          class="btn-secondary"
-          title="ซ่อมความสัมพันธ์ Booking ↔ ใบสั่งสินค้า — ซ่อมสถานะวางบิลของงานที่ค้างจากระบบเดิม ให้กลับมากดออกใบวางบิลได้ตามปกติ"
-        >
-          <span class="material-symbols-rounded text-base">sync_alt</span>
-          ซิงก์ความสัมพันธ์ Booking
-        </button>
         <div class="relative">
         <button @click="createMenuOpen = !createMenuOpen" class="btn-primary">
           <span class="material-symbols-rounded text-base">add</span>
@@ -80,7 +64,9 @@
                 </RouterLink>
                 <span v-else>-</span>
               </td>
-              <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(row.doc.amount + (row.doc.vatAmount || 0)) }}</td>
+              <td class="px-3 py-3 text-right font-semibold" :class="row.doc.amount > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
+                {{ row.doc.amount > 0 ? formatBaht(row.doc.amount + (row.doc.vatAmount || 0)) : PRICE_NOT_SET_LABEL }}
+              </td>
               <td class="px-3 py-3">
                 <select
                   v-if="row.booking"
@@ -165,6 +151,7 @@ import { useSalesDocumentsStore, type SalesDocument } from '@/stores/salesDocume
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
+import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import type { Booking, BookingCategory, BookingStatus } from '@/types'
 
 const router = useRouter()
@@ -206,35 +193,6 @@ const sourceQuotationNumber = (doc: SalesDocument) => salesDocumentsStore.docume
 const createNew = (fleet: BookingCategory) => {
   createMenuOpen.value = false
   router.push({ name: 'BookingCreate', params: { fleet }, query: { source: 'sales_order' } })
-}
-
-/** ปุ่มเดียวทำ 2 อย่าง: (1) สร้างใบสั่งสินค้าให้งานที่ยังไม่มี (2) ซ่อมยอด VAT ของใบสั่งสินค้าเดิมที่ไม่เคยคำนวณ
- *  VAT ระดับเอกสารเลย — แยกฟังก์ชันกันในสโตร์ (backfillMissingSalesOrders / repairSalesOrderVat) แต่รวมปุ่มเดียว
- *  ในหน้านี้เพราะเป้าหมายเดียวกันคือ "ทำให้ใบสั่งสินค้าถูกต้อง/ครบถ้วน" ไม่ใช่การสร้างเอกสารขั้นถัดไปแต่อย่างใด */
-const syncMissingSalesOrders = () => {
-  const created = salesDocumentsStore.backfillMissingSalesOrders()
-  const vatResult = salesDocumentsStore.repairSalesOrderVat()
-  const lines: string[] = []
-  lines.push(created > 0 ? `สร้างใบสั่งสินค้าให้งานที่ขาดหายแล้ว ${created} ใบ` : 'ทุกงานมีใบสั่งสินค้าครบแล้ว ไม่มีรายการที่ต้องสร้างเพิ่ม')
-  if (vatResult.repaired.length > 0) {
-    lines.push(`ซ่อมยอด VAT ของใบสั่งสินค้าเดิมแล้ว ${vatResult.repaired.length} ใบ: ${vatResult.repaired.map((r) => r.number).join(', ')}`)
-  } else {
-    lines.push('ไม่พบใบสั่งสินค้าที่ยอด VAT ค้าง (ตรวจแล้ว ' + vatResult.checked + ' ใบ)')
-  }
-  alert(lines.join('\n'))
-}
-
-/** ซ่อมความสัมพันธ์ Booking ↔ ใบสั่งสินค้า โดยตรง — เดิมฟังก์ชันนี้ (syncBillingReadiness) ถูกย้ายไปอยู่แค่หน้า
- * ใบวางบิล/ใบแจ้งหนี้/ใบเสร็จ แต่ผู้ใช้ต้องมาที่หน้านี้ก่อนเพื่อกด "ออกใบวางบิล" อยู่ดี จึงต้องมี Sync ที่จุดนี้ด้วย
- * ไม่งั้นต้องสลับหน้าไปมาเพื่อซ่อมข้อมูลก่อนถึงจะกลับมากดปุ่มในหน้านี้ได้จริง */
-const syncBookingRelationship = () => {
-  const result = salesDocumentsStore.syncBillingReadiness()
-  if (result.repaired.length === 0) {
-    alert(`ตรวจสอบแล้ว ${result.checked} งาน ไม่พบรายการที่ค้างสถานะวางบิลจากระบบเดิม`)
-    return
-  }
-  const list = result.repaired.map((r) => `- ${r.docNo} (เดิม: ${r.previousBillingStatus})`).join('\n')
-  alert(`ซ่อมสถานะวางบิลให้ ${result.repaired.length} งาน สามารถกด "ออกใบวางบิล" ได้แล้ว:\n${list}`)
 }
 
 /** งานนี้มีเอกสารระบบปัจจุบัน (BILLING/TAX_INVOICE/RECEIPT) อ้างอิงอยู่แล้วหรือยัง — ใช้ซ่อนตัวเลือก "ออกใบวางบิล"

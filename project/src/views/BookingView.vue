@@ -117,9 +117,6 @@
               <td class="px-4 py-3">
                 <div class="flex flex-wrap items-center gap-1">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
-                  <span v-if="booking.status === 'ASSIGNED'" class="text-[11px] text-muted">
-                    เหลือ {{ formatCountdown(remainingAcceptSeconds(booking)) }}
-                  </span>
                 </div>
               </td>
               <td class="px-4 py-3">
@@ -633,7 +630,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
@@ -703,24 +700,6 @@ const isCements = computed(() => props.fleet === 'cements')
 const productOptionsForFleet = computed(() => inventoryStore.products.filter((p) => p.category === props.fleet))
 
 const jobTypeOptions: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
-
-// --- นาฬิกาสำหรับนับถอยหลังเวลาที่เหลือให้คนขับตอบรับงาน (ASSIGNED) ---
-const now = ref(Date.now())
-let clockTimer: number
-onMounted(() => {
-  clockTimer = window.setInterval(() => {
-    now.value = Date.now()
-  }, 1000)
-})
-onUnmounted(() => clearInterval(clockTimer))
-
-const ACCEPT_TIMEOUT_MS = 15 * 60 * 1000
-const remainingAcceptSeconds = (booking: Booking) => {
-  if (!booking.dispatchedAt) return 0
-  const deadline = new Date(booking.dispatchedAt).getTime() + ACCEPT_TIMEOUT_MS
-  return Math.max(0, Math.floor((deadline - now.value) / 1000))
-}
-const formatCountdown = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
 
 const driverOptions = computed(() =>
   driversStore.drivers.filter((d) => d.employmentStatus === 'active').map((d) => `${d.firstName} ${d.lastName}`)
@@ -1448,13 +1427,18 @@ const parseImportRow = (raw: Record<string, unknown>, rowNumber: number): Import
 
   if (!allowance) warnings.push('ต้องกรอกเพิ่ม: เบี้ยเลี้ยง')
   if (!price) warnings.push('ต้องกรอกเพิ่ม: ราคาปูน')
+  // เดิมไม่เช็คว่าขาดจำนวนตันเลย — งานที่ Excel ไม่กรอกจำนวนตันมาจะเงียบๆ กลายเป็น 0 ตันโดยไม่มีคำเตือนใดๆ
+  // (ต่างจากราคา/เบี้ยเลี้ยงที่เตือนอยู่แล้ว) ทำให้ผู้ใช้งงว่าทำไมน้ำหนัก/ราคาเป็น 0 ทั้งที่สินค้ากรอกมาถูกต้อง
+  if (!qty) warnings.push('ต้องกรอกเพิ่ม: จำนวนตัน')
 
-  let fuelLiters = num(raw[IMPORT_HEADERS.fuel])
-  if (!fuelLiters && province && district) {
-    fuelLiters = fuelRateStore.findRate(province, district)?.liters || 0
-  }
+  const fuelFromExcel = num(raw[IMPORT_HEADERS.fuel])
+  const configuredFuelRate = province && district ? fuelRateStore.findRate(province, district)?.liters : undefined
+  let fuelLiters = fuelFromExcel || configuredFuelRate || 0
   if (!fuelLiters || !province || !district) {
     warnings.push('ตรวจสอบข้อมูลน้ำมัน/ปลายทาง')
+  } else if (fuelFromExcel && configuredFuelRate && fuelFromExcel !== configuredFuelRate) {
+    // น้ำมันจาก Excel ไม่ตรงกับเรทที่ตั้งค่าไว้สำหรับปลายทางนี้ — ยังใช้ค่าจาก Excel ตามเดิม (ไม่ใช้เรทตั้งค่าทับ) แค่เตือนให้ตรวจสอบ
+    warnings.push(`น้ำมันจาก Excel (${fuelFromExcel} ล.) ไม่ตรงกับเรทที่ตั้งไว้สำหรับ ${district}/${province} (${configuredFuelRate} ล.)`)
   }
 
   // "สถานะขนส่งสินค้า" บางไฟล์กรอกเป็นเวลาที่ส่งของเสร็จ (เช่น "07:14") แทนสถานะข้อความ — ถือว่าจบงานแล้ว (DELIVERED)
@@ -1557,6 +1541,7 @@ const confirmImport = () => {
         deliveredAt: row.deliveredAt,
       },
     ]
+    const amount = row.qty * row.price
     const newBooking = bookingStore.addBooking({
       category: props.fleet,
       docNo: bookingStore.nextDocNo(props.fleet),
@@ -1565,7 +1550,11 @@ const confirmImport = () => {
       customer: row.customer,
       items,
       allowance: row.allowance,
-      tripFee: 0,
+      /** เดิม hardcode เป็น 0 เสมอ ทำให้ booking.tripFee ว่างสำหรับงาน import ทุกแถวไม่ว่า Excel จะมีราคาปูนมาหรือไม่ —
+       *  กระทบยอดวางบิล/รายได้คนขับ-รถร่วมจริงเพราะจุดเหล่านั้นอ่านจาก tripFee ตรงๆ (ไม่ได้อ่านจากรายการในใบสั่งสินค้า)
+       *  ต้องเซ็ตให้ตรงกับ amount เดียวกับที่ใช้สร้างใบสั่งสินค้าด้านล่างเสมอ ส่วน agreedPrice ไม่ใช่ field ที่ import
+       *  รองรับตั้งแต่แรก คงไว้ที่ 0 เหมือนเดิม (ไม่ใช่ตัวที่ยอดวางบิล/รายได้อ่านอยู่ดี) */
+      tripFee: amount,
       agreedPrice: 0,
       vatRate: documentSettingsStore.settings.vatRate,
       pricingMode: 'SINGLE_DESTINATION',
@@ -1581,7 +1570,6 @@ const confirmImport = () => {
     })
     newBooking.status = row.status
     if (row.status === 'DELIVERED' && row.deliveredAt) newBooking.completedAt = row.deliveredAt
-    const amount = row.qty * row.price
     const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
       bookingId: newBooking.id,
       customer: newBooking.customer,

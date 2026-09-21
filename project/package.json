@@ -20,6 +20,8 @@
     "chart.js": "^4.4.1",
     "date-fns": "^3.0.0",
     "firebase": "^10.7.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "pinia": "^2.1.6",
     "vue": "^3.4.0",
     "vue-chartjs": "^5.3.1",

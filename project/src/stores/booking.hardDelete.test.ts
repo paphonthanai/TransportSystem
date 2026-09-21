@@ -54,7 +54,10 @@ describe('hardDeleteBooking — permission', () => {
 })
 
 describe('hardDeleteBooking — no reference', () => {
-  it('deletes the booking document for real when nothing references it', async () => {
+  /** salesDocumentsStore ซ่อมใบสั่งสินค้าที่ขาดหายให้อัตโนมัติทันทีที่ store ถูกใช้งาน (ดู watch ท้าย
+   *  stores/salesDocuments.ts) ดังนั้นงานที่ยังไม่มีใบสั่งสินค้าเลยจะมีใบสั่งสินค้าถูกสร้างให้ก่อนถูกลบเสมอ —
+   *  deletedDocumentCount จึงเป็น 1 (ใบสั่งสินค้าที่เพิ่งซ่อมให้) ไม่ใช่ 0 อีกต่อไป */
+  it('deletes the booking document for real, including the auto-repaired sales order', async () => {
     loginAs('ADMIN')
     const bookingStore = useBookingStore()
     const booking = makeBooking({ items: [] })
@@ -63,7 +66,7 @@ describe('hardDeleteBooking — no reference', () => {
     const result = await bookingStore.hardDeleteBooking(booking.id)
 
     expect(result.ok).toBe(true)
-    expect(result.deletedDocumentCount).toBe(0)
+    expect(result.deletedDocumentCount).toBe(1)
     expect(bookingStore.bookings).toHaveLength(0)
   })
 })

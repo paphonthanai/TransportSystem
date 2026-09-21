@@ -7,6 +7,19 @@
              (syncMissingSalesOrders/syncBillingReadiness/syncInvoiceReferences) ยังอยู่ครบ ไม่ได้ลบ ไม่มี auto-trigger ที่ไหน
              เรียกเฉพาะตอนกดปุ่มเหล่านี้เท่านั้น (ตรวจแล้วก่อนซ่อน) -->
         <!-- ยกเลิกการสร้างเอกสารแบบ Dropdown ตาม requirement — ไปหน้าเลือกประเภทแบบการ์ด (TaxInvoiceTypeSelectView.vue) แทน -->
+        <label v-if="selectedIds.length > 0 && !exporting" class="flex items-center gap-1.5 text-xs text-muted">
+          <input type="checkbox" v-model="mergeIntoOneFile" />
+          รวมเป็นไฟล์เดียว
+        </label>
+        <button
+          v-if="selectedIds.length > 0"
+          @click="downloadSelectedPdf"
+          :disabled="exporting"
+          class="btn-secondary disabled:opacity-50"
+        >
+          <span class="material-symbols-rounded text-base">picture_as_pdf</span>
+          {{ exporting ? `กำลังสร้าง PDF (${exportProgress.done}/${exportProgress.total})...` : `ดาวน์โหลด PDF (${selectedIds.length})` }}
+        </button>
         <button @click="router.push('/tax-invoices/type-select')" class="btn-primary">
           <span class="material-symbols-rounded text-base">add</span>
           สร้างใบแจ้งหนี้
@@ -32,6 +45,9 @@
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border sticky top-0 z-[1]">
             <tr>
+              <th class="px-3 py-3 w-8">
+                <input type="checkbox" :checked="allVisibleSelected" @change="toggleSelectAll" />
+              </th>
               <th class="text-left px-3 py-3 font-semibold text-muted">วันที่</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">ชื่อลูกค้า</th>
@@ -44,6 +60,13 @@
           </thead>
           <tbody>
             <tr v-for="doc in pagedDocs" :key="doc.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+              <td class="px-3 py-3">
+                <input
+                  type="checkbox"
+                  :checked="!!selected[doc.id]"
+                  @change="(e) => (selected[doc.id] = (e.target as HTMLInputElement).checked)"
+                />
+              </td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ formatDate(doc.date) }}</td>
               <td class="px-3 py-3">
                 <div class="flex items-center gap-2 font-bold text-primary">
@@ -56,7 +79,9 @@
               </td>
               <td class="px-3 py-3 font-semibold text-text">{{ doc.customer }}</td>
               <td class="px-3 py-3 text-muted">{{ formatDate(doc.dueDate) }}</td>
-              <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(doc.amount + (doc.vatAmount || 0)) }}</td>
+              <td class="px-3 py-3 text-right font-semibold" :class="doc.amount > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
+                {{ doc.amount > 0 ? formatBaht(doc.amount + (doc.vatAmount || 0)) : PRICE_NOT_SET_LABEL }}
+              </td>
               <td class="px-3 py-3">
                 <select
                   :value="doc.status"
@@ -100,7 +125,7 @@
               </td>
             </tr>
             <tr v-if="pagedDocs.length === 0">
-              <td colspan="8" class="px-3 py-8 text-center text-muted">ยังไม่มีเอกสาร</td>
+              <td colspan="9" class="px-3 py-8 text-center text-muted">ยังไม่มีเอกสาร</td>
             </tr>
           </tbody>
         </table>
@@ -140,6 +165,8 @@ import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } 
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
 import { salesDocumentStatusClass, salesDocumentStatusLabel, salesDocumentTypeLabel } from '@/utils/salesDocumentStatus'
+import { exportDocumentsAsPdf } from '@/utils/exportDocumentsPdf'
+import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 
 const router = useRouter()
@@ -207,7 +234,10 @@ const vClickOutside = {
   },
 }
 
-const allInvoices = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE'))
+/** เรียงใหม่สุดขึ้นก่อนเสมอ (createdAt มาก→น้อย) — ดูเหตุผลเดียวกับ allBilling ใน BillingListView.vue */
+const allInvoices = computed(() =>
+  salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE').sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+)
 
 const filteredDocs = computed(() =>
   allInvoices.value.filter((d) => {
@@ -315,6 +345,37 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
 
 const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH')}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
+
+// --- เลือกหลายรายการ + ดาวน์โหลด PDF รวม ---
+const selected = ref<Record<string, boolean>>({})
+const selectedIds = computed(() => Object.keys(selected.value).filter((id) => selected.value[id]))
+const allVisibleSelected = computed(() => pagedDocs.value.length > 0 && pagedDocs.value.every((d) => selected.value[d.id]))
+const toggleSelectAll = () => {
+  const next = !allVisibleSelected.value
+  pagedDocs.value.forEach((d) => (selected.value[d.id] = next))
+}
+
+const exporting = ref(false)
+const exportProgress = ref({ done: 0, total: 0 })
+const mergeIntoOneFile = ref(true)
+const downloadSelectedPdf = async () => {
+  if (selectedIds.value.length === 0 || exporting.value) return
+  const docs = selectedIds.value
+    .map((id) => allInvoices.value.find((d) => d.id === id))
+    .filter((d): d is SalesDocument => !!d)
+    .map((d) => ({ id: d.id, label: d.number }))
+  exporting.value = true
+  exportProgress.value = { done: 0, total: docs.length }
+  try {
+    await exportDocumentsAsPdf(docs, mergeIntoOneFile.value ? 'merged' : 'separate', `ใบแจ้งหนี้-${Date.now()}.pdf`, (done, total) => {
+      exportProgress.value = { done, total }
+    })
+  } catch (err: any) {
+    alert(err?.message || 'สร้าง PDF ไม่สำเร็จ')
+  } finally {
+    exporting.value = false
+  }
+}
 </script>
 
 <style scoped>

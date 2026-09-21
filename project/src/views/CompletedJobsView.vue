@@ -112,7 +112,9 @@
                   <div class="text-xs text-muted">{{ booking.driverName || '-' }}</div>
                 </td>
                 <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.completedAt) }}</td>
-                <td class="px-4 py-3 text-right text-text font-semibold">{{ formatBaht(booking.agreedPrice || booking.tripFee) }}</td>
+                <td class="px-4 py-3 text-right font-semibold" :class="(booking.agreedPrice || booking.tripFee) > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
+                  {{ priceCellText(booking.agreedPrice || booking.tripFee, formatBaht) }}
+                </td>
                 <td class="px-4 py-3">
                   <div class="flex flex-wrap gap-1">
                     <span v-for="badge in documentClaimBadges(booking)" :key="badge.label" :class="['text-xs font-semibold px-2 py-1 rounded-full', badge.class]">
@@ -197,6 +199,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCompletedJobs, useCompletedJobsFilters, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
+import { priceCellText } from '@/utils/priceDisplay'
 import { useAuthStore } from '@/stores/auth'
 import { documentClaimBadges, podReviewStatusLabel, podReviewStatusClass, bookingStatusLabel } from '@/utils/bookingStatus'
 import type { Booking } from '@/types'
