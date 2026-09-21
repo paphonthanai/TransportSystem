@@ -1,5 +1,8 @@
 import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
+// html2canvas ตัวจริง (ของเดิม) parse สี CSS ได้แค่ rgb/hsl/hex เก่าๆ พอเจอ oklch() ที่ Chrome รุ่นใหม่ใช้เป็นค่า
+// default ของ UI บางส่วน (เช่น focus outline/form control) จะโยน error "unsupported color function 'oklch'" ทันที
+// เปลี่ยนมาใช้ html2canvas-pro (fork ที่ยังอัปเดตอยู่ รองรับ oklch/oklab/lab/lch/color()) แทน โดย API เหมือนเดิมทุกอย่าง
+import html2canvas from 'html2canvas-pro'
 
 export interface ExportDocRef {
   id: string
