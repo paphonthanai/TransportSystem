@@ -20,6 +20,10 @@
           <span class="material-symbols-rounded text-base">picture_as_pdf</span>
           {{ exporting ? `กำลังสร้าง PDF (${exportProgress.done}/${exportProgress.total})...` : `ดาวน์โหลด PDF (${selectedIds.length})` }}
         </button>
+        <button v-if="selectedIds.length > 0" @click="deleteSelected" class="btn-secondary text-red-600 hover:bg-red-50">
+          <span class="material-symbols-rounded text-base">delete</span>
+          ลบที่เลือก ({{ selectedIds.length }})
+        </button>
         <button @click="router.push('/tax-invoices/type-select')" class="btn-primary">
           <span class="material-symbols-rounded text-base">add</span>
           สร้างใบแจ้งหนี้
@@ -54,9 +58,15 @@
               <th class="text-left px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('number')">
                 เลขที่เอกสาร<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('number') }}</span>
               </th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">ชื่อลูกค้า</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">วันครบกำหนด</th>
-              <th class="text-right px-3 py-3 font-semibold text-muted">ยอดรวมสุทธิ</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('customer')">
+                ชื่อลูกค้า<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('customer') }}</span>
+              </th>
+              <th class="text-left px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('dueDate')">
+                วันครบกำหนด<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('dueDate') }}</span>
+              </th>
+              <th class="text-right px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('amount')">
+                ยอดรวมสุทธิ<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('amount') }}</span>
+              </th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานะ</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">เอกสารต่อเนื่อง</th>
               <th class="px-3 py-3 w-10"></th>
@@ -245,7 +255,7 @@ const vClickOutside = {
 const allInvoices = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE'))
 
 /** เรียงตามคอลัมน์ที่คลิก (วันที่/เลขที่เอกสาร) — ค่าเริ่มต้นวันที่ใหม่สุดก่อนเสมอ — ดูเหตุผลเดียวกับ BillingListView.vue */
-type SortKey = 'date' | 'number'
+type SortKey = 'date' | 'number' | 'customer' | 'amount' | 'dueDate'
 const sortKey = ref<SortKey>('date')
 const sortDir = ref<'asc' | 'desc'>('desc')
 const toggleSort = (key: SortKey) => {
@@ -266,9 +276,13 @@ const filteredDocs = computed(() => {
     return d.customer.toLowerCase().includes(q) || d.number.toLowerCase().includes(q)
   })
   const dir = sortDir.value === 'asc' ? 1 : -1
-  return [...list].sort((a, b) =>
-    sortKey.value === 'number' ? a.number.localeCompare(b.number) * dir : (new Date(a.date).getTime() - new Date(b.date).getTime()) * dir
-  )
+  return [...list].sort((a, b) => {
+    if (sortKey.value === 'number') return a.number.localeCompare(b.number) * dir
+    if (sortKey.value === 'customer') return a.customer.localeCompare(b.customer, 'th') * dir
+    if (sortKey.value === 'amount') return (a.amount + (a.vatAmount || 0) - (b.amount + (b.vatAmount || 0))) * dir
+    if (sortKey.value === 'dueDate') return (new Date(a.dueDate || 0).getTime() - new Date(b.dueDate || 0).getTime()) * dir
+    return (new Date(a.date).getTime() - new Date(b.date).getTime()) * dir
+  })
 })
 
 const page = ref(1)
@@ -376,6 +390,19 @@ const allVisibleSelected = computed(() => pagedDocs.value.length > 0 && pagedDoc
 const toggleSelectAll = () => {
   const next = !allVisibleSelected.value
   pagedDocs.value.forEach((d) => (selected.value[d.id] = next))
+}
+
+const deleteSelected = () => {
+  if (selectedIds.value.length === 0) return
+  if (!confirm(`ยืนยันลบใบแจ้งหนี้ที่เลือก ${selectedIds.value.length} ใบ? งานขนส่ง/ใบวางบิลที่ผูกไว้จะกลับไปสถานะก่อนหน้า`)) return
+  const failed: string[] = []
+  selectedIds.value.forEach((id) => {
+    const doc = allInvoices.value.find((d) => d.id === id)
+    const result = salesDocumentsStore.deleteTaxInvoice(id)
+    if (!result.ok) failed.push(`${doc?.number || id}: ${result.message || 'ลบไม่สำเร็จ'}`)
+  })
+  selected.value = {}
+  if (failed.length) alert(`ลบไม่สำเร็จบางรายการ:\n${failed.join('\n')}`)
 }
 
 const exporting = ref(false)

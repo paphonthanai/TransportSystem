@@ -142,7 +142,7 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   }
 
   const driverName = str(raw[IMPORT_HEADERS.driverName])
-  const plate = str(raw[IMPORT_HEADERS.plate])
+  const plateRaw = str(raw[IMPORT_HEADERS.plate])
   const docRef = str(raw[IMPORT_HEADERS.docRef])
   const customer = str(raw[IMPORT_HEADERS.customer])
   // คอลัมน์ "time" ในไฟล์จริงมักมีข้อความอื่นปนมากับเวลา (เช่น "ย้ำ!! ตราประทับ") — แยกเวลาไว้ใช้เป็น loadingTime
@@ -188,6 +188,12 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   const isEmpty = !driverName && !customer && !siteName && !product
 
   const warnings: string[] = []
+
+  // "คอนเฟิร์ม" ต้องเป็นทะเบียนรถเดี่ยวเสมอ (ยืนยันจากไฟล์จริงแล้วว่าคือทะเบียนรถจริงที่ใช้ยืนยันงาน) — ถ้าเจอเครื่องหมาย
+  // "," แปลว่ามีมากกว่า 1 คันปนกันมาในช่องเดียว (แบบเดียวกับที่คอลัมน์ "ทะเบียนรถ" รุ่นเก่าเคยเป็น เช่น
+  // "70-6826 , 72-6467, 73-0388") ไม่รู้ว่าจริงๆ ยืนยันด้วยคันไหนกันแน่ เว้นทะเบียนว่างไว้ก่อนแทนการเดา/เก็บทั้งก้อนดิบ
+  const plate = plateRaw.includes(',') ? '' : plateRaw
+  if (plateRaw.includes(',')) warnings.push(`คอนเฟิร์มมีทะเบียนรถมากกว่า 1 คัน ("${plateRaw}") ไม่สามารถระบุได้แน่ชัด — เว้นทะเบียนว่างไว้ก่อน ตรวจสอบเองภายหลัง`)
 
   const matchedDriver = driverName ? deps.matchDriver(driverName, plate) : undefined
   if (driverName && !matchedDriver) warnings.push(`ชื่อเล่นคนขับ "${driverName}" ไม่ตรงกับที่ผูกไว้ในระบบ (เทียบกับทะเบียนรถแล้ว) — เว้นคนขับว่างไว้ก่อน`)

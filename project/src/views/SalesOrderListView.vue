@@ -3,6 +3,10 @@
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="text-xs text-muted">ใบสั่งสินค้า &gt; {{ statusFilterLabel }}</div>
       <div class="flex items-center gap-2">
+        <button v-if="selectedIds.size > 0" @click="deleteSelected" class="btn-secondary text-red-600 hover:bg-red-50">
+          <span class="material-symbols-rounded text-base">delete</span>
+          ลบที่เลือก ({{ selectedIds.size }})
+        </button>
         <button
           @click="repairOldData"
           :disabled="repairing"
@@ -48,17 +52,31 @@
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border sticky top-0 z-[1]">
             <tr>
-              <th class="text-left px-3 py-3 font-semibold text-muted">วันที่</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">ชื่อลูกค้า</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">อ้างอิงใบเสนอราคา</th>
-              <th class="text-right px-3 py-3 font-semibold text-muted">ยอดรวมสุทธิ</th>
+              <th class="px-3 py-3 w-8">
+                <input type="checkbox" :checked="allVisibleSelected" @change="toggleSelectAll" class="w-4 h-4" />
+              </th>
+              <th class="text-left px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('date')">
+                วันที่<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('date') }}</span>
+              </th>
+              <th class="text-left px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('number')">
+                เลขที่เอกสาร<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('number') }}</span>
+              </th>
+              <th class="text-left px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('customer')">
+                ชื่อลูกค้า<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('customer') }}</span>
+              </th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">เลข PO</th>
+              <th class="text-right px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('amount')">
+                ยอดรวมสุทธิ<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('amount') }}</span>
+              </th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานะงานขนส่ง</th>
               <th class="px-3 py-3 w-10"></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in pagedRows" :key="row.doc.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+              <td class="px-3 py-3">
+                <input type="checkbox" :checked="selectedIds.has(row.doc.id)" @change="toggleSelect(row.doc.id)" class="w-4 h-4" />
+              </td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ formatDate(row.doc.date) }}</td>
               <td class="px-3 py-3">
                 <div class="flex items-center gap-2 font-bold text-primary">
@@ -67,12 +85,7 @@
                 </div>
               </td>
               <td class="px-3 py-3 font-semibold text-text">{{ row.doc.customer }}</td>
-              <td class="px-3 py-3 text-muted">
-                <RouterLink v-if="row.doc.parentDocumentId" :to="`/documents/${row.doc.parentDocumentId}`" class="hover:text-primary hover:underline">
-                  {{ sourceQuotationNumber(row.doc) }}
-                </RouterLink>
-                <span v-else>-</span>
-              </td>
+              <td class="px-3 py-3 text-muted">{{ row.booking?.po || '-' }}</td>
               <td class="px-3 py-3 text-right font-semibold" :class="row.doc.amount > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
                 {{ row.doc.amount > 0 ? formatBaht(row.doc.amount + (row.doc.vatAmount || 0)) : PRICE_NOT_SET_LABEL }}
               </td>
@@ -104,7 +117,7 @@
               </td>
             </tr>
             <tr v-if="pagedRows.length === 0">
-              <td colspan="7" class="px-3 py-8 text-center text-muted">ยังไม่มีเอกสาร</td>
+              <td colspan="8" class="px-3 py-8 text-center text-muted">ยังไม่มีเอกสาร</td>
             </tr>
           </tbody>
         </table>
@@ -188,14 +201,36 @@ const rows = computed(() =>
     .map((doc) => ({ doc, booking: bookingStore.bookings.find((b) => b.id === doc.bookingIds[0]) }))
 )
 
-const filteredRows = computed(() =>
-  rows.value.filter(({ doc, booking }) => {
+/** เรียงตามคอลัมน์ที่คลิก (วันที่/เลขที่เอกสาร/ชื่อลูกค้า/ยอดรวมสุทธิ) — ค่าเริ่มต้นวันที่ใหม่สุดก่อนเสมอ เหมือน
+ *  BillingListView.vue/TaxInvoiceListView.vue/ReceiptListView.vue */
+type SortKey = 'date' | 'number' | 'customer' | 'amount'
+const sortKey = ref<SortKey>('date')
+const sortDir = ref<'asc' | 'desc'>('desc')
+const toggleSort = (key: SortKey) => {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDir.value = 'desc'
+  }
+}
+const sortIcon = (key: SortKey) => (sortKey.value !== key ? 'unfold_more' : sortDir.value === 'asc' ? 'arrow_upward' : 'arrow_downward')
+
+const filteredRows = computed(() => {
+  const list = rows.value.filter(({ doc, booking }) => {
     if (statusFilter.value !== 'all' && booking?.status !== statusFilter.value) return false
     const q = search.value.trim().toLowerCase()
     if (!q) return true
     return doc.customer.toLowerCase().includes(q) || doc.number.toLowerCase().includes(q)
   })
-)
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  return [...list].sort((a, b) => {
+    if (sortKey.value === 'number') return a.doc.number.localeCompare(b.doc.number) * dir
+    if (sortKey.value === 'customer') return a.doc.customer.localeCompare(b.doc.customer, 'th') * dir
+    if (sortKey.value === 'amount') return (a.doc.amount + (a.doc.vatAmount || 0) - (b.doc.amount + (b.doc.vatAmount || 0))) * dir
+    return (new Date(a.doc.date).getTime() - new Date(b.doc.date).getTime()) * dir
+  })
+})
 
 const page = ref(1)
 const perPage = ref(20)
@@ -203,7 +238,37 @@ const totalPages = computed(() => Math.max(1, Math.ceil(filteredRows.value.lengt
 const pagedRows = computed(() => filteredRows.value.slice((page.value - 1) * perPage.value, page.value * perPage.value))
 const totalAmount = computed(() => filteredRows.value.reduce((sum, r) => sum + r.doc.amount + (r.doc.vatAmount || 0), 0))
 
-const sourceQuotationNumber = (doc: SalesDocument) => salesDocumentsStore.documents.find((d) => d.id === doc.parentDocumentId)?.number || '-'
+/** เลือกหลายรายการเพื่อลบพร้อมกัน — เลือกได้เฉพาะแถวที่แสดงอยู่ในหน้าปัจจุบัน (pagedRows) เหมือนรูปแบบเดียวกับ
+ *  QuotationListView.vue */
+const selectedIds = ref<Set<string>>(new Set())
+const allVisibleSelected = computed(() => pagedRows.value.length > 0 && pagedRows.value.every((r) => selectedIds.value.has(r.doc.id)))
+const toggleSelectAll = () => {
+  const next = new Set(selectedIds.value)
+  if (allVisibleSelected.value) {
+    pagedRows.value.forEach((r) => next.delete(r.doc.id))
+  } else {
+    pagedRows.value.forEach((r) => next.add(r.doc.id))
+  }
+  selectedIds.value = next
+}
+const toggleSelect = (id: string) => {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+const deleteSelected = () => {
+  if (selectedIds.value.size === 0) return
+  if (!confirm(`ยืนยันลบใบสั่งสินค้าที่เลือก ${selectedIds.value.size} ใบ? งานขนส่งที่ผูกไว้จะไม่ถูกลบ`)) return
+  const failed: string[] = []
+  ;[...selectedIds.value].forEach((id) => {
+    const doc = rows.value.find((r) => r.doc.id === id)?.doc
+    const ok = salesDocumentsStore.deleteSalesOrder(id)
+    if (!ok && doc) failed.push(doc.number)
+  })
+  selectedIds.value = new Set()
+  if (failed.length) alert(`ลบไม่สำเร็จบางรายการ: ${failed.join(', ')}`)
+}
 
 const createNew = (fleet: BookingCategory) => {
   createMenuOpen.value = false
