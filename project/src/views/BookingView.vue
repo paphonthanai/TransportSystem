@@ -684,6 +684,7 @@
                       <th class="text-left px-2 py-1.5">ทะเบียนรถ</th>
                       <th class="text-left px-2 py-1.5">สินค้า</th>
                       <th class="text-left px-2 py-1.5">คนขับ</th>
+                      <th class="text-left px-2 py-1.5">ตรงกัน (วันที่/ลูกค้า/ทะเบียน/สินค้า/คนขับ)</th>
                       <th class="text-left px-2 py-1.5">จับคู่กับงาน</th>
                       <th class="text-left px-2 py-1.5">จะซ่อม</th>
                     </tr>
@@ -696,18 +697,46 @@
                       <td class="px-2 py-1.5">{{ preview.row.product || '-' }}</td>
                       <td class="px-2 py-1.5">{{ preview.row.driverName || '-' }}</td>
                       <td class="px-2 py-1.5">
-                        <span v-if="preview.booking" class="text-primary font-semibold">{{ preview.booking.docNo }} ({{ preview.matchScore }}/5)</span>
-                        <span v-else class="text-muted">ไม่พบข้อมูลที่ตรงกัน</span>
+                        <span v-if="preview.breakdown" class="inline-flex gap-1">
+                          <span
+                            v-for="key in (['date', 'customer', 'plate', 'product', 'driver'] as const)"
+                            :key="key"
+                            :class="preview.breakdown[key] ? 'text-green-600' : 'text-red-400'"
+                            :title="reconcileBreakdownLabel[key]"
+                          >
+                            {{ preview.breakdown[key] ? '✓' : '✗' }}
+                          </span>
+                        </span>
+                        <span v-else class="text-muted">-</span>
+                      </td>
+                      <td class="px-2 py-1.5">
+                        <select
+                          :value="reconcileManualPick[preview.row.rowNumber] ?? ''"
+                          @change="reconcileManualPick[preview.row.rowNumber] = ($event.target as HTMLSelectElement).value"
+                          class="input-field !h-7 !text-xs w-44"
+                        >
+                          <option value="">
+                            {{ preview.isManual ? 'ไม่จับคู่เลย' : preview.booking ? `อัตโนมัติ: ${preview.booking.docNo} (${preview.matchScore}/5)` : 'ไม่พบข้อมูลที่ตรงกัน' }}
+                          </option>
+                          <option v-for="c in preview.topCandidates" :key="c.booking.id" :value="c.booking.id">
+                            {{ c.booking.docNo }} ({{ c.score }}/5{{ c.score >= 4 ? ' — auto' : '' }})
+                          </option>
+                        </select>
                       </td>
                       <td class="px-2 py-1.5">
                         <span v-if="preview.patches.length" class="text-green-600">
                           {{ preview.patches.map((p) => `${p.field}: ${p.from}→${p.to}`).join(', ') }}
                         </span>
+                        <span v-else-if="preview.booking" class="text-muted">ไม่มีอะไรต้องซ่อม (ข้อมูลครบแล้ว)</span>
                         <span v-else class="text-muted">-</span>
                       </td>
                     </tr>
                   </tbody>
                 </table>
+              </div>
+              <div class="text-[11px] text-muted">
+                คอลัมน์ "จับคู่กับงาน" เลือกตัวเลือกแรกสุด (ไม่ระบุ) เพื่อใช้ผลอัตโนมัติ หรือเลือกงานจากรายการเองได้ถ้ามั่นใจว่าใช่
+                แม้คะแนนจะไม่ถึง 4/5 (เช่น ไฟล์ไม่มีคอลัมน์ "ทะเบียนรถ" ทำให้เทียบทะเบียนไม่ได้)
               </div>
             </template>
           </div>
@@ -748,7 +777,7 @@ import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStat
 import { parseGpsInput } from '@/utils/gps'
 import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
 import { exportRowsToExcel } from '@/utils/exportExcel'
-import { findReconcileMatches, computeReconcilePatches } from '@/utils/importReconciliation'
+import { findReconcileMatches, computeReconcilePatches, RECONCILE_MIN_MATCH, type ReconcileMatchBreakdown } from '@/utils/importReconciliation'
 import * as XLSX from 'xlsx'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 
@@ -1415,6 +1444,7 @@ const openReconcileModal = () => {
   reconcileFileName.value = ''
   reconcileRows.value = []
   reconcileShipDate.value = undefined
+  reconcileManualPick.value = {}
   reconcileModalOpen.value = true
 }
 const closeReconcileModal = () => {
@@ -1436,15 +1466,41 @@ const handleReconcileFile = async (e: Event) => {
   const headerRowIndex = hasTitleRow ? 1 : 0
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', range: headerRowIndex })
   reconcileRows.value = raw.map((r, idx) => parseImportRow(r, idx + headerRowIndex + 2, reconcileShipDate.value)).filter((r) => !r.isEmpty)
+  reconcileManualPick.value = {}
   input.value = ''
+}
+
+/** ผู้ใช้เลือกงานเองแทนผลจับคู่อัตโนมัติ ต่อแถว (key = rowNumber, value = booking id หรือ '' = ไม่จับคู่เลย) — ใช้ตอน
+ *  จับคู่อัตโนมัติได้คะแนนไม่ถึงเกณฑ์ (เช่น ไฟล์ไม่มีคอลัมน์ "ทะเบียนรถ" ทำให้ทะเบียน/คนขับเทียบไม่ตรง) แต่ผู้ใช้ดู
+ *  ข้อมูลอื่นแล้วมั่นใจว่าเป็นงานเดียวกันจริง */
+const reconcileManualPick = ref<Record<number, string>>({})
+
+const reconcileBreakdownLabel: Record<keyof ReconcileMatchBreakdown, string> = {
+  date: 'วันที่',
+  customer: 'ลูกค้า',
+  plate: 'ทะเบียนรถ',
+  product: 'สินค้า',
+  driver: 'คนขับ',
 }
 
 const reconcilePreview = computed(() =>
   reconcileRows.value.map((row) => {
-    const matches = findReconcileMatches(row, bookingStore.bookings, reconcileShipDate.value)
-    const booking = matches[0]?.booking
+    const candidates = findReconcileMatches(row, bookingStore.bookings, reconcileShipDate.value)
+    const topCandidates = candidates.slice(0, 5)
+    const autoBooking = candidates[0] && candidates[0].score >= RECONCILE_MIN_MATCH ? candidates[0].booking : undefined
+    const manualPick = reconcileManualPick.value[row.rowNumber]
+    const booking =
+      manualPick === undefined ? autoBooking : manualPick === '' ? undefined : candidates.find((c) => c.booking.id === manualPick)?.booking
     const patches = booking ? computeReconcilePatches(row, booking) : []
-    return { row, booking, matchScore: matches[0]?.score ?? 0, patches }
+    return {
+      row,
+      booking,
+      topCandidates,
+      matchScore: candidates[0]?.score ?? 0,
+      breakdown: candidates[0]?.breakdown,
+      isManual: manualPick !== undefined,
+      patches,
+    }
   })
 )
 const reconcileMatchedCount = computed(() => reconcilePreview.value.filter((r) => r.booking).length)
@@ -1760,6 +1816,9 @@ const confirmImport = () => {
       category: props.fleet,
       docNo: bookingStore.nextDocNo(props.fleet),
       releaseNo: bookingStore.nextReleaseNo(),
+      // เดิมไม่เคยเซ็ต po เลยสำหรับงาน import ต่างจากสร้างงานด้วยมือที่ auto-gen ให้เสมอ (BookingCreateView.vue) —
+      // ทำให้เอกสารที่พิมพ์ออกมาช่อง "ใบสั่งงาน (PO)" ว่างเป็น "-" เสมอสำหรับงาน import ทุกงาน
+      po: bookingStore.nextPoNo(),
       reference: row.docRef || undefined,
       customer: row.customer,
       items,

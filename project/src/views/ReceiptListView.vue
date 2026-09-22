@@ -92,11 +92,15 @@
               </td>
               <td class="px-3 py-3">
                 <select
-                  :value="doc.status"
-                  @change="onStatusSelect(doc, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = doc.status"
+                  :value="''"
+                  autocomplete="off"
+                  @change="onStatusSelect(doc, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = ''"
                   class="status-select"
                   :class="salesDocumentStatusClass(doc.type, doc.status)"
                 >
+                  <!-- ห้ามผูก :value กับ status จริง — เบราว์เซอร์บาง restore ค่า <select> ข้ามการ refresh ได้ ดูเหตุผล
+                       เต็มที่ SalesOrderListView.vue -->
+                  <option value="" disabled hidden>{{ statusLabel[doc.status] }}</option>
                   <option v-for="opt in statusOptionsFor(doc)" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                 </select>
               </td>

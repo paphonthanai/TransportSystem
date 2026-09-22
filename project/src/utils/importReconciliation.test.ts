@@ -38,7 +38,7 @@ describe('findReconcileMatches — จับคู่กับไฟล์จร
     expect(matches[0].score).toBe(5)
   })
 
-  it('ไม่จับคู่ (คะแนนต่ำกว่าเกณฑ์) เมื่อตรงกันแค่ลูกค้า+สินค้า แต่คนละวัน/คนละทะเบียนรถ/คนขับคนละคน', () => {
+  it('คืนผู้สมัครที่คะแนนต่ำกว่าเกณฑ์มาด้วย (ไม่กรองทิ้ง) ให้ผู้ใช้เห็น/เลือกยืนยันเองได้ แต่ยังไม่ถือว่า "จับคู่ได้" อัตโนมัติ', () => {
     const unrelatedBooking = makeBooking({
       customer: 'FSM',
       plate: '99-9999',
@@ -47,10 +47,13 @@ describe('findReconcileMatches — จับคู่กับไฟล์จร
       items: [makeJobItem({ product: '23', qty: 5 })],
     })
     const matches = findReconcileMatches(row3FromRealFile, [unrelatedBooking], shipDate)
-    expect(matches).toHaveLength(0)
+    expect(matches).toHaveLength(1)
+    expect(matches[0].score).toBe(2)
+    expect(matches[0].score).toBeLessThan(RECONCILE_MIN_MATCH)
+    expect(matches[0].breakdown).toEqual({ date: false, customer: true, plate: false, product: true, driver: false })
   })
 
-  it('เกณฑ์ขั้นต่ำคือ 4 จาก 5 อย่าง — ตรงแค่ 3 อย่างไม่ถือว่าจับคู่ได้ (กันจับคู่ผิดงาน)', () => {
+  it('เกณฑ์ขั้นต่ำคือ 4 จาก 5 อย่าง — ตรงแค่ 2 อย่างไม่ถือว่าจับคู่ได้อัตโนมัติ (กันจับคู่ผิดงาน)', () => {
     const booking = makeBooking({
       customer: 'FSM',
       plate: '73-1124',
@@ -59,8 +62,22 @@ describe('findReconcileMatches — จับคู่กับไฟล์จร
       items: [makeJobItem({ product: '99', qty: 0 })],
     })
     const matches = findReconcileMatches(row3FromRealFile, [booking], shipDate)
-    expect(matches).toHaveLength(0)
+    expect(matches[0].score).toBe(2)
+    expect(matches[0].score).toBeLessThan(RECONCILE_MIN_MATCH)
     expect(RECONCILE_MIN_MATCH).toBe(4)
+  })
+
+  it('เทียบลูกค้า/ทะเบียนรถ/คนขับแบบไม่สนตัวพิมพ์เล็ก-ใหญ่/ช่องว่าง/เครื่องหมาย "-" กันจับคู่พลาดเพราะพิมพ์ต่างกันนิดหน่อย', () => {
+    const booking = makeBooking({
+      customer: '  fsm  ', // ตัวพิมพ์เล็ก + ช่องว่างหัวท้าย
+      plate: '731124', // ไม่มีขีด ต่างจาก "73-1124" ในไฟล์
+      driverName: 'หนึ่งใหม่',
+      loadingDate: shipDate,
+      items: [makeJobItem({ product: '23', qty: 0 })],
+    })
+    const matches = findReconcileMatches(row3FromRealFile, [booking], shipDate)
+    expect(matches[0].score).toBe(5)
+    expect(matches[0].breakdown).toEqual({ date: true, customer: true, plate: true, product: true, driver: true })
   })
 })
 

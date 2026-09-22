@@ -90,13 +90,6 @@
           <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-semibold">{{ formatBaht(editMultiTripFeeTotal) }} (อัตโนมัติ)</div>
         </div>
         <div>
-          <label class="block text-xs font-semibold text-muted mb-1">
-            ราคาที่ตกลงกับลูกค้า (บาท)
-            <span class="text-[10px] font-normal text-muted">(ว่างไว้ = ใช้ค่าเที่ยว)</span>
-          </label>
-          <input v-model.number="editForm.agreedPrice" type="number" placeholder="auto" class="input-field w-full" />
-        </div>
-        <div>
           <label class="block text-xs font-semibold text-muted mb-1">เบี้ยเลี้ยงคนขับ</label>
           <input v-if="isCements" v-model.number="editForm.allowance" type="number" placeholder="0" class="input-field w-full" />
           <div v-else class="flex items-center h-10 px-3 rounded-lg bg-surface-2 text-sm text-text font-semibold">{{ formatBaht(editCalculatedAllowance) }} (อัตโนมัติ)</div>
@@ -202,10 +195,6 @@
         <div>
           <div class="text-muted text-xs">ค่าเที่ยวรวม</div>
           <div class="font-semibold text-text">{{ formatBaht(editPricingMode === 'MULTI_DESTINATION' ? editMultiTripFeeTotal : editForm.tripFee) }}</div>
-        </div>
-        <div>
-          <div class="text-muted text-xs">ราคาที่ตกลงกับลูกค้า</div>
-          <div class="font-semibold text-text">{{ formatBaht(editForm.agreedPrice || (editPricingMode === 'MULTI_DESTINATION' ? editMultiTripFeeTotal : editForm.tripFee)) }}</div>
         </div>
         <div>
           <div class="text-muted text-xs">เบี้ยเลี้ยงคนขับ</div>
@@ -559,7 +548,8 @@ const confirmEditBooking = () => {
     route: f.route || undefined,
     origin: f.origin || undefined,
     tripFee: resolvedTripFee,
-    agreedPrice: f.agreedPrice || resolvedTripFee,
+    // "ราคาที่ตกลง" ไม่ใช่ field ที่แสดง/แก้แยกให้ผู้ใช้เห็นอีกต่อไป — ให้เท่ากับค่าเที่ยวเสมอ
+    agreedPrice: resolvedTripFee,
     allowance: editDisplayedAllowance.value,
     fuelLiters: f.fuelLiters,
     fuelRate: f.fuelRate,

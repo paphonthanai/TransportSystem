@@ -65,11 +65,17 @@
               <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(doc.amount + (doc.vatAmount || 0)) }}</td>
               <td class="px-3 py-3">
                 <select
-                  :value="doc.status"
-                  @change="onStatusSelect(doc, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = doc.status"
+                  :value="''"
+                  autocomplete="off"
+                  @change="onStatusSelect(doc, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = ''"
                   class="status-select"
                   :class="salesDocumentStatusClass(doc.type, doc.status)"
                 >
+                  <!-- ห้ามผูก :value กับ status จริง — เบราว์เซอร์บางตัว restore ค่า <select> ข้ามการ refresh หน้าได้
+                       ถ้า value จริงค้างอยู่ใน DOM ตอน refresh แล้วถูก restore กลับมาจะไปยิง @change ซ้ำโดยไม่ตั้งใจ
+                       (ดูรายละเอียดที่ SalesOrderListView.vue) ใช้ '' เป็นค่าจริงเสมอ แสดง label ปัจจุบันผ่าน option
+                       ที่ disabled/hidden แทน -->
+                  <option value="" disabled hidden>{{ statusLabel[doc.status] }}</option>
                   <option v-for="opt in statusOptionsFor(doc)" :key="opt.value" :value="opt.value" :disabled="opt.disabled">
                     {{ opt.label }}{{ opt.disabled ? ' (เร็วๆ นี้)' : '' }}
                   </option>

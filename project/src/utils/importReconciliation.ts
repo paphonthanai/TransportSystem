@@ -14,29 +14,50 @@ export interface ReconcileRowInput {
   fuelLiters: number
 }
 
+/** เกณฑ์เทียบแต่ละอย่าง — โชว์ในหน้า preview ได้ว่าตรง/ไม่ตรงอย่างไหนบ้าง ไม่ใช่แค่คะแนนรวมเฉยๆ ผู้ใช้จะได้รู้ว่าทำไม
+ *  ถึงจับคู่ไม่ได้ (เช่น ทะเบียนรถไม่ตรง เพราะไฟล์ไม่มีคอลัมน์ "ทะเบียนรถ" เลยใช้ "คอนเฟิร์ม" แทน ซึ่งอาจเป็นคนละค่า) */
+export interface ReconcileMatchBreakdown {
+  date: boolean
+  customer: boolean
+  plate: boolean
+  product: boolean
+  driver: boolean
+}
+
 export interface ReconcileMatchResult {
   booking: Booking
   score: number
+  breakdown: ReconcileMatchBreakdown
 }
 
 const isSameCalendarDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+
+/** เทียบข้อความแบบไม่สนตัวพิมพ์เล็ก-ใหญ่/ช่องว่างหัวท้าย — กันจับคู่พลาดเพราะข้อมูลเดียวกันแต่พิมพ์ต่างกันเล็กน้อย
+ *  (เช่น "fsm" vs "FSM", หรือช่องว่างติดมาจาก Excel) ไม่ใช้กับทะเบียนรถ เพราะรูปแบบ (มี "-" หรือไม่) เพี้ยนได้มากกว่านั้น
+ *  เลยเทียบทะเบียนรถแบบตัดอักขระที่ไม่ใช่ตัวอักษร/ตัวเลขออกก่อนแทน (normalizeCode) */
+const normalizeText = (s: string) => s.trim().toLowerCase()
+const normalizeCode = (s: string) => s.toLowerCase().replace(/[^a-z0-9ก-๛]/g, '')
 
 /** ต้องตรงกันอย่างน้อย 4 จาก 5 อย่าง (วันที่/ลูกค้า/ทะเบียนรถ/สินค้าหลัก/คนขับ) ถึงจะถือว่าใช่งานเดียวกัน — กันจับคู่ผิดงาน
  *  ที่ข้อมูลคล้ายกันโดยบังเอิญ (เช่น ลูกค้า+สินค้าเดียวกันคนละวัน) */
 export const RECONCILE_MIN_MATCH = 4
 
+/** คืนผู้สมัครทุกคนที่ตรงอย่างน้อย 1 อย่าง (ไม่ใช่แค่ที่ผ่านเกณฑ์) เรียงคะแนนมาก→น้อย — ผู้เรียกเป็นคนตัดสินใจว่าจะ
+ *  auto-apply เฉพาะที่ผ่านเกณฑ์ (RECONCILE_MIN_MATCH) หรือจะโชว์ผู้สมัครที่ใกล้เคียงที่สุดให้เลือกยืนยันเองก็ได้ */
 export function findReconcileMatches(row: ReconcileRowInput, bookings: Booking[], shipDate?: Date): ReconcileMatchResult[] {
   return bookings
     .map((booking) => {
-      let score = 0
-      if (shipDate && booking.loadingDate && isSameCalendarDay(new Date(booking.loadingDate), shipDate)) score++
-      if (row.customer && booking.customer === row.customer) score++
-      if (row.plate && booking.plate === row.plate) score++
-      if (row.productCodes[0] && booking.items[0]?.product === row.productCodes[0]) score++
-      if (row.driverName && booking.driverName === row.driverName) score++
-      return { booking, score }
+      const breakdown: ReconcileMatchBreakdown = {
+        date: !!(shipDate && booking.loadingDate && isSameCalendarDay(new Date(booking.loadingDate), shipDate)),
+        customer: !!(row.customer && booking.customer && normalizeText(booking.customer) === normalizeText(row.customer)),
+        plate: !!(row.plate && booking.plate && normalizeCode(booking.plate) === normalizeCode(row.plate)),
+        product: !!(row.productCodes[0] && booking.items[0]?.product && normalizeCode(booking.items[0].product) === normalizeCode(row.productCodes[0])),
+        driver: !!(row.driverName && booking.driverName && normalizeText(booking.driverName) === normalizeText(row.driverName)),
+      }
+      const score = Object.values(breakdown).filter(Boolean).length
+      return { booking, score, breakdown }
     })
-    .filter((m) => m.score >= RECONCILE_MIN_MATCH)
+    .filter((m) => m.score > 0)
     .sort((a, b) => b.score - a.score)
 }
 

@@ -256,10 +256,6 @@
           <div class="font-semibold text-text">{{ formatBaht(header.pricingMode === 'MULTI_DESTINATION' ? multiTripFeeTotal : header.tripFee) }}</div>
         </div>
         <div>
-          <div class="text-muted text-xs">ราคาที่ตกลงกับลูกค้า</div>
-          <div class="font-semibold text-text">{{ formatBaht(header.agreedPrice || (header.pricingMode === 'MULTI_DESTINATION' ? multiTripFeeTotal : header.tripFee)) }}</div>
-        </div>
-        <div>
           <div class="text-muted text-xs">เบี้ยเลี้ยงคนขับ</div>
           <div class="font-semibold text-text">{{ formatBaht(isCements ? header.allowance || 0 : headerCalculatedAllowance) }}</div>
         </div>
@@ -683,7 +679,8 @@ const saveAllItems = () => {
     items: lineItems.value,
     allowance: isCements.value ? header.value.allowance || 0 : headerCalculatedAllowance.value,
     tripFee: resolvedTripFee.value,
-    agreedPrice: header.value.agreedPrice || resolvedTripFee.value,
+    // "ราคาที่ตกลง" ไม่ใช่ field ที่แสดง/แก้แยกให้ผู้ใช้เห็นอีกต่อไป — ให้เท่ากับค่าเที่ยวเสมอ
+    agreedPrice: resolvedTripFee.value,
     discountMode: header.value.discountMode,
     discountPercent: header.value.discountPercent || undefined,
     discountAmount: header.value.discountAmount || undefined,

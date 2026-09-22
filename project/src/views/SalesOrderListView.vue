@@ -79,12 +79,18 @@
               <td class="px-3 py-3">
                 <select
                   v-if="row.booking"
-                  :value="row.booking.status"
-                  @change="onStatusSelect(row.booking, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = row.booking.status"
+                  :value="''"
+                  autocomplete="off"
+                  @change="onStatusSelect(row.booking, ($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = ''"
                   class="status-select"
                   :class="bookingStatusClass[row.booking.status]"
                 >
-                  <option :value="row.booking.status">{{ bookingStatusLabel[row.booking.status] }}</option>
+                  <!-- ห้ามผูก :value กับ status จริงเด็ดขาด (เคยเป็นแบบนั้นมาก่อน) — เบราว์เซอร์บางตัว restore ค่า
+                       <select> ที่เคยเลือกไว้ข้ามการ refresh หน้าได้ ถ้า value จริงคือ 'COMPLETE'/'RESET' ค้างอยู่ใน DOM
+                       ตอน refresh แล้วถูก restore กลับมาจะไปยิง @change ซ้ำโดยผู้ใช้ไม่ได้ตั้งใจ (เจอเคสจริง: งานที่ยัง
+                       ไม่จัดรถถูกกดจบงานเองตอน refresh) — ใช้ '' เป็นค่าจริงเสมอเหมือน BillingListView.vue ที่ปลอดภัยกว่า
+                       ส่วน label ปัจจุบันโชว์ผ่าน option ที่ disabled/hidden แทน ไม่ใช่ค่าที่เลือกได้จริง -->
+                  <option value="" disabled hidden>{{ bookingStatusLabel[row.booking.status] }}</option>
                   <option v-if="row.booking.status !== 'DELIVERED' && row.booking.items.length > 0" value="COMPLETE">✓ จบงาน (ออกใบวางบิล)</option>
                   <option v-if="row.booking.status === 'DELIVERED' && !hasActiveBillingDoc(row.booking)" value="CREATE_BILLING">🧾 ออกใบวางบิล</option>
                   <option v-if="row.booking.status !== 'WAITING_DISPATCH'" value="RESET">↺ Reset สถานะ</option>

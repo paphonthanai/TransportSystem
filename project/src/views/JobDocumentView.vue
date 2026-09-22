@@ -141,10 +141,6 @@
               <span class="text-gray-600">รวมเป็นเงิน</span>
               <span>{{ formatBaht(booking.tripFee) }}</span>
             </div>
-            <div v-if="booking.agreedPrice !== booking.tripFee" class="flex justify-between">
-              <span class="text-gray-600">ราคาที่ตกลงกับลูกค้า</span>
-              <span>{{ formatBaht(booking.agreedPrice) }}</span>
-            </div>
             <div v-if="discountTotal > 0" class="flex justify-between">
               <span class="text-gray-600">ส่วนลดรวม</span>
               <span>-{{ formatBaht(discountTotal) }}</span>
@@ -341,26 +337,18 @@
         <div v-if="isMulti" class="text-[11px] text-muted -mt-2">
           งานนี้แยกค่าเที่ยวตามปลายทาง — แก้ไขราคาแบบแยกปลายทางได้ที่หน้าแก้ไขงาน (ปุ่มแก้ไขงานในรายการงาน)
         </div>
-        <div v-if="!isEditing" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div v-if="!isEditing" class="grid grid-cols-1 gap-3">
           <div class="bg-surface-2 rounded-lg p-3">
             <div class="text-xs text-muted mb-1">ค่าเที่ยว</div>
             <div class="font-bold text-text">{{ formatBaht(booking.tripFee) }}</div>
           </div>
-          <div class="bg-surface-2 rounded-lg p-3">
-            <div class="text-xs text-muted mb-1">ราคาที่ตกลง</div>
-            <div class="font-bold text-text">{{ formatBaht(booking.agreedPrice) }}</div>
-          </div>
         </div>
-        <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div v-else class="grid grid-cols-1 gap-3">
           <div>
             <label class="block text-xs font-semibold text-muted mb-1">ค่าเที่ยว</label>
             <input v-model.number="priceForm.tripFee" type="number" class="input-field w-full" />
           </div>
-          <div>
-            <label class="block text-xs font-semibold text-muted mb-1">ราคาที่ตกลง</label>
-            <input v-model.number="priceForm.agreedPrice" type="number" class="input-field w-full" />
-          </div>
-          <div class="sm:col-span-2 flex justify-end gap-2">
+          <div class="flex justify-end gap-2">
             <button @click="isEditing = false" class="btn-secondary">ยกเลิก</button>
             <button @click="savePrice" class="btn-sm text-primary">
               <span class="material-symbols-rounded text-base">save</span>
@@ -568,20 +556,22 @@ const printDoc = () => window.print()
 
 // --- Price edit ---
 const isEditing = ref(false)
-const priceForm = ref({ tripFee: 0, agreedPrice: 0 })
+const priceForm = ref({ tripFee: 0 })
 
 /** ราคาแก้ไขได้อิสระตอน WAITING_DISPATCH เท่านั้น หลังจากนั้นต้องเป็น admin */
 const canEditPrice = computed(() => !!booking.value && !isMulti.value && (booking.value.status === 'WAITING_DISPATCH' || isAdmin.value))
 
 const startEdit = () => {
   if (!booking.value || !canEditPrice.value) return
-  priceForm.value = { tripFee: booking.value.tripFee, agreedPrice: booking.value.agreedPrice }
+  priceForm.value = { tripFee: booking.value.tripFee }
   isEditing.value = true
 }
 
+/** "ราคาที่ตกลง" ไม่ใช่ field ที่แสดง/แก้แยกให้ผู้ใช้เห็นอีกต่อไป (ตามคำสั่ง) — ให้เท่ากับค่าเที่ยวเสมอ เพื่อไม่ให้
+ *  ค่าเดิมที่เคย mismatch กันค้างอยู่ (เช่นจากงาน import เก่า) ไปกวนจุดอื่นที่ยังอ่าน agreedPrice || tripFee อยู่ */
 const savePrice = () => {
   if (!booking.value) return
-  bookingStore.updateBookingPrice(booking.value.id, priceForm.value)
+  bookingStore.updateBookingPrice(booking.value.id, { tripFee: priceForm.value.tripFee, agreedPrice: priceForm.value.tripFee })
   isEditing.value = false
 }
 
