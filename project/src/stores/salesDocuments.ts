@@ -1005,6 +1005,11 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const bookingStore = useBookingStore()
     let created = 0
     bookingStore.bookings.forEach((booking) => {
+      // เช็ค booking.sourceDocumentId ก่อนเสมอ (เชื่อถือได้แม้ documents.value ยังโหลดจาก Firestore ไม่ครบ เพราะมันมากับ
+      // ตัว booking เอง) ก่อนจะ fallback ไปสแกน documents.value — เดิมเช็คแค่สแกน documents.value อย่างเดียว ถ้า watcher
+      // ด้านล่างทำงานตอน documents ยังโหลดไม่เสร็จ (bookings โหลดเสร็จก่อน) จะเข้าใจผิดว่างานยังไม่มีใบสั่งสินค้า แล้ว
+      // สร้างซ้ำให้ทุกครั้งที่หน้าเว็บโหลดใหม่ ทั้งที่จริงมีอยู่แล้วใน Firestore แค่ยังไม่ถูก sync เข้า documents.value
+      if (booking.sourceDocumentId) return
       const hasSalesOrder = documents.value.some((d) => d.type === 'SALES_ORDER' && d.bookingIds.includes(booking.id))
       if (hasSalesOrder) return
       const amount = booking.agreedPrice || booking.tripFee || 0
@@ -3012,11 +3017,19 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    *  "มีงาน/เอกสารเพิ่มขึ้น" โดยไม่ยิงถี่เกินไปตอนแก้ไข field ย่อยของ document เดิม — ฟังก์ชันที่เรียกทั้งหมด idempotent
    *  อยู่แล้ว ไม่มีผลข้างเคียง ข้าม (return) ตอน bookings ยังโหลดไม่เสร็จ (ว่างเปล่า) กันซ่อมผิดพลาดเหมือนกับที่
    *  backfillBookingItemDescriptions ทำไว้แล้วด้านบน ต้องประกาศไว้ท้ายสุดของ setup นี้เสมอ (หลัง const/function ทุกตัว
-   *  ที่ใช้ เช่น genId) ไม่งั้น immediate:true จะยิงก่อนตัวแปรที่อ้างถึงถูกประกาศจริง (TDZ) */
+   *  ที่ใช้ เช่น genId) ไม่งั้น immediate:true จะยิงก่อนตัวแปรที่อ้างถึงถูกประกาศจริง (TDZ)
+   *
+   *  บั๊กจริงที่เจอ: bookings (booking.ts) กับ documents (ไฟล์นี้) โหลดจาก Firestore ผ่านคนละ listener แยกอิสระกันเลย
+   *  ไม่มีการรอกัน ถ้า bookings โหลดเสร็จก่อน documents (bookings.length เปลี่ยนก่อน) watcher นี้จะยิงตอน documents.value
+   *  ยังว่าง/โหลดไม่ครบ ทำให้ backfillMissingSalesOrders() เข้าใจผิดว่างานยังไม่มีใบสั่งสินค้าเลย (ทั้งที่มีอยู่แล้วใน
+   *  Firestore แค่ยัง sync เข้ามาไม่ทัน) แล้วสร้างใบสั่งสินค้าซ้ำให้ทุกครั้งที่รีเฟรชหน้าเว็บ — เจอจริงเป็นใบสั่งสินค้า
+   *  เลขที่เดียวกันซ้ำ 3-8 ใบในระบบจริง ต้องรอให้ทั้ง 2 ฝั่งโหลดรอบแรกเสร็จก่อน (bookingsLoading/loading เป็น false)
+   *  ถึงจะยอมให้ซ่อมอัตโนมัติทำงาน ไม่ใช่แค่เช็คว่า bookings ไม่ว่างเฉยๆ */
   const bookingStoreForAutoRepair = useBookingStore()
   watch(
-    [() => bookingStoreForAutoRepair.bookings.length, () => documents.value.length],
+    [() => bookingStoreForAutoRepair.bookingsLoading, () => loading.value, () => bookingStoreForAutoRepair.bookings.length, () => documents.value.length],
     () => {
+      if (bookingStoreForAutoRepair.bookingsLoading || loading.value) return
       if (bookingStoreForAutoRepair.bookings.length === 0) return
       backfillMissingSalesOrders()
       repairSalesOrderVat()

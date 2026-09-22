@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useBookingStore } from './booking'
 import { useSalesDocumentsStore } from './salesDocuments'
@@ -54,14 +55,26 @@ describe('hardDeleteBooking — permission', () => {
 })
 
 describe('hardDeleteBooking — no reference', () => {
-  /** salesDocumentsStore ซ่อมใบสั่งสินค้าที่ขาดหายให้อัตโนมัติทันทีที่ store ถูกใช้งาน (ดู watch ท้าย
-   *  stores/salesDocuments.ts) ดังนั้นงานที่ยังไม่มีใบสั่งสินค้าเลยจะมีใบสั่งสินค้าถูกสร้างให้ก่อนถูกลบเสมอ —
-   *  deletedDocumentCount จึงเป็น 1 (ใบสั่งสินค้าที่เพิ่งซ่อมให้) ไม่ใช่ 0 อีกต่อไป */
+  /** salesDocumentsStore ซ่อมใบสั่งสินค้าที่ขาดหายให้อัตโนมัติ (ดู watch ท้าย stores/salesDocuments.ts) แต่ตอนนี้ต้องรอ
+   *  ให้ bookings/documents โหลดรอบแรกจาก Firestore เสร็จก่อน (bookingsLoading/loading เป็น false) ถึงจะยอมทำงาน —
+   *  กันบั๊กจริงที่เจอ: ถ้า bookings โหลดเสร็จก่อน documents (คนละ listener ไม่รอกัน) ระบบจะเข้าใจผิดว่างานยังไม่มี
+   *  ใบสั่งสินค้าเลยทั้งที่มีอยู่แล้ว แล้วสร้างซ้ำทุกครั้งที่รีเฟรชหน้าเว็บ (ดู backfillMissingSalesOrders/watcher) —
+   *  เทสต์นี้จึงต้องรอให้ทั้ง 2 store โหลดเสร็จก่อนเรียก hardDeleteBooking เหมือนการใช้งานจริง (ผู้ใช้ไม่กดลบก่อน
+   *  หน้าเว็บโหลดเสร็จ) ไม่งั้น backfill จะยังไม่ทันทำงาน ได้ deletedDocumentCount เป็น 0 แทน */
   it('deletes the booking document for real, including the auto-repaired sales order', async () => {
     loginAs('ADMIN')
     const bookingStore = useBookingStore()
+    const salesDocs = useSalesDocumentsStore()
     const booking = makeBooking({ items: [] })
     bookingStore.bookings.push(booking)
+
+    for (let i = 0; i < 20 && (bookingStore.bookingsLoading || salesDocs.loading); i++) {
+      await nextTick()
+    }
+    // watcher ที่เรียก backfillMissingSalesOrders ใช้ flush timing แบบ 'pre' ของ Vue (default) — เปลี่ยนค่า
+    // bookingsLoading/loading เป็น false แล้ว callback ยังไม่ได้รันจริงในติ๊กเดียวกันเสมอไป ต้องรอ nextTick() เพิ่ม
+    // อีกรอบให้คิวของ watcher flush จริงก่อนเช็คผลลัพธ์
+    await nextTick()
 
     const result = await bookingStore.hardDeleteBooking(booking.id)
 
