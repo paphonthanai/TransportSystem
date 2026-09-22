@@ -1,5 +1,3 @@
-import type { BookingStatus } from '@/types'
-import { bookingStatusLabel } from '@/utils/bookingStatus'
 import { normalizePlateCode } from '@/utils/importReconciliation'
 
 // --- นำเข้า Booking จากไฟล์ Excel งานจริง (Requirement: "Import Excel เพื่อสร้างงาน" ตามคอลัมน์ที่หน้างานใช้อยู่จริง) ---
@@ -10,6 +8,10 @@ import { normalizePlateCode } from '@/utils/importReconciliation'
 // ไฟล์จริงของลูกค้า (16 คอลัมน์ ยืนยันแล้ว) ไม่มีคอลัมน์ "ทะเบียนรถ" เลย — "คอนเฟิร์ม" คือทะเบียนรถจริงที่ใช้ยืนยันงาน
 // เสมอ (ไม่ใช่แค่รหัสยืนยันคิวเบื้องต้นตามที่เข้าใจผิดไว้เดิม) จึงใช้คอลัมน์นี้ตรงๆ เป็นทะเบียนรถของ Booking โดยไม่มี
 // fallback คอลัมน์อื่นอีก (ไฟล์รุ่นเก่าบางไฟล์มีคอลัมน์ "ทะเบียนรถ" แต่เก็บเป็นรายการรถหลายคันคั่นจุลภาค ใช้แทนไม่ได้)
+//
+// ไม่มีคอลัมน์ "สถานะขนส่งสินค้า" ด้วยเช่นกัน (ของเดิมเคยมีแล้วเอาไปตั้ง status ของ Booking ให้ แต่ไฟล์จริงไม่มีคอลัมน์
+// นี้อยู่แล้ว และเป็นการตัดสินใจของระบบว่า "สถานะงาน" ต้องเป็นสิ่งที่ระบบ/ผู้ใช้กำหนดเองเสมอ ไม่ใช่ไฟล์ที่ import เข้ามา —
+// งานที่ import มาทุกงานจึงเริ่มที่ WAITING_DISPATCH เสมอ ไม่มีทางถูกตั้งเป็น "จบงานแล้ว" จากไฟล์ได้อีก)
 export const IMPORT_HEADERS = {
   driverName: 'พขร.',
   plate: 'คอนเฟิร์ม',
@@ -25,7 +27,6 @@ export const IMPORT_HEADERS = {
   allowance: 'เบี้ยเลี้ยง',
   price: 'ราคาปูน',
   fuel: 'น้ำมัน',
-  status: 'สถานะขนส่งสินค้า',
   note: 'หมายเหตุ',
 } as const
 
@@ -55,9 +56,6 @@ export interface ImportRowResult {
   allowance: number
   price: number
   fuelLiters: number
-  status: BookingStatus
-  statusRaw: string
-  deliveredAt?: Date
   note: string
   warnings: string[]
 }
@@ -130,9 +128,6 @@ export interface ParseImportRowDeps {
    *  ด้านบน ผู้เรียก (BookingView.vue) เป็นคนต่อกับ driversStore/vehiclesStore เพราะโมดูลนี้ไม่ผูกกับ Pinia store ตรงๆ */
   matchDriver: (nickname: string, plate: string) => { id?: string; fullName: string } | undefined
   findFuelRate: (province: string, district: string) => { liters: number } | undefined
-  /** วันที่ลงงาน (booking.loadingDate) ของไฟล์นี้ — ดึงมาจาก Row หัวเรื่องของไฟล์ (ดู parseShipDateFromTitle) ใช้คำนวณ
-   *  deliveredAt ตอนสถานะจาก Excel เป็นเวลาส่งของ (เช่น "07:14") แทนป้ายสถานะข้อความปกติ */
-  shipDate?: Date
 }
 
 /** แปลงแถว Excel ดิบเป็นข้อมูลที่ใช้สร้าง Booking ได้ทันที — ไม่มี error ที่บล็อกการสร้างงานอีกต่อไป (ตามที่ตกลง)
@@ -185,7 +180,6 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   const allowance = num(raw[IMPORT_HEADERS.allowance])
   const price = num(raw[IMPORT_HEADERS.price])
   const noteRaw = str(raw[IMPORT_HEADERS.note])
-  const statusRaw = str(raw[IMPORT_HEADERS.status])
 
   const [districtRaw, provinceRaw] = str(raw[IMPORT_HEADERS.districtProvince]).split('/')
   const district = (districtRaw || '').trim()
@@ -217,26 +211,6 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
     warnings.push(`น้ำมันจาก Excel (${fuelFromExcel} ล.) ไม่ตรงกับเรทที่ตั้งไว้สำหรับ ${district}/${province} (${configuredFuelRate} ล.)`)
   }
 
-  // "สถานะขนส่งสินค้า" บางไฟล์กรอกเป็นเวลาที่ส่งของเสร็จ (เช่น "07:14") แทนสถานะข้อความ — ถือว่าจบงานแล้ว (DELIVERED)
-  // ที่เวลานั้น ยังคงพยายาม match กับป้ายสถานะข้อความปกติก่อนเสมอ (ของเดิม) แล้วค่อย fallback มาเช็คว่าเป็นเวลาไหม
-  const matchedStatusEntry = Object.entries(bookingStatusLabel).find(([, label]) => label === statusRaw)
-  const statusTimeMatch = statusRaw.match(/(\d{1,2})[:.](\d{2})/)
-  let status: BookingStatus = 'WAITING_DISPATCH'
-  let deliveredAt: Date | undefined
-  if (matchedStatusEntry) {
-    status = matchedStatusEntry[0] as BookingStatus
-  } else if (statusTimeMatch) {
-    status = 'DELIVERED'
-    if (deps.shipDate) {
-      deliveredAt = new Date(deps.shipDate)
-      deliveredAt.setHours(Number(statusTimeMatch[1]), Number(statusTimeMatch[2]), 0, 0)
-    } else {
-      warnings.push(`ส่งของสำเร็จเวลา ${statusRaw} (ไม่มีวันที่จากไฟล์ ระบุเวลาส่งของให้ไม่ได้ครบ)`)
-    }
-  } else if (statusRaw) {
-    warnings.push(`สถานะจาก Excel ไม่ตรงกับระบบ: "${statusRaw}"`)
-  }
-
   const note = [timeExtraText, noteRaw, ...warnings].filter(Boolean).join(' | ')
 
   return {
@@ -263,9 +237,6 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
     allowance,
     price,
     fuelLiters,
-    status,
-    statusRaw,
-    deliveredAt,
     note,
     warnings,
   }

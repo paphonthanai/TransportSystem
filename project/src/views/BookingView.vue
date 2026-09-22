@@ -595,7 +595,6 @@
                       <th class="text-left px-2 py-1.5">สถานที่ส่ง</th>
                       <th class="text-left px-2 py-1.5">ชนิดปูน</th>
                       <th class="text-right px-2 py-1.5">ตัน</th>
-                      <th class="text-left px-2 py-1.5">สถานะ</th>
                       <th class="text-left px-2 py-1.5">หมายเหตุ</th>
                     </tr>
                   </thead>
@@ -608,7 +607,6 @@
                       <td class="px-2 py-1.5">{{ row.siteName || '-' }}</td>
                       <td class="px-2 py-1.5">{{ row.product || '-' }}</td>
                       <td class="px-2 py-1.5 text-right">{{ row.qty }}</td>
-                      <td class="px-2 py-1.5">{{ bookingStatusLabel[row.status] }}</td>
                       <td class="px-2 py-1.5">
                         <span v-if="row.warnings.length" class="text-amber-700">{{ row.warnings.join(', ') }}</span>
                         <span v-else class="text-green-600">ครบถ้วน</span>
@@ -1416,7 +1414,6 @@ const handleReconcileFile = async (e: Event) => {
       parseImportRow(r, idx + headerRowIndex + 2, {
         matchDriver: matchDriverForImportRow,
         findFuelRate: (province, district) => fuelRateStore.findRate(province, district) ?? undefined,
-        shipDate: reconcileShipDate.value,
       })
     )
     .filter((r) => !r.isEmpty)
@@ -1512,7 +1509,6 @@ const IMPORT_COLUMN_ORDER = [
   IMPORT_HEADERS.allowance,
   IMPORT_HEADERS.price,
   IMPORT_HEADERS.fuel,
-  IMPORT_HEADERS.status,
   IMPORT_HEADERS.note,
 ]
 
@@ -1536,7 +1532,6 @@ const downloadImportTemplate = () => {
     0,
     0,
     '',
-    bookingStatusLabel.WAITING_DISPATCH,
     '',
   ]
   const worksheet = XLSX.utils.aoa_to_sheet([IMPORT_COLUMN_ORDER, sampleRow])
@@ -1567,7 +1562,6 @@ const handleImportFile = async (e: Event) => {
     parseImportRow(r, idx + headerRowIndex + 2, {
       matchDriver: matchDriverForImportRow,
       findFuelRate: (province, district) => fuelRateStore.findRate(province, district) ?? undefined,
-      shipDate: importShipDate.value,
     })
   )
   input.value = ''
@@ -1578,9 +1572,10 @@ const importWarningRowCount = computed(() => importableRows.value.filter((r) => 
 
 /** สร้าง Booking จริงทีละแถว — เลขที่เอกสาร/ใบปล่อยรถยังออกอัตโนมัติตามปกติเสมอ (ไม่ใช้เลขจาก Excel ตรงๆ กันชนกับ
  *  เลขที่ระบบเคยออกไปแล้ว) ส่วนเลขที่เอกสารจาก Excel เก็บไว้ที่ booking.reference เพื่ออ้างอิงย้อนหลังเท่านั้น
- *  สถานะงาน (status) เซ็ตตรงจากที่ import มาได้เลยเพราะ addBooking บังคับ WAITING_DISPATCH เสมอ (ดู stores/booking.ts) —
- *  จึงต้องเซ็ตทับหลังสร้างเสร็จ ไม่ backfill timestamp อื่น (dispatchedAt/completedAt ฯลฯ) ให้เพราะเป็นข้อมูลนำเข้า ไม่ใช่
- *  งานที่เดินผ่าน flow จริง */
+ *  สถานะงาน (status) ไม่เอามาจากไฟล์ Excel เด็ดขาด — ปล่อยให้เป็น WAITING_DISPATCH ตามที่ addBooking ตั้งให้เสมอ
+ *  (เดิมเคยพยายามอ่านคอลัมน์ "สถานะขนส่งสินค้า" มาตั้งสถานะให้ แต่ไฟล์จริงของลูกค้าไม่มีคอลัมน์นี้อยู่แล้ว และระบบควร
+ *  เป็นคนกำหนดสถานะงานเอง ไม่ใช่ไฟล์ที่ import เข้ามา — เอาลอจิกนี้ออกทั้งหมด กันงานที่ import มาโดนตีความผิดเป็น
+ *  "จบงานแล้ว" ทั้งที่ยังไม่ได้จัดรถเลย) */
 const confirmImport = () => {
   if (!importableRows.value.length) return
   importableRows.value.forEach((row) => {
@@ -1598,8 +1593,6 @@ const confirmImport = () => {
         district: row.district,
         siteContactName: row.siteContactName || undefined,
         sitePhone: row.phone || undefined,
-        deliveryStatus: row.status === 'DELIVERED' ? 'DELIVERED' : undefined,
-        deliveredAt: row.deliveredAt,
         extraProducts: otherPairs.length ? otherPairs.map((p) => ({ product: p.product, qty: p.qty, unit: 'ตัน' })) : undefined,
       },
     ]
@@ -1633,8 +1626,6 @@ const confirmImport = () => {
       ticketChecked: row.ticketChecked || undefined,
       note: row.note || undefined,
     })
-    newBooking.status = row.status
-    if (row.status === 'DELIVERED' && row.deliveredAt) newBooking.completedAt = row.deliveredAt
     const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
       bookingId: newBooking.id,
       customer: newBooking.customer,
