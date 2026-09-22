@@ -67,6 +67,20 @@ describe('findReconcileMatches — จับคู่กับไฟล์จร
     expect(RECONCILE_MIN_MATCH).toBe(4)
   })
 
+  it('จับคู่สินค้าได้แม้ Booking เก่าเก็บหลายชนิดเป็นสตริงดิบไม่ได้แยก (เช่น "23 + 52" ทั้งก้อน) ต่างจากไฟล์ใหม่ที่แยกเป็น ["23","52"] — เคสจริงที่เจอ: CM2569-0070', () => {
+    const legacyBooking = makeBooking({
+      customer: 'Sccc',
+      plate: '72-2337',
+      driverName: 'คนขับทดสอบ',
+      loadingDate: shipDate,
+      items: [makeJobItem({ product: '23 + 52', qty: 10 })], // งานเก่าก่อนแก้ไข ยังไม่แยกสินค้า
+    })
+    const row: ReconcileRowInput = { ...row3FromRealFile, customer: 'Sccc', plate: '72-2337', productCodes: ['23', '52'], driverName: 'คนขับทดสอบ' }
+    const matches = findReconcileMatches(row, [legacyBooking], shipDate)
+    expect(matches[0].breakdown.product).toBe(true)
+    expect(matches[0].score).toBe(5)
+  })
+
   it('เทียบลูกค้า/ทะเบียนรถ/คนขับแบบไม่สนตัวพิมพ์เล็ก-ใหญ่/ช่องว่าง/เครื่องหมาย "-" กันจับคู่พลาดเพราะพิมพ์ต่างกันนิดหน่อย', () => {
     const booking = makeBooking({
       customer: '  fsm  ', // ตัวพิมพ์เล็ก + ช่องว่างหัวท้าย

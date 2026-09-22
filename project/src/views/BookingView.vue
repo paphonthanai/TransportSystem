@@ -713,13 +713,19 @@
                         <select
                           :value="reconcileManualPick[preview.row.rowNumber] ?? ''"
                           @change="reconcileManualPick[preview.row.rowNumber] = ($event.target as HTMLSelectElement).value"
-                          class="input-field !h-7 !text-xs w-44"
+                          class="input-field !h-7 !text-xs w-64"
                         >
                           <option value="">
-                            {{ preview.isManual ? 'ไม่จับคู่เลย' : preview.booking ? `อัตโนมัติ: ${preview.booking.docNo} (${preview.matchScore}/5)` : 'ไม่พบข้อมูลที่ตรงกัน' }}
+                            {{
+                              preview.isManual
+                                ? 'ไม่จับคู่เลย'
+                                : preview.booking
+                                  ? `แนะนำ: ${reconcileCandidateLabel(preview.booking)} (${preview.matchScore}/5)`
+                                  : 'ไม่พบข้อมูลที่ตรงกัน — เลือกจากรายการด้านล่างถ้ามั่นใจ'
+                            }}
                           </option>
                           <option v-for="c in preview.topCandidates" :key="c.booking.id" :value="c.booking.id">
-                            {{ c.booking.docNo }} ({{ c.score }}/5{{ c.score >= 4 ? ' — auto' : '' }})
+                            {{ reconcileCandidateLabel(c.booking) }} ({{ c.score }}/5)
                           </option>
                         </select>
                       </td>
@@ -778,6 +784,14 @@ import { parseGpsInput } from '@/utils/gps'
 import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
 import { exportRowsToExcel } from '@/utils/exportExcel'
 import { findReconcileMatches, computeReconcilePatches, RECONCILE_MIN_MATCH, type ReconcileMatchBreakdown } from '@/utils/importReconciliation'
+import {
+  IMPORT_HEADERS,
+  IMPORT_HEADER_MARKER,
+  parseImportRow,
+  matchDriverForImport,
+  parseShipDateFromTitle,
+  type ImportRowResult,
+} from '@/utils/importRowParser'
 import * as XLSX from 'xlsx'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 
@@ -802,26 +816,11 @@ const isAdmin = computed(() => authStore.role === 'ADMIN')
 /** หาคนขับจากชื่อเต็ม รองรับทั้งแบบมีคำนำหน้าและไม่มี (เดิมเคยอยู่ใน driversStore.findDriverByVehicle) */
 const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
 
-/** หาคนขับจาก "ชื่อเล่น" (ใช้เฉพาะตอนนำเข้า Excel — ไฟล์จัดคิวจริงกรอกชื่อเล่นแทนชื่อจริงเสมอ ต่างจาก findDriverByName
- *  ด้านบนที่จับคู่ชื่อเต็ม) ต้องเชื่อมกับทะเบียนรถที่ประจำคนขับคนนั้นด้วยเสมอกันชื่อเล่นซ้ำกัน — ถ้าเจอชื่อเล่นตรงกันคนเดียว
- *  และไม่มีทะเบียนรถมาเทียบเลย ก็ยังเชื่อชื่อเล่นได้ (ไม่มีอะไรให้ขัดแย้ง) แต่ถ้ามีทะเบียนรถมาด้วย ต้องตรงกับรถที่ประจำ
- *  คนขับคนนั้นจริงเท่านั้น ไม่งั้นถือว่าข้อมูลไม่ตรงกับที่ผูกในระบบ คืน undefined (ให้ผู้เรียกเว้นว่างไว้ ไม่เดาสุ่ม) */
-const matchDriverForImport = (nickname: string, plate: string) => {
-  // (d.nickname || '') กันพัง — คนขับที่บันทึกไว้ก่อนฟีเจอร์นี้มีอยู่ใน Firestore จริงโดยไม่มี field นี้เลย (undefined
-  // ไม่ใช่ '') เพราะ driverRepository.getAll() ไม่ได้ผ่าน sanitizeDriver() (ต่างจากตอนแก้ไขผ่านฟอร์มที่ผ่านเสมอ)
-  const candidates = driversStore.drivers.filter((d) => (d.nickname || '').trim() === nickname.trim())
-  if (candidates.length === 0) return undefined
-  const plateTrimmed = plate.trim()
-  if (candidates.length === 1) {
-    if (!plateTrimmed) return candidates[0]
-    const vehicle = vehiclesStore.vehicleForDriver(candidates[0].code)
-    return vehicle && vehicle.plate.trim() === plateTrimmed ? candidates[0] : undefined
-  }
-  if (!plateTrimmed) return undefined
-  return candidates.find((d) => {
-    const vehicle = vehiclesStore.vehicleForDriver(d.code)
-    return vehicle && vehicle.plate.trim() === plateTrimmed
-  })
+/** ต่อ matchDriverForImport (จาก importRowParser.ts) เข้ากับ driversStore/vehiclesStore จริง แล้วคืนแค่ {id, fullName}
+ *  ให้ parseImportRow ใช้ต่อ — แยกโมดูล parser ออกไม่ให้ผูกกับ Pinia store ตรงๆ จะได้เทสแยกได้จริงโดยไม่ต้อง mock store */
+const matchDriverForImportRow = (nickname: string, plate: string) => {
+  const driver = matchDriverForImport(nickname, plate, driversStore.drivers, vehiclesStore.vehicleForDriver)
+  return driver ? { id: driver.id, fullName: driversStore.fullName(driver) } : undefined
 }
 
 const searchQuery = ref('')
@@ -1356,62 +1355,9 @@ const confirmComplete = () => {
 }
 
 // --- นำเข้า Booking จากไฟล์ Excel งานจริง (Requirement: "Import Excel เพื่อสร้างงาน" ตามคอลัมน์ที่หน้างานใช้อยู่จริง) ---
-// 1 แถว Excel = 1 Booking เสมอ (ไม่มีคอลัมน์กลุ่มงานแล้วเหมือนเทมเพลตเดิม) — เจตนาของฟีเจอร์นี้เปลี่ยนจาก "สร้างงานใหม่
-// จากข้อมูลที่ครบถ้วน" เป็น "นำข้อมูลงานจริง (ที่อาจกรอกไม่ครบ/มีสถานะไปไกลแล้ว) เข้าระบบให้ได้ก่อน" ตามที่ตกลงกันไว้:
-// ห้ามข้าม/บล็อกแถวเด็ดขาดแม้ข้อมูลน้ำมัน/ปลายทาง/ราคาจะไม่ครบ ให้สร้างงานได้เสมอแล้วแปะหมายเหตุ (note) ไว้ให้ไปกรอกเพิ่มทีหลัง
-const IMPORT_HEADERS = {
-  driverName: 'พขร.',
-  vehicleRegistration: 'ทะเบียนรถ',
-  plate: 'คอนเฟิร์ม',
-  docRef: 'เลขที่เอกสาร',
-  customer: 'บมจ./บจก./ร้าน/หจก.',
-  ticketChecked: 'เช็คตั๋ว',
-  time: 'time',
-  siteName: 'สถานที่ส่งสินค้า',
-  districtProvince: 'อำเภอ/จังหวัด',
-  phone: 'เบอร์',
-  product: 'ชนิดปูน',
-  qty: 'จำนวนตัน',
-  allowance: 'เบี้ยเลี้ยง',
-  price: 'ราคาปูน',
-  fuel: 'น้ำมัน',
-  status: 'สถานะขนส่งสินค้า',
-  note: 'หมายเหตุ',
-} as const
-
-interface ImportRowResult {
-  rowNumber: number
-  isEmpty: boolean
-  driverName: string
-  driverId?: string
-  plate: string
-  docRef: string
-  customer: string
-  ticketChecked: boolean
-  time: string
-  siteName: string
-  district: string
-  province: string
-  siteContactName: string
-  phone: string
-  product: string
-  /** แยกจาก product ด้วยเครื่องหมาย "+" (เช่น "23 + 52" → ["23","52"]) — กรณีแถวเดียวมีหลายชนิดสินค้าปนกัน
-   *  ตัวแรกใช้เป็นสินค้าหลักของ Item เดิม ตัวที่เหลือไปเป็น extraProducts (ดู confirmImport) */
-  productCodes: string[]
-  /** สินค้าแต่ละชนิดคู่กับจำนวนตันของตัวเอง (จับคู่ตามตำแหน่งกับคอลัมน์จำนวนตันที่แยกด้วย + เหมือนกัน) — ใช้สร้าง
-   *  extraProducts ตอน confirmImport แทนการเดาแบ่ง qty รวมเท่าๆ กันทุกชนิด */
-  productQtyPairs: { product: string; qty: number }[]
-  qty: number
-  allowance: number
-  price: number
-  fuelLiters: number
-  status: BookingStatus
-  statusRaw: string
-  deliveredAt?: Date
-  note: string
-  warnings: string[]
-}
-
+// การ parse แถวจริง (IMPORT_HEADERS/ImportRowResult/parseImportRow ฯลฯ) ย้ายไปอยู่ที่ src/utils/importRowParser.ts
+// แล้ว (เทสแยกได้จริงโดยไม่ต้อง mock Pinia store) ไฟล์นี้เหลือแค่ state ของ modal + ต่อ deps (driversStore/
+// vehiclesStore/fuelRateStore) เข้ากับ parser เท่านั้น
 const importModalOpen = ref(false)
 const importRows = ref<ImportRowResult[]>([])
 const importFileName = ref('')
@@ -1465,7 +1411,15 @@ const handleReconcileFile = async (e: Event) => {
   reconcileShipDate.value = hasTitleRow ? parseShipDateFromTitle((allRows[0] || []).join(' ')) : undefined
   const headerRowIndex = hasTitleRow ? 1 : 0
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', range: headerRowIndex })
-  reconcileRows.value = raw.map((r, idx) => parseImportRow(r, idx + headerRowIndex + 2, reconcileShipDate.value)).filter((r) => !r.isEmpty)
+  reconcileRows.value = raw
+    .map((r, idx) =>
+      parseImportRow(r, idx + headerRowIndex + 2, {
+        matchDriver: matchDriverForImportRow,
+        findFuelRate: (province, district) => fuelRateStore.findRate(province, district) ?? undefined,
+        shipDate: reconcileShipDate.value,
+      })
+    )
+    .filter((r) => !r.isEmpty)
   reconcileManualPick.value = {}
   input.value = ''
 }
@@ -1481,6 +1435,13 @@ const reconcileBreakdownLabel: Record<keyof ReconcileMatchBreakdown, string> = {
   plate: 'ทะเบียนรถ',
   product: 'สินค้า',
   driver: 'คนขับ',
+}
+
+/** โชว์รายละเอียดจริงของงานที่จะให้เลือก แทนการโชว์แค่เลขที่เอกสารเปล่าๆ ที่เดาไม่ออกว่าใช่งานเดียวกันไหม */
+const reconcileCandidateLabel = (booking: Booking) => {
+  const product = booking.items[0]?.product || '-'
+  const date = booking.loadingDate ? formatShortDate(booking.loadingDate) : 'ไม่มีวันที่'
+  return `${booking.docNo} · ${booking.customer} · ${booking.plate || 'ไม่มีทะเบียน'} · ${product} · ${date}`
 }
 
 const reconcilePreview = computed(() =>
@@ -1530,18 +1491,14 @@ const confirmReconcile = () => {
   }
 }
 
-/** คอลัมน์แรกสุดของชีทงานจริงเสมอ (ทั้งไฟล์ที่มี Row หัวเรื่อง+วันที่ และไฟล์ที่ไม่มี) ใช้เช็คใน handleImportFile ว่า
- *  Row แรกของไฟล์ที่อัปโหลดเป็นหัวคอลัมน์เลย (ไม่มีหัวเรื่อง) หรือเป็นหัวเรื่อง/วันที่ส่งงานที่ต้องข้ามไปอีก 1 แถว */
-const IMPORT_HEADER_MARKER = 'ลำดับ'
-
 /** ลำดับคอลัมน์ทั้งหมดของชีทงานจริง รวมคอลัมน์ที่ไม่ได้ใช้เก็บข้อมูล (ลำดับ/เที่ยวที่ — เที่ยวที่คำนวณสดเสมอ ดู
  *  driverTripNumberForBooking) ไว้ด้วย เพื่อให้ Template ที่ดาวน์โหลดหน้าตาตรงกับไฟล์งานจริงเป๊ะ และ Row แรกของ
- *  Template ขึ้นต้นด้วย "ลำดับ" เหมือนไฟล์จริงที่ไม่มีหัวเรื่อง (ดู IMPORT_HEADER_MARKER) */
+ *  Template ขึ้นต้นด้วย "ลำดับ" เหมือนไฟล์จริงที่ไม่มีหัวเรื่อง (ดู IMPORT_HEADER_MARKER) — ไม่มีคอลัมน์ "ทะเบียนรถ"
+ *  เพราะไฟล์จริงของลูกค้าไม่มีคอลัมน์นี้ ("คอนเฟิร์ม" คือทะเบียนรถจริงที่ใช้ยืนยันงานอยู่แล้ว ดู IMPORT_HEADERS.plate) */
 const IMPORT_COLUMN_ORDER = [
   IMPORT_HEADER_MARKER,
   'เที่ยวที่',
   IMPORT_HEADERS.driverName,
-  IMPORT_HEADERS.vehicleRegistration,
   IMPORT_HEADERS.plate,
   IMPORT_HEADERS.docRef,
   IMPORT_HEADERS.customer,
@@ -1568,7 +1525,6 @@ const downloadImportTemplate = () => {
     '',
     '',
     '',
-    '',
     'ตัวอย่าง บริษัท จำกัด',
     '',
     '',
@@ -1589,176 +1545,6 @@ const downloadImportTemplate = () => {
   XLSX.writeFile(workbook, 'Booking_Import_Template.xlsx')
 }
 
-/** อ่านวันที่แรกที่เจอในข้อความหัวเรื่อง รูปแบบ DD-MM-YY/YYYY (พ.ศ.) เช่น "19-09-69" หรือ "19/09/2569" — เอาแค่วันที่แรก
- *  แม้หัวเรื่องจะมีช่วงวันที่ (เช่น "(ศุกร์ >> เสาร์)") ต่อท้ายก็ตาม ปีที่กรอก 2 หลักถือเป็น พ.ศ. ย่อ (69 = 2569) */
-const parseShipDateFromTitle = (text: string): Date | undefined => {
-  const match = text.match(/(\d{1,2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{2,4})/)
-  if (!match) return undefined
-  const day = Number(match[1])
-  const month = Number(match[2])
-  const beYear = Number(match[3]) < 100 ? Number(match[3]) + 2500 : Number(match[3])
-  const date = new Date(beYear - 543, month - 1, day)
-  return Number.isNaN(date.getTime()) ? undefined : date
-}
-
-/** แปลงแถว Excel ดิบเป็นข้อมูลที่ใช้สร้าง Booking ได้ทันที — ไม่มี error ที่บล็อกการสร้างงานอีกต่อไป (ตามที่ตกลง)
- *  ข้อมูลส่วนไหนขาด/จับคู่ไม่ได้ (คนขับไม่พบในทะเบียน, น้ำมัน/ปลายทางไม่มีเรท, สถานะไม่ตรง ฯลฯ) จะถูกสะสมไว้ใน warnings
- *  แล้วต่อท้ายเข้า note ของ Booking ให้ออฟฟิศไปตรวจ/กรอกเพิ่มทีหลัง แถวที่ไม่มีข้อมูลอะไรเลย (isEmpty) จะถูกข้ามตอนสร้างจริง
- *  เพราะถือเป็นแถวว่างท้ายชีท ไม่ใช่ข้อมูลที่ตั้งใจกรอก */
-/** ดึงช่วง/จุดเวลา (เช่น "08.00 - 17.00" หรือ "07:14") ออกจากข้อความที่อาจมีข้อความอื่นปนมาด้วย (เช่น "ย้ำ!! ตราประทับ")
- *  คืนทั้งเวลาที่เจอ (ถ้ามี) และข้อความส่วนที่เหลือ (ไม่รวมเวลา) ไว้ไปต่อเป็นหมายเหตุแทนการทิ้งไป */
-const extractTimeAndText = (raw: string): { time: string; text: string } => {
-  const match = raw.match(/\d{1,2}[.:]\d{2}(?:\s*-\s*\d{1,2}[.:]\d{2})?/)
-  const time = match ? match[0].replace(/\s+/g, '') : ''
-  const text = (match ? raw.replace(match[0], '') : raw).replace(/[\r\n]+/g, ' ').trim()
-  return { time, text }
-}
-
-/** แยกชื่อผู้ติดต่อออกจากเบอร์โทร ในกรณีที่ Excel กรอกปนกันมาในช่องเดียว (เช่น "ผรม.กรวีวัลย์ โฮมเวิร์ค\nช่างจอม 086-3347315")
- *  เก็บเบอร์แรกที่เจอไว้ที่ sitePhone (ไว้ใช้กดโทรได้ตรงๆ) ส่วน contactName เก็บข้อความเต็มทั้งหมด (ขึ้นบรรทัดใหม่แทนด้วย ", ")
- *  ไว้เผื่อมีมากกว่า 1 ชื่อ/เบอร์ในช่องเดียว — ไม่ทิ้งข้อมูลไหนไป แค่แยกเบอร์แรกออกมาเป็นฟิลด์ที่ใช้งานง่ายเพิ่ม */
-const splitContactPhone = (raw: string): { contactName: string; phone: string } => {
-  const phoneMatch = raw.match(/0[\d\-\s]{7,}\d/)
-  const phone = phoneMatch ? phoneMatch[0].replace(/[\s-]+/g, '') : ''
-  const contactName = raw.replace(/[\r\n]+/g, ', ').trim()
-  return { contactName, phone }
-}
-
-const parseImportRow = (raw: Record<string, unknown>, rowNumber: number, shipDateOverride?: Date): ImportRowResult => {
-  const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())
-  const num = (v: unknown) => {
-    const n = typeof v === 'number' ? v : Number(str(v))
-    return Number.isFinite(n) ? n : 0
-  }
-
-  const driverName = str(raw[IMPORT_HEADERS.driverName])
-  // ทะเบียนรถ = เลขทะเบียนจริง (มักยังไม่กรอกตอนจัดคิวล่วงหน้า), คอนเฟิร์ม = รหัสรถที่ใช้ยืนยันคิวเบื้องต้น —
-  // ใช้ทะเบียนรถก่อนถ้ามี ไม่งั้น fallback ไปโค้ดในคอนเฟิร์ม เพราะ Booking มีที่เก็บได้แค่ช่องเดียว (plate)
-  const plate = str(raw[IMPORT_HEADERS.vehicleRegistration]) || str(raw[IMPORT_HEADERS.plate])
-  const docRef = str(raw[IMPORT_HEADERS.docRef])
-  const customer = str(raw[IMPORT_HEADERS.customer])
-  // คอลัมน์ "time" ในไฟล์จริงมักมีข้อความอื่นปนมากับเวลา (เช่น "ย้ำ!! ตราประทับ") — แยกเวลาไว้ใช้เป็น loadingTime
-  // จริงๆ ส่วนข้อความที่เหลือไปต่อแถวหมายเหตุแทนที่จะทิ้ง
-  const { time, text: timeExtraText } = extractTimeAndText(str(raw[IMPORT_HEADERS.time]))
-  const siteName = str(raw[IMPORT_HEADERS.siteName])
-  // คอลัมน์ "เบอร์" มักกรอกชื่อผู้ติดต่อ+เบอร์โทรปนกันมาในช่องเดียว — แยกเบอร์ออกมาเป็น field ใช้งานง่าย
-  // (sitePhone) ส่วนข้อความเต็มเก็บไว้ที่ siteContactName ไม่ให้ข้อมูลหาย
-  const { contactName: siteContactName, phone } = splitContactPhone(str(raw[IMPORT_HEADERS.phone]))
-  const product = str(raw[IMPORT_HEADERS.product])
-  // "23 + 52" หรือ "52 + 13 + 23" หมายถึงหลายชนิดสินค้าปนมาในเที่ยวเดียว ไม่ใช่ชื่อสินค้าชื่อเดียวที่มีเครื่องหมาย +
-  // อยู่ในชื่อ — แยกออกเป็นรายการเดี่ยวๆ ไปแสดงแบบคอลัมน์ (ดู productColumns + JobItem.extraProducts) ยืนยันจากไฟล์จริง
-  // แล้วว่า "จำนวนตัน" ก็แยกด้วย + คู่กันตำแหน่งต่อตำแหน่งเช่นกัน (เช่น "23 + 13" คู่กับ "0.40 + 9.60")
-  const productCodes = product
-    .split('+')
-    .map((p) => p.trim())
-    .filter(Boolean)
-  // เดิม num() พาร์สค่าดิบทั้งก้อนตรงๆ ("0.40 + 9.60") ได้ NaN แล้ว fallback เป็น 0 เงียบๆ — เป็นสาเหตุจริงที่ทำให้
-  // งานที่มีสินค้าหลายชนิดในเที่ยวเดียว (จำนวนตันเขียนแบบ "0.40 + 9.60") ได้ tripFee/ยอดใบสั่งสินค้าเป็น 0 ทั้งที่ราคา
-  // ปูนกรอกมาถูกต้อง (ไม่มีคำเตือนราคาให้สังเกตด้วย) — แก้ด้วยการแยกตามเครื่องหมาย + แล้วรวมยอดจริงแทน (ค่าปกติที่ไม่มี +
-  // เลยก็ยังพาร์สได้ผลลัพธ์เดิมทุกประการ เพราะ split บนสตริงไม่มี + ได้ array 1 ตัวเท่ากับค่าเดิม)
-  const qtyStr = str(raw[IMPORT_HEADERS.qty])
-  const qtyParts = qtyStr
-    .split('+')
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isFinite(n))
-  const qty = qtyParts.length ? Math.round(qtyParts.reduce((sum, n) => sum + n, 0) * 100) / 100 : 0
-  /** จับคู่สินค้ากับจำนวนตันเป็นรายชนิด — ใช้ได้เฉพาะตอนจำนวนชิ้นตรงกันเป๊ะ (กรณีปกติ) ถ้าจำนวนไม่ตรงกัน (ข้อมูลกรอกมา
-   *  ไม่สมบูรณ์ เช่น เขียนโค้ดสินค้าปนเครื่องหมาย "-" จนแยกจำนวนชนิดผิด) ให้ยกยอดรวมทั้งหมดไปไว้ที่สินค้าตัวแรกก่อน
-   *  แทนการเดาแบ่งเอง แล้วเตือนให้ไปตรวจสอบเอง (ดู warnings ด้านล่าง) */
-  const productQtyPairs =
-    productCodes.length > 0 && productCodes.length === qtyParts.length
-      ? productCodes.map((p, i) => ({ product: p, qty: qtyParts[i] }))
-      : productCodes.map((p, i) => ({ product: p, qty: i === 0 ? qty : 0 }))
-  const allowance = num(raw[IMPORT_HEADERS.allowance])
-  const price = num(raw[IMPORT_HEADERS.price])
-  const noteRaw = str(raw[IMPORT_HEADERS.note])
-  const statusRaw = str(raw[IMPORT_HEADERS.status])
-
-  const [districtRaw, provinceRaw] = str(raw[IMPORT_HEADERS.districtProvince]).split('/')
-  const district = (districtRaw || '').trim()
-  const province = (provinceRaw || '').trim()
-
-  const isEmpty = !driverName && !customer && !siteName && !product
-
-  const warnings: string[] = []
-
-  const matchedDriver = driverName ? matchDriverForImport(driverName, plate) : undefined
-  if (driverName && !matchedDriver) warnings.push(`ชื่อเล่นคนขับ "${driverName}" ไม่ตรงกับที่ผูกไว้ในระบบ (เทียบกับทะเบียนรถแล้ว) — เว้นคนขับว่างไว้ก่อน`)
-
-  if (!allowance) warnings.push('ต้องกรอกเพิ่ม: เบี้ยเลี้ยง')
-  if (!price) warnings.push('ต้องกรอกเพิ่ม: ราคาปูน')
-  // เดิมไม่เช็คว่าขาดจำนวนตันเลย — งานที่ Excel ไม่กรอกจำนวนตันมาจะเงียบๆ กลายเป็น 0 ตันโดยไม่มีคำเตือนใดๆ
-  // (ต่างจากราคา/เบี้ยเลี้ยงที่เตือนอยู่แล้ว) ทำให้ผู้ใช้งงว่าทำไมน้ำหนัก/ราคาเป็น 0 ทั้งที่สินค้ากรอกมาถูกต้อง
-  if (!qty) warnings.push('ต้องกรอกเพิ่ม: จำนวนตัน')
-  if (productCodes.length > 1 && productCodes.length !== qtyParts.length) {
-    warnings.push(`สินค้าหลายชนิดในเที่ยวเดียว (${productCodes.join(' + ')}) แต่จำนวนตันแยกไม่ตรงกับจำนวนชนิดสินค้า — ยกยอดรวมไปไว้ที่ "${productCodes[0]}" ก่อน ตรวจสอบแยกจำนวนตันต่อชนิดเองภายหลัง`)
-  }
-
-  const fuelFromExcel = num(raw[IMPORT_HEADERS.fuel])
-  const configuredFuelRate = province && district ? fuelRateStore.findRate(province, district)?.liters : undefined
-  let fuelLiters = fuelFromExcel || configuredFuelRate || 0
-  if (!fuelLiters || !province || !district) {
-    warnings.push('ตรวจสอบข้อมูลน้ำมัน/ปลายทาง')
-  } else if (fuelFromExcel && configuredFuelRate && fuelFromExcel !== configuredFuelRate) {
-    // น้ำมันจาก Excel ไม่ตรงกับเรทที่ตั้งค่าไว้สำหรับปลายทางนี้ — ยังใช้ค่าจาก Excel ตามเดิม (ไม่ใช้เรทตั้งค่าทับ) แค่เตือนให้ตรวจสอบ
-    warnings.push(`น้ำมันจาก Excel (${fuelFromExcel} ล.) ไม่ตรงกับเรทที่ตั้งไว้สำหรับ ${district}/${province} (${configuredFuelRate} ล.)`)
-  }
-
-  // "สถานะขนส่งสินค้า" บางไฟล์กรอกเป็นเวลาที่ส่งของเสร็จ (เช่น "07:14") แทนสถานะข้อความ — ถือว่าจบงานแล้ว (DELIVERED)
-  // ที่เวลานั้น ยังคงพยายาม match กับป้ายสถานะข้อความปกติก่อนเสมอ (ของเดิม) แล้วค่อย fallback มาเช็คว่าเป็นเวลาไหม
-  const matchedStatusEntry = Object.entries(bookingStatusLabel).find(([, label]) => label === statusRaw)
-  const statusTimeMatch = statusRaw.match(/(\d{1,2})[:.](\d{2})/)
-  let status: BookingStatus = 'WAITING_DISPATCH'
-  let deliveredAt: Date | undefined
-  if (matchedStatusEntry) {
-    status = matchedStatusEntry[0] as BookingStatus
-  } else if (statusTimeMatch) {
-    status = 'DELIVERED'
-    const shipDate = shipDateOverride ?? importShipDate.value
-    if (shipDate) {
-      deliveredAt = new Date(shipDate)
-      deliveredAt.setHours(Number(statusTimeMatch[1]), Number(statusTimeMatch[2]), 0, 0)
-    } else {
-      warnings.push(`ส่งของสำเร็จเวลา ${statusRaw} (ไม่มีวันที่จากไฟล์ ระบุเวลาส่งของให้ไม่ได้ครบ)`)
-    }
-  } else if (statusRaw) {
-    warnings.push(`สถานะจาก Excel ไม่ตรงกับระบบ: "${statusRaw}"`)
-  }
-
-  const note = [timeExtraText, noteRaw, ...warnings].filter(Boolean).join(' | ')
-
-  return {
-    rowNumber,
-    isEmpty,
-    // ถ้าจับคู่ชื่อเล่น+ทะเบียนรถไม่ได้ ให้เว้นชื่อคนขับว่างไว้เลย (ไม่ใช้ชื่อเล่นดิบจากไฟล์ตรงๆ เพราะ driverName ของ
-    // Booking ใช้คำนวณเงินเดือนจริง ต้องเป็นชื่อ-นามสกุลที่ยืนยันแล้วเท่านั้น) — ชื่อเล่นดิบยังอยู่ใน warnings/note ด้านบน
-    driverName: matchedDriver ? driversStore.fullName(matchedDriver) : '',
-    driverId: matchedDriver?.id,
-    plate,
-    docRef,
-    customer,
-    ticketChecked: !!str(raw[IMPORT_HEADERS.ticketChecked]),
-    time,
-    siteName,
-    district,
-    province,
-    siteContactName,
-    phone,
-    product,
-    productCodes,
-    productQtyPairs,
-    qty,
-    allowance,
-    price,
-    fuelLiters,
-    status,
-    statusRaw,
-    deliveredAt,
-    note,
-    warnings,
-  }
-}
-
 /** รองรับไฟล์ทั้ง 2 แบบ: (1) Row แรกเป็นหัวคอลัมน์เลย (ไม่มีหัวเรื่อง/วันที่) และ (2) Row แรกเป็นหัวเรื่อง+วันที่ส่งงาน
  *  แล้ว Row ที่สองถึงเป็นหัวคอลัมน์จริง — เช็คจากคอลัมน์แรกสุดของ Row แรก: ถ้าไม่ใช่ "ลำดับ" (IMPORT_HEADER_MARKER)
  *  ถือว่าเป็นหัวเรื่อง ต้องข้ามไปอีก 1 แถวถึงจะถึงหัวคอลัมน์จริง (เดิม fix ค่า range=1 ตายตัวเสมอ ทำให้ไฟล์แบบ (1)
@@ -1777,7 +1563,13 @@ const handleImportFile = async (e: Event) => {
   importShipDate.value = hasTitleRow ? parseShipDateFromTitle((allRows[0] || []).join(' ')) : undefined
   const headerRowIndex = hasTitleRow ? 1 : 0
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', range: headerRowIndex })
-  importRows.value = raw.map((r, idx) => parseImportRow(r, idx + headerRowIndex + 2))
+  importRows.value = raw.map((r, idx) =>
+    parseImportRow(r, idx + headerRowIndex + 2, {
+      matchDriver: matchDriverForImportRow,
+      findFuelRate: (province, district) => fuelRateStore.findRate(province, district) ?? undefined,
+      shipDate: importShipDate.value,
+    })
+  )
   input.value = ''
 }
 

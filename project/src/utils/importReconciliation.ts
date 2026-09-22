@@ -33,14 +33,33 @@ export interface ReconcileMatchResult {
 const isSameCalendarDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 
 /** เทียบข้อความแบบไม่สนตัวพิมพ์เล็ก-ใหญ่/ช่องว่างหัวท้าย — กันจับคู่พลาดเพราะข้อมูลเดียวกันแต่พิมพ์ต่างกันเล็กน้อย
- *  (เช่น "fsm" vs "FSM", หรือช่องว่างติดมาจาก Excel) ไม่ใช้กับทะเบียนรถ เพราะรูปแบบ (มี "-" หรือไม่) เพี้ยนได้มากกว่านั้น
- *  เลยเทียบทะเบียนรถแบบตัดอักขระที่ไม่ใช่ตัวอักษร/ตัวเลขออกก่อนแทน (normalizeCode) */
+ *  (เช่น "fsm" vs "FSM", หรือช่องว่างติดมาจาก Excel) ไม่ใช้กับทะเบียนรถ/รหัสสินค้า เพราะรูปแบบ (มี "-" หรือไม่) เพี้ยน
+ *  ได้มากกว่านั้น เลยเทียบแบบตัดอักขระที่ไม่ใช่ตัวอักษร/ตัวเลขออกก่อนแทน (normalizePlateCode — ใช้ทั้งกับทะเบียนรถและ
+ *  รหัสสินค้า เพราะทั้งคู่มีปัญหารูปแบบเขียนต่างกันแบบเดียวกัน คือมี/ไม่มีขีดหรือช่องว่างคั่น) */
 const normalizeText = (s: string) => s.trim().toLowerCase()
-const normalizeCode = (s: string) => s.toLowerCase().replace(/[^a-z0-9ก-๛]/g, '')
+export const normalizePlateCode = (s: string) => s.toLowerCase().replace(/[^a-z0-9ก-๛]/g, '')
+
+/** booking.plate เก็บทะเบียน+จังหวัดต่อท้ายเสมอหลังจัดรถจริงจริง (เช่น "70-8821 สระบุรี" ดู vehiclesStore.fullPlate)
+ *  แต่คอลัมน์ "คอนเฟิร์ม" ในไฟล์ Excel มีแค่เลขทะเบียนเดี่ยวๆ ไม่มีจังหวัด ("70-8821") — ต้องตัดจังหวัดออกก่อนเทียบ ไม่งั้น
+ *  จะไม่มีทางตรงกันได้เลยไม่ว่าเลขทะเบียนจะตรงกันจริงแค่ไหน ตัดที่ช่องว่างตัวแรกได้ปลอดภัย เพราะ fullPlate ต่อด้วย
+ *  เว้นวรรคตัวเดียวเสมอ และ Vehicle.plate เองไม่เคยมีช่องว่างในตัว (ดู stores/vehicles.ts) */
+const stripPlateProvince = (s: string) => s.split(' ')[0]
 
 /** ต้องตรงกันอย่างน้อย 4 จาก 5 อย่าง (วันที่/ลูกค้า/ทะเบียนรถ/สินค้าหลัก/คนขับ) ถึงจะถือว่าใช่งานเดียวกัน — กันจับคู่ผิดงาน
  *  ที่ข้อมูลคล้ายกันโดยบังเอิญ (เช่น ลูกค้า+สินค้าเดียวกันคนละวัน) */
 export const RECONCILE_MIN_MATCH = 4
+
+/** งานที่ import ไว้ก่อนจะแก้ให้แยกสินค้าหลายชนิดเป็น item หลัก + extraProducts (ดู BookingView.vue confirmImport)
+ *  จะมี booking.items[0].product เก็บเป็นสตริงดิบไม่ได้แยก เช่น "23 + 52" ทั้งก้อน — ต่างจากไฟล์ที่เพิ่ง parse ใหม่ที่ได้
+ *  productCodes แยกเป็น ["23","52"] เทียบแค่ตัวแรกอย่างเดียวจึงพลาดกับงานเก่ากลุ่มนี้เสมอ (คือไม่ตรง "23" ตัวเดียว) —
+ *  เทียบทั้ง 2 แบบ: ตัวแรกอย่างเดียว (งานใหม่ที่แยกแล้ว) หรือรวมทุกตัวเป็นก้อนเดียว (งานเก่าที่ยังไม่แยก) */
+function productMatches(booking: Booking, productCodes: string[]): boolean {
+  const bookingProduct = booking.items[0]?.product
+  if (!bookingProduct || productCodes.length === 0) return false
+  const bookingNorm = normalizePlateCode(bookingProduct)
+  if (normalizePlateCode(productCodes[0]) === bookingNorm) return true
+  return normalizePlateCode(productCodes.join('')) === bookingNorm
+}
 
 /** คืนผู้สมัครทุกคนที่ตรงอย่างน้อย 1 อย่าง (ไม่ใช่แค่ที่ผ่านเกณฑ์) เรียงคะแนนมาก→น้อย — ผู้เรียกเป็นคนตัดสินใจว่าจะ
  *  auto-apply เฉพาะที่ผ่านเกณฑ์ (RECONCILE_MIN_MATCH) หรือจะโชว์ผู้สมัครที่ใกล้เคียงที่สุดให้เลือกยืนยันเองก็ได้ */
@@ -50,8 +69,8 @@ export function findReconcileMatches(row: ReconcileRowInput, bookings: Booking[]
       const breakdown: ReconcileMatchBreakdown = {
         date: !!(shipDate && booking.loadingDate && isSameCalendarDay(new Date(booking.loadingDate), shipDate)),
         customer: !!(row.customer && booking.customer && normalizeText(booking.customer) === normalizeText(row.customer)),
-        plate: !!(row.plate && booking.plate && normalizeCode(booking.plate) === normalizeCode(row.plate)),
-        product: !!(row.productCodes[0] && booking.items[0]?.product && normalizeCode(booking.items[0].product) === normalizeCode(row.productCodes[0])),
+        plate: !!(row.plate && booking.plate && normalizePlateCode(stripPlateProvince(booking.plate)) === normalizePlateCode(row.plate)),
+        product: productMatches(booking, row.productCodes),
         driver: !!(row.driverName && booking.driverName && normalizeText(booking.driverName) === normalizeText(row.driverName)),
       }
       const score = Object.values(breakdown).filter(Boolean).length
