@@ -2995,6 +2995,41 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return documents.value.filter((d) => (d.bookingIds || []).includes(bookingId))
   }
 
+  /** สถานะที่ถือว่าเอกสารประเภทนั้นยัง "แก้ไขได้" (ยังไม่ถูกวางบิล/เก็บเงิน/ปิดงาน) — ใช้เฉพาะตอนแก้ชื่อลูกค้าใน Booking
+   *  แล้วต้องเลือกว่าจะไล่แก้ชื่อในเอกสารลูกตามไปด้วยหรือไม่ (ดู renameCustomerOnBookingDocuments) SALES_ORDER ไม่มี
+   *  สถานะ "ปิด/ชำระแล้ว" เป็นของตัวเอง (status เป็น 'CONVERTED' คงที่ตั้งแต่สร้างเสมอ ดู createSalesOrderForBooking)
+   *  จึงถือว่าแก้ไขได้เสมอ */
+  function isDocumentStillEditableForCustomerRename(d: SalesDocument): boolean {
+    switch (d.type) {
+      case 'SALES_ORDER':
+        return true
+      case 'BILLING':
+        return d.status === 'BILLING_PENDING'
+      case 'TAX_INVOICE':
+        return d.status === 'DRAFT' || d.status === 'SENT'
+      case 'RECEIPT':
+        return d.status === 'DRAFT'
+      default:
+        return false
+    }
+  }
+
+  /**
+   * แก้ชื่อลูกค้าใน Booking แล้วไล่อัปเดตชื่อลูกค้าในเอกสารขายที่อ้างอิง Booking นี้ (ผ่าน bookingIds) ให้ตรงกันด้วย —
+   * เฉพาะเอกสารที่ "ยังแก้ไขได้" เท่านั้น (ดู isDocumentStillEditableForCustomerRename) เอกสารที่วางบิล/เก็บเงิน/ปิดงาน
+   * ไปแล้วถือเป็นบันทึกทางบัญชีที่ freeze ชื่อลูกค้า ณ ตอนนั้นไว้ ไม่แก้ย้อนหลัง (ใช้ตอนแก้ไข Booking จากหน้า
+   * BookingEditView.vue — ดู updateBookingFull ใน stores/booking.ts) อัปเดต snapshot ที่อยู่/เลขผู้เสียภาษีให้ตรงกับ
+   * ลูกค้าใหม่ไปด้วย (resolveCustomerTaxSnapshot ตัวเดียวกับตอนสร้างเอกสารเหล่านี้ครั้งแรก)
+   */
+  function renameCustomerOnBookingDocuments(bookingId: string, newCustomer: string) {
+    documentsReferencingBooking(bookingId)
+      .filter((d) => isDocumentStillEditableForCustomerRename(d) && d.customer !== newCustomer)
+      .forEach((d) => {
+        d.customer = newCustomer
+        Object.assign(d, resolveCustomerTaxSnapshot(newCustomer))
+      })
+  }
+
   /**
    * ลบเอกสารขายหลายใบออกจาก local state พร้อมกัน (ใช้เฉพาะหลัง Hard Delete Booking ลบเอกสารเหล่านี้ใน Firestore
    * จริงสำเร็จแล้วเท่านั้น — ฟังก์ชันนี้ไม่เขียน Firestore เอง แค่ sync state ให้ตรงกับความจริง) ไม่ใช้
@@ -3114,6 +3149,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     deleteReceipt,
     createCashSale,
     documentsReferencingBooking,
+    renameCustomerOnBookingDocuments,
     removeDocumentsLocally,
   }
 })

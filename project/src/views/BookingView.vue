@@ -788,6 +788,7 @@ import {
   parseImportRow,
   matchDriverForImport,
   parseShipDateFromTitle,
+  flagPriceOutliers,
   type ImportRowResult,
 } from '@/utils/importRowParser'
 import * as XLSX from 'xlsx'
@@ -1566,6 +1567,9 @@ const handleImportFile = async (e: Event) => {
       findFuelRate: (province, district) => fuelRateStore.findRate(province, district) ?? undefined,
     })
   )
+  // เทียบราคาต่อหน่วยของแต่ละแถวกับราคามัธยฐานของสินค้าเดียวกันในไฟล์นี้ กันกรณีกรอกราคารวมมาแทนราคาต่อหน่วย
+  // (ดู flagPriceOutliers) ต้องรอให้ parse ครบทุกแถวก่อนถึงจะเทียบได้ จึงทำหลัง map เสร็จ ไม่ใช่ต่อแถวใน parseImportRow
+  flagPriceOutliers(importRows.value)
   input.value = ''
 }
 
@@ -1620,7 +1624,8 @@ const confirmImport = () => {
        *  รองรับตั้งแต่แรก คงไว้ที่ 0 เหมือนเดิม (ไม่ใช่ตัวที่ยอดวางบิล/รายได้อ่านอยู่ดี) */
       tripFee: amount,
       agreedPrice: 0,
-      vatRate: documentSettingsStore.settings.vatRate,
+      // ไม่ auto-เซ็ต VAT ของระบบให้งาน import อีกต่อไป — ไฟล์ Excel ไม่มีคอลัมน์ภาษีเลย การเติม VAT 7% ให้เองทำให้
+      // ใบสั่งงานที่พิมพ์ออกมามี VAT ติดทุกใบทั้งที่ไม่มีใครกรอก (ดู JobDocumentView.vue's showVatRow)
       pricingMode: 'SINGLE_DESTINATION',
       fuelLiters: row.fuelLiters,
       fuelRate: fuelRateStore.settings.todayPricePerLiter,

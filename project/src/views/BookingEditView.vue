@@ -18,6 +18,13 @@
       <h3 class="font-semibold text-text mb-3">ข้อมูลเอกสาร</h3>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
+          <label class="block text-xs font-semibold text-muted mb-1">ชื่อลูกค้า</label>
+          <input v-model="editForm.customer" list="editCustomerNameOptions" placeholder="ชื่อลูกค้า (พิมพ์ใหม่ได้ หรือเลือกจากสมุดรายชื่อ)" class="input-field w-full" />
+          <datalist id="editCustomerNameOptions">
+            <option v-for="c in customerStore.customers" :key="c.name" :value="c.name" />
+          </datalist>
+        </div>
+        <div>
           <label class="block text-xs font-semibold text-muted mb-1">ใบสั่งงาน (PO)</label>
           <input v-model="editForm.po" placeholder="เลขที่ PO" class="input-field w-full" />
         </div>
@@ -52,6 +59,18 @@
         <div>
           <label class="block text-xs font-semibold text-muted mb-1">ต้นทาง</label>
           <input v-model="editForm.origin" placeholder="จุดขึ้นสินค้า" class="input-field w-full" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-muted mb-1">เลขที่ PO ลูกค้า</label>
+          <input v-model="editForm.reference" class="input-field w-full" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-muted mb-1">รายละเอียด</label>
+          <input v-model="editForm.description" class="input-field w-full" />
+        </div>
+        <div class="md:col-span-3">
+          <label class="block text-xs font-semibold text-muted mb-1">หมายเหตุ</label>
+          <textarea v-model="editForm.note" rows="3" class="input-field w-full" />
         </div>
         <div class="md:col-span-3">
           <label class="block text-xs font-semibold text-muted mb-1">
@@ -268,6 +287,7 @@ import { useBookingStore } from '@/stores/booking'
 import { useInventoryStore } from '@/stores/inventory'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { useAuthStore } from '@/stores/auth'
+import { useCustomerStore } from '@/stores/customers'
 import type { Booking, BookingCategory, JobItem, PricingMode } from '@/types'
 import { parseGpsInput } from '@/utils/gps'
 import JobItemEditorModal, { type JobItemDraft } from '@/components/booking/JobItemEditorModal.vue'
@@ -279,6 +299,7 @@ const bookingStore = useBookingStore()
 const inventoryStore = useInventoryStore()
 const fuelRateStore = useFuelRateStore()
 const authStore = useAuthStore()
+const customerStore = useCustomerStore()
 
 /** ล็อกช่องน้ำมันถ้ามีปลายทางที่ยังไม่ได้ตั้งค่าน้ำมันไว้ล่วงหน้า — ต้องเป็นบัญชีที่มีสิทธิ์ผู้จัดการ (canOverrideFuelRate) เท่านั้นที่กรอกค่านอกเหนือจากที่ตั้งไว้ได้ */
 const hasUnconfiguredDistrict = computed(() => editLineItems.value.some((li) => !fuelRateStore.findRate(li.province, li.district)))
@@ -306,6 +327,7 @@ const combineLoadingTime = (start: string, end: string): string | undefined => {
 }
 
 const editForm = ref({
+  customer: '',
   po: '',
   shipDate: '',
   loadingDate: '',
@@ -317,6 +339,9 @@ const editForm = ref({
   shipmentNo: '',
   route: '',
   origin: '',
+  reference: '',
+  description: '',
+  note: '',
   tripFee: 0,
   agreedPrice: 0,
   allowance: 0,
@@ -336,6 +361,7 @@ watch(
     if (!booking) return
     const [loadingTime, loadingTimeEnd] = splitLoadingTime(booking.loadingTime)
     editForm.value = {
+      customer: booking.customer || '',
       po: booking.po || '',
       shipDate: toDateInput(booking.shipDate),
       loadingDate: toDateInput(booking.loadingDate),
@@ -345,6 +371,9 @@ watch(
       shipmentNo: booking.shipmentNo || '',
       route: booking.route || '',
       origin: booking.origin || '',
+      reference: booking.reference || '',
+      description: booking.description || '',
+      note: booking.note || '',
       tripFee: booking.tripFee,
       agreedPrice: booking.agreedPrice,
       allowance: booking.allowance || 0,
@@ -539,6 +568,7 @@ const confirmEditBooking = () => {
   const resolvedTripFee = editPricingMode.value === 'MULTI_DESTINATION' ? editMultiTripFeeTotal.value : f.tripFee
   bookingStore.updateBookingFull(target.value.id, {
     items: editLineItems.value,
+    customer: f.customer.trim() || undefined,
     po: f.po || undefined,
     shipDate: f.shipDate ? new Date(f.shipDate) : undefined,
     loadingDate: f.loadingDate ? new Date(f.loadingDate) : undefined,
@@ -547,6 +577,9 @@ const confirmEditBooking = () => {
     shipmentNo: f.shipmentNo || undefined,
     route: f.route || undefined,
     origin: f.origin || undefined,
+    reference: f.reference || undefined,
+    description: f.description || undefined,
+    note: f.note || undefined,
     tripFee: resolvedTripFee,
     // "ราคาที่ตกลง" ไม่ใช่ field ที่แสดง/แก้แยกให้ผู้ใช้เห็นอีกต่อไป — ให้เท่ากับค่าเที่ยวเสมอ
     agreedPrice: resolvedTripFee,

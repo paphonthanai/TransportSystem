@@ -133,15 +133,15 @@
         </div>
       </div>
 
-      <!-- เลขชิพเม้น / เลขที่อ้างอิง / รายละเอียด — ซ่อนเส้นทาง/ต้นทางตาม Requirement (คง field ไว้ใน data model) -->
+      <!-- เลขชิพเม้น / เลขที่ PO ลูกค้า / รายละเอียด — ซ่อนเส้นทาง/ต้นทางตาม Requirement (คง field ไว้ใน data model) -->
       <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-4 border-t border-border">
         <div>
           <label class="field-label">เลขชิพเม้น</label>
           <input v-model="header.shipmentNo" placeholder="เลขที่ Shipment" class="input-field w-full" />
         </div>
         <div>
-          <label class="field-label">เลขที่อ้างอิง</label>
-          <input v-model="header.reference" class="input-field w-full" />
+          <label class="field-label">เลขที่ PO ลูกค้า</label>
+          <input v-model="header.reference" placeholder="เลขที่ PO/เอกสารอ้างอิงของลูกค้าเอง" class="input-field w-full" />
         </div>
         <div>
           <label class="field-label">รายละเอียด</label>
@@ -418,7 +418,10 @@ const defaultHeader = () => ({
   discountMode: 'percent' as 'percent' | 'fixed',
   discountPercent: 0,
   discountAmount: 0,
-  vatRate: documentSettingsStore.settings.vatRate,
+  // ไม่ auto-เซ็ตเป็นค่า VAT เริ่มต้นของระบบอีกต่อไป (เดิมทำให้ทุกงานที่สร้าง/import มี VAT 7% ติดมาโดยไม่มีใครกรอก
+  // เพราะ field นี้ไม่มี UI ให้กรอกเองอยู่แล้ว — ดู comment "ซ่อนตาม Requirement" ด้านล่าง) เหลือ undefined จนกว่าจะมีจุด
+  // ที่ตั้งใจให้กรอก VAT จริงๆ (เอกสารขาย/ใบวางบิล ที่มี VAT เป็นตัวเลือกอยู่แล้วในตัวเอง)
+  vatRate: undefined as number | undefined,
   allowance: 0,
   pricingMode: 'SINGLE_DESTINATION' as PricingMode,
 })

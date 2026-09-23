@@ -395,6 +395,7 @@ export const useBookingStore = defineStore('booking', () => {
     id: string,
     data: {
       items?: JobItem[]
+      customer?: string
       po?: string
       shipDate?: Date
       loadingDate?: Date
@@ -403,6 +404,9 @@ export const useBookingStore = defineStore('booking', () => {
       shipmentNo?: string
       route?: string
       origin?: string
+      reference?: string
+      description?: string
+      note?: string
       tripFee?: number
       agreedPrice?: number
       allowance?: number
@@ -415,6 +419,13 @@ export const useBookingStore = defineStore('booking', () => {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
     if (data.items !== undefined) booking.items = data.items
+    // ชื่อลูกค้าเป็น field บังคับ (string, ไม่ใช่ optional) — ไม่รับค่าว่างเปล่า กันเผลอเคลียร์ชื่อลูกค้าทิ้งจากฟอร์ม
+    if (data.customer !== undefined && data.customer !== booking.customer) {
+      booking.customer = data.customer
+      // เอกสารขายที่อ้างอิง Booking นี้ (ใบสั่งสินค้า/ใบวางบิล/ใบกำกับภาษี/ใบเสร็จ ที่ยังไม่ปิดงาน) ต้องได้ชื่อลูกค้าใหม่
+      // ตามไปด้วย ไม่งั้นชื่อจะไม่ตรงกันระหว่าง Booking กับเอกสารที่สร้างจาก Booking นี้ (ดู renameCustomerOnBookingDocuments)
+      useSalesDocumentsStore().renameCustomerOnBookingDocuments(id, data.customer)
+    }
     if (data.po !== undefined) booking.po = data.po || undefined
     if (data.shipDate !== undefined) booking.shipDate = data.shipDate
     if (data.loadingDate !== undefined) booking.loadingDate = data.loadingDate
@@ -423,6 +434,9 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.shipmentNo !== undefined) booking.shipmentNo = data.shipmentNo || undefined
     if (data.route !== undefined) booking.route = data.route || undefined
     if (data.origin !== undefined) booking.origin = data.origin || undefined
+    if (data.reference !== undefined) booking.reference = data.reference || undefined
+    if (data.description !== undefined) booking.description = data.description || undefined
+    if (data.note !== undefined) booking.note = data.note || undefined
     if (data.tripFee !== undefined) booking.tripFee = data.tripFee
     if (data.agreedPrice !== undefined) booking.agreedPrice = data.agreedPrice
     if (data.allowance !== undefined) booking.allowance = data.allowance

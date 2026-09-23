@@ -263,3 +263,38 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
     warnings,
   }
 }
+
+/**
+ * เตือนแถวที่ "ราคาปูน" ต่อหน่วยต่างจากราคาปกติของสินค้าเดียวกันในไฟล์เดียวกันมากผิดปกติ (เช่น กรอกราคารวมมาแทนราคาต่อ
+ * หน่วย ทำให้ระบบเอาไปคูณจำนวนตันซ้ำอีกที กลายเป็นยอดพองขึ้นหลายเท่า) เทียบแบบ "ราคามัธยฐานของสินค้าเดียวกันในไฟล์
+ * นี้เอง" ไม่ใช่เกณฑ์ราคาตายตัว เพราะระบบไม่รู้ราคาจริงของแต่ละสินค้าล่วงหน้า — เป็นแค่คำเตือนให้ผู้ import ไปตรวจสอบเอง
+ * ก่อนยืนยัน ไม่ auto-แก้ราคาให้ (import ยังสร้างงานต่อได้ตามปกติ เหมือนคำเตือนอื่นๆ ที่มีอยู่แล้วในฟังก์ชันนี้)
+ */
+export function flagPriceOutliers(rows: ImportRowResult[]): void {
+  const groups = new Map<string, ImportRowResult[]>()
+  rows
+    .filter((r) => !r.isEmpty && r.price > 0 && r.qty > 0)
+    .forEach((r) => {
+      const key = r.productCodes[0] || r.product
+      if (!key) return
+      const list = groups.get(key) || []
+      list.push(r)
+      groups.set(key, list)
+    })
+
+  groups.forEach((groupRows) => {
+    // ต้องมีอย่างน้อย 3 แถวถึงจะเทียบมัธยฐานได้อย่างมีความหมาย (2 แถวขึ้นไปมัธยฐานจะเอนเอียงไปทางค่าใดค่าหนึ่งง่ายเกินไป)
+    if (groupRows.length < 3) return
+    const sortedPrices = groupRows.map((r) => r.price).sort((a, b) => a - b)
+    const median = sortedPrices[Math.floor(sortedPrices.length / 2)]
+    if (!median) return
+    groupRows.forEach((r) => {
+      const ratio = r.price / median
+      if (ratio > 3 || ratio < 1 / 3) {
+        const warning = `ราคาต่อหน่วย (${r.price.toLocaleString('th-TH')}) ต่างจากราคาปกติของสินค้านี้ในไฟล์นี้มาก (~${median.toLocaleString('th-TH')}) — ตรวจสอบว่าใส่ราคารวมมาแทนราคาต่อหน่วยหรือไม่`
+        r.warnings.push(warning)
+        r.note = [r.note, warning].filter(Boolean).join(' | ')
+      }
+    })
+  })
+}

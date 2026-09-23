@@ -90,7 +90,7 @@
                 <span class="font-semibold">{{ formatDate(booking.shipDate) }}</span>
               </div>
               <div v-if="booking.reference" class="flex justify-between gap-4">
-                <span class="text-gray-500">เลขที่อ้างอิง</span>
+                <span class="text-gray-500">เลขที่ PO ลูกค้า</span>
                 <span class="font-semibold text-right max-w-[60%] truncate">{{ booking.reference }}</span>
               </div>
             </div>
@@ -213,7 +213,7 @@
             <div class="font-semibold text-text">{{ booking.releaseNo || '-' }}</div>
           </div>
           <div>
-            <div class="text-muted text-xs">เลขที่อ้างอิง</div>
+            <div class="text-muted text-xs">เลขที่ PO ลูกค้า</div>
             <div class="font-semibold text-text">{{ booking.reference || '-' }}</div>
           </div>
           <div>
@@ -531,7 +531,10 @@ const mileageSummary = computed(() => {
 })
 
 const subtotalAmount = computed(() => booking.value?.agreedPrice || booking.value?.tripFee || 0)
-const showVatRow = computed(() => documentSettingsStore.settings.calcMode.purchase.vat !== 'included')
+// ต้องมี booking.vatRate จริงๆ ด้วย ไม่ใช่แค่เช็ค calcMode ของระบบ — เดิมทุกงานมี vatRate ติดมา (ดู
+// BookingCreateView.vue/BookingView.vue's confirmImport) เลยไม่เคยเป็น undefined จนแสดงแถว VAT ฟรีทุกใบ ตอนนี้งาน
+// ที่ไม่มีใครกรอก VAT จะไม่มี vatRate เลย จึงต้องไม่โชว์แถว VAT (ไม่ใช่โชว์แถว VAT ฿0.00 ที่ดูเหมือนตั้งใจไม่คิดภาษี)
+const showVatRow = computed(() => documentSettingsStore.settings.calcMode.purchase.vat !== 'included' && !!booking.value?.vatRate)
 
 /** แถวสังเคราะห์ 1 แถวป้อนเข้า documentTotals.ts engine เดียวกับที่ BookingCreateView.vue ใช้ — ไม่เขียนสูตรคำนวณใหม่
  *  ใช้ discountMode/discountPercent/discountAmount/vatRate ของงานนี้เอง แทนค่าคงที่ระดับระบบเหมือนเดิม */
