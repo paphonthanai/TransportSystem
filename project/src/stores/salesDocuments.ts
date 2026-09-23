@@ -489,17 +489,21 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   }
 
   /**
-   * กติกาใหม่ (แทนที่ documentNumberRegistry.nextSequence/peekNextSequence เดิมทั้งหมด — ดูคอมเมนต์ deprecation ที่
+   * กติกา (แทนที่ documentNumberRegistry.nextSequence/peekNextSequence เดิมทั้งหมด — ดูคอมเมนต์ deprecation ที่
    * documentNumberRegistry.ts): auto-generate เลขที่เอกสารต้องหา "เลขรันน้อยที่สุดที่ไม่มี Active Document ถือครองอยู่"
-   * ไม่ใช่ตัวนับที่เดินหน้าอย่างเดียว — สแกนเอกสารที่ยัง Active อยู่ (documents.value) ทั้งหมดของ docType นี้ ไม่สนว่า
-   * วันที่ฝังอยู่ในเลขที่เอกสารนั้นจะเป็นวันไหน (ตามที่ PM ยืนยัน scope แบบ global ไม่ผูกกับวันที่ที่ออกเอกสาร) แล้วคืน
-   * จำนวนเต็มบวกตัวแรก (เริ่มที่ 1) ที่ยังไม่มีเอกสาร Active ใดถือครอง เอกสารที่ถูกยกเลิก/ลบไปแล้ว (hard delete ตามเดิม)
-   * จะไม่ถูกนับว่า "ถือครอง" อีกต่อไป จึงทำให้เลขที่ว่างแล้วถูกเสนอกลับมาใช้ได้ทันทีโดยไม่ต้องพิมพ์เอง
-   * เลขที่เอกสารที่ไม่ตรง pattern "prefix + วันที่ 8 หลัก + เลขรัน" (เช่น ผู้ใช้เคยพิมพ์เลขเองแบบอิสระ) จะถูกข้ามไปเฉยๆ
-   * ไม่นับเป็นเลขรันที่ถูกถือครอง เพราะไม่ใช่ส่วนหนึ่งของชุดเลข auto-generate นี้
+   * ไม่ใช่ตัวนับที่เดินหน้าอย่างเดียว — สแกนเฉพาะเอกสาร Active ที่ออกใน "ปีเดียวกับ date" เท่านั้น (เดิมเคย scope แบบ
+   * global ไม่ผูกปีตามที่เคยยืนยันไว้ แต่เปลี่ยนใหม่ตามที่ตกลง: เลขรัน 4 หลักท้ายต้องรีเซ็ตกลับเป็น 0001 ทุกครั้งที่ขึ้นปีใหม่
+   * เพื่อให้ตรงกับ pattern nextPoNo ที่มีอยู่แล้ว) แล้วคืนจำนวนเต็มบวกตัวแรก (เริ่มที่ 1) ที่ยังไม่มีเอกสาร Active ใด
+   * ถือครองในปีนั้น เอกสารที่ถูกยกเลิก/ลบไปแล้ว (hard delete ตามเดิม) จะไม่ถูกนับว่า "ถือครอง" อีกต่อไป จึงทำให้เลขที่
+   * ว่างแล้วถูกเสนอกลับมาใช้ได้ทันทีโดยไม่ต้องพิมพ์เอง — เลขที่เอกสารที่แก้ไขเองด้วยมือ (ผ่าน changeDocumentNumber หรือ
+   * กรอกเลขที่กำหนดเองตอนสร้าง) ยังคงถูกนับเป็น "ถือครองแล้ว" ตามปกติ เพราะฟังก์ชันนี้สแกนจากเลขที่จริงที่เก็บอยู่ใน
+   * เอกสาร ไม่ได้แยกจำว่าเลขไหนมาจากการแก้ไขเอง — เลขที่เอกสารที่ไม่ตรง pattern "prefix + ปี(4) + เดือนวัน(4) + เลขรัน"
+   * (เช่น ผู้ใช้เคยพิมพ์เลขเองแบบอิสระ) จะถูกข้ามไปเฉยๆ ไม่นับเป็นเลขรันที่ถูกถือครอง เพราะไม่ใช่ส่วนหนึ่งของชุดเลข
+   * auto-generate นี้
    */
-  function nextFreeSequence(salesDocType: SalesDocument['type'], prefix: string, extraNumbers: string[] = []): number {
-    const pattern = new RegExp(`^${prefix}\\d{8}(\\d+)$`)
+  function nextFreeSequence(salesDocType: SalesDocument['type'], prefix: string, extraNumbers: string[] = [], date: Date = new Date()): number {
+    const yyyy = date.getFullYear()
+    const pattern = new RegExp(`^${prefix}${yyyy}\\d{4}(\\d+)$`)
     const occupied = new Set<number>()
     for (const d of documents.value) {
       if (d.type !== salesDocType) continue
@@ -522,7 +526,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   /** เลขที่เอกสาร auto-generate ตัวถัดไปแบบเต็ม (prefix+วันที่+เลขรัน) ใช้ได้ทั้งตอนแสดงตัวอย่างในฟอร์มก่อนบันทึก
    *  และตอนสร้างเอกสารจริง เพราะ nextFreeSequence ไม่ mutate ค่าอะไรเลย (คำนวณจากเอกสาร Active ปัจจุบันสดๆ ทุกครั้ง) */
   function peekNextDocumentNumber(salesDocType: SalesDocument['type'], prefix: string, padding: number, extraNumbers: string[] = []): string {
-    return generateDocNumber(prefix, nextFreeSequence(salesDocType, prefix, extraNumbers), padding, new Date())
+    const now = new Date()
+    return generateDocNumber(prefix, nextFreeSequence(salesDocType, prefix, extraNumbers, now), padding, now)
   }
 
   /** รวมค่า override (จากหน้า QuotationConvertView.vue) เข้ากับข้อมูลต้นทางของใบเสนอราคา ก่อนสร้างเอกสารใหม่ */
@@ -615,10 +620,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   }): SalesDocument {
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.quotation
-    const seq = nextFreeSequence('QUOTATION', numbering.prefix)
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const now = new Date()
     const issueDate = data.date || now
+    const seq = nextFreeSequence('QUOTATION', numbering.prefix, [], issueDate)
     const dueDate = data.creditDays !== undefined ? new Date(issueDate) : undefined
     if (dueDate) dueDate.setDate(dueDate.getDate() + (data.creditDays || 0))
     const doc: SalesDocument = {
@@ -1367,10 +1372,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       reuseCheck = checkDocumentNumberReuseEligibility(manualNumber)
       if (!reuseCheck.eligible) return null
     }
-    const seq = nextFreeSequence('BILLING', numbering.prefix)
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const now = new Date()
     const issueDate = data.date || now
+    const seq = nextFreeSequence('BILLING', numbering.prefix, [], issueDate)
     const billing: SalesDocument = {
       id: genId('sdoc'),
       type: 'BILLING',
@@ -1526,13 +1531,14 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       if (!reuseCheck.eligible) return null
     }
     const numbering = documentSettingsStore.settings.numbering.invoice
+    const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
+    const issueDate = data.date || new Date()
     const seq = nextFreeSequence(
       'TAX_INVOICE',
       numbering.prefix,
-      bookingStore.documents.map((d) => d.number)
+      bookingStore.documents.map((d) => d.number),
+      issueDate
     )
-    const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
-    const issueDate = data.date || new Date()
     const creditDays = data.creditDays ?? 30
     const dueDate = new Date(issueDate)
     dueDate.setDate(dueDate.getDate() + creditDays)
@@ -1699,10 +1705,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const numbering = documentSettingsStore.settings.numbering.receipt
     const manualNumber = data.number?.trim()
     if (manualNumber && !checkDocumentNumberReuseEligibility(manualNumber).eligible) return null
-    const seq = nextFreeSequence('RECEIPT', numbering.prefix)
     const amount = data.items.reduce((sum, i) => sum + i.amount, 0)
     const now = new Date()
     const issueDate = data.date || now
+    const seq = nextFreeSequence('RECEIPT', numbering.prefix, [], issueDate)
     const receipt: SalesDocument = {
       id: genId('sdoc'),
       type: 'RECEIPT',

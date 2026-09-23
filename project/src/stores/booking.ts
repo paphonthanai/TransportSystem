@@ -237,15 +237,26 @@ export const useBookingStore = defineStore('booking', () => {
   const pendingBookings = (category: BookingCategory) =>
     computed(() => bookings.value.filter((b) => b.category === category && b.status === 'WAITING_DISPATCH'))
 
+  /** เลขที่งาน (docNo) รูปแบบ {prefix}{ปีเดือนวันที่ออก 8 หลัก}{เลขรัน 4 หลัก} เช่น CM202609230001 — หาเลขรันน้อยที่สุด
+   *  ที่ยังไม่มีงานถือครองอยู่ในปีเดียวกัน (ไม่ใช่ตัวนับเดินหน้าเรื่อยๆ) เหมือน nextFreeSequence ของเอกสารขาย/nextPoNo
+   *  ด้านล่าง รีเซ็ตกลับเป็น 0001 ทุกครั้งที่ขึ้นปีใหม่ — เดิม hardcode ปีเป็น "2569" ตายตัว (บั๊กจริง: ปีจะไม่เปลี่ยน
+   *  เองเลยเมื่อขึ้นปีใหม่จริง) และไม่มีเดือน/วันอยู่ในเลขที่เอกสารด้วย แก้ให้ตรงรูปแบบเดียวกับเอกสารขายอื่นทั้งระบบ */
   function nextDocNo(category: BookingCategory) {
     const prefix = category === 'cements' ? 'CM' : 'CR'
-    const maxSeq = bookings.value
-      .filter((b) => b.category === category)
-      .reduce((max, b) => {
-        const seq = Number(b.docNo.replace(prefix, '').replace('2569-', ''))
-        return Number.isFinite(seq) && seq > max ? seq : max
-      }, 0)
-    return `${prefix}2569-${String(maxSeq + 1).padStart(4, '0')}`
+    const now = new Date()
+    const yyyy = now.getFullYear()
+    const datePart = `${yyyy}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    const pattern = new RegExp(`^${prefix}${yyyy}\\d{4}(\\d+)$`)
+    const occupied = new Set<number>()
+    bookings.value.forEach((b) => {
+      if (b.category !== category) return
+      const m = b.docNo.match(pattern)
+      if (!m) return
+      occupied.add(parseInt(m[1], 10))
+    })
+    let seq = 1
+    while (occupied.has(seq)) seq++
+    return `${prefix}${datePart}${String(seq).padStart(4, '0')}`
   }
 
   /** เลขรันรายวัน รูปแบบ {prefix}{YYYYMMDD}{เลข 5 หลัก} — ใช้ร่วมกันโดย nextReleaseNo/nextPoNo

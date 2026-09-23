@@ -1509,6 +1509,7 @@ const IMPORT_COLUMN_ORDER = [
   IMPORT_HEADERS.allowance,
   IMPORT_HEADERS.price,
   IMPORT_HEADERS.fuel,
+  IMPORT_HEADERS.jobType,
   IMPORT_HEADERS.note,
 ]
 
@@ -1531,6 +1532,7 @@ const downloadImportTemplate = () => {
     0,
     0,
     0,
+    '',
     '',
     '',
   ]
@@ -1593,6 +1595,8 @@ const confirmImport = () => {
         district: row.district,
         siteContactName: row.siteContactName || undefined,
         sitePhone: row.phone || undefined,
+        // ประเภทงานเป็นฟิลด์เฉพาะ Fleet Cements เท่านั้น (ดู JobItem.jobType) — เหมือน pattern เดียวกับตอนจัดรถ
+        jobType: isCements.value ? row.jobType : undefined,
         extraProducts: otherPairs.length ? otherPairs.map((p) => ({ product: p.product, qty: p.qty, unit: 'ตัน' })) : undefined,
       },
     ]
