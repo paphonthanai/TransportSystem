@@ -46,9 +46,6 @@ export interface LegacySalesDocument {
 
 const fixedCeramicsCustomer = 'บจก. ศรีไทยคอนกรีต'
 
-/** ระยะเวลาที่ให้คนขับตอบรับงานหลังถูกจัดรถ ก่อนยกเลิกและกลับไปรอจัดคนขับใหม่อัตโนมัติ */
-const ACCEPT_TIMEOUT_MS = 15 * 60 * 1000
-
 /**
  * ไม่มี backend จริง จึงใช้ localStorage เป็นตัวกลางเก็บข้อมูล
  * เพื่อให้หน้า Admin (สั่งงาน/จบงาน/วางบิล) กับหน้า Driver App ที่เปิดคนละแท็บ
@@ -569,7 +566,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (extra?.odometerBefore !== undefined) booking.odometerBefore = extra.odometerBefore
     // น้ำมันคำนวณและล็อกไว้ตั้งแต่ตอนสร้างงานแล้ว (จากจังหวัด/อำเภอของแต่ละปลายทาง) ตอนจัดรถจึงไม่ต้องกรอก/คำนวณซ้ำ
     // การวางบิลแยกอิสระจากการจัดรถโดยเจตนา — booking.billingStatus ยังคง UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล (ดู addBookingsToBatch)
-    const alreadyAccepted = booking.status !== 'WAITING_DISPATCH' && booking.status !== 'ASSIGNED'
+    const alreadyAccepted = booking.status !== 'WAITING_DISPATCH'
     if (alreadyAccepted) {
       /**
        * Phase E.1 (Test 8) — เปลี่ยนรถจริง (plate ไม่เหมือนเดิม ไม่ใช่แค่แก้ชื่อคนขับบนรถคันเดิม) ระหว่างสถานะ
@@ -592,9 +589,11 @@ export const useBookingStore = defineStore('booking', () => {
       addLog(`เปลี่ยนรถ/คนขับ ${booking.docNo} เป็นทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''}`, { bookingId: booking.id })
       return
     }
-    booking.status = 'ASSIGNED'
+    // ตัดขั้น "รอคนขับตอบรับ" (ASSIGNED) ออกตามที่ตกลง — จัดรถแล้วถือว่ารับงานทันที ไม่ต้องรอกดรับในแอปคนขับอีกต่อไป
+    // (เดิม ASSIGNED -> ACCEPTED ต้องรอคนขับกดตอบรับเอง หรือให้ office กด "รับงานแทน" ผ่าน acceptDispatch)
+    booking.status = 'ACCEPTED'
     booking.dispatchedAt = new Date()
-    addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''} (รอคนขับตอบรับ)`, { bookingId: booking.id })
+    addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''}`, { bookingId: booking.id })
   }
 
   /**
@@ -658,10 +657,11 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`คนขับตอบรับงาน ${booking.docNo}`, { bookingId: booking.id })
   }
 
-  /** คนขับกดไม่รับงานใน Driver App: ยกเลิกการจ่ายงาน กลับไปรอจัดคนขับใหม่ทันที (เหมือน checkExpiredDispatches แต่ตั้งใจกดเอง) */
+  /** ยกเลิกการจ่ายงาน (office กด "ยกเลิก" ใน BookingActionMenu) กลับไปรอจัดคนขับใหม่ทันที — ใช้ได้ตอน ACCEPTED
+   *  (ระยะแรกสุดหลังจัดรถ ตัดขั้น ASSIGNED/รอตอบรับออกไปแล้ว) ยังรองรับ ASSIGNED ไว้เผื่อมีข้อมูลเก่าค้างอยู่ */
   function declineDispatch(id: string) {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking || booking.status !== 'ASSIGNED') return
+    if (!booking || (booking.status !== 'ASSIGNED' && booking.status !== 'ACCEPTED')) return
     removeFromBatch(booking)
     booking.status = 'WAITING_DISPATCH'
     booking.plate = ''
@@ -817,27 +817,6 @@ export const useBookingStore = defineStore('booking', () => {
     item.pickedUpAt = new Date()
     addLog(`ยืนยันรับสินค้าที่เหลือขึ้นรถคันใหม่ ${booking.docNo}: ${item.product} (${item.siteName})`, { bookingId: booking.id })
   }
-
-  /** ตรวจงานที่รอคนขับตอบรับเกิน 15 นาที ยกเลิกการจ่ายงานและกลับไปรอจัดคนขับใหม่อัตโนมัติ */
-  function checkExpiredDispatches() {
-    const now = Date.now()
-    bookings.value.forEach((booking) => {
-      if (booking.status !== 'ASSIGNED' || !booking.dispatchedAt) return
-      if (now - new Date(booking.dispatchedAt).getTime() < ACCEPT_TIMEOUT_MS) return
-      removeFromBatch(booking)
-      booking.status = 'WAITING_DISPATCH'
-      booking.plate = ''
-      booking.driverName = undefined
-      booking.driverId = undefined
-      booking.driverFirstName = undefined
-      booking.driverLastName = undefined
-      booking.dispatchedAt = undefined
-      addLog(`ยกเลิกการจ่ายงาน ${booking.docNo} (คนขับไม่ตอบรับภายใน 15 นาที) รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`, { bookingId: booking.id })
-    })
-  }
-
-  checkExpiredDispatches()
-  setInterval(checkExpiredDispatches, 30_000)
 
   /** คนขับกดเริ่มขนส่ง: LOADED -> IN_TRANSIT */
   function startTransit(id: string) {

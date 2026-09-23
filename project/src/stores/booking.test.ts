@@ -26,6 +26,54 @@ describe('pickupJobItem', () => {
   })
 })
 
+describe('dispatchBooking — ตัดขั้น ASSIGNED/รอคนขับตอบรับออกแล้ว', () => {
+  it('จัดรถจาก WAITING_DISPATCH ไปที่ ACCEPTED ตรงๆ ไม่ผ่าน ASSIGNED', () => {
+    const store = useBookingStore()
+    const booking = makeBooking({ status: 'WAITING_DISPATCH' })
+    store.bookings.push(booking)
+
+    store.dispatchBooking(booking.id, '70-8821 สระบุรี', { driverName: 'คนขับทดสอบ' })
+
+    expect(booking.status).toBe('ACCEPTED')
+    expect(booking.plate).toBe('70-8821 สระบุรี')
+    expect(booking.driverName).toBe('คนขับทดสอบ')
+    expect(booking.dispatchedAt).toBeInstanceOf(Date)
+  })
+
+  it('declineDispatch (ปุ่ม "ยกเลิกจ่ายงาน") ใช้ได้ตอน ACCEPTED เพราะเป็นระยะแรกสุดหลังจัดรถแล้วตอนนี้', () => {
+    const store = useBookingStore()
+    const booking = makeBooking({ status: 'ACCEPTED', plate: '70-8821 สระบุรี', driverName: 'คนขับทดสอบ' })
+    store.bookings.push(booking)
+
+    store.declineDispatch(booking.id)
+
+    expect(booking.status).toBe('WAITING_DISPATCH')
+    expect(booking.plate).toBe('')
+    expect(booking.driverName).toBeUndefined()
+  })
+
+  it('declineDispatch ยังรองรับ ASSIGNED เผื่อมีข้อมูลเก่าค้างอยู่ (backward-compat)', () => {
+    const store = useBookingStore()
+    const booking = makeBooking({ status: 'ASSIGNED', plate: '70-8821 สระบุรี', driverName: 'คนขับทดสอบ' })
+    store.bookings.push(booking)
+
+    store.declineDispatch(booking.id)
+
+    expect(booking.status).toBe('WAITING_DISPATCH')
+  })
+
+  it('declineDispatch ไม่ทำอะไรถ้างานผ่านไปไกลกว่า ACCEPTED แล้ว (เช่น FUEL_RECEIVED)', () => {
+    const store = useBookingStore()
+    const booking = makeBooking({ status: 'FUEL_RECEIVED', plate: '70-8821 สระบุรี', driverName: 'คนขับทดสอบ' })
+    store.bookings.push(booking)
+
+    store.declineDispatch(booking.id)
+
+    expect(booking.status).toBe('FUEL_RECEIVED')
+    expect(booking.plate).toBe('70-8821 สระบุรี')
+  })
+})
+
 describe('happy-path state machine: ACCEPTED -> FUEL_RECEIVED -> LOADING -> LOADED -> IN_TRANSIT', () => {
   it('walks through markFuelReceived -> startLoading -> startTransit in order, refusing out-of-order calls', () => {
     const store = useBookingStore()

@@ -29,15 +29,8 @@
       </div>
 
       <template v-else>
-        <!-- STEP 1: ASSIGNED — รอตอบรับงาน (ไม่มีปุ่มไม่รับงาน) -->
-        <template v-if="job.status === 'ASSIGNED'">
-          <div class="text-sm font-semibold text-center text-amber-700 bg-amber-50 rounded-xl px-3 py-2.5">
-            กรุณาตอบรับภายใน {{ formatCountdown(remainingAcceptSeconds(job)) }} มิฉะนั้นงานจะถูกจัดให้คนขับคนอื่นอัตโนมัติ
-          </div>
-        </template>
-
         <!-- STEP 2: ACCEPTED — แสดงจำนวนน้ำมันที่ต้องรับ -->
-        <template v-else-if="job.status === 'ACCEPTED'">
+        <template v-if="job.status === 'ACCEPTED'">
           <div class="text-sm text-text bg-white border border-border rounded-xl p-4">
             <span class="text-muted">ต้องรับน้ำมันทั้งหมด:</span> <span class="font-bold text-base">{{ job.fuelLiters || 0 }} ล.</span>
           </div>
@@ -179,15 +172,7 @@
       class="sticky bottom-0 bg-white border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex-shrink-0"
     >
       <button
-        v-if="job.status === 'ASSIGNED'"
-        @click="bookingStore.acceptDispatch(job.id)"
-        class="w-full h-12 rounded-lg bg-amber-500 text-white text-base font-semibold flex items-center justify-center gap-1.5 active:bg-amber-600"
-      >
-        <span class="material-symbols-rounded text-xl">how_to_reg</span>
-        ตอบรับงาน
-      </button>
-      <button
-        v-else-if="job.status === 'ACCEPTED'"
+        v-if="job.status === 'ACCEPTED'"
         @click="bookingStore.markFuelReceived(job.id)"
         class="w-full h-12 rounded-lg bg-orange-500 text-white text-base font-semibold flex items-center justify-center gap-1.5 active:bg-orange-600"
       >
@@ -290,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
@@ -339,24 +324,6 @@ const actingDriverName = computed(() => {
   const linked = job.value?.driverId ? driversStore.drivers.find((d) => d.id === job.value!.driverId) : undefined
   return linked ? driversStore.fullName(linked) : job.value?.driverName || authStore.userName
 })
-
-// นาฬิกาสำหรับนับถอยหลังเวลาที่เหลือให้ตอบรับงาน
-const now = ref(Date.now())
-let clockTimer: number
-onMounted(() => {
-  clockTimer = window.setInterval(() => {
-    now.value = Date.now()
-  }, 1000)
-})
-onUnmounted(() => clearInterval(clockTimer))
-
-const ACCEPT_TIMEOUT_MS = 15 * 60 * 1000
-const remainingAcceptSeconds = (b: Booking) => {
-  if (!b.dispatchedAt) return 0
-  const deadline = new Date(b.dispatchedAt).getTime() + ACCEPT_TIMEOUT_MS
-  return Math.max(0, Math.floor((deadline - now.value) / 1000))
-}
-const formatCountdown = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
 
 /** logic จริงอยู่ที่ utils/driverJobs.ts (แยกเป็น pure function ให้ unit test ได้ตรงๆ — ดู driverJobs.test.ts)
  *  ที่นี่แค่ wrap ให้ยังเรียกด้วย Booking ทั้งก้อนเหมือนเดิมทุกจุดในเทมเพลต ไม่ต้องแก้ template */

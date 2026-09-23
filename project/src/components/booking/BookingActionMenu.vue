@@ -39,7 +39,7 @@
           ลบถาวร
         </button>
         <button
-          v-if="booking.status === 'ASSIGNED'"
+          v-if="booking.status === 'ASSIGNED' || booking.status === 'ACCEPTED'"
           @click="fire('cancel')"
           class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-red-600"
         >

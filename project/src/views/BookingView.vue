@@ -142,10 +142,6 @@
                     <span class="material-symbols-rounded text-base">sync_alt</span>
                     เปลี่ยนรถ / คนขับ
                   </button>
-                  <button v-if="booking.status === 'ASSIGNED'" @click="adminAcceptDispatch(booking)" class="btn-sm text-green-700" title="รับงานแทนคนขับ (ไม่ต้องรอกดในแอป)">
-                    <span class="material-symbols-rounded text-base">how_to_reg</span>
-                    ✓ คนขับตอบรับงาน
-                  </button>
                   <BookingActionMenu
                     :booking="booking"
                     :can-hard-delete="isAdmin"
@@ -1216,12 +1212,6 @@ const confirmDispatch = () => {
     if (vehicle) vehiclesStore.assignDriver(vehicle.id, selectedDriver.code)
   }
   dispatchTarget.value = null
-}
-
-/** งานฝั่ง Admin กด "✓ คนขับตอบรับงาน" แทนคนขับได้ทันที ไม่ต้องรอกดรับในแอปคนขับ (Phase 1 ข้อ 4)
- *  ใช้ acceptDispatch เดิมตัวเดียวกับที่ Driver Mobile เรียก ไม่มี logic คำนวณใหม่ ไม่แตะ D1-D7 */
-const adminAcceptDispatch = (booking: Booking) => {
-  bookingStore.acceptDispatch(booking.id)
 }
 
 /**
