@@ -74,8 +74,8 @@
                 <span class="font-semibold">{{ booking.docNo }}</span>
               </div>
               <div class="flex justify-between gap-4">
-                <span class="text-gray-500">ใบสั่งงาน (PO)</span>
-                <span class="font-semibold">{{ booking.po || '-' }}</span>
+                <span class="text-gray-500">เลขที่ PO ลูกค้า</span>
+                <span class="font-semibold text-right max-w-[60%] truncate">{{ booking.reference || '-' }}</span>
               </div>
               <div class="flex justify-between gap-4">
                 <span class="text-gray-500">เลขที่ใบปล่อยรถ</span>
@@ -88,10 +88,6 @@
               <div v-if="booking.shipDate" class="flex justify-between gap-4">
                 <span class="text-gray-500">วันที่ขนส่ง</span>
                 <span class="font-semibold">{{ formatDate(booking.shipDate) }}</span>
-              </div>
-              <div v-if="booking.reference" class="flex justify-between gap-4">
-                <span class="text-gray-500">เลขที่ PO ลูกค้า</span>
-                <span class="font-semibold text-right max-w-[60%] truncate">{{ booking.reference }}</span>
               </div>
             </div>
           </div>
@@ -205,16 +201,12 @@
             <div class="font-semibold text-text">{{ booking.docNo }}</div>
           </div>
           <div>
-            <div class="text-muted text-xs">ใบสั่งงาน (PO)</div>
-            <div class="font-semibold text-text">{{ booking.po || '-' }}</div>
+            <div class="text-muted text-xs">เลขที่ PO ลูกค้า</div>
+            <div class="font-semibold text-text">{{ booking.reference || '-' }}</div>
           </div>
           <div>
             <div class="text-muted text-xs">เลขที่ใบปล่อยรถ</div>
             <div class="font-semibold text-text">{{ booking.releaseNo || '-' }}</div>
-          </div>
-          <div>
-            <div class="text-muted text-xs">เลขที่ PO ลูกค้า</div>
-            <div class="font-semibold text-text">{{ booking.reference || '-' }}</div>
           </div>
           <div>
             <div class="text-muted text-xs">รายละเอียด</div>
