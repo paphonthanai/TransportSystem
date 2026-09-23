@@ -179,7 +179,7 @@ const periodThaiLabel = computed(() => {
   return `${thaiMonths[monthIndex] || m} ${y}`
 })
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = (date: Date) => new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
 const formatDateTime = (date: Date) => new Date(date).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
 

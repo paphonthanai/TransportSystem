@@ -806,7 +806,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     dueDate.setDate(dueDate.getDate() + creditDays)
     const salesCalcMode = documentSettingsStore.settings.calcMode.sales
     const whtRate = salesCalcMode.wht === 'included' ? 0 : documentSettingsStore.settings.whtRate
-    const whtAmount = Math.round((amount * whtRate) / 100)
+    const whtAmount = Math.round(amount * whtRate) / 100
     const invoice: SalesDocument = {
       id: genId('sdoc'),
       type: 'TAX_INVOICE',
@@ -968,7 +968,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     /** คำนวณ VAT ระดับเอกสารจาก item.amount/item.vatRate ของแต่ละรายการ (item.amount คำนวณหักส่วนลดไว้แล้ว) —
      *  เดิม createSalesOrderForBooking ไม่เคยเซ็ต vatAmount/vatRate ระดับเอกสารเลย ทำให้พิมพ์ใบสั่งสินค้าแล้ว
      *  ยอดรวมทั้งสิ้นไม่รวม VAT (ต่างจากใบวางบิลที่คำนวณให้ถูกต้องอยู่แล้ว ดู createBillingFromBookings) */
-    const vatAmount = Math.round(data.items.reduce((sum, item) => sum + (item.amount * (item.vatRate || 0)) / 100, 0))
+    const vatAmount = Math.round(data.items.reduce((sum, item) => sum + (item.amount * (item.vatRate || 0)) / 100, 0) * 100) / 100
     const vatRates = new Set(data.items.map((item) => item.vatRate || 0))
     const vatRate = vatRates.size === 1 ? data.items[0]?.vatRate : undefined
     const salesOrder: SalesDocument = {
@@ -1146,7 +1146,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       if (doc.vatAmount !== undefined) return
       const docItems = itemsForDocument(doc.id)
       if (docItems.length === 0) return
-      const vatAmount = Math.round(docItems.reduce((sum, item) => sum + computeRowVat(item), 0))
+      const vatAmount = Math.round(docItems.reduce((sum, item) => sum + computeRowVat(item), 0) * 100) / 100
       const vatRates = new Set(docItems.map((item) => item.vatRate || 0))
       const vatRate = vatRates.size === 1 ? docItems[0].vatRate : undefined
       doc.vatAmount = vatAmount
@@ -2051,7 +2051,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
      *  ก็ตาม: ไม่ override → itemRows คือรายการเดิมของใบวางบิลซึ่งแต่ละแถวมี vatRate ของตัวเองอยู่แล้ว (ไม่ว่าจะมาจาก
      *  booking หรือกรอกเอง) ผลรวมจึงตรงกับต้นทางเสมอโดยไม่ต้องมี Path พิเศษแยกจาก doc.vatAmount อีกต่อไป */
     const whtRate = salesCalcMode.wht === 'included' ? 0 : documentSettingsStore.settings.whtRate
-    const whtAmount = Math.round((amount * whtRate) / 100)
+    const whtAmount = Math.round(amount * whtRate) / 100
     const invoice: SalesDocument = {
       id: genId('sdoc'),
       type: 'TAX_INVOICE',
@@ -2190,9 +2190,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   }
 
   function recalcBillingTotalsFromBookings(targetBookings: Booking[]): BillingVatBackfillTotals {
-    const discountTotal = Math.round(targetBookings.reduce((sum, b) => sum + computeRowDiscountBaht(bookingBillingRow(b)), 0))
-    const amount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowAmount(bookingBillingRow(b)), 0))
-    const vatAmount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowVat(bookingBillingRow(b)), 0))
+    const discountTotal = Math.round(targetBookings.reduce((sum, b) => sum + computeRowDiscountBaht(bookingBillingRow(b)), 0) * 100) / 100
+    const amount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowAmount(bookingBillingRow(b)), 0) * 100) / 100
+    const vatAmount = Math.round(targetBookings.reduce((sum, b) => sum + computeRowVat(bookingBillingRow(b)), 0) * 100) / 100
     const vatRates = new Set(targetBookings.map((b) => b.vatRate || 0))
     const vatRate = vatRates.size === 1 ? targetBookings[0].vatRate : undefined
     return { amount, discountTotal, vatAmount, vatRate }

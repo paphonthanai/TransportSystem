@@ -460,7 +460,7 @@ const goToFuelSettings = () => router.push('/settings/fuel')
 
 const headerCalculatedAllowance = computed(() => {
   const fee = header.value.pricingMode === 'MULTI_DESTINATION' ? multiTripFeeTotal.value : header.value.tripFee || 0
-  return Math.round(fee * 0.99 * 0.62 - computedFuel.value * fuelRateStore.settings.todayPricePerLiter)
+  return Math.round((fee * 0.99 * 0.62 - computedFuel.value * fuelRateStore.settings.todayPricePerLiter) * 100) / 100
 })
 
 /** รวมค่าเที่ยวจากทุกรายการ (tripFee * tripCount) — ใช้เฉพาะงาน MULTI_DESTINATION เป็น booking.tripFee โดยอัตโนมัติ */
@@ -622,7 +622,7 @@ const removeLineItem = (idx: number) => {
   lineItems.value.splice(idx, 1)
 }
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 /**
  * Requirement: หน้านี้ทำหน้าที่ "จอง/ล็อครถให้ลูกค้า" — เลือก Feed (props.fleet) + เลือกลูกค้าแล้วสร้างงานได้ทันที

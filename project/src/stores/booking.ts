@@ -849,7 +849,7 @@ export const useBookingStore = defineStore('booking', () => {
     })
     const netAdjustment = debtAdjustments.reduce((sum, d) => sum + d.amount, 0)
     booking.debtAdjustments = debtAdjustments
-    booking.finalAllowance = Math.round((booking.allowance || 0) - netAdjustment)
+    booking.finalAllowance = Math.round(((booking.allowance || 0) - netAdjustment) * 100) / 100
     if (odometerAfter !== undefined) booking.odometerAfter = odometerAfter
     booking.status = 'DELIVERED'
     // billingStatus ไม่เกี่ยวกับสถานะงานเลย ปล่อยไว้ตามเดิม (UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล)
@@ -1038,9 +1038,9 @@ export const useBookingStore = defineStore('booking', () => {
     const invoiceNumbering = documentSettingsStore.settings.numbering.invoice
     const salesCalcMode = documentSettingsStore.settings.calcMode.sales
     const vatRate = salesCalcMode.vat === 'included' ? 0 : documentSettingsStore.settings.vatRate
-    const vatAmount = Math.round((amount * vatRate) / 100)
+    const vatAmount = Math.round(amount * vatRate) / 100
     const whtRate = salesCalcMode.wht === 'included' ? 0 : documentSettingsStore.settings.whtRate
-    const whtAmount = Math.round((amount * whtRate) / 100)
+    const whtAmount = Math.round(amount * whtRate) / 100
     const doc: LegacySalesDocument = {
       id: `doc${Date.now()}`,
       number: `${invoiceNumbering.prefix}${new Date().getFullYear() + 543}-${documentSettingsStore.padNumber(documents.value.length + 1, invoiceNumbering.padding)}`,

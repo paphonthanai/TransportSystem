@@ -183,7 +183,7 @@ const formatDateShort = (date?: Date) => {
 
 const selectedTotal = computed(() => eligibleBookings.value.filter((b) => pickerSelectedIds.value.has(b.id)).reduce((sum, b) => sum + bookingTotal(b), 0))
 
-const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 const goToForm = () => {
   if (pickerSelectedIds.value.size === 0) return

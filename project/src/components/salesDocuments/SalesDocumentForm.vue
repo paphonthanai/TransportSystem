@@ -165,7 +165,7 @@ const totalAmount = computed(() => rows.value.reduce((sum, r) => sum + r.qty * r
 
 const canSubmit = computed(() => customer.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0))
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 const submit = () => {
   if (!canSubmit.value) return

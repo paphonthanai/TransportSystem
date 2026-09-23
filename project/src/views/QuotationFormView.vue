@@ -492,7 +492,7 @@ const whtTotal = computed(() => whtOverride.value ?? whtComputed.value)
 const netPayable = computed(() => grandTotal.value - whtTotal.value)
 
 const startEditWht = () => {
-  if (whtOverride.value === null) whtOverride.value = Math.round(whtComputed.value)
+  if (whtOverride.value === null) whtOverride.value = Math.round(whtComputed.value * 100) / 100
   whtOverrideEditing.value = true
 }
 
@@ -560,7 +560,7 @@ const resolvedCreditDays = computed<number | undefined>(() => {
   return creditDays.value
 })
 
-const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDateDisplay = (date: Date) => date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
 
 /** บันทึกเอกสาร (สร้างใหม่ หรืออัปเดตถ้าบันทึกไปแล้วอย่างน้อยหนึ่งครั้ง) แล้วคืนเอกสารกลับมา ใช้ร่วมกันทั้งปุ่ม

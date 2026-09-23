@@ -48,10 +48,10 @@ export interface DocumentTotals {
  * QuotationFormView.vue/DocumentConvertView.vue)
  */
 export function computeDocumentTotals(rows: TaxableRow[]): DocumentTotals {
-  const amount = Math.round(rows.reduce((sum, r) => sum + computeRowAmount(r), 0))
-  const discountTotal = Math.round(rows.reduce((sum, r) => sum + computeRowDiscountBaht(r), 0))
-  const vatAmount = Math.round(rows.reduce((sum, r) => sum + computeRowVat(r), 0))
-  const whtAmount = Math.round(rows.reduce((sum, r) => sum + computeRowWht(r), 0))
+  const amount = Math.round(rows.reduce((sum, r) => sum + computeRowAmount(r), 0) * 100) / 100
+  const discountTotal = Math.round(rows.reduce((sum, r) => sum + computeRowDiscountBaht(r), 0) * 100) / 100
+  const vatAmount = Math.round(rows.reduce((sum, r) => sum + computeRowVat(r), 0) * 100) / 100
+  const whtAmount = Math.round(rows.reduce((sum, r) => sum + computeRowWht(r), 0) * 100) / 100
   const taxedRates = new Set(rows.filter((r) => r.vatRate).map((r) => r.vatRate))
   const vatRate = taxedRates.size === 1 ? [...taxedRates][0] : undefined
   return { amount, discountTotal, vatAmount, vatRate, whtAmount }

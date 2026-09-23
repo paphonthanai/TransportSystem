@@ -129,7 +129,7 @@ const canEdit = computed(() => authStore.role === 'ADMIN')
 
 const statusLabel = (status: string) => ({ draft: 'ร่าง', sent: 'ส่งแล้ว', paid: 'ชำระแล้ว' })[status] || status
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
 // --- Record payment (บังคับแนบหลักฐานการชำระเงินก่อนบันทึกรับชำระ) ---

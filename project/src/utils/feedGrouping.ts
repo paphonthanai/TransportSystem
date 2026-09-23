@@ -63,11 +63,11 @@ export function groupRowsByFeed(rows: FeedGroupSourceRow[], bookings: Booking[])
     const end = dates[dates.length - 1]
     const dateLabel = start ? (end && end.toDateString() !== start.toDateString() ? `${formatDateSlashFullYear(start)} - ${formatDateSlashFullYear(end)}` : formatDateSlashFullYear(start)) : ''
     const qty = groupRows.length
-    const amount = Math.round(groupRows.reduce((sum, r) => sum + r.amount, 0))
+    const amount = Math.round(groupRows.reduce((sum, r) => sum + r.amount, 0) * 100) / 100
     /** ราคาต่อหน่วย = ราคาจริงถ้าทุกเที่ยวในกลุ่มเดียวกันเท่ากันหมด (กรณีปกติ) ไม่งั้นเฉลี่ยจาก amount/qty (กรณีราคาไม่เท่ากัน
      *  ในบางเที่ยว) — คงค่า "จำนวน × ราคาต่อหน่วย = ยอดรวม" ให้ตรงเป๊ะเมื่อราคาสม่ำเสมอ (กรณีส่วนใหญ่) */
     const uniquePrices = new Set(groupRows.map((r) => r.unitPrice))
-    const unitPrice = uniquePrices.size === 1 ? groupRows[0].unitPrice : Math.round(amount / qty)
+    const unitPrice = uniquePrices.size === 1 ? groupRows[0].unitPrice : Math.round((amount / qty) * 100) / 100
     return { feed, dateLabel, qty, unitPrice, amount }
   })
 }

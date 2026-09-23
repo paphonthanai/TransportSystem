@@ -90,7 +90,7 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
 
     const driverName = `${targetBookings[0].driverFirstName || ''} ${targetBookings[0].driverLastName || ''}`.trim() || targetBookings[0].driverName || ''
     const periodLabel = toBEPeriodLabel(period)
-    const tripIncomeTotal = Math.round(targetBookings.reduce((sum, b) => sum + (b.finalAllowance ?? b.allowance ?? 0), 0))
+    const tripIncomeTotal = Math.round(targetBookings.reduce((sum, b) => sum + (b.finalAllowance ?? b.allowance ?? 0), 0) * 100) / 100
     const additionTotal = deductionsStore.additionsFor(driverName, periodLabel).reduce((sum, a) => sum + a.amount, 0)
     const deductionTotal = deductionsStore.deductionsFor(driverName, periodLabel).reduce((sum, d) => sum + d.amount, 0)
     const netIncome = tripIncomeTotal + additionTotal - deductionTotal

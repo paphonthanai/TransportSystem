@@ -258,7 +258,7 @@ const destinationLabel = (booking: { items: { siteName: string }[] }) => {
   return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
 }
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
 /** เลือกงานเพื่อสร้างเอกสารรายได้รถ — งานที่ออกเอกสารไปแล้ว (vehicleIncomeDocId) เลือกซ้ำไม่ได้ ไม่มี checkbox ให้เลย */

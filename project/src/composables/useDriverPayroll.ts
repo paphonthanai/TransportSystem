@@ -120,7 +120,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
   )
 
   const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
-  const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+  const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
   function exportSummary() {
     exportRowsToExcel(

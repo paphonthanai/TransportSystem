@@ -129,7 +129,7 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     [...new Set(bookingStore.bookings.filter((b) => b.status === 'DELIVERED').flatMap((b) => b.items.map((i) => i.district)).filter(Boolean))].sort()
   )
 
-  const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+  const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const formatShortDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-')
 
   return {

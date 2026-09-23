@@ -256,9 +256,9 @@ const drivers = computed(() =>
     }))
 )
 
-const whtAmount = (cert: WHTCertificate) => Math.round(((cert.grossAmount || 0) * (cert.whtRate || 0)) / 100)
+const whtAmount = (cert: WHTCertificate) => Math.round((cert.grossAmount || 0) * (cert.whtRate || 0)) / 100
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-')
 
 // --- Create ---
@@ -276,7 +276,7 @@ const form = ref({
   note: '',
 })
 
-const formWhtAmount = computed(() => Math.round(((form.value.grossAmount || 0) * (form.value.whtRate || 0)) / 100))
+const formWhtAmount = computed(() => Math.round((form.value.grossAmount || 0) * (form.value.whtRate || 0)) / 100)
 
 const openCreate = () => {
   selectedDriverName.value = ''

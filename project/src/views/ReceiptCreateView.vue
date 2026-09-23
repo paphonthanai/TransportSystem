@@ -390,7 +390,7 @@ const numberReusable = computed(() => numberReuseCheck.value.eligible && !!numbe
 
 const canSubmit = computed(() => customerName.value.trim().length > 0 && sourceIds.value.length > 0 && !numberDuplicate.value)
 
-const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
 const submitError = ref('')

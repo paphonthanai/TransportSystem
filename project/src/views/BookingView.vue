@@ -1023,7 +1023,7 @@ const fuelLitersLabel = (booking: Booking) => (booking.fuelLiters ? `${booking.f
 
 const deliveredItemCount = (booking: Booking) => booking.items.filter((i) => i.deliveryStatus === 'DELIVERED').length
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 
 // --- Dispatch flow ---
@@ -1320,7 +1320,7 @@ const addAdjustmentRow = () => {
 const finalAllowance = computed(() => {
   if (!completeTarget.value) return 0
   const net = debtAdjustments.value.reduce((sum, d) => sum + (d.amount || 0), 0)
-  return Math.round((completeTarget.value.allowance || 0) - net)
+  return Math.round(((completeTarget.value.allowance || 0) - net) * 100) / 100
 })
 
 /** สรุประยะทาง/อัตราสิ้นเปลืองน้ำมัน/ชดเชยน้ำมัน เมื่อกรอกเลขไมล์สิ้นสุดแล้ว (เทียบกับน้ำมันที่กรอกไว้ตอนจัดรถ + ลิตรมาตรฐานรวมของทุกปลายทาง) */

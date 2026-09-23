@@ -237,7 +237,7 @@ const confirmSave = async () => {
   router.push(`/payroll/staff/${result.id}`)
 }
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 </script>
 
 <style scoped>

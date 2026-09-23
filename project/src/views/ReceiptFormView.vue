@@ -563,7 +563,7 @@ const whtTotal = computed(() => whtOverride.value ?? whtComputed.value)
 const netPayable = computed(() => grandTotal.value - whtTotal.value)
 
 const startEditWht = () => {
-  if (whtOverride.value === null) whtOverride.value = Math.round(whtComputed.value)
+  if (whtOverride.value === null) whtOverride.value = Math.round(whtComputed.value * 100) / 100
   whtOverrideEditing.value = true
 }
 
@@ -650,7 +650,7 @@ const canSubmit = computed(
   () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
 )
 
-const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 /** id ของเอกสารที่ "บันทึกแล้ว" ล่าสุด — เริ่มจาก editingId (ถ้าแก้ไขเอกสารเดิม) แล้วอัปเดตเป็น id ใหม่ทันทีที่มีการสร้างเอกสารครั้งแรก
  *  (เช่น กดปุ่มพิมพ์/แชร์/ดาวน์โหลดก่อนกด "บันทึกเอกสาร") เพื่อให้การกดซ้ำครั้งต่อไปเป็นการอัปเดต ไม่ใช่สร้างซ้ำ */

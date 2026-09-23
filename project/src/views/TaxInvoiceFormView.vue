@@ -624,7 +624,7 @@ const whtTotal = computed(() => whtOverride.value ?? whtComputed.value)
 const netPayable = computed(() => grandTotal.value - whtTotal.value)
 
 const startEditWht = () => {
-  if (whtOverride.value === null) whtOverride.value = Math.round(whtComputed.value)
+  if (whtOverride.value === null) whtOverride.value = Math.round(whtComputed.value * 100) / 100
   whtOverrideEditing.value = true
 }
 
@@ -721,7 +721,7 @@ const resolvedCreditDays = computed<number | undefined>(() => {
   return creditDays.value
 })
 
-const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDateDisplay = (date: Date) => date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
 
 /** id ของเอกสารที่ "บันทึกแล้ว" ล่าสุด — เริ่มจาก editingId (ถ้าแก้ไขเอกสารเดิม) แล้วอัปเดตเป็น id ใหม่ทันทีที่มีการสร้างเอกสารครั้งแรก

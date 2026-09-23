@@ -549,7 +549,7 @@ const vatAmount = computed(() => (showVatRow.value ? computeRowVat(pricingRow.va
 const grandTotal = computed(() => afterDiscount.value + vatAmount.value)
 
 const formatBaht = (value: number) =>
-  `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+  `${documentSettingsStore.settings.currency.symbol}${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-')
 
 const printDoc = () => window.print()

@@ -228,7 +228,7 @@ const customerStore = useCustomerStore()
 const bookingStore = useBookingStore()
 
 const avatarPalette = ['#3b82f6', '#10b981', '#2563eb', '#8b5cf6', '#f97316', '#ec4899']
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 const customerRows = computed(() =>
   customerStore.customers.map((customer, i) => {

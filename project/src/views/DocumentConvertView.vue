@@ -209,7 +209,7 @@ const grandTotal = computed(() => totals.value.amount + totals.value.vatAmount)
 
 const canSubmit = computed(() => customer.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0))
 
-const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 const goBack = () => router.push(sourceType === 'billing' ? '/billing-notes' : '/quotation')
 

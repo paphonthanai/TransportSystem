@@ -364,7 +364,7 @@ const editMultiTripFeeTotal = computed(() => editLineItems.value.reduce((sum, i)
 const editFuelCost = computed(() => (editForm.value.fuelLiters || 0) * (editForm.value.fuelRate || 0))
 const editCalculatedAllowance = computed(() => {
   const fee = editPricingMode.value === 'MULTI_DESTINATION' ? editMultiTripFeeTotal.value : editForm.value.tripFee || 0
-  return Math.round(fee * 0.99 * 0.62 - editFuelCost.value)
+  return Math.round((fee * 0.99 * 0.62 - editFuelCost.value) * 100) / 100
 })
 const editDisplayedAllowance = computed(() => (isCements.value ? editForm.value.allowance || 0 : editCalculatedAllowance.value))
 
@@ -520,7 +520,7 @@ const removeEditLineItem = (idx: number) => {
   editLineItems.value.splice(idx, 1)
 }
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 /** ปุ่มบันทึกหลักถูกบล็อกไว้จนกว่างาน MULTI_DESTINATION จะกรอกค่าเที่ยว/จำนวนเที่ยวครบทุกรายการ (การเปลี่ยนโหมดเองยืนยันแยกต่างหากไปแล้วผ่าน confirmPricingModeChange) */
 const canSaveEdit = computed(() => {

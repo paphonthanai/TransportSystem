@@ -669,12 +669,12 @@ const selectedTotal = computed(() => selectedBookings.value.reduce((sum, b) => s
 // --- พรีวิว VAT/หัก ณ ที่จ่าย ตามตั้งค่าเอกสาร (คำนวณจริงตอนกดยืนยันออกใบแจ้งหนี้ใน issueInvoiceFromBatch) ---
 const previewShowVatRow = computed(() => documentSettingsStore.settings.calcMode.sales.vat !== 'included')
 const previewVatAmount = computed(() =>
-  previewShowVatRow.value ? Math.round((selectedTotal.value * documentSettingsStore.settings.vatRate) / 100) : 0
+  previewShowVatRow.value ? Math.round(selectedTotal.value * documentSettingsStore.settings.vatRate) / 100 : 0
 )
 const previewGrandTotal = computed(() => selectedTotal.value + previewVatAmount.value)
 const previewShowWhtRow = computed(() => documentSettingsStore.settings.calcMode.sales.wht !== 'included')
 const previewWhtAmount = computed(() =>
-  previewShowWhtRow.value ? Math.round((selectedTotal.value * documentSettingsStore.settings.whtRate) / 100) : 0
+  previewShowWhtRow.value ? Math.round(selectedTotal.value * documentSettingsStore.settings.whtRate) / 100 : 0
 )
 const previewNetPayable = computed(() => previewGrandTotal.value - previewWhtAmount.value)
 
@@ -713,7 +713,7 @@ function priceMatches(booking: Booking) {
   return bookingTotal(booking) === booking.agreedPrice
 }
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
 // --- Create invoice ---

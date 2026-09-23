@@ -842,7 +842,7 @@ const docNote = computed(() => {
 })
 
 const formatBaht = (value: number) =>
-  `${documentSettingsStore.settings.currency.symbol}${Math.round(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+  `${documentSettingsStore.settings.currency.symbol}${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-')
 /** วันที่ส่งในตารางรายเที่ยว ใช้รูปแบบย่อ วว/ดด/ปป (พ.ศ. 2 หลัก) เช่น "14/08/69" ตาม Requirement ล่าสุด — คนละรูปแบบ
  *  กับ formatDate (เต็ม) ที่ใช้กับวันที่หัวเอกสาร/ครบกำหนด ซึ่งยังคงรูปแบบเดิมไว้ */

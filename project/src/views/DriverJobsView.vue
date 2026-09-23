@@ -373,7 +373,7 @@ const destinationLabel = (booking: Booking) => {
   return booking.items.length > 1 ? `${first} +${booking.items.length - 1} ที่อื่น` : first
 }
 
-const formatBaht = (value: number) => `฿${Math.round(value || 0).toLocaleString('th-TH')}`
+const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
 // --- Account Settings: บัญชี (ข้อมูลติดต่อ + เปลี่ยนอีเมล/PIN) และ ตั้งค่า UI (ธีม/ขนาดตัวอักษร) ---
