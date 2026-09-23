@@ -96,7 +96,7 @@ describe('findReconcileMatches — จับคู่กับไฟล์จร
 })
 
 describe('computeReconcilePatches — ใช้ยอดที่ parse ถูกต้องจากไฟล์ ไม่ใช่ค่า 0 ที่ค้างอยู่ในระบบจากบั๊กเดิม', () => {
-  it('เติมค่าเที่ยว/เบี้ยเลี้ยง/น้ำมัน/จำนวนตันที่ยังว่าง/0 อยู่ ด้วยค่าจากไฟล์ (10 ตัน x 3300 = 33000)', () => {
+  it('เติมค่าเที่ยว/เบี้ยเลี้ยง/น้ำมัน/จำนวนตันที่ยังว่าง/0 อยู่ ด้วยค่าจากไฟล์ — ค่าเที่ยวใช้ "ราคาปูน" ตรงๆ (3300) ไม่คูณจำนวนตัน เพราะราคาปูนคือราคาต่อเที่ยวอยู่แล้ว', () => {
     const booking = makeBooking({
       tripFee: 0,
       allowance: 0,
@@ -106,7 +106,7 @@ describe('computeReconcilePatches — ใช้ยอดที่ parse ถู�
     const patches = computeReconcilePatches(row3FromRealFile, booking)
     expect(patches).toEqual(
       expect.arrayContaining([
-        { field: 'ค่าเที่ยว', from: 0, to: 33000 },
+        { field: 'ค่าเที่ยว', from: 0, to: 3300 },
         { field: 'เบี้ยเลี้ยง', from: 0, to: 750 },
         { field: 'น้ำมัน (ลิตร)', from: 0, to: 38 },
         { field: 'จำนวนตัน', from: 0, to: 0.4 },

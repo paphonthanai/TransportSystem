@@ -1614,9 +1614,10 @@ const confirmImport = () => {
         extraProducts: otherPairs.length ? otherPairs.map((p) => ({ product: p.product, qty: p.qty, unit: 'ตัน' })) : undefined,
       },
     ]
-    // ปัดเก็บ 2 ตำแหน่งกันเศษ floating point ยาวๆ (เช่น 0.1+0.2) ไม่ใช่การตัดทศนิยมทิ้ง — row.qty/row.price
-    // จากไฟล์ Excel เก็บทศนิยมมาครบอยู่แล้ว (parseImportRow ไม่เคยปัดเศษราคา/จำนวนตันทิ้งเลย)
-    const amount = Math.round(row.qty * row.price * 100) / 100
+    // "ราคาปูน" ในไฟล์ Excel คือราคาต่อเที่ยวอยู่แล้ว (ไม่ใช่ราคาต่อตัน) — ห้ามเอาไปคูณกับจำนวนตันอีก เดิมเคยคูณ
+    // row.qty * row.price ผิด ตาม requirement ที่ยืนยันชัดเจนว่า "คิดราคาเป็นเที่ยว ไม่ใช่ตามจำนวน/ราคาสินค้า"
+    // ใช้ row.price ตรงๆ เป็นยอด "รวมเป็นเงิน"/"จำนวนเงินทั้งสิ้น" เสมอ ปัดเก็บ 2 ตำแหน่งกันเศษ floating point เท่านั้น
+    const amount = Math.round(row.price * 100) / 100
     const newBooking = bookingStore.addBooking({
       category: props.fleet,
       docNo: bookingStore.nextDocNo(props.fleet),
