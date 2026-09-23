@@ -130,12 +130,12 @@
         <div class="flex justify-between items-start mb-6">
           <div class="text-sm">
             <div class="text-gray-600 text-xs">จำนวนเงินเป็นตัวอักษร</div>
-            <div class="font-semibold">({{ bahtText(grandTotal) }})</div>
+            <div class="font-semibold">({{ grandTotal > 0 ? bahtText(grandTotal) : PRICE_NOT_SET_LABEL }})</div>
           </div>
           <div class="w-64 text-sm space-y-1">
             <div class="flex justify-between">
               <span class="text-gray-600">รวมเป็นเงิน</span>
-              <span>{{ formatBaht(booking.tripFee) }}</span>
+              <span>{{ priceCellText(booking.tripFee, formatBaht) }}</span>
             </div>
             <div v-if="discountTotal > 0" class="flex justify-between">
               <span class="text-gray-600">ส่วนลดรวม</span>
@@ -147,7 +147,7 @@
             </div>
             <div class="flex justify-between font-bold border-t border-black pt-1">
               <span>จำนวนเงินรวมทั้งสิ้น</span>
-              <span>{{ formatBaht(grandTotal) }}</span>
+              <span>{{ priceCellText(grandTotal, formatBaht) }}</span>
             </div>
           </div>
         </div>
@@ -307,7 +307,7 @@
           </div>
         </div>
         <div v-if="isMulti" class="text-sm text-text mt-2 text-right font-semibold">
-          รวมค่าเที่ยวทั้งงาน: {{ formatBaht(booking.tripFee) }}
+          รวมค่าเที่ยวทั้งงาน: {{ priceCellText(booking.tripFee, formatBaht) }}
         </div>
       </div>
 
@@ -414,6 +414,7 @@ import { bahtText } from '@/utils/companyInfo'
 import { bookingStatusLabel, bookingStatusClass, documentClaimBadges } from '@/utils/bookingStatus'
 import { computeRowDiscountBaht, computeRowAmount, computeRowVat } from '@/utils/documentTotals'
 import { compressImageToDataUrl } from '@/utils/podImage'
+import { priceCellText, PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import type { Booking, BookingStatus, JobItem } from '@/types'
 
