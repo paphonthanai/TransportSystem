@@ -89,7 +89,7 @@ export interface ReconcilePatch {
 /** เติมเฉพาะ field ที่ยังว่าง/เป็น 0 อยู่เท่านั้น — ไม่เขียนทับข้อมูลที่มีอยู่แล้วไม่ว่ากรณีใด */
 export function computeReconcilePatches(row: ReconcileRowInput, booking: Booking): ReconcilePatch[] {
   const patches: ReconcilePatch[] = []
-  const amount = row.qty * row.price
+  const amount = Math.round(row.qty * row.price * 100) / 100
   if ((booking.tripFee || 0) === 0 && amount > 0) patches.push({ field: 'ค่าเที่ยว', from: booking.tripFee || 0, to: amount })
   if (!booking.allowance && row.allowance > 0) patches.push({ field: 'เบี้ยเลี้ยง', from: booking.allowance || 0, to: row.allowance })
   if (!booking.fuelLiters && row.fuelLiters > 0) patches.push({ field: 'น้ำมัน (ลิตร)', from: booking.fuelLiters || 0, to: row.fuelLiters })

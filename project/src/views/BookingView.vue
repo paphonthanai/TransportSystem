@@ -1335,7 +1335,7 @@ const completeMileageSummary = computed(() => {
       .reduce((sum, b) => sum + ((b.odometerAfter || 0) - (b.odometerBefore || 0)), 0) + distanceKm
   const avgKmPerLiter = booking.fuelLiters ? Math.round((distanceKm / booking.fuelLiters) * 100) / 100 : null
   const standardFuelLiters = fuelRateStore.standardFuelLiters(booking.items, booking.pricingMode) || null
-  const fuelCompensation = standardFuelLiters !== null ? Math.round((standardFuelLiters - (booking.fuelLiters || 0)) * (booking.fuelRate || 0)) : null
+  const fuelCompensation = standardFuelLiters !== null ? Math.round((standardFuelLiters - (booking.fuelLiters || 0)) * (booking.fuelRate || 0) * 100) / 100 : null
   return { distanceKm, cumulativeKm, avgKmPerLiter, standardFuelLiters, fuelCompensation }
 })
 
@@ -1600,7 +1600,9 @@ const confirmImport = () => {
         extraProducts: otherPairs.length ? otherPairs.map((p) => ({ product: p.product, qty: p.qty, unit: 'ตัน' })) : undefined,
       },
     ]
-    const amount = row.qty * row.price
+    // ปัดเก็บ 2 ตำแหน่งกันเศษ floating point ยาวๆ (เช่น 0.1+0.2) ไม่ใช่การตัดทศนิยมทิ้ง — row.qty/row.price
+    // จากไฟล์ Excel เก็บทศนิยมมาครบอยู่แล้ว (parseImportRow ไม่เคยปัดเศษราคา/จำนวนตันทิ้งเลย)
+    const amount = Math.round(row.qty * row.price * 100) / 100
     const newBooking = bookingStore.addBooking({
       category: props.fleet,
       docNo: bookingStore.nextDocNo(props.fleet),
