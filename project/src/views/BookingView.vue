@@ -787,6 +787,7 @@ import {
   IMPORT_HEADER_MARKER,
   parseImportRow,
   matchDriverForImport,
+  matchCustomerForImport,
   parseShipDateFromTitle,
   flagPriceOutliers,
   type ImportRowResult,
@@ -820,6 +821,13 @@ const findDriverByName = (name: string) => driversStore.drivers.find((d) => driv
 const matchDriverForImportRow = (nickname: string, plate: string) => {
   const driver = matchDriverForImport(nickname, plate, driversStore.drivers, vehiclesStore.vehicleForDriver)
   return driver ? { id: driver.id, fullName: driversStore.fullName(driver) } : undefined
+}
+
+/** ต่อ matchCustomerForImport เข้ากับ customerStore จริง — จับคู่กับรหัสผู้ติดต่อ (ชื่อย่อ) ก่อนเสมอ ไม่เจอค่อยลอง
+ *  ชื่อเต็ม คืนแค่ {name} (ชื่อเต็ม) ให้ parseImportRow ใช้ต่อ */
+const matchCustomerForImportRow = (raw: string) => {
+  const customer = matchCustomerForImport(raw, customerStore.customers)
+  return customer ? { name: customer.name } : undefined
 }
 
 const searchQuery = ref('')
@@ -1414,6 +1422,7 @@ const handleReconcileFile = async (e: Event) => {
     .map((r, idx) =>
       parseImportRow(r, idx + headerRowIndex + 2, {
         matchDriver: matchDriverForImportRow,
+        matchCustomer: matchCustomerForImportRow,
         findFuelRate: (province, district) => fuelRateStore.findRate(province, district) ?? undefined,
       })
     )
@@ -1564,6 +1573,7 @@ const handleImportFile = async (e: Event) => {
   importRows.value = raw.map((r, idx) =>
     parseImportRow(r, idx + headerRowIndex + 2, {
       matchDriver: matchDriverForImportRow,
+      matchCustomer: matchCustomerForImportRow,
       findFuelRate: (province, district) => fuelRateStore.findRate(province, district) ?? undefined,
     })
   )

@@ -73,7 +73,14 @@
                 </div>
               </td>
               <td class="px-3 py-3">
-                <div class="font-semibold text-text">{{ doc.customer }}</div>
+                <div class="font-semibold text-text inline-flex items-center gap-1.5" :title="doc.customer">
+                  <span
+                    v-if="customerStore.findByName(doc.customer)?.color"
+                    :style="{ background: customerStore.findByName(doc.customer)!.color }"
+                    class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  ></span>
+                  {{ customerStore.findByName(doc.customer)?.code || doc.customer }}
+                </div>
                 <div v-if="doc.project" class="text-xs text-muted">{{ doc.project }}</div>
               </td>
               <td class="px-3 py-3 text-right font-semibold text-text">{{ formatBaht(doc.amount + (doc.vatAmount || 0)) }}</td>
@@ -193,6 +200,7 @@ import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useCustomerStore } from '@/stores/customers'
 import { useDocumentPrefillStore, type DocumentPrefillPayload } from '@/stores/documentPrefill'
 import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
 import type { BookingCategory } from '@/types'
@@ -200,6 +208,7 @@ import type { BookingCategory } from '@/types'
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const customerStore = useCustomerStore()
 const documentPrefillStore = useDocumentPrefillStore()
 
 const statusFilter = ref<'all' | SalesDocumentStatus>('all')

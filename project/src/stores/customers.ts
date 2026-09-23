@@ -80,6 +80,15 @@ export const useCustomerStore = defineStore('customers', () => {
   const lookupCustomer = (name: string): CustomerRecord =>
     customers.value.find((c) => c.name === name) || emptyCustomer(name)
 
+  /** หาข้อมูลลูกค้าจากชื่อเต็ม แบบไม่สนตัวพิมพ์เล็ก-ใหญ่/ช่องว่างหัวท้าย คืน undefined ถ้าไม่พบ (ต่างจาก lookupCustomer
+   *  ที่คืน emptyCustomer เสมอ) — ใช้แสดง "รหัสผู้ติดต่อ" (ชื่อย่อ) + สีประจำลูกค้าแทนชื่อเต็มในหน้า list ต่างๆ กันไม่ให้
+   *  ชนกับ lookupCustomer ที่ผูกพฤติกรรมเดิมไว้แล้วในหลายจุด */
+  const findByName = (name: string): CustomerRecord | undefined => {
+    const norm = name.trim().toLowerCase()
+    if (!norm) return undefined
+    return customers.value.find((c) => c.name.trim().toLowerCase() === norm)
+  }
+
   /**
    * แนะนำเลขที่ PO จากรหัสลูกค้าในสมุดรายชื่อ: PO-{รหัสลูกค้า}-{วันที่ พ.ศ.}-{ลำดับงานของลูกค้านั้นในวันนี้}
    * คืนค่าว่างถ้าไม่พบลูกค้า หรือลูกค้ายังไม่ได้ตั้งรหัสผู้ติดต่อไว้
@@ -112,5 +121,5 @@ export const useCustomerStore = defineStore('customers', () => {
     customers.value = customers.value.filter((c) => c.id !== id)
   }
 
-  return { customers, loading, error, lookupCustomer, suggestPoNumber, createCustomer, updateCustomer, deleteCustomer, sanitizeCustomer }
+  return { customers, loading, error, lookupCustomer, findByName, suggestPoNumber, createCustomer, updateCustomer, deleteCustomer, sanitizeCustomer }
 })

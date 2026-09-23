@@ -95,7 +95,16 @@
                   />
                 </td>
                 <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
-                <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
+                <td class="px-4 py-3 text-text">
+                  <span class="inline-flex items-center gap-1.5" :title="booking.customer">
+                    <span
+                      v-if="customerStore.findByName(booking.customer)?.color"
+                      :style="{ background: customerStore.findByName(booking.customer)!.color }"
+                      class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    ></span>
+                    {{ customerStore.findByName(booking.customer)?.code || booking.customer }}
+                  </span>
+                </td>
                 <td class="px-4 py-3">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
                 </td>
@@ -296,7 +305,16 @@
             <tbody>
               <tr v-for="doc in batchInvoices" :key="doc.id" class="border-b border-border last:border-0">
                 <td class="px-3 py-2 font-bold text-primary">{{ doc.number }}</td>
-                <td class="px-3 py-2 text-text">{{ doc.customer }}</td>
+                <td class="px-3 py-2 text-text">
+                  <span class="inline-flex items-center gap-1.5" :title="doc.customer">
+                    <span
+                      v-if="customerStore.findByName(doc.customer)?.color"
+                      :style="{ background: customerStore.findByName(doc.customer)!.color }"
+                      class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    ></span>
+                    {{ customerStore.findByName(doc.customer)?.code || doc.customer }}
+                  </span>
+                </td>
                 <td class="px-3 py-2 text-muted">{{ formatDate(doc.dueDate) }}</td>
                 <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(doc.amount) }}</td>
                 <td class="px-3 py-2">
@@ -565,6 +583,7 @@ import { useBookingStore } from '@/stores/booking'
 import type { LegacySalesDocument } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBillingRuleStore } from '@/stores/billingRule'
+import { useCustomerStore } from '@/stores/customers'
 import { billingStatusLabel, billingStatusClass, bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import type { Booking, BillingBatch } from '@/types'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
@@ -573,6 +592,7 @@ const route = useRoute()
 const router = useRouter()
 const bookingStore = useBookingStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const customerStore = useCustomerStore()
 const billingRuleStore = useBillingRuleStore()
 
 const batches = computed(() => bookingStore.batches)

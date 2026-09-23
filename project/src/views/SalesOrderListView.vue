@@ -84,7 +84,16 @@
                   {{ row.doc.number }}
                 </div>
               </td>
-              <td class="px-3 py-3 font-semibold text-text">{{ row.doc.customer }}</td>
+              <td class="px-3 py-3 font-semibold text-text">
+                <span class="inline-flex items-center gap-1.5" :title="row.doc.customer">
+                  <span
+                    v-if="customerStore.findByName(row.doc.customer)?.color"
+                    :style="{ background: customerStore.findByName(row.doc.customer)!.color }"
+                    class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  ></span>
+                  {{ customerStore.findByName(row.doc.customer)?.code || row.doc.customer }}
+                </span>
+              </td>
               <td class="px-3 py-3 text-muted">{{ row.booking?.po || '-' }}</td>
               <td class="px-3 py-3 text-right font-semibold" :class="row.doc.amount > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
                 {{ row.doc.amount > 0 ? formatBaht(row.doc.amount + (row.doc.vatAmount || 0)) : PRICE_NOT_SET_LABEL }}
@@ -178,6 +187,7 @@ import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
+import { useCustomerStore } from '@/stores/customers'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import type { Booking, BookingCategory, BookingStatus } from '@/types'
@@ -185,6 +195,7 @@ import type { Booking, BookingCategory, BookingStatus } from '@/types'
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const customerStore = useCustomerStore()
 const bookingStore = useBookingStore()
 
 const statusFilter = ref<'all' | BookingStatus>('all')

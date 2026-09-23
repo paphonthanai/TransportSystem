@@ -100,7 +100,16 @@
                     {{ booking.category === 'cements' ? 'Cements' : 'Ceramics' }}
                   </span>
                 </td>
-                <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
+                <td class="px-4 py-3 text-text">
+                  <span class="inline-flex items-center gap-1.5" :title="booking.customer">
+                    <span
+                      v-if="customerStore.findByName(booking.customer)?.color"
+                      :style="{ background: customerStore.findByName(booking.customer)!.color }"
+                      class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    ></span>
+                    {{ customerStore.findByName(booking.customer)?.code || booking.customer }}
+                  </span>
+                </td>
                 <td class="px-4 py-3 font-semibold text-text">
                   {{ destinationLabel(booking) }}
                   <span class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-surface-2 text-muted">{{ booking.items.length }} เที่ยว</span>
@@ -199,12 +208,14 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCompletedJobs, useCompletedJobsFilters, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
+import { useCustomerStore } from '@/stores/customers'
 import { priceCellText } from '@/utils/priceDisplay'
 import { useAuthStore } from '@/stores/auth'
 import { documentClaimBadges, podReviewStatusLabel, podReviewStatusClass, bookingStatusLabel } from '@/utils/bookingStatus'
 import type { Booking } from '@/types'
 
 const router = useRouter()
+const customerStore = useCustomerStore()
 const bookingStore = useBookingStore()
 const authStore = useAuthStore()
 

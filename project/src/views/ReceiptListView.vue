@@ -95,7 +95,16 @@
                   </button>
                 </div>
               </td>
-              <td class="px-3 py-3 font-semibold text-text">{{ doc.customer }}</td>
+              <td class="px-3 py-3 font-semibold text-text">
+                <span class="inline-flex items-center gap-1.5" :title="doc.customer">
+                  <span
+                    v-if="customerStore.findByName(doc.customer)?.color"
+                    :style="{ background: customerStore.findByName(doc.customer)!.color }"
+                    class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  ></span>
+                  {{ customerStore.findByName(doc.customer)?.code || doc.customer }}
+                </span>
+              </td>
               <td class="px-3 py-3 text-right text-muted">{{ doc.bookingIds.length || '-' }}</td>
               <td class="px-3 py-3 text-right font-semibold" :class="doc.amount > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
                 {{ doc.amount > 0 ? formatBaht(doc.amount + (doc.vatAmount || 0)) : PRICE_NOT_SET_LABEL }}
@@ -205,6 +214,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
+import { useCustomerStore } from '@/stores/customers'
 import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
 import { exportDocumentsAsPdf } from '@/utils/exportDocumentsPdf'
 import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
@@ -212,6 +222,7 @@ import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const customerStore = useCustomerStore()
 
 const statusFilter = ref<'all' | SalesDocumentStatus>('all')
 const search = ref('')

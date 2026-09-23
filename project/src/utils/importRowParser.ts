@@ -98,6 +98,15 @@ export function matchDriverForImport<D extends { code: string; nickname: string 
   })
 }
 
+/** หาลูกค้าจากข้อความในไฟล์ (มักกรอกแบบย่อ เช่น "Sccc") — จับคู่กับ "รหัสผู้ติดต่อ" (ชื่อย่อ) ก่อนเสมอ ถ้าไม่เจอค่อยลอง
+ *  จับคู่กับชื่อเต็มตรงๆ (เผื่อไฟล์บางไฟล์กรอกชื่อเต็มมาแทน) เทียบแบบ trim + ไม่สนตัวพิมพ์เล็ก-ใหญ่ทั้งคู่ ไม่เจอคืน
+ *  undefined ให้ผู้เรียกใช้ข้อความดิบไปก่อนแล้วเตือน (ไม่เดาสุ่มจับคู่บางส่วน กันจับคู่ผิดลูกค้า) */
+export function matchCustomerForImport<C extends { code: string; name: string }>(raw: string, customers: C[]): C | undefined {
+  const norm = raw.trim().toLowerCase()
+  if (!norm) return undefined
+  return customers.find((c) => c.code.trim().toLowerCase() === norm) || customers.find((c) => c.name.trim().toLowerCase() === norm)
+}
+
 /** อ่านวันที่แรกที่เจอในข้อความหัวเรื่อง รูปแบบ DD-MM-YY/YYYY (พ.ศ.) เช่น "19-09-69" หรือ "19/09/2569" — เอาแค่วันที่แรก
  *  แม้หัวเรื่องจะมีช่วงวันที่ (เช่น "(ศุกร์ >> เสาร์)") ต่อท้ายก็ตาม ปีที่กรอก 2 หลักถือเป็น พ.ศ. ย่อ (69 = 2569) */
 export const parseShipDateFromTitle = (text: string): Date | undefined => {
@@ -134,6 +143,9 @@ export interface ParseImportRowDeps {
    *  ด้านบน ผู้เรียก (BookingView.vue) เป็นคนต่อกับ driversStore/vehiclesStore เพราะโมดูลนี้ไม่ผูกกับ Pinia store ตรงๆ */
   matchDriver: (nickname: string, plate: string) => { id?: string; fullName: string } | undefined
   findFuelRate: (province: string, district: string) => { liters: number } | undefined
+  /** คืนลูกค้าที่จับคู่ได้ (จากรหัสผู้ติดต่อ/ชื่อย่อ หรือชื่อเต็ม) แค่ name (ชื่อเต็ม) พอ — ตัวหา match จริงคือ
+   *  matchCustomerForImport ด้านบน ผู้เรียกเป็นคนต่อกับ customerStore เพราะโมดูลนี้ไม่ผูกกับ Pinia store ตรงๆ */
+  matchCustomer: (raw: string) => { name: string } | undefined
 }
 
 /** แปลงแถว Excel ดิบเป็นข้อมูลที่ใช้สร้าง Booking ได้ทันที — ไม่มี error ที่บล็อกการสร้างงานอีกต่อไป (ตามที่ตกลง)
@@ -150,7 +162,7 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   const driverName = str(raw[IMPORT_HEADERS.driverName])
   const plateRaw = str(raw[IMPORT_HEADERS.plate])
   const docRef = str(raw[IMPORT_HEADERS.docRef])
-  const customer = str(raw[IMPORT_HEADERS.customer])
+  const customerRaw = str(raw[IMPORT_HEADERS.customer])
   // คอลัมน์ "time" ในไฟล์จริงมักมีข้อความอื่นปนมากับเวลา (เช่น "ย้ำ!! ตราประทับ") — แยกเวลาไว้ใช้เป็น loadingTime
   // จริงๆ ส่วนข้อความที่เหลือไปต่อแถวหมายเหตุแทนที่จะทิ้ง
   const { time, text: timeExtraText } = extractTimeAndText(str(raw[IMPORT_HEADERS.time]))
@@ -191,7 +203,7 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   const district = (districtRaw || '').trim()
   const province = (provinceRaw || '').trim()
 
-  const isEmpty = !driverName && !customer && !siteName && !product
+  const isEmpty = !driverName && !customerRaw && !siteName && !product
 
   const warnings: string[] = []
 
@@ -200,6 +212,14 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   // "70-6826 , 72-6467, 73-0388") ไม่รู้ว่าจริงๆ ยืนยันด้วยคันไหนกันแน่ เว้นทะเบียนว่างไว้ก่อนแทนการเดา/เก็บทั้งก้อนดิบ
   const plate = plateRaw.includes(',') ? '' : plateRaw
   if (plateRaw.includes(',')) warnings.push(`คอนเฟิร์มมีทะเบียนรถมากกว่า 1 คัน ("${plateRaw}") ไม่สามารถระบุได้แน่ชัด — เว้นทะเบียนว่างไว้ก่อน ตรวจสอบเองภายหลัง`)
+
+  // ไฟล์จริงมักกรอกชื่อลูกค้าแบบย่อ (เช่น "Sccc" แทน "บริษัท ปูนซีเมนต์นครหลวง จำกัด (มหาชน)") — จับคู่กับรหัสผู้ติดต่อ
+  // (ชื่อย่อ) ก่อน ถ้าไม่เจอลองจับคู่กับชื่อเต็มตรงๆ (ไม่สนตัวพิมพ์เล็ก-ใหญ่) เจอแล้วใช้ชื่อเต็มเสมอ เพราะเอกสารที่พิมพ์
+  // ออกไปหาลูกค้า/สรรพากรต้องเป็นชื่อเต็มตามกฎหมาย ไม่ใช่ชื่อย่อที่กรอกมาในไฟล์ — จับคู่ไม่ได้ก็ไม่บล็อกการสร้างงาน
+  // ใช้ข้อความดิบไปก่อนแล้วเตือนให้ไปตรวจสอบเอง (เหมือน pattern เดียวกับคนขับ)
+  const matchedCustomer = customerRaw ? deps.matchCustomer(customerRaw) : undefined
+  const customer = matchedCustomer ? matchedCustomer.name : customerRaw
+  if (customerRaw && !matchedCustomer) warnings.push(`ชื่อลูกค้าจาก Excel "${customerRaw}" ไม่ตรงกับรหัสผู้ติดต่อ/ชื่อเต็มในสมุดรายชื่อ — ใช้ข้อความดิบไปก่อน ตรวจสอบเองภายหลัง`)
 
   const matchedDriver = driverName ? deps.matchDriver(driverName, plate) : undefined
   if (driverName && !matchedDriver) warnings.push(`ชื่อเล่นคนขับ "${driverName}" ไม่ตรงกับที่ผูกไว้ในระบบ (เทียบกับทะเบียนรถแล้ว) — เว้นคนขับว่างไว้ก่อน`)

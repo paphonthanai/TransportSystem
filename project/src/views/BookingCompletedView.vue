@@ -36,7 +36,16 @@
             <tbody>
               <tr v-for="booking in completedBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
                 <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
-                <td class="px-4 py-3 text-text">{{ booking.customer }}</td>
+                <td class="px-4 py-3 text-text">
+                  <span class="inline-flex items-center gap-1.5" :title="booking.customer">
+                    <span
+                      v-if="customerStore.findByName(booking.customer)?.color"
+                      :style="{ background: customerStore.findByName(booking.customer)!.color }"
+                      class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    ></span>
+                    {{ customerStore.findByName(booking.customer)?.code || booking.customer }}
+                  </span>
+                </td>
                 <td class="px-4 py-3 font-semibold text-text">
                   {{ destinationLabel(booking) }}
                   <span class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-surface-2 text-muted">{{ booking.items.length }} เที่ยว</span>
@@ -89,11 +98,13 @@ import { useRouter } from 'vue-router'
 import type { BookingCategory } from '@/types'
 import { documentClaimBadges } from '@/utils/bookingStatus'
 import { useCompletedJobs, useCompletedJobsFilters } from '@/composables/useCompletedJobs'
+import { useCustomerStore } from '@/stores/customers'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 
 const props = defineProps<{ fleet: BookingCategory }>()
 
 const router = useRouter()
+const customerStore = useCustomerStore()
 
 const isCements = computed(() => props.fleet === 'cements')
 const filters = useCompletedJobsFilters(props.fleet)

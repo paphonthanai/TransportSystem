@@ -125,7 +125,14 @@
         <div class="space-y-2 min-h-[7rem]">
           <div v-for="item in pagedDueInvoices" :key="item.id" class="flex items-center justify-between py-2 border-b border-border last:border-0">
             <div>
-              <div class="text-sm font-semibold text-text">{{ item.customer }}</div>
+              <div class="text-sm font-semibold text-text inline-flex items-center gap-1.5" :title="item.customer">
+                <span
+                  v-if="customerStore.findByName(item.customer)?.color"
+                  :style="{ background: customerStore.findByName(item.customer)!.color }"
+                  class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                ></span>
+                {{ customerStore.findByName(item.customer)?.code || item.customer }}
+              </div>
               <div class="text-xs text-muted">ครบกำหนด {{ item.dueDate }}</div>
             </div>
             <div class="text-sm font-bold text-text">{{ formatBaht(item.amount) }}</div>
@@ -165,7 +172,14 @@
           <div v-for="item in pagedBillingRequests" :key="item.id" class="flex items-center justify-between py-2 border-b border-border last:border-0">
             <div>
               <div class="text-sm font-semibold text-text">{{ item.docNo }}</div>
-              <div class="text-xs text-muted">{{ item.customer }}</div>
+              <div class="text-xs text-muted inline-flex items-center gap-1.5" :title="item.customer">
+                <span
+                  v-if="customerStore.findByName(item.customer)?.color"
+                  :style="{ background: customerStore.findByName(item.customer)!.color }"
+                  class="w-2 h-2 rounded-full flex-shrink-0"
+                ></span>
+                {{ customerStore.findByName(item.customer)?.code || item.customer }}
+              </div>
             </div>
             <div class="text-sm font-bold text-text">{{ formatBaht(item.amount) }}</div>
           </div>
@@ -225,9 +239,11 @@ import DashboardLineChart from '@/components/DashboardLineChart.vue'
 import Pager from '@/components/Pager.vue'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useBookingStore } from '@/stores/booking'
+import { useCustomerStore } from '@/stores/customers'
 
 const salesDocumentsStore = useSalesDocumentsStore()
 const bookingStore = useBookingStore()
+const customerStore = useCustomerStore()
 
 const taxInvoices = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE'))
 const receipts = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'RECEIPT'))

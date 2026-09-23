@@ -17,7 +17,16 @@
           <tbody>
             <tr v-for="doc in documents" :key="doc.id" class="border-b border-border hover:bg-surface-2 transition-colors">
               <td class="px-4 py-3 font-bold text-primary">{{ doc.number }}</td>
-              <td class="px-4 py-3 font-semibold text-text">{{ doc.customer }}</td>
+              <td class="px-4 py-3 font-semibold text-text">
+                <span class="inline-flex items-center gap-1.5" :title="doc.customer">
+                  <span
+                    v-if="customerStore.findByName(doc.customer)?.color"
+                    :style="{ background: customerStore.findByName(doc.customer)!.color }"
+                    class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  ></span>
+                  {{ customerStore.findByName(doc.customer)?.code || doc.customer }}
+                </span>
+              </td>
               <td class="px-4 py-3 text-muted">{{ formatDate(doc.date) }}</td>
               <td class="px-4 py-3 text-right text-text">{{ doc.bookingIds.length }}</td>
               <td class="px-4 py-3 text-right font-semibold text-text">{{ formatBaht(doc.amount) }}</td>
@@ -119,10 +128,12 @@ import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import type { LegacySalesDocument } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
+import { useCustomerStore } from '@/stores/customers'
 
 const router = useRouter()
 const bookingStore = useBookingStore()
 const authStore = useAuthStore()
+const customerStore = useCustomerStore()
 
 const documents = computed(() => bookingStore.documents)
 const canEdit = computed(() => authStore.role === 'ADMIN')

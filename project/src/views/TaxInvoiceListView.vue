@@ -91,7 +91,16 @@
                   </button>
                 </div>
               </td>
-              <td class="px-3 py-3 font-semibold text-text">{{ doc.customer }}</td>
+              <td class="px-3 py-3 font-semibold text-text">
+                <span class="inline-flex items-center gap-1.5" :title="doc.customer">
+                  <span
+                    v-if="customerStore.findByName(doc.customer)?.color"
+                    :style="{ background: customerStore.findByName(doc.customer)!.color }"
+                    class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  ></span>
+                  {{ customerStore.findByName(doc.customer)?.code || doc.customer }}
+                </span>
+              </td>
               <td class="px-3 py-3 text-muted">{{ formatDate(doc.dueDate) }}</td>
               <td class="px-3 py-3 text-right font-semibold" :class="doc.amount > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
                 {{ doc.amount > 0 ? formatBaht(doc.amount + (doc.vatAmount || 0)) : PRICE_NOT_SET_LABEL }}
@@ -182,6 +191,7 @@ import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
+import { useCustomerStore } from '@/stores/customers'
 import { salesDocumentStatusClass, salesDocumentStatusLabel, salesDocumentTypeLabel } from '@/utils/salesDocumentStatus'
 import { exportDocumentsAsPdf } from '@/utils/exportDocumentsPdf'
 import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
@@ -190,6 +200,7 @@ import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
+const customerStore = useCustomerStore()
 /** ต้อง instantiate ตั้งแต่หน้านี้โหลด (แม้ไม่ได้ใช้แสดงผลตรงๆ) เพื่อให้ bookingStore เริ่มดึงข้อมูลจาก Firestore ล่วงหน้า
  *  ก่อนผู้ใช้จะกด "สร้างใบเสร็จรับเงิน" — ดูเหตุผลเดียวกันใน BillingListView.vue */
 useBookingStore()
