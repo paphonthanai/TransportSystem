@@ -7,7 +7,8 @@
       <div v-if="open" class="fixed inset-0 z-40" @click="open = false" @wheel="open = false"></div>
       <div
         v-if="open"
-        class="fixed w-48 rounded-lg border border-border bg-surface shadow-lg z-50 py-1 text-sm"
+        ref="menuEl"
+        class="fixed w-48 rounded-lg border border-border bg-surface shadow-lg z-50 py-1 text-sm max-h-[calc(100vh-16px)] overflow-y-auto"
         :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }"
       >
         <button @click="fire('view')" class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-text">
@@ -52,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import type { Booking } from '@/types'
 
 defineProps<{ booking: Booking; canHardDelete?: boolean }>()
@@ -68,19 +69,31 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const btnEl = ref<HTMLButtonElement | null>(null)
+const menuEl = ref<HTMLDivElement | null>(null)
 const menuPos = ref({ top: 0, left: 0 })
 
-/** เปิดเมนูแบบ Teleport ไป body พร้อมคำนวณตำแหน่งจากปุ่มจริง กันไม่ให้โดน overflow-hidden ของตารางบัง */
-const toggle = () => {
-  if (!open.value && btnEl.value) {
-    const rect = btnEl.value.getBoundingClientRect()
-    const menuWidth = 192
-    menuPos.value = {
-      top: rect.bottom + 4,
-      left: Math.max(8, rect.right - menuWidth),
-    }
+/** เปิดเมนูแบบ Teleport ไป body พร้อมคำนวณตำแหน่งจากปุ่มจริง กันไม่ให้โดน overflow-hidden ของตารางบัง — วางใต้ปุ่มก่อน
+ *  เสมอ แล้ว "พลิก" ขึ้นข้างบนแทนถ้าไม่พอที่ (เช่น แถวสุดท้ายของตารางอยู่ใกล้ขอบล่างจอ/ใกล้ taskbar) กันเมนูโดนตัด
+ *  จนกดปุ่มที่อยู่ท้ายเมนู (เช่น "ลบถาวร") ไม่ได้เลยเหมือนที่เจอตอนเหลืองานแค่ 1 แถว — ต้องรอ nextTick ให้เมนู render
+ *  ก่อนถึงจะวัดความสูงจริงได้ (จำนวนปุ่มในเมนูไม่คงที่ ขึ้นกับ v-if ของแต่ละสถานะงาน เดาความสูงล่วงหน้าไม่ได้) */
+const toggle = async () => {
+  if (open.value) {
+    open.value = false
+    return
   }
-  open.value = !open.value
+  if (!btnEl.value) return
+  const rect = btnEl.value.getBoundingClientRect()
+  const menuWidth = 192
+  menuPos.value = {
+    top: rect.bottom + 4,
+    left: Math.max(8, rect.right - menuWidth),
+  }
+  open.value = true
+  await nextTick()
+  const menuHeight = menuEl.value?.offsetHeight || 0
+  if (menuHeight && rect.bottom + 4 + menuHeight > window.innerHeight) {
+    menuPos.value = { ...menuPos.value, top: Math.max(8, rect.top - menuHeight - 4) }
+  }
 }
 
 const fire = (action: 'view' | 'edit' | 'start-transit' | 'complete' | 'delete' | 'cancel') => {

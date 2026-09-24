@@ -222,19 +222,42 @@
 import { ref, computed } from 'vue'
 import { useCustomerStore, type CustomerRecord } from '@/stores/customers'
 import { useBookingStore } from '@/stores/booking'
+import { useSalesDocumentsStore, type SalesDocument } from '@/stores/salesDocuments'
 import CustomerContactsPanel from '@/components/customers/CustomerContactsPanel.vue'
 
 const customerStore = useCustomerStore()
 const bookingStore = useBookingStore()
+const salesDocumentsStore = useSalesDocumentsStore()
 
 const avatarPalette = ['#3b82f6', '#10b981', '#2563eb', '#8b5cf6', '#f97316', '#ec4899']
 const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-const customerRows = computed(() =>
-  customerStore.customers.map((customer, i) => {
-    const jobs = bookingStore.bookings.filter((b) => b.customer === customer.name).length
-    const total = bookingStore.documents
-      .filter((d) => d.customer === customer.name && d.status === 'paid')
+/**
+ * เอกสารนี้ยังเป็น "ปลายทาง" ของเงินก้อนนี้อยู่หรือไม่ (ยังไม่ถูกแปลงต่อไปเป็นเอกสารขั้นถัดไป) — เงินก้อนเดียวกัน
+ * เดินทางผ่าน BILLING → TAX_INVOICE → RECEIPT ได้ ถ้านับทุกขั้นจะนับซ้ำ ต้องนับที่ขั้นล่าสุดที่ยังไม่ถูกแปลงต่อเท่านั้น
+ * BILLING ใช้ status 'BILLED' บอกว่าถูกแปลงไปแล้ว (set สม่ำเสมอทุกจุดที่แปลง ดู createInvoiceFromBilling/
+ * createReceiptFromSourceDocs) — TAX_INVOICE ไม่มี flag ของตัวเอง (createReceiptFromSourceDocs sourceType
+ * TAX_INVOICE ไม่ได้อัปเดต convertedToDocumentIds ของใบแจ้งหนี้ต้นทาง) ต้องเช็คย้อนจาก RECEIPT.sourceDocumentIds แทน
+ */
+function isConvertedFurther(doc: SalesDocument, allDocs: SalesDocument[]): boolean {
+  if (doc.type === 'BILLING') return doc.status === 'BILLED'
+  if (doc.type === 'TAX_INVOICE') return allDocs.some((d) => d.type === 'RECEIPT' && (d.sourceDocumentIds || []).includes(doc.id))
+  return false
+}
+
+const customerRows = computed(() => {
+  const allDocs = salesDocumentsStore.documents
+  return customerStore.customers.map((customer, i) => {
+    // "งานสะสม" = งานที่ส่งจบแล้ว (DELIVERED) แต่ยังไม่ถูกดึงเข้าใบวางบิลใดเลย (billingNoteDocId ว่าง) — พอวางบิลไปแล้ว
+    // งานสะสมต้องลดลงตามที่ผู้ใช้ยืนยัน ไม่ใช่นับ booking ทุกสถานะรวมกันแบบเดิม
+    const jobs = bookingStore.bookings.filter((b) => b.customer === customer.name && b.status === 'DELIVERED' && !b.billingNoteDocId).length
+    // "ยอดรวม" = ยอดเงินที่วางบิล/ออกใบกำกับภาษี/ออกใบเสร็จไปแล้วแต่ยังไม่ได้รับเงินจริง (ยังไม่ PAID/CLOSED) นับที่
+    // เอกสารขั้นล่าสุดของแต่ละสายเงินเท่านั้น กันนับซ้ำเงินก้อนเดียวกันข้ามขั้น (BILLING/TAX_INVOICE/RECEIPT)
+    const total = allDocs
+      .filter((d) => d.customer === customer.name)
+      .filter((d) => d.type === 'BILLING' || d.type === 'TAX_INVOICE' || d.type === 'RECEIPT')
+      .filter((d) => d.status !== 'PAID' && d.status !== 'CLOSED')
+      .filter((d) => !isConvertedFurther(d, allDocs))
       .reduce((sum, d) => sum + d.amount, 0)
     return {
       ...customer,
@@ -244,7 +267,7 @@ const customerRows = computed(() =>
       avatarBg: avatarPalette[i % avatarPalette.length],
     }
   })
-)
+})
 
 const showDialog = ref(false)
 const editingCode = ref<string | null>(null)
