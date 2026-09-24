@@ -1,5 +1,7 @@
 <template>
-  <div class="space-y-6">
+  <!-- pb-32 กันเมนู "การจัดการ" (BookingActionMenu.vue) ของแถวท้ายตารางโดนขอบล่างจอ/taskbar บัง เผื่อพื้นที่ scroll ให้
+       เลื่อนแถวขึ้นมาได้เสมอแม้ตารางจะสั้น (เหลืองานแค่ 1-2 แถว) เสริมกับ flip-up logic ใน BookingActionMenu เอง -->
+  <div class="space-y-6 pb-32">
     <!-- Create Button -->
     <div class="flex justify-end gap-2">
       <button
@@ -54,21 +56,21 @@
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
-              <th v-if="isAdmin" class="px-4 py-3 w-8">
+              <th v-if="isAdmin" class="px-3 py-3 w-8">
                 <input type="checkbox" :checked="allInProgressSelected" @change="toggleSelectAllInProgress" />
               </th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เที่ยวที่</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">พขร.</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
-              <th class="text-center px-4 py-3 font-semibold text-muted">เช็คตั๋ว</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ลงงาน</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เวลา</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">สถานที่ส่ง</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">สถานะขนส่ง</th>
-              <th class="px-4 py-3"></th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">เที่ยวที่</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">พขร.</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
+              <th class="text-center px-3 py-3 font-semibold text-muted">เช็คตั๋ว</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">ลูกค้า</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">วันที่ลงงาน</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">เวลา</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">สถานที่ส่ง</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">สถานะขนส่ง</th>
+              <th class="px-3 py-3"></th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
@@ -78,17 +80,17 @@
               :style="customerRowStyle(booking)"
               class="border-b border-border hover:bg-surface-2 transition-colors"
             >
-              <td v-if="isAdmin" class="px-4 py-3">
+              <td v-if="isAdmin" class="px-3 py-3">
                 <input
                   type="checkbox"
                   :checked="!!selectedInProgress[booking.id]"
                   @change="(e) => (selectedInProgress[booking.id] = (e.target as HTMLInputElement).checked)"
                 />
               </td>
-              <td class="px-4 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
-              <td class="px-4 py-3 text-text">{{ booking.driverName || '-' }}</td>
-              <td class="px-4 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
-              <td class="px-4 py-3 text-center">
+              <td class="px-3 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
+              <td class="px-3 py-3 text-text">{{ booking.driverName || '-' }}</td>
+              <td class="px-3 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
+              <td class="px-3 py-3 text-center">
                 <button
                   @click="bookingStore.toggleTicketChecked(booking.id)"
                   :class="[
@@ -100,7 +102,7 @@
                   <span class="material-symbols-rounded text-base">check</span>
                 </button>
               </td>
-              <td class="px-4 py-3 text-text">
+              <td class="px-3 py-3 text-text">
                 <span class="inline-flex items-center gap-1.5" :title="booking.customer">
                   <span
                     v-if="customerRecordFor(booking)?.color"
@@ -110,9 +112,9 @@
                   {{ customerRecordFor(booking)?.code || booking.customer }}
                 </span>
               </td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
-              <td class="px-4 py-3 text-text">
+              <td class="px-3 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
+              <td class="px-3 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
+              <td class="px-3 py-3 text-text">
                 <div class="font-semibold">{{ destinationLabel(booking) }}</div>
                 <div v-if="booking.items.length" class="flex flex-wrap gap-3 text-[11px] text-muted leading-tight mt-0.5">
                   <div v-for="col in productColumns(booking)" :key="col.key" class="border-l border-border pl-2 first:border-l-0 first:pl-0">
@@ -121,18 +123,18 @@
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
-              <td class="px-4 py-3">
+              <td class="px-3 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
+              <td class="px-3 py-3">
                 <div class="flex flex-wrap items-center gap-1">
-                  <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
+                  <span :class="['text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
                 </div>
               </td>
-              <td class="px-4 py-3">
+              <td class="px-3 py-3">
                 <button v-if="booking.note" @click="noteTarget = booking" class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center" title="ดูหมายเหตุ">
                   !
                 </button>
               </td>
-              <td class="px-4 py-3">
+              <td class="px-3 py-3">
                 <div class="flex items-center gap-2">
                   <button v-if="booking.status === 'WAITING_DISPATCH'" @click="openDispatchDialog(booking)" class="btn-sm text-primary">
                     <span class="material-symbols-rounded text-base">local_shipping</span>
@@ -156,7 +158,7 @@
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
-              <td :colspan="isAdmin ? 13 : 12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td :colspan="isAdmin ? 13 : 12" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -174,18 +176,18 @@
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เที่ยวที่</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">พขร.</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
-              <th class="text-center px-4 py-3 font-semibold text-muted">เช็คตั๋ว</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">วันที่ลงงาน</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">เวลา</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">สถานที่ส่ง</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">สถานะขนส่ง</th>
-              <th class="px-4 py-3"></th>
-              <th class="text-left px-4 py-3 font-semibold text-muted">การจัดการ</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">เที่ยวที่</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">พขร.</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
+              <th class="text-center px-3 py-3 font-semibold text-muted">เช็คตั๋ว</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">ลูกค้า</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">วันที่ลงงาน</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">เวลา</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">สถานที่ส่ง</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">สถานะขนส่ง</th>
+              <th class="px-3 py-3"></th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
@@ -195,10 +197,10 @@
               :style="customerRowStyle(booking)"
               class="border-b border-border hover:bg-surface-2 transition-colors"
             >
-              <td class="px-4 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
-              <td class="px-4 py-3 text-text">{{ booking.driverName || '-' }}</td>
-              <td class="px-4 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
-              <td class="px-4 py-3 text-center">
+              <td class="px-3 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
+              <td class="px-3 py-3 text-text">{{ booking.driverName || '-' }}</td>
+              <td class="px-3 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
+              <td class="px-3 py-3 text-center">
                 <button
                   @click="bookingStore.toggleTicketChecked(booking.id)"
                   :class="[
@@ -210,7 +212,7 @@
                   <span class="material-symbols-rounded text-base">check</span>
                 </button>
               </td>
-              <td class="px-4 py-3 text-text">
+              <td class="px-3 py-3 text-text">
                 <span class="inline-flex items-center gap-1.5" :title="booking.customer">
                   <span
                     v-if="customerRecordFor(booking)?.color"
@@ -220,9 +222,9 @@
                   {{ customerRecordFor(booking)?.code || booking.customer }}
                 </span>
               </td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
-              <td class="px-4 py-3 text-text">
+              <td class="px-3 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
+              <td class="px-3 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
+              <td class="px-3 py-3 text-text">
                 <div class="font-semibold">{{ destinationLabel(booking) }}</div>
                 <div v-if="booking.items.length" class="flex flex-wrap gap-3 text-[11px] text-muted leading-tight mt-0.5">
                   <div v-for="col in productColumns(booking)" :key="col.key" class="border-l border-border pl-2 first:border-l-0 first:pl-0">
@@ -231,16 +233,16 @@
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
-              <td class="px-4 py-3">
-                <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
+              <td class="px-3 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
+              <td class="px-3 py-3">
+                <span :class="['text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
               </td>
-              <td class="px-4 py-3">
+              <td class="px-3 py-3">
                 <button v-if="booking.note" @click="noteTarget = booking" class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center" title="ดูหมายเหตุ">
                   !
                 </button>
               </td>
-              <td class="px-4 py-3">
+              <td class="px-3 py-3">
                 <div class="flex items-center gap-2">
                   <button @click="openDispatchDialog(booking)" class="btn-sm text-amber-700">
                     <span class="material-symbols-rounded text-base">sync_alt</span>
@@ -260,7 +262,7 @@
               </td>
             </tr>
             <tr v-if="inTransitBookings.length === 0">
-              <td colspan="12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="12" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>

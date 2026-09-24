@@ -137,6 +137,14 @@ body {
     @apply w-10 h-10 rounded-lg border border-border bg-surface-2 text-muted flex items-center justify-center cursor-pointer hover:bg-border;
   }
 
+  /* fallback ระดับ global — คอมโพเนนต์ส่วนใหญ่ (28 ไฟล์) ประกาศ .btn-sm ซ้ำกันเองใน <style scoped> ของตัวเอง (ชนะ
+     ตัวนี้ได้เสมอเพราะ specificity สูงกว่าจาก data-v attribute) แต่บางหน้า (เช่น BookingView.vue/JobDocumentView.vue)
+     ใช้ class นี้โดยไม่เคยประกาศเลย ทำให้ปุ่มไม่มีสไตล์อะไรเลย ข้อความ (โดยเฉพาะภาษาไทยที่ไม่มีช่องว่างให้ตัดคำ) เลย
+     wrap ทีละตัวอักษรดูไม่สวย (whitespace-nowrap กันปัญหานี้โดยตรง) */
+  .btn-sm {
+    @apply h-8 px-3 rounded-lg border border-border bg-surface font-medium text-xs cursor-pointer hover:bg-surface-2 whitespace-nowrap;
+  }
+
   .card {
     @apply bg-surface border border-border rounded-xl shadow-default p-4;
   }
