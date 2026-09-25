@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { driverRepository, sanitizeDriver } from '@/repositories/driverRepository'
 import { driverAuthRepository } from '@/repositories/driverAuthRepository'
 import { driverLoginCredentialsRepository } from '@/repositories/driverLoginCredentialsRepository'
-import { internalDriverEmail, generateAuthBootstrapSecret } from '@/utils/driverAuth'
+import { internalDriverEmail } from '@/utils/driverAuth'
 
 export type EmploymentStatus = 'active' | 'resigned'
 export type IncomeType = 'daily' | 'monthly' | 'trip'
@@ -130,12 +130,12 @@ export const useDriversStore = defineStore('drivers', () => {
   }
 
   /**
-   * ใช้ตอนสร้างบัญชีคนขับใหม่เท่านั้น (UserManagementView.vue) — สุ่ม Auth Bootstrap Secret ใหม่ (ใช้สร้างบัญชี
-   * Firebase Auth จริงตอนนั้นเลย) แล้วบันทึกคู่กับ driverLoginPassword ที่แอดมินตั้ง คืนค่า authPassword ที่สุ่มได้
-   * ให้ผู้เรียกเอาไปใช้ createUserWithEmailAndPassword ต่อ (ทำครั้งเดียว ไม่เก็บซ้ำที่อื่น)
+   * ใช้ตอนสร้างบัญชีคนขับใหม่เท่านั้น — บันทึก driverLoginPassword (ที่แอดมินตั้ง) คู่กับ Auth Bootstrap Secret
+   * (authPassword) ที่ผู้เรียกสุ่มไว้และ "ใช้สร้างบัญชี Firebase Auth สำเร็จแล้ว" ต้องเรียกหลังสร้างบัญชี Auth สำเร็จเสมอ
+   * ห้ามเรียกก่อน — ไม่งั้นถ้าสร้างบัญชี Auth ไม่สำเร็จ (เช่น อีเมลซ้ำ) ข้อมูลของคนขับเดิมที่ใช้งานอยู่จะถูกทับด้วย
+   * secret ใหม่ที่ไม่ตรงกับบัญชี Auth จริง ทำให้ล็อกอินไม่ได้ทั้งที่รหัสถูก
    */
-  async function createDriverLoginCredentials(driverId: string, code: string, loginPassword: string): Promise<string> {
-    const authPassword = generateAuthBootstrapSecret()
+  async function saveDriverLoginCredentials(driverId: string, code: string, loginPassword: string, authPassword: string): Promise<void> {
     await driverLoginCredentialsRepository.set(code, {
       driverId,
       code,
@@ -143,7 +143,6 @@ export const useDriversStore = defineStore('drivers', () => {
       authPassword,
       updatedAt: new Date().toISOString(),
     })
-    return authPassword
   }
 
   /** แอดมินดู driverLoginPassword ปัจจุบันจากหน้าจัดการผู้ใช้งาน (คืน null ถ้าคนขับคนนี้ยังไม่เคยตั้งค่า Driver Login เลย) */
@@ -216,7 +215,7 @@ export const useDriversStore = defineStore('drivers', () => {
     fetchOwnDriver,
     updateOwnDriverContact,
     verifyDriverLogin,
-    createDriverLoginCredentials,
+    saveDriverLoginCredentials,
     getDriverLoginCredentials,
     updateDriverLoginPassword,
     changeDriverLoginCode,

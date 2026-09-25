@@ -207,7 +207,7 @@ import { ref, computed, watch } from 'vue'
 import { useUserStore, type UserProfile, type UserRole } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
-import { internalDriverEmail } from '@/utils/driverAuth'
+import { internalDriverEmail, generateAuthBootstrapSecret } from '@/utils/driverAuth'
 import UserActionMenu from '@/components/settings/UserActionMenu.vue'
 
 const userStore = useUserStore()
@@ -435,10 +435,15 @@ const save = async () => {
        *  ไปจาก UI แล้วในเคสนี้ — ดู template) กัน Firebase auth/invalid-email ถ้ามีค่าเก่าค้างอยู่ในฟอร์ม */
       let effectiveEmail = form.value.email.trim()
       if (linkedDriver) {
-        firebaseAuthPassword = await driversStore.createDriverLoginCredentials(linkedDriver.id!, linkedDriver.code, form.value.password.replace(/\D/g, ''))
+        firebaseAuthPassword = generateAuthBootstrapSecret()
         effectiveEmail = internalDriverEmail(linkedDriver.code)
       }
+      // สร้างบัญชี Firebase Auth ให้สำเร็จก่อน แล้วค่อยบันทึก driverLoginCredentials — กันไม่ให้ทับ secret เดิมของคนขับ
+      // ที่ใช้งานอยู่ถ้าสร้างบัญชีไม่สำเร็จ (เช่น อีเมลซ้ำ) ดู driversStore.saveDriverLoginCredentials
       const uid = await authStore.createStaffAccount(effectiveEmail, firebaseAuthPassword, form.value.name, form.value.role, form.value.driverId)
+      if (linkedDriver) {
+        await driversStore.saveDriverLoginCredentials(linkedDriver.id!, linkedDriver.code, form.value.password.replace(/\D/g, ''), firebaseAuthPassword)
+      }
       userStore.addLocalCopy({
         id: uid,
         email: effectiveEmail,
@@ -465,7 +470,10 @@ const save = async () => {
     showDialog.value = false
   } catch (err: any) {
     const code = err?.code as string | undefined
-    formError.value = code === 'auth/email-already-in-use' ? 'มี Email นี้อยู่ในระบบแล้ว' : err.message || 'บันทึกไม่สำเร็จ'
+    formError.value =
+      code === 'auth/email-already-in-use'
+        ? 'มี Email นี้อยู่ในระบบแล้ว — ถ้าเป็นบัญชีคนขับที่ไม่มีในรายชื่อผู้ใช้งาน แปลว่ามีบัญชีค้างอยู่ใน Firebase Console → Authentication ให้ลบบัญชีนั้นก่อนแล้วสร้างใหม่'
+        : err.message || 'บันทึกไม่สำเร็จ'
   } finally {
     saving.value = false
   }

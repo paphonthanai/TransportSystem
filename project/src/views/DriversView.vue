@@ -332,7 +332,7 @@ import { useDriversStore, type DriverRecord, type LicenseType, type IncomeType }
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useUserStore } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
-import { internalDriverEmail } from '@/utils/driverAuth'
+import { internalDriverEmail, generateAuthBootstrapSecret } from '@/utils/driverAuth'
 import type { DriverLoginCredentials } from '@/repositories/driverLoginCredentialsRepository'
 
 const onboardingStore = useOnboardingStore()
@@ -405,9 +405,11 @@ const confirmSetup = async () => {
   }
   setupSaving.value = true
   try {
-    const authPassword = await driversStore.createDriverLoginCredentials(driver.id, driver.code, password)
+    const authPassword = generateAuthBootstrapSecret()
     const email = internalDriverEmail(driver.code)
+    // สร้างบัญชี Auth ให้สำเร็จก่อนแล้วค่อยบันทึก credentials (กันทับ secret เดิมถ้าสร้างไม่สำเร็จ)
     const uid = await authStore.createStaffAccount(email, authPassword, fullName(driver), 'DRIVER', driver.id)
+    await driversStore.saveDriverLoginCredentials(driver.id, driver.code, password, authPassword)
     userStore.addLocalCopy({
       id: uid,
       email,
