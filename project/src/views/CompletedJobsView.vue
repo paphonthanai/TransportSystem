@@ -171,9 +171,9 @@
                       <span class="material-symbols-rounded text-base">add_a_photo</span>
                       แนบ POD
                     </button>
-                    <button v-if="firstPodImage(booking)" @click="openPod(booking)" class="btn-sm" title="ดู POD">
+                    <button v-if="bookingPhotos(booking).length" @click="openPod(booking)" class="btn-sm" title="ดูรูปทั้งหมด (ขึ้นสินค้า/สินค้าตอนลง/ใบส่งของ)">
                       <span class="material-symbols-rounded text-base">photo_camera</span>
-                      POD
+                      รูป ({{ bookingPhotos(booking).length }})
                     </button>
                     <button v-if="documentsForBooking(booking).billing" @click="router.push(`/documents/${documentsForBooking(booking).billing!.id}`)" class="btn-sm" title="ใบวางบิล">
                       <span class="material-symbols-rounded text-base">receipt_long</span>
@@ -202,8 +202,19 @@
 
     <!-- POD Preview -->
     <Teleport to="body">
-      <div v-if="podPreviewImage" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-6" @click="podPreviewImage = null">
-        <img :src="podPreviewImage" class="max-w-full max-h-full rounded-xl shadow-2xl" @click.stop />
+      <div v-if="podPreview" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-6" @click="podPreview = null">
+        <div class="bg-surface rounded-xl shadow-2xl max-w-4xl w-full max-h-full overflow-y-auto p-4 space-y-3" @click.stop>
+          <div class="flex items-center justify-between">
+            <div class="font-bold text-text">รูปงาน {{ podPreview.docNo }}</div>
+            <button @click="podPreview = null" class="btn-sm"><span class="material-symbols-rounded text-base">close</span></button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div v-for="photo in podPreview.photos" :key="photo.url" class="space-y-1">
+              <div class="text-xs font-semibold text-muted">{{ photo.label }}</div>
+              <a :href="photo.url" target="_blank" rel="noopener"><img :src="photo.url" class="w-full max-h-72 object-contain rounded-lg border border-border bg-white" /></a>
+            </div>
+          </div>
+        </div>
       </div>
     </Teleport>
   </div>
@@ -247,6 +258,7 @@ const {
   destinationLabel,
   weightQtyLabel,
   firstPodImage,
+  bookingPhotos,
   documentsForBooking,
   distinctCustomers,
   distinctDrivers,
@@ -276,9 +288,10 @@ const clearFilters = () => {
 /** งานที่ออฟฟิศจบเอง (podReviewStatus undefined) แต่ยังไม่มีรายการไหนแนบ POD เลยสักรูป — ให้แสดงปุ่มแนบ POD แทนขีด "-" */
 const hasMissingPod = (booking: Booking) => !firstPodImage(booking)
 
-const podPreviewImage = ref<string | null>(null)
+const podPreview = ref<{ docNo: string; photos: { label: string; url: string }[] } | null>(null)
 const openPod = (booking: Booking) => {
-  podPreviewImage.value = firstPodImage(booking) || null
+  const photos = bookingPhotos(booking)
+  podPreview.value = photos.length ? { docNo: booking.docNo, photos } : null
 }
 
 /** ตรวจสอบ POD ที่คนขับส่งผ่านแอปแล้วอนุมัติ/ตีกลับ (ดู reviewPod ใน stores/booking.ts) — อนุมัติแล้วเท่านั้นถึงจะออกใบวางบิลได้ */

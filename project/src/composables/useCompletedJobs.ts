@@ -111,6 +111,18 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
   /** รูป POD อยู่ระดับรายการสินค้า (JobItem.podImage) ไม่ใช่ระดับงาน — ใช้รูปแรกที่มีเป็นตัวแทนของทั้งงาน */
   const firstPodImage = (booking: Booking) => booking.items.find((i) => i.podImage)?.podImage
 
+  /** รูปทั้งหมดของงาน (ขึ้นสินค้า + ต่อจุดส่ง: สินค้าตอนลง/ใบส่งของ) พร้อมป้ายกำกับ ใช้โชว์รวมในหน้าดูรูป */
+  const bookingPhotos = (booking: Booking) => {
+    const photos: { label: string; url: string }[] = []
+    if (booking.loadingImage) photos.push({ label: 'ขึ้นสินค้า', url: booking.loadingImage })
+    booking.items.forEach((item, idx) => {
+      const where = booking.items.length > 1 ? ` (จุดที่ ${idx + 1}: ${item.siteName})` : ''
+      if (item.podImage) photos.push({ label: `สินค้าตอนลง${where}`, url: item.podImage })
+      if (item.deliveryNoteImage) photos.push({ label: `ใบส่งของ${where}`, url: item.deliveryNoteImage })
+    })
+    return photos
+  }
+
   /** หาเอกสารขาย (ใบวางบิล/ใบแจ้งหนี้/ใบเสร็จ) ที่ผูกกับงานนี้ ใช้ทำลิงก์ข้ามไปหน้าเอกสารนั้นโดยตรง */
   const documentsForBooking = (booking: Booking) => {
     const docs = salesDocumentsStore.documents.filter((d) => d.bookingIds.includes(booking.id))
@@ -138,6 +150,7 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     destinationLabel,
     weightQtyLabel,
     firstPodImage,
+    bookingPhotos,
     documentsForBooking,
     distinctCustomers,
     distinctDrivers,

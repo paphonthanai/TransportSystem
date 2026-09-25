@@ -437,7 +437,6 @@ import { useFuelRateStore } from '@/stores/fuelRates'
 import { bahtText } from '@/utils/companyInfo'
 import { bookingStatusLabel, bookingStatusClass, documentClaimBadges } from '@/utils/bookingStatus'
 import { computeRowDiscountBaht, computeRowAmount, computeRowVat } from '@/utils/documentTotals'
-import { compressImageToDataUrl } from '@/utils/podImage'
 import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
 import { priceCellText, PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
@@ -597,7 +596,7 @@ const savePrice = () => {
 }
 
 /**
- * แนบ/เปลี่ยนรูป POD ให้รายการที่ส่งของแล้ว — Resize/Compress เป็น Base64 Data URL ฝั่ง Frontend ล้วนๆ (ดู utils/podImage.ts)
+ * แนบ/เปลี่ยนรูป POD ให้รายการที่ส่งของแล้ว — ย่อ/บีบรูปแล้วอัปโหลดขึ้น Firebase Storage เก็บแค่ URL (ดู utils/photoUpload.ts)
  * แล้วบันทึกลง Firestore ตรงๆ ไม่ผ่าน Firebase Storage อีกต่อไป ทำได้โดยผู้มีสิทธิ์ที่เข้าหน้านี้ได้เท่านั้น (router meta
  * จำกัด role ไว้แล้ว: ADMIN/DISPATCHER/STAFF/ACCOUNTING — คนขับเข้าหน้านี้ไม่ได้) ล้มเหลวแล้วต้องไม่ย้อนกลับสถานะส่งของใดๆ
  * (deliveryStatus ไม่ถูกแตะในฟังก์ชันนี้เลย — เป็นแค่การแนบหลักฐานเพิ่มเติมทีหลัง)
@@ -643,8 +642,8 @@ const onPodFileSelected = async (item: JobItem, event: Event) => {
   podUploadingItemId.value = item.id
   podErrorByItemId.value = { ...podErrorByItemId.value, [item.id]: '' }
   try {
-    const dataUrl = await compressImageToDataUrl(file)
-    bookingStore.confirmPodImage(booking.value.id, item.id, dataUrl)
+    const url = await uploadJobPhoto(photoPaths.delivery(booking.value.id, item.id), file)
+    bookingStore.confirmPodImage(booking.value.id, item.id, url)
   } catch (err: any) {
     podErrorByItemId.value = { ...podErrorByItemId.value, [item.id]: err?.message || 'บันทึกรูป POD ไม่สำเร็จ กรุณาลองใหม่' }
   } finally {

@@ -882,7 +882,7 @@ export const useBookingStore = defineStore('booking', () => {
    * สำเร็จไปแล้วโดยไม่มี POD — เป็นขั้นตอนที่แยกออกจากการส่งของของคนขับโดยเจตนา (ดู DriverJobDetailView.vue's
    * confirmDeliverItem ที่ไม่บังคับ POD แล้ว) ไม่มี field/สถานะใหม่: "ยืนยันแล้ว" คือ !!item.podImage ตรงๆ (ดู
    * billingRule.ts's hasAllPods ที่ใช้เงื่อนไขนี้อยู่แล้วตั้งแต่ก่อนงานนี้ — สอดคล้องกันโดยไม่ต้องแก้)
-   * รูปที่ส่งเข้ามาต้องเป็น Base64 Data URL ที่ resize/compress แล้ว (ดู utils/podImage.ts) ไม่ใช่ Firebase Storage URL อีกต่อไป
+   * รูปที่ส่งเข้ามาเป็น Firebase Storage URL (ดู utils/photoUpload.ts) — รูป POD เก่าที่เป็น Base64 Data URL ยังแสดงได้ตามปกติ
    */
   function confirmPodImage(bookingId: string, itemId: string, podImage: string) {
     const booking = bookings.value.find((b) => b.id === bookingId)
