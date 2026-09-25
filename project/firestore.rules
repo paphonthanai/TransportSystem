@@ -55,7 +55,9 @@ service cloud.firestore {
     }
 
     match /customers/{customerId} {
-      allow read, write: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING']);
+      allow read, create, update: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING']);
+      // Hard Delete ลูกค้า/คู่ค้า (ลบถาวรจาก Firestore) — ADMIN เท่านั้น เหมือน pattern เดียวกับ /users และ /bookings
+      allow delete: if hasRole(['ADMIN']);
     }
 
     // ผู้ติดต่อของลูกค้า (Contact) — Entity แยกจาก CustomerRecord.contact เดิม อ้างอิงกลับด้วย customerId สิทธิ์เดียวกับ customers
