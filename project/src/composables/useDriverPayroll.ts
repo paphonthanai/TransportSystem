@@ -79,7 +79,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
 
   const driverOptions = computed(() => [...new Set(bookingsInScope.value.map((b) => driverKeyFor(b)))].sort())
 
-  const fuelCost = (booking: Booking) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0))
+  const fuelCost = (booking: Booking) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0) * 100) / 100
 
   const summaryRows = computed(() => {
     const byDriver = new Map<string, { trips: number; baseAllowance: number; debtNet: number; netIncome: number; fuelCost: number }>()

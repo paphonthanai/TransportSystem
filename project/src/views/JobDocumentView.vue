@@ -303,6 +303,18 @@
                 <span class="material-symbols-rounded text-sm">error</span>
                 {{ podErrorByItemId[item.id] }}
               </div>
+              <!-- รูปใบส่งของ — คนขับถ่ายจากแอป หรือออฟฟิศแนบให้ทีหลังตรงนี้ (ไม่บังคับ) -->
+              <img v-if="item.deliveryNoteImage" :src="item.deliveryNoteImage" class="w-full max-h-32 object-contain rounded border border-border" />
+              <div class="flex items-center justify-between gap-2">
+                <span :class="['text-xs font-semibold px-2 py-1 rounded-full', item.deliveryNoteImage ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600']">
+                  {{ item.deliveryNoteImage ? 'มีรูปใบส่งของ' : 'ยังไม่มีรูปใบส่งของ' }}
+                </span>
+                <label class="btn-sm cursor-pointer">
+                  <span class="material-symbols-rounded text-base">{{ item.deliveryNoteImage ? 'sync' : 'add_a_photo' }}</span>
+                  {{ photoBusyKey === 'note-' + item.id ? 'กำลังอัปโหลด...' : item.deliveryNoteImage ? 'เปลี่ยนรูปใบส่งของ' : 'แนบรูปใบส่งของ' }}
+                  <input type="file" accept="image/*" class="hidden" :disabled="!!photoBusyKey" @change="onOfficePhoto('note', item, $event)" />
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -381,6 +393,18 @@
         </div>
       </div>
 
+      <!-- รูปตอนขึ้นสินค้า — คนขับถ่ายจากแอป ถ้าไม่ได้ถ่ายออฟฟิศแนบให้ที่นี่ (ไม่บังคับ) -->
+      <div v-if="booking.status !== 'WAITING_DISPATCH'" class="card-lg no-print space-y-2">
+        <h3 class="font-semibold text-text">รูปตอนขึ้นสินค้า</h3>
+        <img v-if="booking.loadingImage" :src="booking.loadingImage" class="w-full max-h-64 object-contain rounded-lg border border-border" />
+        <label class="btn-sm cursor-pointer inline-flex">
+          <span class="material-symbols-rounded text-base">{{ booking.loadingImage ? 'sync' : 'add_a_photo' }}</span>
+          {{ photoBusyKey === 'loading' ? 'กำลังอัปโหลด...' : booking.loadingImage ? 'เปลี่ยนรูป' : 'แนบรูปขึ้นสินค้า' }}
+          <input type="file" accept="image/*" class="hidden" :disabled="!!photoBusyKey" @change="onOfficePhoto('loading', undefined, $event)" />
+        </label>
+        <div v-if="officePhotoError" class="text-xs text-red-600">{{ officePhotoError }}</div>
+      </div>
+
       <!-- POD -->
       <div v-if="booking.podImage" class="card-lg no-print">
         <h3 class="font-semibold text-text mb-3">รูปหลักฐานการส่งมอบสินค้า (POD)</h3>
@@ -414,6 +438,7 @@ import { bahtText } from '@/utils/companyInfo'
 import { bookingStatusLabel, bookingStatusClass, documentClaimBadges } from '@/utils/bookingStatus'
 import { computeRowDiscountBaht, computeRowAmount, computeRowVat } from '@/utils/documentTotals'
 import { compressImageToDataUrl } from '@/utils/podImage'
+import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
 import { priceCellText, PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import type { Booking, BookingStatus, JobItem } from '@/types'
@@ -577,6 +602,32 @@ const savePrice = () => {
  * จำกัด role ไว้แล้ว: ADMIN/DISPATCHER/STAFF/ACCOUNTING — คนขับเข้าหน้านี้ไม่ได้) ล้มเหลวแล้วต้องไม่ย้อนกลับสถานะส่งของใดๆ
  * (deliveryStatus ไม่ถูกแตะในฟังก์ชันนี้เลย — เป็นแค่การแนบหลักฐานเพิ่มเติมทีหลัง)
  */
+const photoBusyKey = ref<string | null>(null)
+const officePhotoError = ref('')
+/** ออฟฟิศแนบรูปใบส่งของ/รูปขึ้นสินค้าแทนคนขับ — อัปโหลดขึ้น Firebase Storage แล้วเก็บ URL ลงงาน */
+const onOfficePhoto = async (kind: 'note' | 'loading', item: JobItem | undefined, event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || !booking.value) return
+  photoBusyKey.value = kind === 'note' ? `note-${item!.id}` : 'loading'
+  officePhotoError.value = ''
+  try {
+    if (kind === 'note' && item) {
+      const url = await uploadJobPhoto(photoPaths.deliveryNote(booking.value.id, item.id), file)
+      bookingStore.setDeliveryNoteImage(booking.value.id, item.id, url)
+    } else {
+      const url = await uploadJobPhoto(photoPaths.loading(booking.value.id), file)
+      bookingStore.setLoadingImage(booking.value.id, url)
+    }
+  } catch (err: any) {
+    officePhotoError.value = err?.message || 'อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่'
+    if (item) podErrorByItemId.value = { ...podErrorByItemId.value, [item.id]: officePhotoError.value }
+  } finally {
+    photoBusyKey.value = null
+  }
+}
+
 const podUploadingItemId = ref<string | null>(null)
 const podErrorByItemId = ref<Record<string, string>>({})
 

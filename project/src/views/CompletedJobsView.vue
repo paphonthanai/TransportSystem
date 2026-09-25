@@ -53,22 +53,28 @@
     <div>
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div class="font-bold text-text">งานที่เสร็จสิ้นทั้งหมด ({{ completedBookings.length }})</div>
-        <button
-          v-if="isAdmin && selectedIds.length > 0"
-          @click="bulkDeleteSelected"
-          :disabled="bulkDeleting"
-          class="btn-sm !border-red-200 !bg-red-50 !text-red-700 disabled:opacity-50"
-        >
-          <span class="material-symbols-rounded text-base">delete_forever</span>
-          ลบถาวรที่เลือกไว้ ({{ selectedIds.length }})
-        </button>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button @click="exportToExcel" :disabled="completedBookings.length === 0" class="btn-sm !border-green-200 !bg-green-50 !text-green-700 disabled:opacity-50">
+            <span class="material-symbols-rounded text-base">download</span>
+            {{ selectedIds.length > 0 ? `นำออก Excel ที่เลือกไว้ (${selectedIds.length})` : `นำออก Excel ทั้งหมดที่กรอง (${completedBookings.length})` }}
+          </button>
+          <button
+            v-if="isAdmin && selectedIds.length > 0"
+            @click="bulkDeleteSelected"
+            :disabled="bulkDeleting"
+            class="btn-sm !border-red-200 !bg-red-50 !text-red-700 disabled:opacity-50"
+          >
+            <span class="material-symbols-rounded text-base">delete_forever</span>
+            ลบถาวรที่เลือกไว้ ({{ selectedIds.length }})
+          </button>
+        </div>
       </div>
       <div class="card-lg overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-surface-2 border-b border-border">
               <tr>
-                <th v-if="isAdmin" class="px-4 py-3 w-8">
+                <th class="px-4 py-3 w-8">
                   <input type="checkbox" :checked="allVisibleSelected" @change="toggleSelectAll" />
                 </th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
@@ -87,7 +93,7 @@
             </thead>
             <tbody>
               <tr v-for="booking in completedBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
-                <td v-if="isAdmin" class="px-4 py-3">
+                <td class="px-4 py-3">
                   <input
                     type="checkbox"
                     :checked="!!selected[booking.id]"
@@ -186,7 +192,7 @@
                 </td>
               </tr>
               <tr v-if="completedBookings.length === 0">
-                <td :colspan="isAdmin ? 13 : 12" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับตัวกรอง</td>
+                <td colspan="13" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับตัวกรอง</td>
               </tr>
             </tbody>
           </table>
@@ -210,6 +216,7 @@ import { useCompletedJobs, useCompletedJobsFilters, type CompletedJobsDocClaimFi
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
 import { priceCellText } from '@/utils/priceDisplay'
+import { exportRowsToExcel } from '@/utils/exportExcel'
 import { useAuthStore } from '@/stores/auth'
 import { documentClaimBadges, podReviewStatusLabel, podReviewStatusClass, bookingStatusLabel } from '@/utils/bookingStatus'
 import type { Booking } from '@/types'
@@ -309,6 +316,34 @@ const toggleSelectAll = () => {
   completedBookings.value.forEach((b) => {
     selected.value[b.id] = next
   })
+}
+
+/** นำออกเฉพาะรายการที่ติ๊กเลือก ถ้าไม่ได้เลือกเลยจะนำออกทั้งหมดที่ผ่านตัวกรองอยู่ ณ ตอนนี้ — ลูกค้าใช้ชื่อเต็มเสมอ (ไม่ใช่ชื่อย่อ) */
+const exportToExcel = () => {
+  const targets = selectedIds.value.length > 0 ? completedBookings.value.filter((b) => selected.value[b.id]) : completedBookings.value
+  if (!targets.length) return
+  const dateLabel = (d?: Date) => (d ? new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '')
+  const rows = targets.map((b) => {
+    const docs = documentsForBooking(b)
+    return {
+      เลขที่เอกสาร: b.docNo,
+      'เลข PO': b.po || '',
+      กองรถ: b.category === 'cements' ? 'Cements' : 'Ceramics',
+      ลูกค้า: b.customer,
+      ปลายทาง: b.items.map((i) => i.siteName).filter(Boolean).join(', '),
+      'อำเภอ/จังหวัด': [...new Set(b.items.map((i) => [i.district, i.province].filter(Boolean).join('/')).filter(Boolean))].join(', '),
+      สินค้า: productLabel(b),
+      'น้ำหนัก/จำนวน': weightQtyLabel(b),
+      ทะเบียนรถ: b.plate || '',
+      คนขับ: b.driverName || '',
+      วันที่ส่งของสำเร็จ: dateLabel(b.completedAt),
+      ราคา: b.agreedPrice || b.tripFee || 0,
+      เลขใบวางบิล: docs.billing?.number || '',
+      เลขใบแจ้งหนี้: docs.taxInvoice?.number || '',
+      เลขใบเสร็จ: docs.receipt?.number || '',
+    }
+  })
+  exportRowsToExcel(`งานเสร็จสิ้น_${new Date().toISOString().slice(0, 10)}`, rows, 'งานเสร็จสิ้น')
 }
 
 const bulkDeleting = ref(false)

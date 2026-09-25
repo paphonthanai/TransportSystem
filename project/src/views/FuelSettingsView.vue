@@ -18,6 +18,26 @@
         <input v-model.number="fuelRateStore.settings.todayPricePerLiter" type="number" min="0" step="0.01" class="input-field w-full" />
         <div class="text-[11px] text-muted mt-1">ใช้เป็นเรทตั้งต้นทุกอำเภอ อัปเดตทุกวันที่ราคาน้ำมันเปลี่ยน</div>
       </div>
+      <div class="mt-5 pt-4 border-t border-border">
+        <div class="font-semibold text-text mb-1">เรทน้ำมันแยกตามประเภทรถ</div>
+        <div class="text-[11px] text-muted mb-3">
+          ระบบจะใช้เรทของประเภทรถที่จัดให้ตอนจ่ายงาน/จัดรถ (ก่อนคนขับรับน้ำมัน) — เว้นว่างหรือใส่ 0 = ใช้ราคาน้ำมัน ณ วันนี้ด้านบน
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div v-for="type in vehicleTypeOptions" :key="type">
+            <label class="block text-xs font-semibold text-muted mb-1">{{ type }} (บาท/ลิตร)</label>
+            <input
+              :value="fuelRateStore.settings.pricePerLiterByVehicleType?.[type] ?? ''"
+              @input="(e) => setTypePrice(type, (e.target as HTMLInputElement).value)"
+              type="number"
+              min="0"
+              step="0.01"
+              :placeholder="String(fuelRateStore.settings.todayPricePerLiter)"
+              class="input-field w-full"
+            />
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="card-lg overflow-x-auto">
@@ -98,8 +118,18 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useFuelRateStore, type FuelRate } from '@/stores/fuelRates'
+import type { CurrentVehicleType } from '@/types'
 
 const fuelRateStore = useFuelRateStore()
+
+const vehicleTypeOptions: CurrentVehicleType[] = ['รถบริษัท', 'รถหุ้นส่วน', 'รถร่วม', 'รถอู่เสริม']
+const setTypePrice = (type: CurrentVehicleType, raw: string) => {
+  const map = { ...(fuelRateStore.settings.pricePerLiterByVehicleType || {}) }
+  const value = parseFloat(raw)
+  if (Number.isFinite(value) && value > 0) map[type] = value
+  else delete map[type]
+  fuelRateStore.settings.pricePerLiterByVehicleType = map
+}
 
 const sortedRates = computed(() =>
   [...fuelRateStore.settings.rates].sort((a, b) => a.province.localeCompare(b.province) || a.district.localeCompare(b.district))

@@ -6,6 +6,7 @@ import { useOnboardingStore } from '@/stores/onboarding'
 import { useInventoryStore } from '@/stores/inventory'
 import { useBillingRuleStore } from '@/stores/billingRule'
 import { useFuelRateStore } from '@/stores/fuelRates'
+import { useVehiclesStore } from '@/stores/vehicles'
 import { bookingRepository } from '@/repositories/bookingRepository'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import type { Booking, BookingCategory, BookingStatus, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
@@ -564,6 +565,12 @@ export const useBookingStore = defineStore('booking', () => {
       booking.driverLastName = extra.driverLastName
     }
     if (extra?.odometerBefore !== undefined) booking.odometerBefore = extra.odometerBefore
+    /** เรทน้ำมันแยกตามประเภทรถ — ตอนสร้างงานยังไม่รู้ว่าจะใช้รถคันไหน (ใช้เรทกลางไปก่อน) จึงอัปเดตเรทตอนจัดรถ/เปลี่ยนรถ
+     *  เฉพาะก่อนคนขับรับน้ำมัน (หลังจากนั้นน้ำมันจ่ายไปแล้วตามเรทเดิม ห้ามเปลี่ยนย้อนหลัง) */
+    if (booking.status === 'WAITING_DISPATCH' || booking.status === 'ASSIGNED' || booking.status === 'ACCEPTED') {
+      const vehicle = useVehiclesStore().findByFullPlate(plate)
+      booking.fuelRate = fuelRateStore.pricePerLiterFor(vehicle?.department)
+    }
     // น้ำมันคำนวณและล็อกไว้ตั้งแต่ตอนสร้างงานแล้ว (จากจังหวัด/อำเภอของแต่ละปลายทาง) ตอนจัดรถจึงไม่ต้องกรอก/คำนวณซ้ำ
     // การวางบิลแยกอิสระจากการจัดรถโดยเจตนา — booking.billingStatus ยังคง UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล (ดู addBookingsToBatch)
     const alreadyAccepted = booking.status !== 'WAITING_DISPATCH'
@@ -856,12 +863,13 @@ export const useBookingStore = defineStore('booking', () => {
    * ไม่ตัดสต๊อกที่นี่ (ตัดไปแล้วตอนรับสินค้าที่ต้นทาง — ดู pickupJobItem)
    * ไม่ปิดงานอัตโนมัติที่นี่แม้ส่งครบทุกรายการแล้ว — ต้องรอคนขับกดยืนยัน "ดำเนินการเสร็จสิ้น" เอง (ดู finishDriverJob)
    */
-  function deliverJobItem(bookingId: string, itemId: string, podImage: string | undefined, deliveredBy: string) {
+  function deliverJobItem(bookingId: string, itemId: string, podImage: string | undefined, deliveredBy: string, deliveryNoteImage?: string) {
     const booking = bookings.value.find((b) => b.id === bookingId)
     const item = booking?.items.find((i) => i.id === itemId)
     if (!booking || !item || item.deliveryStatus === 'DELIVERED') return
     item.deliveryStatus = 'DELIVERED'
     if (podImage) item.podImage = podImage
+    if (deliveryNoteImage) item.deliveryNoteImage = deliveryNoteImage
     item.deliveredBy = deliveredBy
     item.deliveredAt = new Date()
     addLog(`ส่งของสำเร็จ ${booking.docNo}: ${item.siteName} - ${item.product} (ผู้รับ: ${deliveredBy})`, { bookingId: booking.id })
@@ -882,6 +890,23 @@ export const useBookingStore = defineStore('booking', () => {
     if (!booking || !item || item.deliveryStatus !== 'DELIVERED') return
     item.podImage = podImage
     addLog(`แนบ POD ${booking.docNo}: ${item.siteName} - ${item.product}`, { bookingId: booking.id })
+  }
+
+  /** แนบ/เปลี่ยนรูปใบส่งของของจุดที่ส่งแล้ว (คนขับตอนส่งของ หรือออฟฟิศแนบให้ทีหลัง) ไม่บังคับ */
+  function setDeliveryNoteImage(bookingId: string, itemId: string, url: string) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
+    const item = booking?.items.find((i) => i.id === itemId)
+    if (!booking || !item || item.deliveryStatus !== 'DELIVERED') return
+    item.deliveryNoteImage = url
+    addLog(`แนบรูปใบส่งของ ${booking.docNo}: ${item.siteName}`, { bookingId: booking.id })
+  }
+
+  /** แนบ/เปลี่ยนรูปตอนขึ้นสินค้า — ไม่บังคับ และไม่เปลี่ยนสถานะงาน (สถานะเดินตามปุ่มรับสินค้าเดิม) */
+  function setLoadingImage(bookingId: string, url: string) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
+    if (!booking) return
+    booking.loadingImage = url
+    addLog(`แนบรูปขึ้นสินค้า ${booking.docNo}`, { bookingId: booking.id })
   }
 
   /**
@@ -1157,6 +1182,8 @@ export const useBookingStore = defineStore('booking', () => {
     completeJob,
     deliverJobItem,
     confirmPodImage,
+    setDeliveryNoteImage,
+    setLoadingImage,
     toggleTicketChecked,
     finishDriverJob,
     stripDateSuffixFromSiteNames,

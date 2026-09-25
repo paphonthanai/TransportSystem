@@ -142,6 +142,17 @@
           ส่งของสำเร็จแล้ว
         </div>
 
+        <!-- รูปตอนขึ้นสินค้า — ไม่บังคับ ไม่ขวางการเปลี่ยนสถานะ (ออฟฟิศแนบให้ทีหลังได้ถ้าคนขับไม่ได้ถ่าย) -->
+        <div v-if="job.status === 'LOADING' || job.status === 'LOADED'" class="rounded-xl bg-white border border-border p-3.5">
+          <PhotoPicker
+            label="รูปตอนขึ้นสินค้า (ไม่บังคับ)"
+            :preview="job.loadingImage"
+            :busy="loadingPhotoBusy"
+            :error="loadingPhotoError"
+            @file="onLoadingPhoto"
+          />
+        </div>
+
         <!-- รายละเอียดงาน — จุดที่ deliveryStatus=DELIVERED แล้วต้องยังโชว์เป็น "ส่งแล้ว" ต่อไปเสมอ (แม้ Job ถูก Reset/
              เปลี่ยนคนขับ/เปลี่ยนรถในภายหลัง — ข้อมูลนี้มาจาก item ตรงๆ ไม่ใช่คำนวณจาก Job status จึงไม่มีทางหายเอง) -->
         <div class="border-t border-border pt-3 mt-1 space-y-2">
@@ -221,15 +232,17 @@
               <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้รับสินค้า</label>
               <input v-model="deliveredByInput" placeholder="ชื่อผู้รับสินค้า" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
             </div>
+            <PhotoPicker label="รูปสินค้าตอนลง (ไม่บังคับ)" :preview="goodsPhotoUrl" :busy="photoBusy === 'goods'" :error="photoError.goods" @file="(f) => onDeliveryPhoto('goods', f)" />
+            <PhotoPicker label="รูปใบส่งของ (ไม่บังคับ)" :preview="notePhotoUrl" :busy="photoBusy === 'note'" :error="photoError.note" @file="(f) => onDeliveryPhoto('note', f)" />
             <div class="text-sm text-muted">
-              ไม่บังคับแนบรูป POD ตอนนี้ — ออฟฟิศแนบ/ยืนยันรูป POD ให้ทีหลังได้จากหน้ารายละเอียดงาน
+              ไม่บังคับแนบรูป — ถ้าไม่ได้ถ่าย ออฟฟิศแนบให้ทีหลังได้จากหน้ารายละเอียดงาน
             </div>
           </div>
           <div class="flex gap-3 px-5 py-4 border-t border-border">
             <button @click="closeDeliverItem" class="flex-1 h-12 rounded-lg border border-border text-base font-medium text-text">ยกเลิก</button>
             <button
               @click="confirmDeliverItem"
-              :disabled="!deliveredByInput"
+              :disabled="!deliveredByInput || !!photoBusy"
               class="flex-[2] h-12 rounded-lg bg-green-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-xl">task_alt</span>
@@ -285,6 +298,8 @@ import { bookingStatusLabel } from '@/utils/bookingStatus'
 import { isDriverVisibleBooking, nextPickup as nextPickupItems, nextDelivery as nextDeliveryItems } from '@/utils/driverJobs'
 import { deliveryProgress, pickupProgress } from '@/utils/deliveryProgress'
 import { bookingTitle } from '@/utils/bookingTitle'
+import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
+import PhotoPicker from '@/components/driver/PhotoPicker.vue'
 
 const props = defineProps<{ id: string }>()
 
@@ -358,9 +373,50 @@ const navigateUrl = (item: JobItem) => {
 const deliverTarget = ref<JobItem | null>(null)
 const deliveredByInput = ref('')
 
+const goodsPhotoUrl = ref<string | undefined>()
+const notePhotoUrl = ref<string | undefined>()
+const photoBusy = ref<'goods' | 'note' | null>(null)
+const photoError = ref<{ goods: string; note: string }>({ goods: '', note: '' })
+
 const openDeliverItem = (item: JobItem) => {
   deliverTarget.value = item
   deliveredByInput.value = ''
+  goodsPhotoUrl.value = undefined
+  notePhotoUrl.value = undefined
+  photoError.value = { goods: '', note: '' }
+}
+
+/** อัปโหลดทันทีที่ถ่ายเสร็จ (เก็บแค่ URL) กดยืนยันส่งของแล้วค่อยบันทึกลงงานพร้อมกัน — อัปโหลดล้มเหลวไม่บล็อกการส่งของ */
+const onDeliveryPhoto = async (kind: 'goods' | 'note', file: File) => {
+  if (!job.value || !deliverTarget.value) return
+  photoBusy.value = kind
+  photoError.value = { ...photoError.value, [kind]: '' }
+  try {
+    const path = kind === 'goods' ? photoPaths.delivery(job.value.id, deliverTarget.value.id) : photoPaths.deliveryNote(job.value.id, deliverTarget.value.id)
+    const url = await uploadJobPhoto(path, file)
+    if (kind === 'goods') goodsPhotoUrl.value = url
+    else notePhotoUrl.value = url
+  } catch (err: any) {
+    photoError.value = { ...photoError.value, [kind]: err?.message || 'อัปโหลดรูปไม่สำเร็จ ลองใหม่ หรือข้ามไปให้ออฟฟิศแนบให้ทีหลัง' }
+  } finally {
+    photoBusy.value = null
+  }
+}
+
+const loadingPhotoBusy = ref(false)
+const loadingPhotoError = ref('')
+const onLoadingPhoto = async (file: File) => {
+  if (!job.value) return
+  loadingPhotoBusy.value = true
+  loadingPhotoError.value = ''
+  try {
+    const url = await uploadJobPhoto(photoPaths.loading(job.value.id), file)
+    bookingStore.setLoadingImage(job.value.id, url)
+  } catch (err: any) {
+    loadingPhotoError.value = err?.message || 'อัปโหลดรูปไม่สำเร็จ ลองใหม่ หรือข้ามไปให้ออฟฟิศแนบให้ทีหลัง'
+  } finally {
+    loadingPhotoBusy.value = false
+  }
 }
 
 const closeDeliverItem = () => {
@@ -369,7 +425,7 @@ const closeDeliverItem = () => {
 
 const confirmDeliverItem = () => {
   if (!job.value || !deliverTarget.value || !deliveredByInput.value) return
-  bookingStore.deliverJobItem(job.value.id, deliverTarget.value.id, undefined, deliveredByInput.value)
+  bookingStore.deliverJobItem(job.value.id, deliverTarget.value.id, goodsPhotoUrl.value, deliveredByInput.value, notePhotoUrl.value)
   closeDeliverItem()
 }
 

@@ -228,7 +228,7 @@ function inPeriod(date: Date | undefined, monthValue: string): boolean {
 const period = ref(currentMonthValue())
 const periodLabel = computed(() => toBEPeriodLabel(period.value))
 
-const fuelCost = (booking: { fuelLiters?: number; fuelRate?: number }) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0))
+const fuelCost = (booking: { fuelLiters?: number; fuelRate?: number }) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0) * 100) / 100
 
 /**
  * Trace ตรงจาก Booking.plate -> ทะเบียนรถคันนี้ (เก็บไว้ ณ ตอนจ่ายงานจริง) ไม่ผ่านคนขับปัจจุบันของรถเลย จึงยังเห็นงาน

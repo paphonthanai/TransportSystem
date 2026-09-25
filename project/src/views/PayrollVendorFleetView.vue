@@ -83,6 +83,7 @@ import { useBookingStore } from '@/stores/booking'
 import { useVehicleExpensesStore } from '@/stores/vehicleExpenses'
 import { exportRowsToExcel } from '@/utils/exportExcel'
 import type { Booking, Vehicle, VehicleType } from '@/types'
+import { vehicleGroupOf, type VehicleGroup } from '@/utils/vehicleType'
 
 /**
  * ข้อมูลของ "รถร่วม/รถหุ้นส่วน" เท่านั้น (Vehicle Income/Fuel Cost/Vehicle Expense/Net) — ไม่แสดงเบี้ยเลี้ยง/รายได้คนขับ
@@ -90,18 +91,24 @@ import type { Booking, Vehicle, VehicleType } from '@/types'
  * ปนกับ Vehicle Income ตาม Data Ownership ที่ต้องแยกกัน — รายได้/ค่าน้ำมัน Trace ตรงจาก Booking.plate เหมือนกับที่
  * VendorFleetVehicleDetailView.vue ใช้ (ไม่สร้าง Calculation Engine ใหม่ ใช้ Logic เดียวกันเป๊ะ)
  */
-const categoryOptions: { value: VehicleType | 'ALL'; label: string }[] = [
+type CategoryFilter = VehicleType | VehicleGroup | 'ALL'
+const categoryOptions: { value: CategoryFilter; label: string }[] = [
   { value: 'ALL', label: 'ทั้งหมด' },
-  { value: 'รถร่วมใน', label: 'รถร่วมใน' },
-  { value: 'รถร่วมนอก', label: 'รถร่วมนอก' },
-  { value: 'รถหุ้นส่วน', label: 'รถหุ้นส่วน' },
+  { value: 'ร่วมใน', label: 'หมวดร่วมใน' },
+  { value: 'รถหุ้นส่วน', label: '- รถหุ้นส่วน' },
+  { value: 'ร่วมนอก', label: 'หมวดร่วมนอก' },
+  { value: 'รถร่วม', label: '- รถร่วม' },
+  { value: 'รถอู่เสริม', label: '- รถอู่เสริม' },
 ]
 
-const category = ref<VehicleType | 'ALL'>('ALL')
+const category = ref<CategoryFilter>('ALL')
 
+/** ตัวกรองเป็นได้ทั้งหมวดใหญ่ (ร่วมใน/ร่วมนอก) หรือหมวดย่อย — หน้านี้ไม่รวมรถบริษัทเสมอ */
 const departmentFilter = (department: VehicleType | undefined) => {
   if (!department || department === 'รถบริษัท') return false
-  return category.value === 'ALL' || department === category.value
+  if (category.value === 'ALL') return true
+  if (category.value === 'ร่วมใน' || category.value === 'ร่วมนอก') return vehicleGroupOf(department) === category.value
+  return department === category.value
 }
 
 const vehiclesStore = useVehiclesStore()
@@ -122,7 +129,7 @@ function inPeriod(date: Date | undefined, monthValue: string): boolean {
 
 const period = ref(currentMonthValue())
 
-const fuelCost = (booking: Booking) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0))
+const fuelCost = (booking: Booking) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0) * 100) / 100
 
 /** งานของรถคันนี้ในรอบที่เลือก — Trace ตรงจาก Booking.plate เหมือน VendorFleetVehicleDetailView.vue (ไม่ใช้ currentDriver ของรถมาไล่ย้อนหลัง) */
 const bookingsForVehicle = (vehicle: Vehicle) => {

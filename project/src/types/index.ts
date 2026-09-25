@@ -136,6 +136,8 @@ export interface JobItem {
    *  ได้แม้ยังไม่มี podImage) แนบ/เปลี่ยนได้ทีหลังโดยผู้มีสิทธิ์ฝั่งออฟฟิศ (ดู booking.ts's confirmPodImage) —
    *  ถือว่า "ยืนยันแล้ว" เมื่อ !!podImage เท่านั้น ไม่มี field สถานะแยกต่างหาก */
   podImage?: string
+  /** รูปใบส่งของ (ใบเซ็นรับ) ของจุดส่งนี้ — เป็น Firebase Storage URL (ดู utils/photoUpload.ts) ไม่บังคับ ออฟฟิศแนบทีหลังได้ */
+  deliveryNoteImage?: string
   /** ชื่อผู้รับสินค้าที่ปลายทางนี้ */
   deliveredBy?: string
   deliveredAt?: Date
@@ -225,6 +227,8 @@ export interface Booking {
   /** รูปหลักฐานการส่งมอบสินค้า (POD) ล่าสุด = ของปลายทางสุดท้ายที่ส่งสำเร็จ เก็บไว้ที่ระดับงานเพื่อความเข้ากันได้กับหน้าจอที่แสดง POD เดียว
    *  Base64 Data URL เหมือน JobItem.podImage (ดู utils/podImage.ts) — อาจไม่มีค่าได้ถ้ายังไม่มี item ไหนถูกแนบ POD เลย */
   podImage?: string
+  /** รูปตอนขึ้นสินค้า (คนขับถ่ายจากแอป หรือออฟฟิศแนบให้) — Firebase Storage URL ไม่บังคับ ไม่ขวางการเปลี่ยนสถานะ */
+  loadingImage?: string
   /** สถานะการเงินจากระบบรอบบิลเดิม (batches/addBookingsToBatch/issueInvoiceFromBatch ใน stores/booking.ts) — คงไว้เพื่อความเข้ากันได้กับ
    *  หน้า /billing (BillingView.vue) เดิมเท่านั้น ระบบเอกสารรวมปัจจุบัน (createBillingFromBookings/createTaxInvoiceFromBookings/
    *  createReceiptFromBookings ใน stores/salesDocuments.ts) ไม่อ่าน/เขียน field นี้อีกต่อไป — ดู billingNoteDocId/taxInvoiceDocId/receiptDocId */
@@ -426,7 +430,11 @@ export interface Driver {
   bankAccount?: string
 }
 
-export type VehicleType = 'รถบริษัท' | 'รถร่วมใน' | 'รถร่วมนอก' | 'รถหุ้นส่วน'
+/** หมวดย่อยของรถที่เลือกได้ — อยู่ใต้หมวดใหญ่ "ร่วมใน" (รถบริษัท/รถหุ้นส่วน) และ "ร่วมนอก" (รถร่วม/รถอู่เสริม) ดู utils/vehicleType.ts */
+export type CurrentVehicleType = 'รถบริษัท' | 'รถหุ้นส่วน' | 'รถร่วม' | 'รถอู่เสริม'
+/** ค่าเดิมที่เก็บไว้เป็นชื่อหมวดใหญ่อย่างเดียว (ยังไม่ได้ระบุหมวดย่อย) — คงไว้ให้ข้อมูลรถเก่าไม่พัง แล้วให้ผู้ใช้เลือกหมวดย่อยทีละคัน */
+export type LegacyVehicleType = 'รถร่วมใน' | 'รถร่วมนอก'
+export type VehicleType = CurrentVehicleType | LegacyVehicleType
 
 export interface Vehicle {
   id: string

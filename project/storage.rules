@@ -24,14 +24,28 @@ service firebase.storage {
       return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.driverId;
     }
 
-    // POD (หลักฐานการส่งมอบสินค้า) — path ผูกกับ bookingId/jobItemId เสมอ กันรูปชนกัน (ดู stores/booking.ts
-    // deliverJobItem, repositories/podRepository.ts) อ่านได้ทุก role ที่ล็อกอินอยู่ (ต้องโชว์ในหน้า Job
-    // Detail/office ฝั่งตรวจสอบ) แต่เขียนได้เฉพาะ ADMIN หรือคนขับที่ "เป็นคนขับของ Booking นี้จริง" เท่านั้น (เทียบ
-    // driverId ตรงๆ ไม่ใช่แค่ role DRIVER เฉยๆ กันคนขับคนอื่นอัปโหลดทับ POD ของงานที่ไม่ใช่ของตัวเอง)
+    // รูปต้องเป็นไฟล์ภาพและไม่เกิน 3 MB (ฝั่งแอปย่อ/บีบเหลือราว 350 KB ก่อนอัปโหลดอยู่แล้ว)
+    function isImageUnder3Mb() {
+      return request.resource.size < 3 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+    }
+
+    // คนขับเขียนได้เฉพาะงานที่ driverId ตรงกับบัญชีตัวเอง (ยืนยันตัวตนผ่าน Firebase Auth uid -> users/{uid}.driverId)
+    // ออฟฟิศ (ADMIN/DISPATCHER/STAFF) แนบรูปแทนคนขับได้ ตามที่ธุรกิจให้เสมียนใส่ให้เมื่อคนขับไม่ได้ถ่าย
+    function canWriteBookingPhoto(bookingId) {
+      return hasRole(['ADMIN', 'DISPATCHER', 'STAFF']) ||
+        (hasRole(['DRIVER']) && myDriverId() == firestore.get(/databases/(default)/documents/bookings/$(bookingId)).data.driverId);
+    }
+
+    // รูปตอนส่งของ (รูปสินค้าตอนลง + รูปใบส่งของ) — path ผูกกับ bookingId/jobItemId กันรูปชนกัน
     match /pod/{bookingId}/{jobItemId}/{fileName} {
       allow read: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING', 'DRIVER']);
-      allow write: if hasRole(['ADMIN']) ||
-        (hasRole(['DRIVER']) && myDriverId() == firestore.get(/databases/(default)/documents/bookings/$(bookingId)).data.driverId);
+      allow write: if canWriteBookingPhoto(bookingId) && isImageUnder3Mb();
+    }
+
+    // รูปตอนขึ้นสินค้า
+    match /loading/{bookingId}/{fileName} {
+      allow read: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING', 'DRIVER']);
+      allow write: if canWriteBookingPhoto(bookingId) && isImageUnder3Mb();
     }
 
     match /{allPaths=**} {

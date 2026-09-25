@@ -42,7 +42,11 @@
             <td class="px-4 py-3 text-muted">{{ vehicle.engineNo }}</td>
             <td class="px-4 py-3 text-muted">{{ vehicle.year || '-' }}</td>
             <td class="px-4 py-3">
-              <span class="text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">{{ vehicle.department }}</span>
+              <span
+                :class="['text-xs font-semibold px-2 py-1 rounded-full', isLegacyDepartment(vehicle.department) ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700']"
+                :title="isLegacyDepartment(vehicle.department) ? 'ประเภทเดิมที่ยกเลิกแล้ว — กดแก้ไขแล้วเลือกประเภทใหม่' : ''"
+                >{{ isLegacyDepartment(vehicle.department) ? `${vehicle.department} (เลือกหมวดย่อย)` : `${vehicleGroupOf(vehicle.department)} · ${vehicle.department}` }}</span
+              >
             </td>
             <td class="px-4 py-3 text-muted">{{ feedLabel(vehicle) }}</td>
             <td class="px-4 py-3 text-muted">{{ assignedDriverLabel(vehicle) }}</td>
@@ -104,16 +108,22 @@
             </div>
             <div class="md:col-span-2">
               <label class="block text-xs font-semibold text-muted mb-1">หน่วยงาน</label>
-              <div class="flex gap-2 flex-wrap">
-                <button
-                  v-for="type in departmentOptions"
-                  :key="type"
-                  type="button"
-                  @click="form.department = type"
-                  :class="['px-3 py-2 text-sm font-medium rounded-lg transition-all', form.department === type ? 'bg-primary text-white' : 'bg-surface-2 text-text border border-border hover:bg-border']"
-                >
-                  {{ type }}
-                </button>
+              <div v-if="isLegacyDepartment(form.department)" class="text-xs text-amber-700 mb-2">
+                รถคันนี้ยังเป็นค่าเดิม "{{ form.department }}" (หมวดใหญ่) — กรุณาเลือกหมวดย่อยด้านล่าง
+              </div>
+              <div class="space-y-2">
+                <div v-for="g in VEHICLE_GROUPS" :key="g.group" class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-semibold text-muted w-20">หมวด{{ g.group }}</span>
+                  <button
+                    v-for="type in g.types"
+                    :key="type"
+                    type="button"
+                    @click="form.department = type"
+                    :class="['px-3 py-2 text-sm font-medium rounded-lg transition-all', form.department === type ? 'bg-primary text-white' : 'bg-surface-2 text-text border border-border hover:bg-border']"
+                  >
+                    {{ type }}
+                  </button>
+                </div>
               </div>
             </div>
             <div class="md:col-span-2">
@@ -162,6 +172,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useDriversStore } from '@/stores/drivers'
 import { useAuthStore } from '@/stores/auth'
 import type { Vehicle, VehicleType, BookingCategory } from '@/types'
+import { VEHICLE_GROUPS, vehicleGroupOf, isUnresolvedVehicleType } from '@/utils/vehicleType'
 import { categoryFeedLabel } from '@/utils/bookingStatus'
 
 const router = useRouter()
@@ -172,7 +183,7 @@ const driversStore = useDriversStore()
 
 type VehicleForm = Omit<Vehicle, 'id' | 'repairStatus' | 'repairDays' | 'driverCode'>
 
-const departmentOptions: VehicleType[] = ['รถบริษัท', 'รถร่วมใน', 'รถร่วมนอก', 'รถหุ้นส่วน']
+const isLegacyDepartment = isUnresolvedVehicleType
 
 /** ต้องเป็น computed (ไม่ใช่ const เฉยๆ) เพราะตอนนี้ vehiclesStore.vehicles โหลดข้อมูลแบบ async จาก Firestore —
  *  ค่าตอน setup อาจยังว่างอยู่ ถ้า snapshot เป็น const ธรรมดา ตารางจะไม่อัปเดตตอนโหลดเสร็จ (ใช้ได้เฉยๆ ตอนเป็น

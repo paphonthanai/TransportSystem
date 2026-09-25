@@ -189,7 +189,7 @@ const periodThaiLabel = computed(() => {
   return `${thaiMonths[monthIndex] || m} ${Number(y) + 543}`
 })
 
-const fuelCost = (booking: { fuelLiters?: number; fuelRate?: number }) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0))
+const fuelCost = (booking: { fuelLiters?: number; fuelRate?: number }) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0) * 100) / 100
 
 const rows = computed(() => {
   if (!doc.value) return []

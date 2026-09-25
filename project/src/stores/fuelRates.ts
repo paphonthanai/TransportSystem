@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
 import { useFirestoreSettings } from '@/composables/useFirestoreSettings'
-import type { JobItem, PricingMode } from '@/types'
+import type { JobItem, PricingMode, VehicleType } from '@/types'
 
 export interface FuelRate {
   province: string
@@ -16,6 +16,8 @@ export interface FuelSettings {
   rates: FuelRate[]
   /** ราคาน้ำมัน ณ วันนี้ (บาท/ลิตร) ใช้เป็นค่าตั้งต้นในทุกอำเภอ อัปเดตเองทุกวันที่ราคาเปลี่ยน */
   todayPricePerLiter: number
+  /** ราคาน้ำมันแยกตามประเภทรถ (บาท/ลิตร) — ประเภทไหนไม่ได้ตั้ง (หรือตั้งเป็น 0) ใช้ todayPricePerLiter แทน */
+  pricePerLiterByVehicleType?: Partial<Record<VehicleType, number>>
 }
 
 function defaultSettings(): FuelSettings {
@@ -43,6 +45,12 @@ export const useFuelRateStore = defineStore('fuelRates', () => {
     return (
       settings.value.rates.find((r) => matchText(r.province, p) && matchText(r.district, d)) || null
     )
+  }
+
+  /** เรทน้ำมัน (บาท/ลิตร) ของรถประเภทนี้ — ไม่รู้ประเภทรถ/ไม่ได้ตั้งเรทเฉพาะประเภท ใช้เรทกลาง (todayPricePerLiter) */
+  const pricePerLiterFor = (vehicleType?: VehicleType): number => {
+    const specific = vehicleType ? settings.value.pricePerLiterByVehicleType?.[vehicleType] : undefined
+    return specific && specific > 0 ? specific : settings.value.todayPricePerLiter
   }
 
   /** รายชื่อจังหวัดทั้งหมดที่ตั้งค่าไว้ (ไม่ซ้ำ) ใช้เป็น datalist ตอนสร้างงาน */
@@ -85,5 +93,5 @@ export const useFuelRateStore = defineStore('fuelRates', () => {
     })
   }
 
-  return { settings, loading, error, findRate, provincesList, districtsForProvince, standardFuelLiters, isDifferentCorridor }
+  return { settings, loading, error, findRate, pricePerLiterFor, provincesList, districtsForProvince, standardFuelLiters, isDifferentCorridor }
 })
