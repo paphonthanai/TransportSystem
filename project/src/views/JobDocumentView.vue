@@ -613,10 +613,10 @@ const onOfficePhoto = async (kind: 'note' | 'loading', item: JobItem | undefined
   officePhotoError.value = ''
   try {
     if (kind === 'note' && item) {
-      const url = await uploadJobPhoto(photoPaths.deliveryNote(booking.value.id, item.id), file)
+      const url = await uploadJobPhoto(photoPaths.deliveryNote(booking.value.id, item.id, 'office'), file)
       bookingStore.setDeliveryNoteImage(booking.value.id, item.id, url)
     } else {
-      const url = await uploadJobPhoto(photoPaths.loading(booking.value.id), file)
+      const url = await uploadJobPhoto(photoPaths.loading(booking.value.id, 'office'), file)
       bookingStore.setLoadingImage(booking.value.id, url)
     }
   } catch (err: any) {
@@ -642,7 +642,7 @@ const onPodFileSelected = async (item: JobItem, event: Event) => {
   podUploadingItemId.value = item.id
   podErrorByItemId.value = { ...podErrorByItemId.value, [item.id]: '' }
   try {
-    const url = await uploadJobPhoto(photoPaths.delivery(booking.value.id, item.id), file)
+    const url = await uploadJobPhoto(photoPaths.delivery(booking.value.id, item.id, 'office'), file)
     bookingStore.confirmPodImage(booking.value.id, item.id, url)
   } catch (err: any) {
     podErrorByItemId.value = { ...podErrorByItemId.value, [item.id]: err?.message || 'บันทึกรูป POD ไม่สำเร็จ กรุณาลองใหม่' }

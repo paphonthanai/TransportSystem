@@ -6,11 +6,14 @@ import { compressImageToDataUrl } from '@/utils/podImage'
  *  เพื่อประหยัดโควตาฟรี (เก็บ 5 GB, ดาวน์โหลด 1 GB/วัน) และให้อัปโหลดผ่านเน็ตมือถือไว */
 const MAX_UPLOAD_BYTES = 350_000
 
-/** path ต้องตรงกับ storage.rules — ห้ามเปลี่ยนโดยไม่แก้ rules ตามไปด้วย */
+/** ผู้อัปโหลด: 'driver' = คนขับถ่ายจากแอป (เขียนได้เฉพาะ driver-uploads/) 'office' = ออฟฟิศแนบแทน (office-uploads/)
+ *  ดูตารางสิทธิ์ที่หัวไฟล์ storage.rules — path ต้องตรงกับกฎเสมอ ห้ามเปลี่ยนโดยไม่แก้กฎตามไปด้วย */
+export type PhotoActor = 'driver' | 'office'
+
 export const photoPaths = {
-  loading: (bookingId: string) => `loading/${bookingId}/${Date.now()}.jpg`,
-  delivery: (bookingId: string, itemId: string) => `pod/${bookingId}/${itemId}/goods-${Date.now()}.jpg`,
-  deliveryNote: (bookingId: string, itemId: string) => `pod/${bookingId}/${itemId}/note-${Date.now()}.jpg`,
+  loading: (bookingId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/loading-${Date.now()}.jpg`,
+  delivery: (bookingId: string, itemId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/goods-${itemId}-${Date.now()}.jpg`,
+  deliveryNote: (bookingId: string, itemId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/note-${itemId}-${Date.now()}.jpg`,
 }
 
 /** ย่อ+บีบรูป แล้วอัปโหลดขึ้น Firebase Storage คืน download URL ที่เก็บลง Firestore ได้เลย */

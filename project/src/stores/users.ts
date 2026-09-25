@@ -22,6 +22,9 @@ export interface UserProfile {
   /** id ของ DriverRecord (stores/drivers.ts) ที่บัญชีนี้คือ — มีความหมายเฉพาะ role DRIVER เท่านั้น ใช้จับคู่งานที่
    * จ่ายให้คนขับคนนี้ใน Driver App ด้วย id แทนการเทียบ name (free text ที่ admin พิมพ์ตอนสร้างบัญชี) กับ driverName */
   driverId?: string
+  /** อีเมลจริงของผู้ใช้ (แอดมินกรอกไว้ ไม่บังคับ) ใช้ระบุตัวตน/ติดต่อ — แยกจาก email ที่ใช้ล็อกอิน (คนขับล็อกอินด้วยอีเมลภายใน
+   *  d{รหัส}@drivers.internal + รหัส 6 หลัก แอดมินเปลี่ยนอีเมลล็อกอินของบัญชีอื่นจากเบราว์เซอร์ไม่ได้) ไม่มีผลกับการล็อกอิน */
+  contactEmail?: string
 }
 
 export const useUserStore = defineStore('users', () => {
@@ -48,7 +51,7 @@ export const useUserStore = defineStore('users', () => {
     users.value.unshift(profile)
   }
 
-  async function updateProfile(uid: string, data: Partial<Pick<UserProfile, 'name' | 'role' | 'canOverrideFuelRate' | 'driverId'>>) {
+  async function updateProfile(uid: string, data: Partial<Pick<UserProfile, 'name' | 'role' | 'canOverrideFuelRate' | 'driverId' | 'contactEmail'>>) {
     await userRepository.update(uid, { ...data, updatedAt: new Date().toISOString() })
     const index = users.value.findIndex((u) => u.id === uid)
     if (index !== -1) users.value[index] = { ...users.value[index], ...data }

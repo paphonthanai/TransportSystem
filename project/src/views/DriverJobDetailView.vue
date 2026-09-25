@@ -373,6 +373,8 @@ const navigateUrl = (item: JobItem) => {
 const deliverTarget = ref<JobItem | null>(null)
 const deliveredByInput = ref('')
 
+/** บัญชีคนขับเขียนได้เฉพาะโซน driver-uploads/ — ผู้ดูแลที่เปิดหน้านี้แทนคนขับใช้โซน office-uploads/ (ดู storage.rules) */
+const photoActor = computed<'driver' | 'office'>(() => (isDriverRole.value ? 'driver' : 'office'))
 const goodsPhotoUrl = ref<string | undefined>()
 const notePhotoUrl = ref<string | undefined>()
 const photoBusy = ref<'goods' | 'note' | null>(null)
@@ -392,7 +394,7 @@ const onDeliveryPhoto = async (kind: 'goods' | 'note', file: File) => {
   photoBusy.value = kind
   photoError.value = { ...photoError.value, [kind]: '' }
   try {
-    const path = kind === 'goods' ? photoPaths.delivery(job.value.id, deliverTarget.value.id) : photoPaths.deliveryNote(job.value.id, deliverTarget.value.id)
+    const path = kind === 'goods' ? photoPaths.delivery(job.value.id, deliverTarget.value.id, photoActor.value) : photoPaths.deliveryNote(job.value.id, deliverTarget.value.id, photoActor.value)
     const url = await uploadJobPhoto(path, file)
     if (kind === 'goods') goodsPhotoUrl.value = url
     else notePhotoUrl.value = url
@@ -410,7 +412,7 @@ const onLoadingPhoto = async (file: File) => {
   loadingPhotoBusy.value = true
   loadingPhotoError.value = ''
   try {
-    const url = await uploadJobPhoto(photoPaths.loading(job.value.id), file)
+    const url = await uploadJobPhoto(photoPaths.loading(job.value.id, photoActor.value), file)
     bookingStore.setLoadingImage(job.value.id, url)
   } catch (err: any) {
     loadingPhotoError.value = err?.message || 'อัปโหลดรูปไม่สำเร็จ ลองใหม่ หรือข้ามไปให้ออฟฟิศแนบให้ทีหลัง'

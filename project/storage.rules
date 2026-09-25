@@ -1,5 +1,25 @@
 rules_version = '2';
 
+// ============================================================================================
+// Firebase Storage — ตารางสิทธิ์ (แยก path ตาม "ผู้อัปโหลด" ให้เห็นชัดว่าใครเขียนที่ไหนได้)
+//
+//   path                              | คนขับ (DRIVER)              | ADMIN/DISPATCHER/STAFF | ACCOUNTING
+//   ----------------------------------|-----------------------------|------------------------|-----------
+//   driver-uploads/{bookingId}/*      | สร้าง (create) ได้อย่างเดียว | อ่าน + แก้ + ลบ         | อ่าน
+//                                     | เฉพาะงานของตัวเอง           |                        |
+//                                     | อ่านเฉพาะงานของตัวเอง       |                        |
+//   office-uploads/{bookingId}/*      | อ่านเฉพาะงานของตัวเอง       | อ่าน + สร้าง + แก้ + ลบ | อ่าน
+//                                     | เขียนไม่ได้                 |                        |
+//   pod/*, loading/* (path เดิม)      | อ่านเฉพาะงานของตัวเอง       | อ่านอย่างเดียว          | อ่าน
+//                                     | เขียนไม่ได้                 | (ไฟล์เก่า ไม่มีใครเขียนเพิ่ม) |
+//   ที่อื่นทั้งหมด                     | ปิด                         | ปิด                    | ปิด
+//
+// ทุกการเขียน: ต้องเป็นไฟล์ภาพ และไม่เกิน 3 MB — บัญชีต้อง active และมีบทบาทตามตาราง
+// ยืนยันตัวตนคนขับด้วย Firebase Auth uid -> users/{uid}.driverId เทียบกับ bookings/{bookingId}.driverId
+// ชื่อไฟล์ที่แอปสร้าง: loading-{เวลา}.jpg / goods-{รหัสรายการ}-{เวลา}.jpg / note-{รหัสรายการ}-{เวลา}.jpg (ห้ามซ้ำ)
+// path ต้องตรงกับ src/utils/photoUpload.ts (photoPaths) — แก้ที่หนึ่งต้องแก้อีกที่
+// ============================================================================================
+
 service firebase.storage {
   match /b/{bucket}/o {
     function isSignedIn() {
@@ -29,23 +49,42 @@ service firebase.storage {
       return request.resource.size < 3 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
     }
 
-    // คนขับเขียนได้เฉพาะงานที่ driverId ตรงกับบัญชีตัวเอง (ยืนยันตัวตนผ่าน Firebase Auth uid -> users/{uid}.driverId)
-    // ออฟฟิศ (ADMIN/DISPATCHER/STAFF) แนบรูปแทนคนขับได้ ตามที่ธุรกิจให้เสมียนใส่ให้เมื่อคนขับไม่ได้ถ่าย
-    function canWriteBookingPhoto(bookingId) {
-      return hasRole(['ADMIN', 'DISPATCHER', 'STAFF']) ||
-        (hasRole(['DRIVER']) && myDriverId() == firestore.get(/databases/(default)/documents/bookings/$(bookingId)).data.driverId);
+    function isOffice() {
+      return hasRole(['ADMIN', 'DISPATCHER', 'STAFF']);
     }
 
-    // รูปตอนส่งของ (รูปสินค้าตอนลง + รูปใบส่งของ) — path ผูกกับ bookingId/jobItemId กันรูปชนกัน
+    // งานนี้เป็นของคนขับที่ล็อกอินอยู่หรือไม่
+    function isMyBooking(bookingId) {
+      return hasRole(['DRIVER']) && myDriverId() == firestore.get(/databases/(default)/documents/bookings/$(bookingId)).data.driverId;
+    }
+
+    // อ่านรูปงาน: ออฟฟิศ/บัญชีอ่านได้ทุกงาน ส่วนคนขับอ่านได้เฉพาะงานของตัวเอง
+    function canReadBookingPhoto(bookingId) {
+      return hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING']) || isMyBooking(bookingId);
+    }
+
+    // โซนคนขับ: รูปที่คนขับถ่ายจากแอป — คนขับ "สร้างได้อย่างเดียว" ทับ/ลบไม่ได้ ออฟฟิศแก้/ลบได้
+    match /driver-uploads/{bookingId}/{fileName} {
+      allow read: if canReadBookingPhoto(bookingId);
+      allow create: if (isMyBooking(bookingId) || isOffice()) && isImageUnder3Mb();
+      allow update: if isOffice() && isImageUnder3Mb();
+      allow delete: if isOffice();
+    }
+
+    // โซนออฟฟิศ: รูปที่เสมียน/แอดมินแนบแทนคนขับ — เขียนได้เฉพาะออฟฟิศ คนขับอ่านของงานตัวเองได้อย่างเดียว
+    match /office-uploads/{bookingId}/{fileName} {
+      allow read: if canReadBookingPhoto(bookingId);
+      allow write: if isOffice() && isImageUnder3Mb();
+    }
+
+    // path เดิม (ก่อนแยกโซน) — เหลือไว้ให้อ่านไฟล์เก่าเท่านั้น ไม่มีใครเขียนเพิ่มได้
     match /pod/{bookingId}/{jobItemId}/{fileName} {
-      allow read: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING', 'DRIVER']);
-      allow write: if canWriteBookingPhoto(bookingId) && isImageUnder3Mb();
+      allow read: if canReadBookingPhoto(bookingId);
+      allow write: if false;
     }
-
-    // รูปตอนขึ้นสินค้า
     match /loading/{bookingId}/{fileName} {
-      allow read: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING', 'DRIVER']);
-      allow write: if canWriteBookingPhoto(bookingId) && isImageUnder3Mb();
+      allow read: if canReadBookingPhoto(bookingId);
+      allow write: if false;
     }
 
     match /{allPaths=**} {

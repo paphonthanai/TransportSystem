@@ -22,7 +22,10 @@
         <tbody>
           <tr v-for="user in userStore.users" :key="user.id" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 font-semibold text-text">{{ user.name }}</td>
-            <td class="px-4 py-3 text-muted font-mono">{{ user.email }}</td>
+            <td class="px-4 py-3 text-muted font-mono">
+              {{ user.email }}
+              <div v-if="user.contactEmail" class="text-[11px] font-sans text-text">อีเมลจริง: {{ user.contactEmail }}</div>
+            </td>
             <td class="px-4 py-3 text-muted">
               {{ roleLabels[user.role] }}
               <span v-if="user.canOverrideFuelRate" class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">ผู้จัดการ (น้ำมัน)</span>
@@ -144,6 +147,13 @@
               <div v-if="driverCredError" class="text-xs text-red-600">{{ driverCredError }}</div>
             </div>
 
+            <!-- อีเมลจริงของคนขับ — ไม่บังคับ ไม่กระทบการล็อกอิน (ยังใช้รหัสคนขับ + รหัส 6 หลักเหมือนเดิม) -->
+            <div v-if="form.role === 'DRIVER'">
+              <label class="block text-xs font-semibold text-muted mb-1">อีเมลจริงของคนขับ <span class="font-normal text-[10px]">(ไม่บังคับ)</span></label>
+              <input v-model="form.contactEmail" type="email" placeholder="name@example.com" class="input-field w-full" />
+              <div class="text-[11px] text-muted mt-1">ใช้ระบุตัวตน/ติดต่อเท่านั้น คนขับยังล็อกอินด้วยรหัสคนขับ + รหัสผ่านตัวเลขเหมือนเดิม ไม่ต้องมีอีเมลก็ใช้งานได้</div>
+            </div>
+
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">Role</label>
               <select v-model="form.role" class="input-field w-full">
@@ -226,6 +236,7 @@ const form = ref({
   role: 'STAFF' as UserRole,
   driverId: undefined as string | undefined,
   canOverrideFuelRate: false,
+  contactEmail: '',
 })
 const formError = ref('')
 const saving = ref(false)
@@ -352,7 +363,7 @@ const sendReset = async () => {
 
 const openCreateDialog = () => {
   editingUser.value = null
-  form.value = { name: '', email: '', password: '', role: 'STAFF', driverId: undefined, canOverrideFuelRate: false }
+  form.value = { name: '', email: '', password: '', role: 'STAFF', driverId: undefined, canOverrideFuelRate: false, contactEmail: '' }
   formError.value = ''
   confirmNoDriverLink.value = false
   resetDriverCredState()
@@ -368,6 +379,7 @@ const openEditDialog = (user: UserProfile) => {
     role: user.role,
     driverId: user.driverId,
     canOverrideFuelRate: user.canOverrideFuelRate ?? false,
+    contactEmail: user.contactEmail ?? '',
   }
   formError.value = ''
   confirmNoDriverLink.value = !!user.driverId // บัญชีที่ผูกอยู่แล้วไม่ต้องติ๊กซ้ำ
@@ -396,6 +408,11 @@ const save = async () => {
     formError.value = 'กรุณากรอก Password อย่างน้อย 6 ตัวอักษร'
     return
   }
+  const contactEmail = form.value.role === 'DRIVER' ? form.value.contactEmail.trim() : ''
+  if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+    formError.value = 'รูปแบบอีเมลจริงไม่ถูกต้อง (หรือเว้นว่างไว้ได้)'
+    return
+  }
   saving.value = true
   try {
     if (editingUser.value) {
@@ -404,6 +421,8 @@ const save = async () => {
         role: form.value.role,
         driverId: form.value.driverId,
         canOverrideFuelRate: form.value.canOverrideFuelRate,
+        // '' = ล้างค่า (undefined จะถูกตัดทิ้งก่อนเขียน Firestore จึงไม่ล้างของเดิม)
+        contactEmail,
       })
     } else {
       // บัญชี DRIVER ที่ผูกกับคนขับในสมุดรายชื่อ — form.password คือ Driver Login Password (ตัวเลข ที่คนขับพิมพ์เอง)
@@ -433,6 +452,9 @@ const save = async () => {
       })
       if (form.value.canOverrideFuelRate) {
         await userStore.updateProfile(uid, { canOverrideFuelRate: true })
+      }
+      if (contactEmail) {
+        await userStore.updateProfile(uid, { contactEmail })
       }
       // เก็บอีเมลที่ใช้ล็อกอินจริงไว้ที่ DriverRecord ด้วย (โชว์ในหน้าแอดมินเท่านั้น — ไม่ใช่ตัวที่หน้า Login ใช้ resolve
       // เพราะยังเป็นค่า default ที่ derive ได้ตรงๆ จาก code อยู่แล้ว ไม่ต้องเขียน driverAuthEmails index ซ้ำ)
