@@ -71,7 +71,7 @@
               <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ bookingProducts(b) }}</td>
               <td class="px-3 py-2 text-text">{{ b.po || '-' }}</td>
-              <td class="px-3 py-2 text-text">{{ formatDateShort(b.shipDate) }}</td>
+              <td class="px-3 py-2 text-text">{{ formatDateShort(b.shipDate || b.loadingDate) }}</td>
               <td class="px-3 py-2 text-right text-text">1</td>
               <td class="px-3 py-2 text-text">เที่ยว</td>
               <td class="px-3 py-2 text-right text-text">{{ formatBaht(bookingTotal(b)) }}</td>
@@ -152,7 +152,7 @@ const sortedEligibleBookings = computed(() => {
   const list = [...eligibleBookings.value]
   const dir = sortDir.value === 'asc' ? 1 : -1
   if (sortKey.value === 'po') list.sort((a, b) => (a.po || '').localeCompare(b.po || '') * dir)
-  else if (sortKey.value === 'shipDate') list.sort((a, b) => (new Date(a.shipDate || 0).getTime() - new Date(b.shipDate || 0).getTime()) * dir)
+  else if (sortKey.value === 'shipDate') list.sort((a, b) => (new Date(a.shipDate || a.loadingDate || 0).getTime() - new Date(b.shipDate || b.loadingDate || 0).getTime()) * dir)
   else if (sortKey.value === 'index' && dir === -1) list.reverse()
   return list
 })

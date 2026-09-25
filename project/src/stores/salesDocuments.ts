@@ -1859,7 +1859,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       discountPercent: b.discountPercent,
       discountAmount: b.discountAmount,
       vatRate: b.vatRate,
-      shipDate: b.shipDate,
+      // งาน import เก่าที่สร้างก่อนแก้บั๊กนี้ไม่เคยมี shipDate เลย (เซ็ตแค่ loadingDate) — fallback ไปใช้ loadingDate
+      // กันช่วงวันที่ในคำอธิบายรายการ/คอลัมน์ "วันที่ส่งงาน" ของเอกสารว่างเปล่าสำหรับงานเหล่านั้น
+      shipDate: b.shipDate || b.loadingDate,
       plate: b.plate,
       referenceDoc: bookingReferenceDoc(b),
       deliveryNo: b.docNo,
@@ -1895,8 +1897,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (manualNumber && !checkDocumentNumberReuseEligibility(manualNumber).eligible) return null
     const customer = overrides?.customer?.trim() || targetBookings[0].customer
     const reference = overrides?.reference ?? targetBookings.map(bookingReferenceDoc).join(', ')
-    const dateFrom = targetBookings[0].shipDate || targetBookings[0].createdAt
-    const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].createdAt
+    const dateFrom = targetBookings[0].shipDate || targetBookings[0].loadingDate || targetBookings[0].createdAt
+    const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].loadingDate || targetBookings[targetBookings.length - 1].createdAt
     const rows = overrides?.items ?? billingRowsFromBookings(targetBookings)
     const { amount, discountTotal, vatRate, vatAmount, whtAmount } = computeDocumentTotals(rows)
     const now = new Date()
@@ -1980,8 +1982,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const dueDate = new Date(issueDate)
     dueDate.setDate(dueDate.getDate() + creditDays)
     const reference = overrides?.reference ?? targetBookings.map(bookingReferenceDoc).join(', ')
-    const dateFrom = targetBookings[0].shipDate || targetBookings[0].createdAt
-    const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].createdAt
+    const dateFrom = targetBookings[0].shipDate || targetBookings[0].loadingDate || targetBookings[0].createdAt
+    const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].loadingDate || targetBookings[targetBookings.length - 1].createdAt
 
     const invoice: SalesDocument = {
       id: genId('sdoc'),
@@ -2117,8 +2119,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const seq = nextFreeSequence('RECEIPT', numbering.prefix)
     const customer = overrides?.customer?.trim() || targetBookings[0].customer
     const reference = overrides?.reference ?? targetBookings.map(bookingReferenceDoc).join(', ')
-    const dateFrom = targetBookings[0].shipDate || targetBookings[0].createdAt
-    const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].createdAt
+    const dateFrom = targetBookings[0].shipDate || targetBookings[0].loadingDate || targetBookings[0].createdAt
+    const dateTo = targetBookings[targetBookings.length - 1].shipDate || targetBookings[targetBookings.length - 1].loadingDate || targetBookings[targetBookings.length - 1].createdAt
     const rows = overrides?.items ?? billingRowsFromBookings(targetBookings)
     const { amount, discountTotal, vatRate, vatAmount, whtAmount } = computeDocumentTotals(rows)
     const now = new Date()

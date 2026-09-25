@@ -1633,6 +1633,10 @@ const confirmImport = () => {
       plate: row.plate || undefined,
       driverName: row.driverName || undefined,
       driverId: row.driverId,
+      // เดิมเซ็ตแค่ loadingDate จากวันที่หัวไฟล์ ไม่เคยเซ็ต shipDate เลย ทำให้หน้าเลือกวางบิล/ใบวางบิล/
+      // ใบกำกับภาษีของงาน import ทุกงานขึ้น "วันที่ส่งงาน" เป็น "-" และช่วงวันที่ในคำอธิบายรายการว่างไปด้วย —
+      // ต้องเซ็ตทั้งคู่เหมือนหน้าสร้าง/แก้ไขงานด้วยมือ (BookingCreateView.vue/BookingEditView.vue)
+      shipDate: importShipDate.value,
       loadingDate: importShipDate.value,
       loadingTime: row.time || undefined,
       ticketChecked: row.ticketChecked || undefined,

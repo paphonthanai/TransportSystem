@@ -548,7 +548,7 @@ const addBookingRow = (b: Booking) => {
     discountAmount: b.discountAmount || 0,
     vatRate: b.vatRate ?? documentSettingsStore.settings.vatRate,
     whtRate: 0,
-    shipDate: b.shipDate,
+    shipDate: b.shipDate || b.loadingDate,
     plate: b.plate,
     referenceDoc: bookingReferenceDoc(b),
     deliveryNo: b.docNo,
