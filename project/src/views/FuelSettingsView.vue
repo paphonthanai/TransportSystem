@@ -10,6 +10,12 @@
     <div class="text-xs text-muted">
       ตั้งค่าลิตรมาตรฐานต่อเที่ยวตามอำเภอ และราคาน้ำมัน ณ วันนี้ — ระบบจะดึงมากรอกให้อัตโนมัติตอนสร้างงานเมื่อกรอกอำเภอ (แก้ไขเองได้เพื่อป้องกันการโกงน้ำมัน)
     </div>
+    <!-- เดิมบันทึกไม่สำเร็จ (เช่น หลุดสิทธิ์/หลุดเน็ต) แล้วเงียบ — ไม่มีจุดไหนแสดง fuelRateStore.error เลยสักที่ ผู้ใช้เห็นรายการ
+         ที่เพิ่งเพิ่มในหน้าจอตามปกติ (แค่ยังไม่ได้ขึ้น Firestore จริง) พอรีเฟรชเลยดูเหมือนข้อมูลหายไปทั้งที่กดบันทึกแล้ว -->
+    <div v-if="fuelRateStore.error" class="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+      <span class="material-symbols-rounded text-base">error</span>
+      บันทึกการตั้งค่าไป Firestore ไม่สำเร็จ: {{ fuelRateStore.error }} — ข้อมูลที่เพิ่ง แก้ไข/เพิ่ม/ลบ อาจไม่ถูกบันทึกจริง กรุณาลองรีเฟรชหน้าแล้วทำซ้ำ
+    </div>
 
     <div class="card-lg">
       <div class="font-bold text-text mb-3">ราคาน้ำมัน ณ วันนี้</div>
