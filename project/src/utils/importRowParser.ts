@@ -236,8 +236,12 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   const fuelFromExcel = num(raw[IMPORT_HEADERS.fuel])
   const configuredFuelRate = province && district ? deps.findFuelRate(province, district)?.liters : undefined
   let fuelLiters = fuelFromExcel || configuredFuelRate || 0
-  if (!fuelLiters || !province || !district) {
-    warnings.push('ตรวจสอบข้อมูลน้ำมัน/ปลายทาง')
+  if (!province || !district) {
+    warnings.push('ต้องกรอกเพิ่ม: อำเภอ/จังหวัด')
+  } else if (!fuelLiters) {
+    // ไม่มีค่าน้ำมันจาก Excel และปลายทาง (อำเภอ/จังหวัด) นี้ก็ยังไม่เคยตั้งค่าลิตรมาตรฐานไว้ในหน้าตั้งค่าน้ำมันเลย —
+    // บอกตรงๆ ว่า "ยังไม่มีปลายทางน้ำมัน" แทนข้อความกว้างๆ เดิม เพื่อให้รู้ทันทีว่าต้องไปเพิ่มอำเภอนี้ในหน้าตั้งค่าน้ำมัน
+    warnings.push(`ยังไม่มีปลายทางน้ำมัน (${district}/${province}) ในระบบ — ไปเพิ่มในหน้าตั้งค่าน้ำมัน หรือกรอกลิตรน้ำมันเองภายหลัง`)
   } else if (fuelFromExcel && configuredFuelRate && fuelFromExcel !== configuredFuelRate) {
     // น้ำมันจาก Excel ไม่ตรงกับเรทที่ตั้งค่าไว้สำหรับปลายทางนี้ — ยังใช้ค่าจาก Excel ตามเดิม (ไม่ใช้เรทตั้งค่าทับ) แค่เตือนให้ตรวจสอบ
     warnings.push(`น้ำมันจาก Excel (${fuelFromExcel} ล.) ไม่ตรงกับเรทที่ตั้งไว้สำหรับ ${district}/${province} (${configuredFuelRate} ล.)`)
