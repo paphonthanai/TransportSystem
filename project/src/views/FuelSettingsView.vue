@@ -168,7 +168,14 @@ const save = () => {
     formError.value = 'จังหวัด/อำเภอนี้มีอยู่แล้ว กรุณาแก้ไขรายการเดิมแทน'
     return
   }
-  const resolved = { ...form.value, corridor: form.value.corridor?.trim() || undefined }
+  // ห้ามเซ็ต corridor เป็น undefined ตรงๆ (ต่างจากไม่มี key เลย) — Firestore setDoc() reject ค่า undefined ที่ซ้อนอยู่ใน
+  // object/array ทันที โยน error แบบ synchronous ก่อนจะได้ Promise คืนมาด้วยซ้ำ ทำให้ .catch() ใน useFirestoreSettings.ts
+  // ไม่มีโอกาสจับ error นี้เลย (ผู้ใช้เห็น error เงียบใน console เท่านั้น ไม่มีอะไรขึ้นหน้าจอ) — เป็นสาเหตุจริงที่ทำให้
+  // เพิ่ม/แก้ไขอำเภอที่ไม่ได้กรอก "สาย/เส้นทาง" (ค่าเริ่มต้น ไม่บังคับกรอก) ไม่เคยถูกบันทึกลง Firestore เลยสักครั้ง
+  // พอรีเฟรชเลยหายไปหมดโดยไม่มีข้อความเตือนใดๆ — ตัดคีย์ corridor ออกไปเลยเมื่อว่าง แทนที่จะเซ็ตเป็น undefined
+  const { corridor, ...rest } = form.value
+  const trimmedCorridor = corridor?.trim()
+  const resolved: FuelRate = trimmedCorridor ? { ...rest, corridor: trimmedCorridor } : rest
   if (editingIndex.value === null) {
     fuelRateStore.settings.rates.unshift(resolved)
   } else {

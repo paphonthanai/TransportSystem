@@ -58,9 +58,18 @@ export function useFirestoreSettings<T extends object>(
       const json = JSON.stringify(val)
       if (json === lastKnownJson) return
       lastKnownJson = json
-      setDoc(doc(db, COLLECTION, key), val).catch((err: any) => {
+      // setDoc() ของ Firestore SDK validate ข้อมูลก่อนเขียนจริง แล้ว throw แบบ synchronous ทันทีถ้าเจอ nested
+      // undefined (เช่น { corridor: undefined }) — โยนก่อนที่ setDoc() จะคืน Promise ด้วยซ้ำ ทำให้ .catch() ที่ต่อท้าย
+      // ไม่มีโอกาสได้ทำงานเลย (บั๊กจริงที่เจอ: FuelSettingsView.vue เคยเซ็ต corridor เป็น undefined ตรงๆ เวลาไม่กรอก
+      // ทำให้บันทึกไม่ผ่านแบบเงียบๆ ไม่มี error โชว์ที่ไหนเลย) ครอบด้วย try/catch ที่นี่กันไว้อีกชั้น เผื่อจุดเรียกอื่น
+      // พลาดแบบเดียวกันในอนาคต จะได้ error.value ที่ UI แสดงอยู่แล้วแทนที่จะเงียบหายไปอีก
+      try {
+        setDoc(doc(db, COLLECTION, key), val).catch((err: any) => {
+          error.value = err?.message || `บันทึกการตั้งค่า (${key}) ไป Firestore ไม่สำเร็จ`
+        })
+      } catch (err: any) {
         error.value = err?.message || `บันทึกการตั้งค่า (${key}) ไป Firestore ไม่สำเร็จ`
-      })
+      }
     },
     { deep: true }
   )
