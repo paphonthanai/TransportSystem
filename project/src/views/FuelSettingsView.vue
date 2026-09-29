@@ -21,7 +21,7 @@
       <div class="font-bold text-text mb-3">ราคาน้ำมัน ณ วันนี้</div>
       <div class="max-w-xs">
         <label class="block text-xs font-semibold text-muted mb-1">ราคาน้ำมัน (บาท/ลิตร)</label>
-        <input v-model.number="fuelRateStore.settings.todayPricePerLiter" type="number" min="0" step="0.01" class="input-field w-full" />
+        <input v-model.number="priceDraft.today" @input="priceDraftDirty = true" type="number" min="0" step="0.01" class="input-field w-full" />
         <div class="text-[11px] text-muted mt-1">ใช้เป็นเรทตั้งต้นทุกอำเภอ อัปเดตทุกวันที่ราคาน้ำมันเปลี่ยน</div>
       </div>
       <div class="mt-5 pt-4 border-t border-border">
@@ -33,16 +33,26 @@
           <div v-for="type in vehicleTypeOptions" :key="type">
             <label class="block text-xs font-semibold text-muted mb-1">{{ type }} (บาท/ลิตร)</label>
             <input
-              :value="fuelRateStore.settings.pricePerLiterByVehicleType?.[type] ?? ''"
+              :value="priceDraft.byType[type] ?? ''"
               @input="(e) => setTypePrice(type, (e.target as HTMLInputElement).value)"
               type="number"
               min="0"
               step="0.01"
-              :placeholder="String(fuelRateStore.settings.todayPricePerLiter)"
+              :placeholder="String(priceDraft.today)"
               class="input-field w-full"
             />
           </div>
         </div>
+      </div>
+      <div class="mt-5 pt-4 border-t border-border flex items-center gap-3">
+        <button @click="saveFuelPrices" class="btn-primary">
+          <span class="material-symbols-rounded text-base">save</span>
+          บันทึก
+        </button>
+        <span v-if="priceSaved" class="text-xs font-semibold text-green-700 flex items-center gap-1">
+          <span class="material-symbols-rounded text-base">check_circle</span>
+          บันทึกแล้ว — อัปเดตค่าน้ำมันของงานที่ยังไม่จบให้ด้วยแล้ว
+        </span>
       </div>
     </div>
 
@@ -122,19 +132,62 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useFuelRateStore, type FuelRate } from '@/stores/fuelRates'
+import { useBookingStore } from '@/stores/booking'
+import { useVehiclesStore } from '@/stores/vehicles'
 import type { CurrentVehicleType } from '@/types'
 
 const fuelRateStore = useFuelRateStore()
+const bookingStore = useBookingStore()
+const vehiclesStore = useVehiclesStore()
+
+/**
+ * ราคาน้ำมัน (ทั่วไป + แยกตามประเภทรถ) เปลี่ยนจาก auto-save ทุกครั้งที่พิมพ์ (v-model ตรงเข้า store) เป็น draft
+ * ในเครื่อง + ปุ่ม "บันทึก" ชัดเจนแทน — กันเผลอบันทึกค่าที่พิมพ์ยังไม่เสร็จ และให้เห็นชัดว่าบันทึกสำเร็จเมื่อไหร่
+ * (ต่างจากช่องอำเภอ/สาย/ลิตร ที่มี dialog + ปุ่มบันทึกของตัวเองอยู่แล้ว)
+ */
+const priceDraft = ref({
+  today: fuelRateStore.settings.todayPricePerLiter,
+  byType: { ...(fuelRateStore.settings.pricePerLiterByVehicleType || {}) } as Partial<Record<CurrentVehicleType, number>>,
+})
+// ถ้าค่าจาก Firestore เปลี่ยน (เช่น แอดมินอีกคนแก้ไว้) ก่อนที่หน้านี้จะเคยกดบันทึกเอง ให้ sync draft ตาม — แต่หยุด sync
+// ทันทีที่ผู้ใช้เริ่มพิมพ์เอง (priceDraftDirty) กันพิมพ์อยู่แล้วโดนค่าจากที่อื่นทับกลางคัน
+const priceDraftDirty = ref(false)
+watch(
+  () => [fuelRateStore.settings.todayPricePerLiter, fuelRateStore.settings.pricePerLiterByVehicleType] as const,
+  ([today, byType]) => {
+    if (priceDraftDirty.value) return
+    priceDraft.value = { today, byType: { ...(byType || {}) } }
+  }
+)
+const priceSaved = ref(false)
+
+/** บันทึกราคาน้ำมันจาก draft ลง store จริง แล้วรีเฟรช booking.fuelRate ของงานที่ยังไม่จบ (ไม่แตะงาน DELIVERED เพราะ
+ *  ค่าน้ำมันของงานที่จบแล้วถือเป็นตัวเลขปิดบัญชี/จ่ายเงินเดือนไปแล้ว ห้ามเปลี่ยนย้อนหลัง) ใช้สูตรเดียวกับตอนจัดรถเป๊ะ
+ *  (ดู dispatchBooking ใน stores/booking.ts) แก้ปัญหาที่พบจริง: แก้เรทในหน้านี้แล้วงานที่จัดรถไปก่อนหน้าไม่เห็นค่าเปลี่ยนตาม */
+const saveFuelPrices = () => {
+  fuelRateStore.settings.todayPricePerLiter = priceDraft.value.today
+  fuelRateStore.settings.pricePerLiterByVehicleType = { ...priceDraft.value.byType }
+  bookingStore.bookings
+    .filter((b) => b.status !== 'DELIVERED' && b.plate)
+    .forEach((b) => {
+      const vehicle = vehiclesStore.findByFullPlate(b.plate!)
+      b.fuelRate = fuelRateStore.pricePerLiterFor(vehicle?.department)
+    })
+  priceDraftDirty.value = false
+  priceSaved.value = true
+  setTimeout(() => (priceSaved.value = false), 2500)
+}
 
 const vehicleTypeOptions: CurrentVehicleType[] = ['รถบริษัท', 'รถหุ้นส่วน', 'รถร่วม', 'รถอู่เสริม']
 const setTypePrice = (type: CurrentVehicleType, raw: string) => {
-  const map = { ...(fuelRateStore.settings.pricePerLiterByVehicleType || {}) }
+  priceDraftDirty.value = true
+  const map = { ...priceDraft.value.byType }
   const value = parseFloat(raw)
   if (Number.isFinite(value) && value > 0) map[type] = value
   else delete map[type]
-  fuelRateStore.settings.pricePerLiterByVehicleType = map
+  priceDraft.value = { ...priceDraft.value, byType: map }
 }
 
 const sortedRates = computed(() =>

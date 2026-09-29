@@ -29,14 +29,17 @@
       </div>
 
       <template v-else>
-        <!-- STEP 2: ACCEPTED — แสดงจำนวนน้ำมันที่ต้องรับ -->
+        <!-- STEP 2: ACCEPTED — ตัดขั้น "รับน้ำมัน"/"เริ่มรับสินค้า"/"รับสินค้าจุดนี้" ออกจาก flow ใหม่แล้ว (ตาม
+             Requirement) เหลือแค่ถ่ายภาพสินค้า (ไม่บังคับ) แล้วกด "เริ่มขนส่ง" ที่แถบปุ่มด้านล่างได้เลย — สถานะ
+             FUEL_RECEIVED/LOADING/LOADED ยังไม่ถูกลบออกจากระบบ งานที่ค้างอยู่ในสถานะเหล่านี้ก่อนเปลี่ยนแปลงยังทำงาน
+             ต่อผ่านปุ่มเดิมได้จนจบ (ดู STEP 3/4/5 ด้านล่าง) -->
         <template v-if="job.status === 'ACCEPTED'">
           <div class="text-sm text-text bg-white border border-border rounded-xl p-4">
             <span class="text-muted">ต้องรับน้ำมันทั้งหมด:</span> <span class="font-bold text-base">{{ job.fuelLiters || 0 }} ล.</span>
           </div>
         </template>
 
-        <!-- STEP 3: FUEL_RECEIVED — ไม่มีข้อมูลเพิ่มเติม รอปุ่มด้านล่าง -->
+        <!-- STEP 3: FUEL_RECEIVED (flow เก่า) — ไม่มีข้อมูลเพิ่มเติม รอปุ่มด้านล่าง -->
 
         <!-- STEP 4: LOADING — แสดงจุดรับสินค้าถัดไปเพียงจุดเดียว ทีละจุดตามลำดับ (เหมือน Delivery step ด้านล่าง)
              ลำดับรับ = ลำดับที่ item ปรากฏใน booking.items[] ตรงๆ ไม่ต้องมี field ใหม่ — pickupJobItem เดิมยัง
@@ -98,6 +101,8 @@
               </div>
               <div class="text-sm text-text"><span class="text-muted">สินค้า:</span> {{ nextDelivery(job)!.product }} {{ nextDelivery(job)!.qty }} {{ nextDelivery(job)!.unit }}</div>
               <div v-if="nextDelivery(job)!.jobType" class="text-sm text-text"><span class="text-muted">ประเภทงาน:</span> {{ nextDelivery(job)!.jobType }}</div>
+              <!-- ผู้ติดต่อหน้างานที่ออฟฟิศกรอกไว้ล่วงหน้า (siteContactName) — เดิมมีแค่เบอร์โทร/ปุ่มนำทาง ไม่มีชื่อให้คนขับดู/รู้จักเลย -->
+              <div v-if="nextDelivery(job)!.siteContactName" class="text-sm text-text"><span class="text-muted">ผู้ติดต่อ:</span> {{ nextDelivery(job)!.siteContactName }}</div>
               <div class="flex gap-3 pt-1">
                 <a
                   :href="nextDelivery(job)!.sitePhone ? `tel:${nextDelivery(job)!.sitePhone}` : undefined"
@@ -139,11 +144,12 @@
 
         <div v-else-if="job.status === 'DELIVERED'" class="text-center py-8 text-green-700 bg-green-50 rounded-xl">
           <span class="material-symbols-rounded text-3xl block mb-1">task_alt</span>
-          ส่งของสำเร็จแล้ว
+          ส่งของเสร็จสิ้นแล้ว
         </div>
 
-        <!-- รูปตอนขึ้นสินค้า — ไม่บังคับ ไม่ขวางการเปลี่ยนสถานะ (ออฟฟิศแนบให้ทีหลังได้ถ้าคนขับไม่ได้ถ่าย) -->
-        <div v-if="job.status === 'LOADING' || job.status === 'LOADED'" class="rounded-xl bg-white border border-border p-3.5">
+        <!-- รูปตอนขึ้นสินค้า — ไม่บังคับ ไม่ขวางการเปลี่ยนสถานะ (ออฟฟิศแนบให้ทีหลังได้ถ้าคนขับไม่ได้ถ่าย) — flow ใหม่ถ่ายได้
+             ตั้งแต่ ACCEPTED เลย (ก่อนกด "เริ่มขนส่ง") ส่วน LOADING/LOADED ยังคงไว้ให้งาน flow เก่าที่ค้างอยู่ -->
+        <div v-if="job.status === 'ACCEPTED' || job.status === 'LOADING' || job.status === 'LOADED'" class="rounded-xl bg-white border border-border p-3.5">
           <PhotoPicker
             label="รูปตอนขึ้นสินค้า (ไม่บังคับ)"
             :preview="job.loadingImage"
@@ -182,16 +188,10 @@
       v-if="job && showBottomActionBar"
       class="sticky bottom-0 bg-white border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex-shrink-0"
     >
+      <!-- flow ใหม่: ตัดปุ่ม "รับน้ำมัน"/"เริ่มรับสินค้า" ออก — ACCEPTED กด "เริ่มขนส่ง" ได้ตรงๆ เลย (ถ่ายรูปสินค้าด้านบน
+           ไม่บังคับ) ปุ่ม "เริ่มรับสินค้า" ของ flow เก่า (FUEL_RECEIVED) ยังคงไว้ให้งานที่ค้างอยู่ก่อนเปลี่ยนแปลงเท่านั้น -->
       <button
-        v-if="job.status === 'ACCEPTED'"
-        @click="bookingStore.markFuelReceived(job.id)"
-        class="w-full h-12 rounded-lg bg-orange-500 text-white text-base font-semibold flex items-center justify-center gap-1.5 active:bg-orange-600"
-      >
-        <span class="material-symbols-rounded text-xl">local_gas_station</span>
-        รับน้ำมัน
-      </button>
-      <button
-        v-else-if="job.status === 'FUEL_RECEIVED'"
+        v-if="job.status === 'FUEL_RECEIVED'"
         @click="bookingStore.startLoading(job.id)"
         class="w-full h-12 rounded-lg bg-teal-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 active:bg-teal-700"
       >
@@ -199,7 +199,7 @@
         เริ่มรับสินค้า
       </button>
       <button
-        v-else-if="job.status === 'LOADED'"
+        v-else-if="job.status === 'LOADED' || job.status === 'ACCEPTED'"
         @click="bookingStore.startTransit(job.id)"
         class="w-full h-12 rounded-lg bg-indigo-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 active:bg-indigo-700"
       >
@@ -229,8 +229,12 @@
           </div>
           <div class="p-5 space-y-4">
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">ชื่อผู้รับสินค้า</label>
-              <input v-model="deliveredByInput" placeholder="ชื่อผู้รับสินค้า" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
+              <!-- แสดงชื่อผู้ติดต่อหน้างานที่ออฟฟิศกรอกไว้ล่วงหน้าเท่านั้น (JobItem.siteContactName) — คนขับแก้ไขไม่ได้
+                   ตาม Requirement เดิมคนขับพิมพ์ชื่อผู้รับเองทุกครั้ง เปลี่ยนเป็นแสดงให้ดู/รู้จักแทน -->
+              <label class="block text-xs font-semibold text-muted mb-1">ผู้ติดต่อหน้างาน</label>
+              <div class="w-full min-h-12 px-3 py-3 rounded-lg border border-border bg-surface-2 text-base text-text">
+                {{ deliverTarget!.siteContactName || 'ไม่มีข้อมูลผู้ติดต่อ' }}
+              </div>
             </div>
             <PhotoPicker label="รูปสินค้าตอนลง (ไม่บังคับ)" :preview="goodsPhotoUrl" :busy="photoBusy === 'goods'" :error="photoError.goods" @file="(f) => onDeliveryPhoto('goods', f)" />
             <PhotoPicker label="รูปใบส่งของ (ไม่บังคับ)" :preview="notePhotoUrl" :busy="photoBusy === 'note'" :error="photoError.note" @file="(f) => onDeliveryPhoto('note', f)" />
@@ -242,7 +246,7 @@
             <button @click="closeDeliverItem" class="flex-1 h-12 rounded-lg border border-border text-base font-medium text-text">ยกเลิก</button>
             <button
               @click="confirmDeliverItem"
-              :disabled="!deliveredByInput || !!photoBusy"
+              :disabled="!!photoBusy"
               class="flex-[2] h-12 rounded-lg bg-green-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-xl">task_alt</span>
@@ -369,9 +373,9 @@ const navigateUrl = (item: JobItem) => {
   return ''
 }
 
-// --- Deliver a single JobItem (stop) — บันทึกแค่ชื่อผู้รับ ไม่บังคับ POD (แนบทีหลังได้ ดู JobDocumentView.vue) ---
+// --- Deliver a single JobItem (stop) — บันทึกผู้รับจาก siteContactName ที่ออฟฟิศกรอกไว้ล่วงหน้า (คนขับแก้ไขไม่ได้
+//     ดู Requirement) ไม่บังคับ POD (แนบทีหลังได้ ดู JobDocumentView.vue) ---
 const deliverTarget = ref<JobItem | null>(null)
-const deliveredByInput = ref('')
 
 /** บัญชีคนขับเขียนได้เฉพาะโซน driver-uploads/ — ผู้ดูแลที่เปิดหน้านี้แทนคนขับใช้โซน office-uploads/ (ดู storage.rules) */
 const photoActor = computed<'driver' | 'office'>(() => (isDriverRole.value ? 'driver' : 'office'))
@@ -382,7 +386,6 @@ const photoError = ref<{ goods: string; note: string }>({ goods: '', note: '' })
 
 const openDeliverItem = (item: JobItem) => {
   deliverTarget.value = item
-  deliveredByInput.value = ''
   goodsPhotoUrl.value = undefined
   notePhotoUrl.value = undefined
   photoError.value = { goods: '', note: '' }
@@ -426,8 +429,8 @@ const closeDeliverItem = () => {
 }
 
 const confirmDeliverItem = () => {
-  if (!job.value || !deliverTarget.value || !deliveredByInput.value) return
-  bookingStore.deliverJobItem(job.value.id, deliverTarget.value.id, goodsPhotoUrl.value, deliveredByInput.value, notePhotoUrl.value)
+  if (!job.value || !deliverTarget.value) return
+  bookingStore.deliverJobItem(job.value.id, deliverTarget.value.id, goodsPhotoUrl.value, deliverTarget.value.siteContactName || '-', notePhotoUrl.value)
   closeDeliverItem()
 }
 

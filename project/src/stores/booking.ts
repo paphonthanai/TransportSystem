@@ -825,10 +825,12 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`ยืนยันรับสินค้าที่เหลือขึ้นรถคันใหม่ ${booking.docNo}: ${item.product} (${item.siteName})`, { bookingId: booking.id })
   }
 
-  /** คนขับกดเริ่มขนส่ง: LOADED -> IN_TRANSIT */
+  /** คนขับกดเริ่มขนส่ง: LOADED -> IN_TRANSIT (flow เก่า ยังรองรับงานที่ค้างอยู่ในสถานะนี้ก่อนตัดขั้นตอน) หรือ
+   *  ACCEPTED -> IN_TRANSIT ตรงๆ (flow ใหม่ที่ตัดขั้น FUEL_RECEIVED/LOADING/LOADED ออก — ดู DriverJobDetailView.vue
+   *  ถ่ายภาพสินค้าระหว่าง ACCEPTED เป็นขั้นตอนไม่บังคับ ไม่เปลี่ยนสถานะ) */
   function startTransit(id: string) {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking || booking.status !== 'LOADED') return
+    if (!booking || (booking.status !== 'LOADED' && booking.status !== 'ACCEPTED')) return
     booking.status = 'IN_TRANSIT'
     booking.transitStartedAt = new Date()
     addLog(`เริ่มขนส่ง ${booking.docNo}`, { bookingId: booking.id })

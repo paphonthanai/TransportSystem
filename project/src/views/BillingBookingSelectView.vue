@@ -107,8 +107,10 @@ const documentSettingsStore = useDocumentSettingsStore()
 const billingRuleStore = useBillingRuleStore()
 
 /** เงื่อนไขเดียวกับ createBillingFromBookings/createBillingManual (claim ทางตรง) ทุกประการ — สถานะงานอ่านจาก
- *  billingRuleStore.isStatusBillable (DELIVERED/IN_TRANSIT บังคับเสมอ + สถานะอื่นที่แอดมินเปิดเพิ่มจาก "เงื่อนไขวางบิล") */
-const isBookingBillable = (b: Booking) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId
+ *  billingRuleStore.isStatusBillable (DELIVERED/IN_TRANSIT บังคับเสมอ + สถานะอื่นที่แอดมินเปิดเพิ่มจาก "เงื่อนไขวางบิล")
+ *  ต้อง POD ยืนยันแล้ว/ไม่ถูกตีกลับด้วย (ไม่งั้นเลือกได้ในหน้านี้แต่ไปพังตอนกดสร้างจริงที่ createBillingFromBookings) */
+const isBookingBillable = (b: Booking) =>
+  billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId && b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED'
 
 /** แจ้งเตือนแบบไม่บล็อก (soft warning) ตามเงื่อนไขเพิ่มเติมที่แอดมินเปิดไว้ — ไม่ตัดงานออกจากรายการที่เลือกได้ */
 const billingWarning = (b: Booking): string | null => {

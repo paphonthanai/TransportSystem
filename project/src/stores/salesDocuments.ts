@@ -1333,10 +1333,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   /** สร้างใบวางบิลแบบกรอกเอง (ไม่ผูกกับ Booking) — ใช้หน้าฟอร์มแบบเดียวกับ QuotationFormView.vue (ดู BillingFormView.vue) */
   /** งานขนส่งที่ดึงเข้ามาแสดงในหน้า Manual โดยตรง (ไม่ผ่านใบเสนอราคา/ใบวางบิลต้นทาง) — เกิดจากปุ่ม "ดึงข้อมูลจากงานขนส่ง"
    *  ในหน้า Manual เอง (BillingFormView.vue) ไม่ใช่ sourceQuotationId/sourceBillingId เดิม เช็คเงื่อนไขเดียวกับ
-   *  createBillingFromBookings ทุกประการ (ลูกค้าเดียวกัน, Feed เดียวกัน, ยังไม่ถูก claim, สถานะงานตาม billingRuleStore)
-   *  ก่อน claim จริง — POD ไม่ใช่เงื่อนไขบังคับของใบวางบิล (เงื่อนไขบังคับของ POD อยู่ที่ใบเสร็จ/รับชำระเงินแทน ดู
-   *  createReceiptFromBookings) คืน true ถ้าผ่านเงื่อนไข (หรือไม่มีงานขนส่งให้ claim เลย) คืน false ถ้าเงื่อนไขไม่ผ่าน
-   *  (ผู้เรียกต้องคืน null ทันที) */
+   *  createBillingFromBookings ทุกประการ (ลูกค้าเดียวกัน, Feed เดียวกัน, ยังไม่ถูก claim, สถานะงานตาม billingRuleStore,
+   *  POD ต้องยืนยันแล้ว/ไม่ถูกตีกลับ) ก่อน claim จริง — คืน true ถ้าผ่านเงื่อนไข (หรือไม่มีงานขนส่งให้ claim เลย) คืน
+   *  false ถ้าเงื่อนไขไม่ผ่าน (ผู้เรียกต้องคืน null ทันที) */
   function isDirectBookingClaimEligibleForBilling(data: ManualDocumentFormData): boolean {
     if (!data.bookingIds?.length || data.sourceBillingId || data.sourceQuotationId) return true
     const bookingStore = useBookingStore()
@@ -1347,7 +1346,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const sameCustomer = bookings.every((b) => b.customer === data.customer)
     const sameCategory = bookings.every((b) => b.category === bookings[0].category)
     const allEligible = bookings.every((b) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId)
-    return sameCustomer && sameCategory && allEligible
+    const allPodApproved = bookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    return sameCustomer && sameCategory && allEligible && allPodApproved
   }
 
   function claimDirectBookingsForBilling(billing: SalesDocument, data: ManualDocumentFormData) {
@@ -1879,17 +1879,19 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
      *  กติกากัน ต้องแยกตั้งแต่ขั้นตอนสร้างใบวางบิล ไม่ใช่ปล่อยให้ปนแล้วค่อยแยกทีหลังตอนออกใบกำกับภาษี (ดู UI guard เดียวกันใน
      *  BillingCreateFromBookingsView.vue — ด่านนี้เป็นด่านสุดท้ายที่บังคับจริง กันเส้นทางอื่นที่อาจข้าม UI นั้นมา) */
     const sameCategory = targetBookings.every((b) => b.category === targetBookings[0].category)
-    /** POD ไม่ใช่เงื่อนไขบังคับสำหรับใบวางบิล (ต่างจากใบเสร็จ/รับชำระเงิน — ดู createReceiptFromBookings ที่ยังคง
-     *  บังคับ podReviewStatus ผ่านการอนุมัติเสมอ) หน้า "เงื่อนไขวางบิล" ควบคุมได้แค่ว่าจะเตือนแอดมินเรื่อง POD ไม่ครบ
-     *  หรือไม่ (billingRuleStore.rule.requirePOD) ไม่ใช่บล็อกการออกเอกสาร
-     *  เช็คเฉพาะว่า "ยังไม่เคยอยู่ในใบวางบิลรวมอื่น" (billingNoteDocId) เท่านั้น — เป็นอิสระจาก taxInvoiceDocId/receiptDocId โดยเจตนา
+    /** เช็คเฉพาะว่า "ยังไม่เคยอยู่ในใบวางบิลรวมอื่น" (billingNoteDocId) เท่านั้น — เป็นอิสระจาก taxInvoiceDocId/receiptDocId โดยเจตนา
      *  งานเดียวกันอยู่ในใบแจ้งหนี้รวม/ใบเสร็จรวมอื่นพร้อมกันได้ (Booking → Billing / Booking → Tax Invoice / Booking → Receipt แยกเส้นทางกัน)
      *  สถานะที่วางบิลได้: DELIVERED/IN_TRANSIT บังคับเสมอ (MANDATORY_BILLING_STATUSES) ส่วนสถานะอื่นเปิดเพิ่มได้จากหน้า
      *  "เงื่อนไขวางบิล" (ดู billingRuleStore.isStatusBillable) — ครอบคลุมทั้งงานปกติที่ยังไม่ถึงปลายทาง, งาน Reset กลับมา
      *  ที่ IN_TRANSIT, และงาน partial delivery (บาง item ยัง PENDING) เพราะการออกใบวางบิลไม่แตะ/ไม่ต้องพึ่งข้อมูลระดับ
      *  item เลย (ดู bookingBillingRow/tripDescription ด้านล่าง — อ่านแค่ tripFee/extraCharges/discount ระดับ booking เท่านั้น) */
     const allEligible = targetBookings.every((b) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId)
-    if (!sameCustomer || !sameCategory || !allEligible) return null
+    /** เพิ่มเข้ามาตาม Requirement: งานที่ "ยังไม่ยืนยัน" (POD ยังรอตรวจสอบ/ถูกตีกลับ) ห้ามออกใบวางบิลได้ — เดิมฟังก์ชันนี้
+     *  จุดเดียวที่ไม่เช็คเงื่อนไขนี้ (createTaxInvoiceFromBookings/createReceiptFromBookings เช็คอยู่แล้วก่อนหน้านี้)
+     *  ใช้เงื่อนไขเดียวกันเป๊ะ: podReviewStatus undefined (งานที่ออฟฟิศปิดเอง ไม่ผ่านขั้นตอนนี้ ถือว่าผ่านโดยปริยาย) หรือ
+     *  APPROVED เท่านั้นถึงจะวางบิลได้ PENDING_REVIEW/REJECTED ห้ามเด็ดขาด */
+    const allPodApproved = targetBookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    if (!sameCustomer || !sameCategory || !allEligible || !allPodApproved) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
     const numbering = documentSettingsStore.settings.numbering.billingList

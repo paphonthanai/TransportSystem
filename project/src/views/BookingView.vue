@@ -244,7 +244,9 @@
               </td>
               <td class="px-3 py-3">
                 <div class="flex items-center gap-2">
-                  <button @click="openDispatchDialog(booking)" class="btn-sm text-amber-700">
+                  <!-- ตารางนี้ตอนนี้โชว์งาน DELIVERED ที่รอตรวจสอบ POD ค้างไว้ด้วย (ดู inTransitBookings) — "เปลี่ยนรถ/คนขับ"
+                       ไม่มีความหมายกับงานที่ส่งของเสร็จแล้ว ซ่อนไว้กันกดเผลอไปจ่ายงานซ้ำ/เปลี่ยนคนขับงานที่จบไปแล้ว -->
+                  <button v-if="booking.status !== 'DELIVERED'" @click="openDispatchDialog(booking)" class="btn-sm text-amber-700">
                     <span class="material-symbols-rounded text-base">sync_alt</span>
                     เปลี่ยนรถ / คนขับ
                   </button>
@@ -963,7 +965,15 @@ const inProgressBookings = computed(() => {
 const inTransitBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return fleetBookings.value
-    .filter((b) => (b.status === 'ACCEPTED' || b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') && (!q || matchesSearch(b, q)))
+    .filter(
+      (b) =>
+        // งานที่คนขับกด "ดำเนินการเสร็จสิ้น" แล้ว (DELIVERED) แต่ POD ยังรอออฟฟิศตรวจสอบ (PENDING_REVIEW) ต้องยังโชว์
+        // อยู่ในตารางนี้ต่อ ไม่ใช่หายไปทันที — ให้ตรงกับ Requirement ที่ต้องการเห็นงานค้างจนกว่าเสมียนจะกดยืนยัน (reviewPod
+        // ที่ CompletedJobsView.vue) เข้าเงื่อนไขวางบิลได้ (ดู createBillingFromBookings's allPodApproved) พอดี
+        ((b.status === 'ACCEPTED' || b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') ||
+          (b.status === 'DELIVERED' && b.podReviewStatus === 'PENDING_REVIEW')) &&
+        (!q || matchesSearch(b, q))
+    )
     .sort((a, b) => new Date(b.transitStartedAt || 0).getTime() - new Date(a.transitStartedAt || 0).getTime())
 })
 

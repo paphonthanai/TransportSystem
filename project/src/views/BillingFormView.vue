@@ -516,7 +516,8 @@ if (!prefill && !editingDoc && typeof route.query.bookingId !== 'string' && type
  *  มาแสดงผล/ตรวจสอบ ก่อนกด "บันทึกเอกสาร" เท่านั้น เงื่อนไข claim เดียวกับ createBillingFromBookings ทุกประการ (เช็คซ้ำ
  *  ในสโตร์อีกชั้นตอนบันทึกจริงเสมอ — ดู isDirectBookingClaimEligibleForBilling) — แถวที่ดึงมามี bookingId กำกับไว้
  *  (ดู Row.bookingId) ลบแถวออก = ไม่ claim งานนั้นตอนบันทึกด้วยอัตโนมัติ */
-const isBookingBillable = (b: Booking) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId
+const isBookingBillable = (b: Booking) =>
+  billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId && b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED'
 
 const alreadyPickedBookingIds = computed(() => new Set(rows.value.map((r) => r.bookingId).filter((id): id is string => !!id)))
 

@@ -15,9 +15,14 @@ export const bookingStatusLabel: Record<BookingStatus, string> = {
   FUEL_RECEIVED: 'รับน้ำมันแล้ว',
   LOADING: 'กำลังรับสินค้า',
   LOADED: 'รับสินค้าครบแล้ว',
-  IN_TRANSIT: 'กำลังขนส่ง',
+  // IN_TRANSIT ใช้ label เดียวกับ DELIVERING โดยตั้งใจ (เดิม "กำลังขนส่ง") — ตัดขั้นตอนย่อย FUEL_RECEIVED/LOADING/
+  // LOADED ออกจาก flow คนขับใหม่แล้ว (ดู DriverJobDetailView.vue) เริ่มขนส่ง (ACCEPTED -> IN_TRANSIT ตรงๆ) จึงควร
+  // อ่านว่า "กำลังส่งของ" ให้สอดคล้องกับช่วง DELIVERING ต่อเนื่องกัน ไม่ใช่คนละความหมายที่ผู้ใช้แยกไม่ออก
+  IN_TRANSIT: 'กำลังส่งของ',
   DELIVERING: 'กำลังส่งของ',
-  DELIVERED: 'ส่งของสำเร็จ',
+  // เดิม "ส่งของสำเร็จ" ฟังดูเหมือนจบงานแล้วทันทีที่คนขับกดรับงาน (สับสนกับ ACCEPTED) เปลี่ยนเป็น "ส่งของเสร็จสิ้น"
+  // ให้ชัดว่าหมายถึงส่งครบทุกจุดแล้วจริง (finishDriverJob/completeJob)
+  DELIVERED: 'ส่งของเสร็จสิ้น',
 }
 
 export const bookingStatusClass: Record<BookingStatus, string> = {

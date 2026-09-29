@@ -8,9 +8,10 @@ beforeEach(() => {
   setActivePinia(createPinia())
 })
 
-/** ใบวางบิลหนึ่งใบต้องมีสินค้า Feed (booking.category) เดียว, ลูกค้าเดียว, งานต้อง DELIVERED/IN_TRANSIT และยังไม่เคยถูกวางบิล
- *  — นี่คือด่านที่กันไม่ให้ใบวางบิลปนกันหลาย Feed (regression ของบั๊กจริงที่เจอในโปรเจกต์นี้ ดู commit a7d0894) จึงเป็นจุด
- *  ที่ต้องมี regression test คุมไว้ POD ไม่ใช่เงื่อนไขของใบวางบิล (เงื่อนไข POD อยู่ที่ใบเสร็จ/รับชำระเงินแทน) */
+/** ใบวางบิลหนึ่งใบต้องมีสินค้า Feed (booking.category) เดียว, ลูกค้าเดียว, งานต้อง DELIVERED/IN_TRANSIT, ยังไม่เคยถูกวางบิล,
+ *  และ POD ต้องยืนยันแล้ว/ไม่ถูกตีกลับ (PENDING_REVIEW/REJECTED ห้ามวางบิล — เพิ่มตาม Requirement ให้ตรงกับที่ใบแจ้งหนี้/
+ *  ใบเสร็จบังคับอยู่แล้ว) — นี่คือด่านที่กันไม่ให้ใบวางบิลปนกันหลาย Feed (regression ของบั๊กจริงที่เจอในโปรเจกต์นี้ ดู
+ *  commit a7d0894) จึงเป็นจุดที่ต้องมี regression test คุมไว้ */
 describe('createBillingFromBookings — eligibility guards', () => {
   it('creates a billing note when every booking shares the same customer, category, is DELIVERED, and unclaimed', () => {
     const bookingStore = useBookingStore()
@@ -66,16 +67,16 @@ describe('createBillingFromBookings — eligibility guards', () => {
     expect(salesDocs.createBillingFromBookings([claimed.id])).toBeNull()
   })
 
-  it('allows billing even when POD review is still pending or was rejected — POD is not a billing-note condition', () => {
+  it('rejects (returns null) when POD review is still pending or was rejected', () => {
     const bookingStore = useBookingStore()
     const salesDocs = useSalesDocumentsStore()
     const pending = makeBooking({ customer: 'ลูกค้า A', category: 'cements', status: 'DELIVERED', podReviewStatus: 'PENDING_REVIEW' })
     bookingStore.bookings.push(pending)
-    expect(salesDocs.createBillingFromBookings([pending.id])).not.toBeNull()
+    expect(salesDocs.createBillingFromBookings([pending.id])).toBeNull()
 
     const rejected = makeBooking({ customer: 'ลูกค้า A', category: 'cements', status: 'DELIVERED', podReviewStatus: 'REJECTED' })
     bookingStore.bookings.push(rejected)
-    expect(salesDocs.createBillingFromBookings([rejected.id])).not.toBeNull()
+    expect(salesDocs.createBillingFromBookings([rejected.id])).toBeNull()
   })
 
   it('allows a booking whose POD was office-completed (podReviewStatus undefined) — treated as implicitly approved', () => {
