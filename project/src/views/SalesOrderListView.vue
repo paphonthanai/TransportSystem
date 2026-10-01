@@ -64,7 +64,7 @@
               <th class="text-left px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('customer')">
                 ชื่อลูกค้า<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('customer') }}</span>
               </th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">เลข PO</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">เลขที่ PO ลูกค้า</th>
               <th class="text-right px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('amount')">
                 ยอดรวมสุทธิ<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('amount') }}</span>
               </th>
@@ -94,7 +94,7 @@
                   {{ customerStore.findByName(row.doc.customer)?.code || row.doc.customer }}
                 </span>
               </td>
-              <td class="px-3 py-3 text-muted">{{ row.booking?.po || '-' }}</td>
+              <td class="px-3 py-3 text-muted">{{ row.booking?.reference || '-' }}</td>
               <td class="px-3 py-3 text-right font-semibold" :class="row.doc.amount > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
                 {{ row.doc.amount > 0 ? formatBaht(row.doc.amount + (row.doc.vatAmount || 0)) : PRICE_NOT_SET_LABEL }}
               </td>
