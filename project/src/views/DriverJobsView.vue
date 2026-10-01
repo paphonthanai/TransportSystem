@@ -81,11 +81,13 @@
           ไม่มีงานที่ได้รับมอบหมายในขณะนี้
         </div>
 
-        <button
+        <!-- การ์ดงาน — เดิมเป็น <button> ครอบทั้งใบ เปลี่ยนเป็น <div> เพราะงาน ACCEPTED ล่าสุดมีปุ่ม "ยืนยัน"/"แสดง
+             รายละเอียด" ซ้อนอยู่ข้างในด้วย (ซ้อน <button> ใน <button> ไม่ได้ตาม HTML spec) -->
+        <div
           v-for="job in activeJobs"
           :key="job.id"
           @click="router.push(`/driver-app/job/${job.id}`)"
-          class="w-full text-left bg-white border border-border rounded-2xl p-4 mb-3 last:mb-0 active:bg-surface-2 transition-colors"
+          class="w-full text-left bg-white border border-border rounded-2xl p-4 mb-3 last:mb-0 active:bg-surface-2 transition-colors cursor-pointer"
         >
           <div class="flex items-center justify-between mb-2 gap-2">
             <div class="font-bold text-primary text-base truncate">{{ bookingTitle(job) }}</div>
@@ -108,7 +110,28 @@
             ส่งแล้ว {{ deliveryProgress(job.items).completed }}/{{ deliveryProgress(job.items).total }} จุด
           </div>
           <div v-else class="text-sm text-muted">{{ destinationLabel(job) }}</div>
-        </button>
+
+          <!-- ปุ่ม "ยืนยัน"/"แสดงรายละเอียด" เฉพาะงาน ACCEPTED ล่าสุดเท่านั้น (ดู latestAcceptedJob) — "ยืนยัน" นำทาง
+               เข้าหน้ารายละเอียดงานเหมือนกดที่การ์ดเฉยๆ (เป็นปุ่ม CTA เด่นชัดเจนกว่าแค่แตะทั้งใบ) หน้ารายละเอียดงานขั้น
+               ACCEPTED จะโชว์น้ำมัน+สินค้า/จำนวน แล้วบังคับถ่ายรูปขึ้นสินค้าก่อนไปขั้นต่อไป (ดู DriverJobDetailView.vue)
+               — "แสดงรายละเอียด" เปิด card ดูข้อมูลแบบไม่นำทางออกจากหน้ารายการ -->
+          <div v-if="job.id === latestAcceptedJob?.id" class="flex gap-2 mt-3 pt-3 border-t border-border" @click.stop>
+            <button
+              @click="router.push(`/driver-app/job/${job.id}`)"
+              class="flex-1 h-10 rounded-lg bg-teal-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-teal-700"
+            >
+              <span class="material-symbols-rounded text-base">task_alt</span>
+              ยืนยัน
+            </button>
+            <button
+              @click="jobDetailsTarget = job"
+              class="flex-1 h-10 rounded-lg border border-border text-sm font-semibold text-text flex items-center justify-center gap-1.5 active:bg-surface-2"
+            >
+              <span class="material-symbols-rounded text-base">list_alt</span>
+              แสดงรายละเอียด
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Recent Trips / Income -->
@@ -127,6 +150,43 @@
         </div>
       </div>
     </main>
+
+    <!-- Job Details — card แสดงรายละเอียดงาน ไม่เกี่ยวกับ flow หลักเลย กดปิดได้ตลอดเวลา (ย้ายมาจาก
+         DriverJobDetailView.vue — ตอนนี้เปิดจากปุ่ม "แสดงรายละเอียด" ในการ์ดงาน ACCEPTED ล่าสุดเท่านั้น) -->
+    <Teleport to="body" v-if="jobDetailsTarget">
+      <div @click="jobDetailsTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-end justify-center">
+        <div @click.stop class="w-full bg-white rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+          <div class="w-10 h-1.5 bg-border rounded-full mx-auto mt-3 mb-1"></div>
+          <div class="flex items-center justify-between px-5 py-3 border-b border-border">
+            <div class="font-bold text-text text-lg truncate">รายละเอียดงาน {{ bookingTitle(jobDetailsTarget) }}</div>
+            <button @click="jobDetailsTarget = null" class="w-11 h-11 -mr-2 flex-shrink-0 rounded-lg hover:bg-surface-2 flex items-center justify-center">
+              <span class="material-symbols-rounded text-xl">close</span>
+            </button>
+          </div>
+          <div class="p-5 space-y-3">
+            <div class="grid grid-cols-2 gap-3 text-sm">
+              <div class="bg-surface-2 rounded-lg p-3">
+                <div class="text-xs text-muted mb-0.5">ลูกค้า</div>
+                <div class="font-semibold text-text truncate">{{ jobDetailsTarget.customer || '-' }}</div>
+              </div>
+              <div class="bg-surface-2 rounded-lg p-3">
+                <div class="text-xs text-muted mb-0.5">น้ำมันที่ต้องรับ</div>
+                <div class="font-semibold text-text">{{ jobDetailsTarget.fuelLiters || 0 }} ล.</div>
+              </div>
+            </div>
+            <div class="text-xs font-bold text-muted uppercase tracking-wide pt-1">รายการสินค้า ({{ jobDetailsTarget.items.length }})</div>
+            <div v-for="item in jobDetailsTarget.items" :key="item.id" class="rounded-lg border border-border p-3 space-y-1">
+              <div class="font-semibold text-text">{{ item.product }} <span class="font-normal text-muted">{{ item.qty }} {{ item.unit }}</span></div>
+              <div class="text-sm text-muted">{{ item.siteName }} ({{ item.province }} · {{ item.district }})</div>
+              <div v-if="item.jobType" class="text-sm text-muted">ประเภทงาน: {{ item.jobType }}</div>
+            </div>
+          </div>
+          <div class="px-5 py-4 border-t border-border">
+            <button @click="jobDetailsTarget = null" class="w-full h-12 rounded-lg bg-surface-2 text-text text-base font-semibold">ปิด</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Account Settings — bottom sheet (mobile-native) แทน card ลอยกลางจอ -->
     <Teleport to="body" v-if="showAccountSettings">
@@ -330,6 +390,17 @@ const ACTIVE_STATUSES = ['ASSIGNED', 'ACCEPTED', 'FUEL_RECEIVED', 'LOADING', 'LO
 const activeJobs = computed(() =>
   bookingStore.bookings.filter((b) => matchesSelectedDriver(b) && (ACTIVE_STATUSES as readonly string[]).includes(b.status))
 )
+
+/** งาน ACCEPTED ล่าสุด (เรียงตามเวลาจัดรถล่าสุด) — การ์ดของงานนี้ใบเดียวเท่านั้นที่โชว์ปุ่ม "ยืนยัน"/"แสดงรายละเอียด"
+ *  (ตามที่ตกลง ไม่ใช่ทุกงาน ACCEPTED) ไม่ persist สถานะใดๆ ไว้เลย แค่คำนวณจากข้อมูลงานสดๆ ทุกครั้ง */
+const latestAcceptedJob = computed(() => {
+  const accepted = activeJobs.value.filter((b) => b.status === 'ACCEPTED')
+  if (!accepted.length) return null
+  return [...accepted].sort((a, b) => new Date(b.dispatchedAt || b.createdAt).getTime() - new Date(a.dispatchedAt || a.createdAt).getTime())[0]
+})
+
+/** เปิด card "แสดงรายละเอียด" ของงานที่เลือก — ไม่นำทางออกจากหน้ารายการ */
+const jobDetailsTarget = ref<Booking | null>(null)
 
 const recentJobs = computed(() =>
   bookingStore.bookings

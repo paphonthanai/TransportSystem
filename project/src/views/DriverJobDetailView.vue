@@ -30,39 +30,20 @@
 
       <template v-else>
         <!-- STEP 2: ACCEPTED — ตัดขั้น "รับน้ำมัน"/"เริ่มรับสินค้า"/"รับสินค้าจุดนี้" ออกจาก flow ใหม่แล้ว (ตาม
-             Requirement) ปุ่ม "ยืนยัน"/"แสดงรายละเอียด" ไม่เกี่ยวกับ flow หลักเลย เป็นแค่ขั้นตอนให้คนขับกดอ่านข้อมูล
-             จริงๆ ก่อน (ไม่ใช่ปุ่มเปลี่ยนสถานะ) ตัวที่บังคับจริงคือรูป "ขึ้นสินค้า" ด้านล่าง — ไม่มีรูปจะกด "เริ่มขนส่ง"
-             ไม่ได้เลย (ดู canStartTransit) — สถานะ FUEL_RECEIVED/LOADING/LOADED ยังไม่ถูกลบออกจากระบบ งานที่ค้างอยู่ใน
-             สถานะเหล่านี้ก่อนเปลี่ยนแปลงยังทำงานต่อผ่านปุ่มเดิมได้จนจบ (ดู STEP 3/4/5 ด้านล่าง) -->
+             Requirement) ปุ่ม "ยืนยัน"/"แสดงรายละเอียด" ย้ายไปอยู่การ์ดงานในหน้ารายการแล้ว (ดู DriverJobsView.vue)
+             หน้านี้เหลือแค่โชว์น้ำมัน+สินค้า/จำนวนเฉยๆ ไม่มีปุ่มกดอะไร ตัวที่บังคับจริงคือรูป "ขึ้นสินค้า" ด้านล่าง —
+             ไม่มีรูปจะกด "เริ่มขนส่ง" ไม่ได้เลย (ดู canStartTransit) — สถานะ FUEL_RECEIVED/LOADING/LOADED ยังไม่ถูกลบ
+             ออกจากระบบ งานที่ค้างอยู่ในสถานะเหล่านี้ก่อนเปลี่ยนแปลงยังทำงานต่อผ่านปุ่มเดิมได้จนจบ (ดู STEP 3/4/5 ด้านล่าง) -->
         <template v-if="job.status === 'ACCEPTED'">
-          <div class="bg-white border border-border rounded-xl p-4 space-y-3">
+          <div class="bg-white border border-border rounded-xl p-4 space-y-2">
             <div class="text-sm text-text">
               <span class="text-muted">ต้องรับน้ำมันทั้งหมด:</span> <span class="font-bold text-base">{{ job.fuelLiters || 0 }} ล.</span>
             </div>
-            <div v-if="acceptedConfirmed" class="space-y-1.5 pt-2 border-t border-border">
+            <div class="space-y-1.5 pt-2 border-t border-border">
               <div v-for="item in job.items" :key="item.id" class="text-sm text-text flex items-center justify-between gap-2">
                 <span class="text-muted truncate">{{ item.siteName }}</span>
                 <span class="font-semibold whitespace-nowrap">{{ item.product }} {{ item.qty }} {{ item.unit }}</span>
               </div>
-            </div>
-            <div class="flex gap-2 pt-1">
-              <button
-                @click="acceptedConfirmed = true"
-                :class="[
-                  'flex-1 h-11 rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5',
-                  acceptedConfirmed ? 'bg-green-100 text-green-700' : 'bg-teal-600 text-white active:bg-teal-700',
-                ]"
-              >
-                <span class="material-symbols-rounded text-base">{{ acceptedConfirmed ? 'check_circle' : 'task_alt' }}</span>
-                {{ acceptedConfirmed ? 'ยืนยันแล้ว' : 'ยืนยัน' }}
-              </button>
-              <button
-                @click="showJobDetails = true"
-                class="flex-1 h-11 rounded-lg border border-border text-sm font-semibold text-text flex items-center justify-center gap-1.5 active:bg-surface-2"
-              >
-                <span class="material-symbols-rounded text-base">list_alt</span>
-                แสดงรายละเอียด
-              </button>
             </div>
           </div>
         </template>
@@ -142,7 +123,7 @@
                 class="w-full h-12 rounded-lg bg-green-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-green-700"
               >
                 <span class="material-symbols-rounded text-base">task_alt</span>
-                ส่งสินค้าจุดที่ {{ (nextDelivery(job)!.deliverySequence ?? 0) + 1 }}
+                ดำเนินการส่งสินค้า
               </button>
             </div>
           </template>
@@ -309,42 +290,6 @@
         </div>
       </div>
     </Teleport>
-
-    <!-- Job Details — card แสดงรายละเอียดงาน ไม่เกี่ยวกับ flow หลักเลย กดปิดได้ตลอดเวลา -->
-    <Teleport to="body" v-if="showJobDetails && job">
-      <div @click="showJobDetails = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-end justify-center">
-        <div @click.stop class="w-full bg-white rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
-          <div class="w-10 h-1.5 bg-border rounded-full mx-auto mt-3 mb-1"></div>
-          <div class="flex items-center justify-between px-5 py-3 border-b border-border">
-            <div class="font-bold text-text text-lg truncate">รายละเอียดงาน {{ bookingTitle(job) }}</div>
-            <button @click="showJobDetails = false" class="w-11 h-11 -mr-2 flex-shrink-0 rounded-lg hover:bg-surface-2 flex items-center justify-center">
-              <span class="material-symbols-rounded text-xl">close</span>
-            </button>
-          </div>
-          <div class="p-5 space-y-3">
-            <div class="grid grid-cols-2 gap-3 text-sm">
-              <div class="bg-surface-2 rounded-lg p-3">
-                <div class="text-xs text-muted mb-0.5">ลูกค้า</div>
-                <div class="font-semibold text-text truncate">{{ job.customer || '-' }}</div>
-              </div>
-              <div class="bg-surface-2 rounded-lg p-3">
-                <div class="text-xs text-muted mb-0.5">น้ำมันที่ต้องรับ</div>
-                <div class="font-semibold text-text">{{ job.fuelLiters || 0 }} ล.</div>
-              </div>
-            </div>
-            <div class="text-xs font-bold text-muted uppercase tracking-wide pt-1">รายการสินค้า ({{ job.items.length }})</div>
-            <div v-for="item in job.items" :key="item.id" class="rounded-lg border border-border p-3 space-y-1">
-              <div class="font-semibold text-text">{{ item.product }} <span class="font-normal text-muted">{{ item.qty }} {{ item.unit }}</span></div>
-              <div class="text-sm text-muted">{{ item.siteName }} ({{ item.province }} · {{ item.district }})</div>
-              <div v-if="item.jobType" class="text-sm text-muted">ประเภทงาน: {{ item.jobType }}</div>
-            </div>
-          </div>
-          <div class="px-5 py-4 border-t border-border">
-            <button @click="showJobDetails = false" class="w-full h-12 rounded-lg bg-surface-2 text-text text-base font-semibold">ปิด</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -414,11 +359,6 @@ const showBottomActionBar = computed(() => {
   if ((job.value.status === 'IN_TRANSIT' || job.value.status === 'DELIVERING') && !nextDelivery(job.value)) return true
   return false
 })
-
-// --- ACCEPTED step: ปุ่ม "ยืนยัน"/"แสดงรายละเอียด" ไม่เกี่ยวกับ flow หลักเลย (ดู template's comment) ---
-/** กดครั้งเดียวค้างไว้ตลอด ไม่รีเซตกลับเพราะเปลี่ยนอย่างอื่น — แค่ขยายการ์ดให้เห็นสินค้า/จำนวน ไม่ส่งผลกับสถานะงานใดๆ */
-const acceptedConfirmed = ref(false)
-const showJobDetails = ref(false)
 
 /** บังคับต้องมีรูป "ขึ้นสินค้า" ก่อนถึงจะกด "เริ่มขนส่ง" ได้ — เป็น UI-level gate เฉพาะปุ่มของคนขับเท่านั้น
  *  (startTransit ฝั่ง store ไม่ได้บังคับ เพราะออฟฟิศยังต้องกดดันงานต่อเองได้จาก BookingActionMenu.vue แม้ไม่มีรูป) */
