@@ -139,19 +139,15 @@
                   </div>
                 </td>
                 <td class="px-4 py-3">
+                  <!-- หน้านี้โชว์เฉพาะงานที่ "ยืนยันการจบงาน" แล้วเท่านั้น (ดู isBookingConfirmedForBilling ใน
+                       useCompletedJobs.ts) งานที่มี podReviewStatus เลยเป็น APPROVED เสมอ ไม่มีทาง PENDING_REVIEW
+                       โผล่มาที่นี่ได้อีก — เอาปุ่มอนุมัติ/ตีกลับออก (ย้ายไปตรวจที่ตาราง "งานที่กำลังขนส่ง" ใน
+                       BookingView.vue แทนแล้ว) เหลือไว้แค่แสดงสถานะให้ดู -->
                   <div v-if="booking.podReviewStatus" class="space-y-1">
                     <span :class="['text-xs font-semibold px-2 py-1 rounded-full inline-block', podReviewStatusClass[booking.podReviewStatus]]">
                       {{ podReviewStatusLabel[booking.podReviewStatus] }}
                     </span>
-                    <div v-if="booking.podReviewStatus === 'PENDING_REVIEW'" class="flex gap-1">
-                      <button @click="approvePod(booking)" class="btn-sm !border-green-200 !bg-green-50 !text-green-700" title="อนุมัติ">
-                        <span class="material-symbols-rounded text-base">check_circle</span>
-                      </button>
-                      <button @click="rejectPod(booking)" class="btn-sm !border-red-200 !bg-red-50 !text-red-700" title="ตีกลับ">
-                        <span class="material-symbols-rounded text-base">cancel</span>
-                      </button>
-                    </div>
-                    <div v-else-if="booking.podReviewNote" class="text-[11px] text-muted">{{ booking.podReviewNote }}</div>
+                    <div v-if="booking.podReviewNote" class="text-[11px] text-muted">{{ booking.podReviewNote }}</div>
                   </div>
                   <span v-else class="text-xs text-muted">-</span>
                 </td>
@@ -292,17 +288,6 @@ const podPreview = ref<{ docNo: string; photos: { label: string; url: string }[]
 const openPod = (booking: Booking) => {
   const photos = bookingPhotos(booking)
   podPreview.value = photos.length ? { docNo: booking.docNo, photos } : null
-}
-
-/** ตรวจสอบ POD ที่คนขับส่งผ่านแอปแล้วอนุมัติ/ตีกลับ (ดู reviewPod ใน stores/booking.ts) — อนุมัติแล้วเท่านั้นถึงจะออกใบวางบิลได้ */
-const approvePod = (booking: Booking) => {
-  if (!confirm(`ยืนยันอนุมัติ POD ของงาน ${booking.docNo}? หลังอนุมัติจะสามารถออกใบวางบิลได้`)) return
-  bookingStore.reviewPod(booking.id, 'APPROVED')
-}
-const rejectPod = (booking: Booking) => {
-  const note = prompt(`เหตุผลที่ตีกลับ POD ของงาน ${booking.docNo} (ไม่บังคับ):`)
-  if (note === null) return
-  bookingStore.reviewPod(booking.id, 'REJECTED', note.trim() || undefined)
 }
 
 /** งานที่หน้านี้แสดงเป็น DELIVERED เสมอ — Reset ถอยกลับไปเป็น DELIVERING หนึ่งขั้น (reuse bookingStore.resetBookingStatus

@@ -253,6 +253,13 @@ export interface Booking {
   podReviewStatus?: PodReviewStatus
   /** เหตุผลที่ออฟฟิศ REJECTED (ถ้ามี) ให้คนขับเห็นว่าต้องแก้อะไร */
   podReviewNote?: string
+  /** เสมียนกดยืนยันการจบงาน — ขั้นตอนสุดท้ายจริงก่อนนำไปวางบิล แยกออกจาก podReviewStatus โดยเจตนา (ตรวจสอบ POD =
+   *  ตรวจคุณภาพหลักฐานว่ารูปตรงกับข้อมูลในระบบไหม, ยืนยันจบงาน = ปิดงานจริงพร้อมนำไปวางบิลได้) กดได้เฉพาะงานที่ POD
+   *  อนุมัติแล้ว (podReviewStatus === 'APPROVED') เท่านั้น — ดู confirmJobCompletion ใน stores/booking.ts งานที่ไม่เคย
+   *  ผ่านขั้นตอนตรวจสอบ POD เลย (ออฟฟิศปิดงานเอง, podReviewStatus undefined) ไม่ต้องรอ field นี้ ถือว่าผ่านโดยปริยาย
+   *  เหมือนเดิม (ดู isBookingConfirmedForBilling ใน utils/bookingStatus.ts) */
+  completionConfirmedAt?: Date
+  completionConfirmedBy?: string
   /** เช็คตั๋ว (ตั๋วชั่งน้ำหนัก/ใบส่งของ ฯลฯ ที่ออฟฟิศต้องตรวจก่อนวางบิล) — ไม่มีค่า/false = ยังไม่เช็ค, true = เช็คแล้ว
    *  toggle ได้จาก Booking List โดยตรง (ดู bookingStore.toggleTicketChecked) เป็นอิสระจาก BookingStatus/BillingStatus เดิมทั้งหมด */
   ticketChecked?: boolean

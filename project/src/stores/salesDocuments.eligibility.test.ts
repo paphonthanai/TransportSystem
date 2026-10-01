@@ -87,6 +87,27 @@ describe('createBillingFromBookings — eligibility guards', () => {
 
     expect(salesDocs.createBillingFromBookings([officeCompleted.id])).not.toBeNull()
   })
+
+  /** "ตรวจสอบ POD" (podReviewStatus) กับ "ยืนยันการจบงาน" (completionConfirmedAt) เป็นคนละขั้นตอนกันโดยเจตนา — POD
+   *  อนุมัติแล้วอย่างเดียวไม่พอ ต้องกดยืนยันจบงานแยกอีกขั้นก่อนถึงจะวางบิลได้ (ดู isBookingConfirmedForBilling ใน
+   *  utils/bookingStatus.ts, confirmJobCompletion ใน stores/booking.ts) */
+  it('rejects (returns null) when POD is APPROVED but job completion has not been confirmed yet', () => {
+    const bookingStore = useBookingStore()
+    const salesDocs = useSalesDocumentsStore()
+    const approvedNotConfirmed = makeBooking({ customer: 'ลูกค้า A', category: 'cements', status: 'DELIVERED', podReviewStatus: 'APPROVED' })
+    bookingStore.bookings.push(approvedNotConfirmed)
+
+    expect(salesDocs.createBillingFromBookings([approvedNotConfirmed.id])).toBeNull()
+  })
+
+  it('allows billing once POD is APPROVED and job completion has been explicitly confirmed', () => {
+    const bookingStore = useBookingStore()
+    const salesDocs = useSalesDocumentsStore()
+    const confirmed = makeBooking({ customer: 'ลูกค้า A', category: 'cements', status: 'DELIVERED', podReviewStatus: 'APPROVED', completionConfirmedAt: new Date() })
+    bookingStore.bookings.push(confirmed)
+
+    expect(salesDocs.createBillingFromBookings([confirmed.id])).not.toBeNull()
+  })
 })
 
 /** Business Rule: "IN_TRANSIT สามารถออกใบวางบิลได้ UNIVERSALLY" — ไม่จำกัดแค่งานที่เคย DELIVERED แล้วถูก Reset

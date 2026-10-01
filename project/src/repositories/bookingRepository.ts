@@ -12,7 +12,19 @@ import type { Booking } from '@/types'
  */
 const COLLECTION = 'bookings'
 
-const BOOKING_DATE_FIELDS = ['shipDate', 'returnDate', 'loadingDate', 'createdAt', 'dispatchedAt', 'fuelReceivedAt', 'transitStartedAt', 'goodsReceivedAt', 'completedAt', 'billedAt'] as const
+const BOOKING_DATE_FIELDS = [
+  'shipDate',
+  'returnDate',
+  'loadingDate',
+  'createdAt',
+  'dispatchedAt',
+  'fuelReceivedAt',
+  'transitStartedAt',
+  'goodsReceivedAt',
+  'completedAt',
+  'billedAt',
+  'completionConfirmedAt',
+] as const
 const JOB_ITEM_DATE_FIELDS = ['pickedUpAt', 'deliveredAt', 'loadingDate'] as const
 
 function serializeValue(value: unknown): unknown {

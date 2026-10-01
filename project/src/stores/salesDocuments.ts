@@ -9,6 +9,7 @@ import { salesDocumentRepository } from '@/repositories/salesDocumentRepository'
 import { salesDocumentItemRepository } from '@/repositories/salesDocumentItemRepository'
 import { computeRowAmount, computeRowDiscountBaht, computeRowVat, computeDocumentTotals } from '@/utils/documentTotals'
 import { sortBookingsForDocumentMerge } from '@/utils/bookingMergeSort'
+import { isBookingConfirmedForBilling } from '@/utils/bookingStatus'
 import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
 import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
 import { useAuditLogStore } from './auditLog'
@@ -1334,8 +1335,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   /** งานขนส่งที่ดึงเข้ามาแสดงในหน้า Manual โดยตรง (ไม่ผ่านใบเสนอราคา/ใบวางบิลต้นทาง) — เกิดจากปุ่ม "ดึงข้อมูลจากงานขนส่ง"
    *  ในหน้า Manual เอง (BillingFormView.vue) ไม่ใช่ sourceQuotationId/sourceBillingId เดิม เช็คเงื่อนไขเดียวกับ
    *  createBillingFromBookings ทุกประการ (ลูกค้าเดียวกัน, Feed เดียวกัน, ยังไม่ถูก claim, สถานะงานตาม billingRuleStore,
-   *  POD ต้องยืนยันแล้ว/ไม่ถูกตีกลับ) ก่อน claim จริง — คืน true ถ้าผ่านเงื่อนไข (หรือไม่มีงานขนส่งให้ claim เลย) คืน
-   *  false ถ้าเงื่อนไขไม่ผ่าน (ผู้เรียกต้องคืน null ทันที) */
+   *  ต้อง "ยืนยันการจบงาน" แล้ว — ดู isBookingConfirmedForBilling) ก่อน claim จริง — คืน true ถ้าผ่านเงื่อนไข (หรือไม่มี
+   *  งานขนส่งให้ claim เลย) คืน false ถ้าเงื่อนไขไม่ผ่าน (ผู้เรียกต้องคืน null ทันที) */
   function isDirectBookingClaimEligibleForBilling(data: ManualDocumentFormData): boolean {
     if (!data.bookingIds?.length || data.sourceBillingId || data.sourceQuotationId) return true
     const bookingStore = useBookingStore()
@@ -1346,7 +1347,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const sameCustomer = bookings.every((b) => b.customer === data.customer)
     const sameCategory = bookings.every((b) => b.category === bookings[0].category)
     const allEligible = bookings.every((b) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId)
-    const allPodApproved = bookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    const allPodApproved = bookings.every((b) => isBookingConfirmedForBilling(b))
     return sameCustomer && sameCategory && allEligible && allPodApproved
   }
 
@@ -1495,7 +1496,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const bookings = targetBookings as Booking[]
     const sameCustomer = bookings.every((b) => b.customer === data.customer)
     const sameCategory = bookings.every((b) => b.category === bookings[0].category)
-    const allPodApproved = bookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    const allPodApproved = bookings.every((b) => isBookingConfirmedForBilling(b))
     const allEligible = bookings.every((b) => b.status === 'DELIVERED' && !b.taxInvoiceDocId)
     return sameCustomer && sameCategory && allEligible && allPodApproved
   }
@@ -1684,7 +1685,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     if (targetBookings.some((b) => !b)) return false
     const bookings = targetBookings as Booking[]
     const sameCustomer = bookings.every((b) => b.customer === data.customer)
-    const allPodApproved = bookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    const allPodApproved = bookings.every((b) => isBookingConfirmedForBilling(b))
     const allEligible = bookings.every((b) => b.status === 'DELIVERED' && !b.receiptDocId)
     return sameCustomer && allEligible && allPodApproved
   }
@@ -1886,11 +1887,11 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
      *  ที่ IN_TRANSIT, และงาน partial delivery (บาง item ยัง PENDING) เพราะการออกใบวางบิลไม่แตะ/ไม่ต้องพึ่งข้อมูลระดับ
      *  item เลย (ดู bookingBillingRow/tripDescription ด้านล่าง — อ่านแค่ tripFee/extraCharges/discount ระดับ booking เท่านั้น) */
     const allEligible = targetBookings.every((b) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId)
-    /** เพิ่มเข้ามาตาม Requirement: งานที่ "ยังไม่ยืนยัน" (POD ยังรอตรวจสอบ/ถูกตีกลับ) ห้ามออกใบวางบิลได้ — เดิมฟังก์ชันนี้
-     *  จุดเดียวที่ไม่เช็คเงื่อนไขนี้ (createTaxInvoiceFromBookings/createReceiptFromBookings เช็คอยู่แล้วก่อนหน้านี้)
-     *  ใช้เงื่อนไขเดียวกันเป๊ะ: podReviewStatus undefined (งานที่ออฟฟิศปิดเอง ไม่ผ่านขั้นตอนนี้ ถือว่าผ่านโดยปริยาย) หรือ
-     *  APPROVED เท่านั้นถึงจะวางบิลได้ PENDING_REVIEW/REJECTED ห้ามเด็ดขาด */
-    const allPodApproved = targetBookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    /** งานที่ยังไม่ "ยืนยันการจบงาน" (ขั้นตอนสุดท้ายจริงที่เสมียนกดแยกต่างหากจากการตรวจสอบ POD) ห้ามออกใบวางบิลได้ —
+     *  ดู isBookingConfirmedForBilling ใน utils/bookingStatus.ts: งานที่ไม่เคยผ่านขั้นตรวจสอบ POD เลย (ออฟฟิศปิดงานเอง)
+     *  ถือว่าผ่านโดยปริยายเหมือนเดิม ส่วนงานที่ผ่านแอปคนขับมาต้องรอ completionConfirmedAt ซึ่งกดได้เฉพาะหลัง POD
+     *  อนุมัติแล้วเท่านั้น (ดู confirmJobCompletion ใน stores/booking.ts) */
+    const allPodApproved = targetBookings.every((b) => isBookingConfirmedForBilling(b))
     if (!sameCustomer || !sameCategory || !allEligible || !allPodApproved) return null
 
     const documentSettingsStore = useDocumentSettingsStore()
@@ -1961,7 +1962,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const sameCategory = targetBookings.every((b) => b.category === targetBookings[0].category)
     /** ต้องผ่านการตรวจสอบ POD ของออฟฟิศก่อนเหมือนใบวางบิล (เดิมฟังก์ชันนี้ไม่เช็คเช่นกัน — ช่องโหว่ให้ออกใบกำกับภาษีได้
      *  ก่อน POD ผ่านการอนุมัติ ทั้งที่ใบวางบิลบังคับไว้แล้ว) */
-    const allPodApproved = targetBookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    const allPodApproved = targetBookings.every((b) => isBookingConfirmedForBilling(b))
     /** เช็คเฉพาะ taxInvoiceDocId ของตัวเอง เป็นอิสระจาก billingNoteDocId — งานที่อยู่ในใบวางบิลรวมแล้วยังออกใบแจ้งหนี้รวมตรงจาก
      *  งานขนส่งได้อีก (ไม่ต้องผ่าน/แปลงจากใบวางบิลนั้นก่อน) ดู createBillingFromBookings */
     const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && !b.taxInvoiceDocId)
@@ -2110,7 +2111,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const targetBookings = sortBookingsForDocumentMerge(bookingStore.bookings.filter((b) => bookingIds.includes(b.id)))
     if (targetBookings.length !== bookingIds.length) return null
     const sameCustomer = targetBookings.every((b) => b.customer === targetBookings[0].customer)
-    const allPodApproved = targetBookings.every((b) => b.podReviewStatus !== 'PENDING_REVIEW' && b.podReviewStatus !== 'REJECTED')
+    const allPodApproved = targetBookings.every((b) => isBookingConfirmedForBilling(b))
     const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && !b.receiptDocId)
     if (!sameCustomer || !allEligible || !allPodApproved) return null
 
@@ -2678,7 +2679,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const bookingStore = useBookingStore()
     return d.bookingIds.every((bid) => {
       const booking = bookingStore.bookings.find((b) => b.id === bid)
-      return !booking || (booking.podReviewStatus !== 'PENDING_REVIEW' && booking.podReviewStatus !== 'REJECTED')
+      return !booking || isBookingConfirmedForBilling(booking)
     })
   }
 

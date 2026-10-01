@@ -956,6 +956,20 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
+   * เสมียนกดยืนยันการจบงาน — ขั้นตอนสุดท้ายจริงก่อนนำไปวางบิล แยกออกจาก reviewPod โดยเจตนา (ตรวจสอบ POD = ตรวจคุณภาพ
+   * หลักฐานว่ารูปตรงกับข้อมูลในระบบไหม, ยืนยันจบงาน = ปิดงานจริงพร้อมนำไปวางบิลได้ — ดู isBookingConfirmedForBilling
+   * ใน utils/bookingStatus.ts ที่ใช้ field นี้เป็นเงื่อนไขวางบิล/ออกเอกสารขายทุกเส้นทาง) กดได้เฉพาะงานที่ POD อนุมัติ
+   * แล้วเท่านั้น (ต้องผ่านขั้นตรวจสอบ POD ก่อนเสมอ) จบงานแล้วจะไปโผล่ที่หน้า "งานเสร็จสิ้น" (ดู useCompletedJobs.ts)
+   */
+  function confirmJobCompletion(id: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking || booking.status !== 'DELIVERED' || booking.podReviewStatus !== 'APPROVED') return
+    booking.completionConfirmedAt = new Date()
+    booking.completionConfirmedBy = authStore.userName || undefined
+    addLog(`ยืนยันการจบงาน ${booking.docNo}`, { bookingId: booking.id })
+  }
+
+  /**
    * ซ่อมข้อมูลเก่า: ตัดวันที่/เวลาที่ปนอยู่ท้ายชื่อหน้างาน (siteName) ออก — เกิดจากข้อมูลทดสอบ Regression ยุคแรกๆ ที่พิมพ์
    * วันที่/เวลากำกับต่อท้ายชื่อไว้ตรงๆ เช่น "Site A (14/08 08:00)" หรือ "Site D (20/08)" ทำให้เอกสารที่พิมพ์ชื่อหน้างาน
    * (ใบสั่งสินค้า/ใบวางบิล/ใบแจ้งหนี้) มีวันที่ปนอยู่ในข้อความรายการทั้งที่ Requirement ปัจจุบันไม่ต้องการให้มี
@@ -1190,6 +1204,7 @@ export const useBookingStore = defineStore('booking', () => {
     finishDriverJob,
     stripDateSuffixFromSiteNames,
     reviewPod,
+    confirmJobCompletion,
     bookingsInBatch,
     addBookingsToBatch,
     updateBatch,

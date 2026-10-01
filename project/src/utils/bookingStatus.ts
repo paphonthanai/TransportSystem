@@ -1,4 +1,16 @@
-import type { BookingStatus, BillingStatus, PodReviewStatus, BookingCategory } from '@/types'
+import type { Booking, BookingStatus, BillingStatus, PodReviewStatus, BookingCategory } from '@/types'
+
+/**
+ * เงื่อนไขเดียวที่ใช้ร่วมกันทุกจุดที่ต้องเช็คว่า "งานนี้คอนเฟิร์มพร้อมนำไปวางบิล/ออกเอกสารขายแล้วหรือยัง" (ใบวางบิล/
+ * ใบกำกับภาษี/ใบเสร็จ ทุกเส้นทาง ทั้งสร้างตรงจากงานขนส่งและสร้างจากเอกสารต้นทาง) — แยกเจตนาจาก "ตรวจสอบ POD"
+ * (podReviewStatus บอกแค่ว่าหลักฐานรูปถ่ายตรงกับข้อมูลในระบบไหม) อย่างชัดเจน: งานที่ไม่เคยผ่านขั้นตอนตรวจสอบ POD เลย
+ * (ออฟฟิศปิดงานเอง ไม่ผ่านแอปคนขับ — podReviewStatus เป็น undefined) ถือว่าคอนเฟิร์มแล้วโดยปริยาย เหมือนเดิมทุกประการ
+ * ส่วนงานที่ผ่านขั้นตอนนี้มา (podReviewStatus มีค่า) ต้องรอ "ยืนยันการจบงาน" (completionConfirmedAt) อีกขั้นหนึ่ง —
+ * ไม่ใช่แค่ POD อนุมัติเฉยๆ เพราะ "ตรวจสอบ POD" กับ "ยืนยันการจบงาน (ขั้นสุดท้ายจริง)" เป็นคนละขั้นตอนกันตาม Requirement
+ */
+export function isBookingConfirmedForBilling(b: Pick<Booking, 'podReviewStatus' | 'completionConfirmedAt'>): boolean {
+  return !b.podReviewStatus || !!b.completionConfirmedAt
+}
 
 /** ป้ายกำกับ Feed (ประเภทสินค้า) ที่ใช้ทั้งตอนสร้างใบวางบิล (บังคับ 1 Feed ต่อใบวางบิล) และตอนพิมพ์ใบกำกับภาษี/ใบเสร็จ
  *  (ชื่องาน/รายละเอียดรายการ) — booking.category เป็นฟิลด์เดียวที่บอก "ประเภทสินค้า" ได้เชื่อถือได้ เพราะรายได้แต่ละ Feed

@@ -259,6 +259,9 @@
                     @complete="openCompleteDialog(booking)"
                     @delete="deleteBooking(booking)"
                     @cancel="onCancelDispatch(booking)"
+                    @approve-pod="approvePod(booking)"
+                    @edit-pod="router.push(`/job/${booking.id}`)"
+                    @confirm-completion="onConfirmJobCompletion(booking)"
                   />
                 </div>
               </td>
@@ -967,11 +970,12 @@ const inTransitBookings = computed(() => {
   return fleetBookings.value
     .filter(
       (b) =>
-        // งานที่คนขับกด "ดำเนินการเสร็จสิ้น" แล้ว (DELIVERED) แต่ POD ยังรอออฟฟิศตรวจสอบ (PENDING_REVIEW) ต้องยังโชว์
-        // อยู่ในตารางนี้ต่อ ไม่ใช่หายไปทันที — ให้ตรงกับ Requirement ที่ต้องการเห็นงานค้างจนกว่าเสมียนจะกดยืนยัน (reviewPod
-        // ที่ CompletedJobsView.vue) เข้าเงื่อนไขวางบิลได้ (ดู createBillingFromBookings's allPodApproved) พอดี
+        // งานที่คนขับกด "ดำเนินการเสร็จสิ้น" แล้ว (DELIVERED) แต่ยังไม่ผ่านทั้งตรวจสอบ POD และ "ยืนยันการจบงาน" (ขั้น
+        // สุดท้ายจริง — ดู confirmJobCompletion) ต้องยังโชว์อยู่ในตารางนี้ต่อ ไม่ใช่หายไปทันที (ครอบคลุมทั้ง PENDING_REVIEW
+        // และ APPROVED-แต่ยังไม่กดยืนยันจบงาน) งานที่ออฟฟิศปิดเอง (podReviewStatus undefined) ไม่เข้าเงื่อนไขนี้ หายไป
+        // ทันทีเหมือนเดิม — ให้ตรงกับ isBookingConfirmedForBilling ใน utils/bookingStatus.ts พอดี
         ((b.status === 'ACCEPTED' || b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') ||
-          (b.status === 'DELIVERED' && b.podReviewStatus === 'PENDING_REVIEW')) &&
+          (b.status === 'DELIVERED' && !!b.podReviewStatus && !b.completionConfirmedAt)) &&
         (!q || matchesSearch(b, q))
     )
     .sort((a, b) => new Date(b.transitStartedAt || 0).getTime() - new Date(a.transitStartedAt || 0).getTime())
@@ -1322,6 +1326,23 @@ const openCompleteDialog = (booking: Booking) => {
 const onCancelDispatch = (booking: Booking) => {
   if (!confirm(`ยกเลิกการจ่ายงาน ${booking.docNo} และคืนกลับไปที่ตารางจองงาน?`)) return
   bookingStore.declineDispatch(booking.id)
+}
+
+/** ตรวจสอบ POD ที่คนขับส่งผ่านแอปแล้ว (ดู reviewPod ใน stores/booking.ts) — แค่ตรวจว่ารูปตรงกับข้อมูลในระบบไหม ไม่ใช่
+ *  ขั้นปิดงาน (ดู confirmJobCompletion แยกต่างหากด้านล่าง) ย้ายมาไว้ที่ตารางนี้ด้วย (เดิมมีแค่ที่หน้า "งานเสร็จสิ้น"
+ *  CompletedJobsView.vue) ให้ออฟฟิศตรวจได้จากจุดที่กำลังดูตารางขนส่งอยู่แล้ว ไม่ต้องสลับหน้า — ไม่มีปุ่ม "ตีกลับ" แยก
+ *  เพราะเจตนาของขั้นนี้คือตรวจสอบแล้วแก้ไขให้ถูกต้องตรงนั้น (แนบรูปใหม่แทนที่ที่หน้ารายละเอียดงาน) ไม่ใช่ส่งกลับไปให้
+ *  คนขับทำใหม่ */
+const approvePod = (booking: Booking) => {
+  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${booking.docNo} ตรงกับข้อมูลในระบบ?`)) return
+  bookingStore.reviewPod(booking.id, 'APPROVED')
+}
+
+/** เสมียนกดยืนยันการจบงาน — ขั้นตอนสุดท้ายจริงก่อนนำไปวางบิล แยกจากการตรวจสอบ POD ด้านบนโดยเจตนา (ดู
+ *  bookingStore.confirmJobCompletion ใน stores/booking.ts) จบงานแล้วจะไปโผล่ที่หน้า "งานเสร็จสิ้น" แทน */
+const onConfirmJobCompletion = (booking: Booking) => {
+  if (!confirm(`ยืนยันการจบงาน ${booking.docNo}? หลังยืนยันจะสามารถนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
+  bookingStore.confirmJobCompletion(booking.id)
 }
 
 const addAdjustmentRow = () => {

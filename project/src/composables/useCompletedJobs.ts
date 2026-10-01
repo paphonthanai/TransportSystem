@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
+import { isBookingConfirmedForBilling } from '@/utils/bookingStatus'
 import type { Booking, BookingCategory } from '@/types'
 
 /** สถานะเอกสารทั้ง 3 ประเภท (billingNoteDocId/taxInvoiceDocId/receiptDocId) เป็นอิสระต่อกันโดยเจตนา ไม่ใช่ enum เดียวแบบ
@@ -54,6 +55,10 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     const to = f.dateTo ? new Date(f.dateTo) : null
     return bookingStore.bookings
       .filter((b) => b.status === 'DELIVERED')
+      // งานที่จบผ่านแอปคนขับ (มี podReviewStatus) ต้องรอ "ยืนยันการจบงาน" ก่อนถึงจะมาอยู่ในหน้านี้ — อยู่ในตาราง
+      // "งานที่กำลังขนส่ง" (BookingView.vue) ไปก่อนจนกว่าจะกดยืนยัน (ดู isBookingConfirmedForBilling) งานที่ออฟฟิศ
+      // ปิดเอง (podReviewStatus undefined) ไม่ต้องรอ โผล่ที่นี่ทันทีเหมือนเดิม
+      .filter((b) => isBookingConfirmedForBilling(b))
       .filter((b) => !f.fleet || b.category === f.fleet)
       .filter((b) => !q || matchesSearch(b, q))
       .filter((b) => !f.customer || b.customer === f.customer)
