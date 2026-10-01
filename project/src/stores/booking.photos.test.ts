@@ -7,7 +7,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
 })
 
-describe('รูปตอนขึ้นสินค้า/ส่งของ (ไม่บังคับ)', () => {
+describe('รูปตอนขึ้นสินค้า (ไม่บังคับ) / รูปสินค้าตอนลง (บังคับ) / รูปใบส่งของ (ไม่บังคับ)', () => {
   it('deliverJobItem เก็บรูปสินค้าตอนลงและรูปใบส่งของได้พร้อมกัน', () => {
     const store = useBookingStore()
     const item = makeJobItem()
@@ -21,7 +21,8 @@ describe('รูปตอนขึ้นสินค้า/ส่งของ (�
     expect(item.deliveryStatus).toBe('DELIVERED')
   })
 
-  it('ส่งของได้แม้ไม่มีรูปเลย (ไม่บังคับ)', () => {
+  /** ตามที่ตกลงให้บังคับรูปสินค้าตอนลงก่อนยืนยันส่งของได้ (เดิมไม่บังคับ) — ไม่มีรูปมาด้วยต้องไม่ทำอะไรเลย */
+  it('ส่งของไม่สำเร็จถ้าไม่มีรูปสินค้าตอนลง (บังคับแล้ว)', () => {
     const store = useBookingStore()
     const item = makeJobItem()
     const b = makeBooking({ status: 'IN_TRANSIT', items: [item] })
@@ -29,7 +30,7 @@ describe('รูปตอนขึ้นสินค้า/ส่งของ (�
 
     store.deliverJobItem(b.id, item.id, undefined, 'สมชาย')
 
-    expect(item.deliveryStatus).toBe('DELIVERED')
+    expect(item.deliveryStatus).not.toBe('DELIVERED')
     expect(item.podImage).toBeUndefined()
     expect(item.deliveryNoteImage).toBeUndefined()
   })

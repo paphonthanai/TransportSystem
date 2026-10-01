@@ -553,7 +553,6 @@ export const useBookingStore = defineStore('booking', () => {
   ) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
-    const previousPlate = booking.plate
     booking.plate = plate
     if (extra?.driverName) {
       booking.driverName = extra.driverName
@@ -575,24 +574,10 @@ export const useBookingStore = defineStore('booking', () => {
     // การวางบิลแยกอิสระจากการจัดรถโดยเจตนา — booking.billingStatus ยังคง UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล (ดู addBookingsToBatch)
     const alreadyAccepted = booking.status !== 'WAITING_DISPATCH'
     if (alreadyAccepted) {
-      /**
-       * Phase E.1 (Test 8) — เปลี่ยนรถจริง (plate ไม่เหมือนเดิม ไม่ใช่แค่แก้ชื่อคนขับบนรถคันเดิม) ระหว่างสถานะ
-       * IN_TRANSIT/DELIVERING (หลังผ่าน LOADED มาแล้ว = ของทุกจุดเคยถูกโหลดขึ้นรถคันเดิมจริง) — จุดที่ "ยังไม่ส่งของ"
-       * (deliveryStatus !== DELIVERED) ต้องยืนยันว่าย้ายขึ้นรถคันใหม่แล้วก่อนถึงจะส่งต่อได้ (ดู confirmRemainingPickup
-       * ด้านล่าง + nextPickup ใน utils/driverJobs.ts ที่ Driver UI ใช้เช็คว่ามีจุดรอยืนยันค้างอยู่หรือไม่) จุดที่ส่งไปแล้ว
-       * (DELIVERED) ไม่แตะเด็ดขาด — ห้าม reset ประวัติที่เสร็จแล้วตาม Business Rule (ดู resetBookingStatus ด้านบนที่ยึด
-       * หลักเดียวกัน) เทียบจาก plate เท่านั้นเพราะระบบนี้ไม่มี field vehicleId แยกต่างหาก (plate คือ Source of Truth
-       * เดียวที่มีอยู่จริงสำหรับ "รถคันไหน" — ตรวจแล้วก่อนแก้)
-       */
-      const vehicleChangedMidDelivery = previousPlate !== plate && (booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING')
-      if (vehicleChangedMidDelivery) {
-        booking.items.forEach((item) => {
-          if (item.deliveryStatus !== 'DELIVERED') {
-            item.pickupStatus = undefined
-          }
-        })
-        addLog(`เปลี่ยนรถระหว่างส่งของ ${booking.docNo}: ต้องยืนยันรับสินค้าที่เหลือขึ้นรถคันใหม่ (${plate}) ก่อนส่งต่อ`, { bookingId: booking.id })
-      }
+      // เดิมเปลี่ยนรถจริงระหว่าง IN_TRANSIT/DELIVERING ต้องกดยืนยัน "รับสินค้าขึ้นรถคันใหม่" ก่อนถึงจะส่งต่อได้
+      // (Phase E.1 Test 8 — ดู confirmRemainingPickup ที่ถูกลบไปแล้ว) ตัดขั้นยืนยันแยกนี้ออกตามที่ตกลง เพราะตอนนี้
+      // การส่งของแต่ละจุดบังคับถ่ายรูปสินค้าตอนลงอยู่แล้ว (ดู deliverJobItem) ถือเป็นการยืนยันที่แน่นหนากว่าปุ่มกดเฉยๆ
+      // เปลี่ยนรถระหว่างทางจึงแค่เปลี่ยน plate/driverName แล้วส่งต่อได้ทันที ไม่ต้องยืนยันซ้ำ ไม่แตะ pickupStatus เลย
       addLog(`เปลี่ยนรถ/คนขับ ${booking.docNo} เป็นทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''}`, { bookingId: booking.id })
       return
     }
@@ -807,24 +792,6 @@ export const useBookingStore = defineStore('booking', () => {
     }
   }
 
-  /**
-   * Phase E.1 (Test 8) — ยืนยันว่าสินค้าที่เหลือ (ยังไม่ส่งของ) ถูกโหลดขึ้นรถคันใหม่แล้ว หลังเปลี่ยนคนขับ/รถระหว่าง
-   * ส่งของจริง (ดู dispatchBooking ที่ล้าง pickupStatus ของ item ที่ยังไม่ส่งไว้เมื่อตรวจพบว่า plate เปลี่ยนจริงระหว่าง
-   * IN_TRANSIT/DELIVERING) — ตั้งใจแยกจาก pickupJobItem โดยเฉพาะ เพราะ pickupJobItem ใช้ได้เฉพาะสถานะ LOADING เท่านั้น
-   * และมี side effect ที่ไม่ต้องการตรงนี้ (ตัดสต๊อกซ้ำ — สต๊อกถูกตัดไปแล้วตั้งแต่รับสินค้าครั้งแรก, เลื่อนสถานะงานกลับเป็น
-   * LOADED — booking.status ต้องคงเป็น IN_TRANSIT/DELIVERING เดิม ไม่ถอยหลัง) ไม่แตะ deliverySequence เลย (เรียงลำดับ
-   * ส่งของเดิมยังถูกต้องอยู่ ไม่ต้องคำนวณใหม่)
-   */
-  function confirmRemainingPickup(bookingId: string, itemId: string) {
-    const booking = bookings.value.find((b) => b.id === bookingId)
-    if (!booking || (booking.status !== 'IN_TRANSIT' && booking.status !== 'DELIVERING')) return
-    const item = booking.items.find((i) => i.id === itemId)
-    if (!item || item.pickupStatus === 'PICKED_UP' || item.deliveryStatus === 'DELIVERED') return
-    item.pickupStatus = 'PICKED_UP'
-    item.pickedUpAt = new Date()
-    addLog(`ยืนยันรับสินค้าที่เหลือขึ้นรถคันใหม่ ${booking.docNo}: ${item.product} (${item.siteName})`, { bookingId: booking.id })
-  }
-
   /** คนขับกดเริ่มขนส่ง: LOADED -> IN_TRANSIT (flow เก่า ยังรองรับงานที่ค้างอยู่ในสถานะนี้ก่อนตัดขั้นตอน) หรือ
    *  ACCEPTED -> IN_TRANSIT ตรงๆ (flow ใหม่ที่ตัดขั้น FUEL_RECEIVED/LOADING/LOADED ออก — ดู DriverJobDetailView.vue
    *  ถ่ายภาพสินค้าระหว่าง ACCEPTED เป็นขั้นตอนไม่บังคับ ไม่เปลี่ยนสถานะ) */
@@ -860,17 +827,19 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
-   * คนขับกดส่งของสำเร็จทีละรายการ (JobItem) — บันทึกชื่อผู้รับของรายการนั้นโดยเฉพาะ ไม่บังคับแนบ POD ก่อน (POD เป็นขั้นตอน
-   * แยกที่ทำได้ทีหลังโดยผู้มีสิทธิ์ฝั่งออฟฟิศ ดู confirmPodImage ด้านล่าง) — podImage เป็น undefined ได้เสมอตรงนี้
+   * คนขับกดส่งของสำเร็จทีละรายการ (JobItem) — บันทึกชื่อผู้รับของรายการนั้นโดยเฉพาะ บังคับต้องมีรูปสินค้าตอนลง (podImage)
+   * เสมอ (ตามที่ตกลง — คนขับต้องถ่ายรูปจริงก่อนยืนยันส่งของได้ ไม่ใช่แค่กดปุ่มเฉยๆ เหมือนขั้น "ยืนยันรับสินค้าขึ้นรถคันนี้"
+   * ที่ถูกตัดออกไปแล้ว) ไม่มี podImage มาด้วยถือเป็นการเรียกผิดเงื่อนไข ไม่ทำอะไรเลย (ฝั่ง UI ต้อง disable ปุ่มไว้ก่อนอยู่แล้ว
+   * ดู DriverJobDetailView.vue) รูปใบส่งของ (deliveryNoteImage) ยังไม่บังคับเหมือนเดิม
    * ไม่ตัดสต๊อกที่นี่ (ตัดไปแล้วตอนรับสินค้าที่ต้นทาง — ดู pickupJobItem)
    * ไม่ปิดงานอัตโนมัติที่นี่แม้ส่งครบทุกรายการแล้ว — ต้องรอคนขับกดยืนยัน "ดำเนินการเสร็จสิ้น" เอง (ดู finishDriverJob)
    */
   function deliverJobItem(bookingId: string, itemId: string, podImage: string | undefined, deliveredBy: string, deliveryNoteImage?: string) {
     const booking = bookings.value.find((b) => b.id === bookingId)
     const item = booking?.items.find((i) => i.id === itemId)
-    if (!booking || !item || item.deliveryStatus === 'DELIVERED') return
+    if (!booking || !item || item.deliveryStatus === 'DELIVERED' || !podImage) return
     item.deliveryStatus = 'DELIVERED'
-    if (podImage) item.podImage = podImage
+    item.podImage = podImage
     if (deliveryNoteImage) item.deliveryNoteImage = deliveryNoteImage
     item.deliveredBy = deliveredBy
     item.deliveredAt = new Date()
@@ -913,13 +882,17 @@ export const useBookingStore = defineStore('booking', () => {
 
   /**
    * คนขับกดยืนยัน "ดำเนินการเสร็จสิ้น" หลังส่งของครบทุกรายการแล้ว — จบงานฝั่งคนขับ (DELIVERING -> DELIVERED)
-   * เป็นจุดที่บันทึกเลขไมล์สิ้นสุด (ย้ายมาจากที่เคยถามในโมดัลส่งของจุดสุดท้าย)
+   * เป็นจุดที่บันทึกเลขไมล์สิ้นสุด (ย้ายมาจากที่เคยถามในโมดัลส่งของจุดสุดท้าย) บังคับทุกรายการที่ส่งแล้วต้องมีรูป POD
+   * ครบก่อนถึงจะจบงานได้ (deliverJobItem บังคับแนบรูปไว้แล้วทุกครั้งที่ส่งของ เช็คซ้ำตรงนี้อีกชั้นกันกรณีข้อมูลเก่าก่อน
+   * เปลี่ยนมาบังคับที่ยังค้าง DELIVERING อยู่โดยบางรายการไม่มีรูป)
    */
   function finishDriverJob(bookingId: string, odometerAfter?: number) {
     const booking = bookings.value.find((b) => b.id === bookingId)
     if (!booking) return
     const allDelivered = booking.items.every((i) => i.deliveryStatus === 'DELIVERED')
     if (!allDelivered) return
+    const allHavePod = booking.items.every((i) => !!i.podImage)
+    if (!allHavePod) return
     if (odometerAfter !== undefined) booking.odometerAfter = odometerAfter
     const lastDelivered = [...booking.items].sort(
       (a, b) => (b.deliveredAt ? new Date(b.deliveredAt).getTime() : 0) - (a.deliveredAt ? new Date(a.deliveredAt).getTime() : 0)
@@ -1193,7 +1166,6 @@ export const useBookingStore = defineStore('booking', () => {
     markFuelReceived,
     startLoading,
     pickupJobItem,
-    confirmRemainingPickup,
     startTransit,
     completeJob,
     deliverJobItem,

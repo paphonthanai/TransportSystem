@@ -116,9 +116,8 @@ describe('deliverJobItem', () => {
     expect(booking.status).toBe('DELIVERING')
   })
 
-  /** Test — POD/Delivery Workflow: DELIVERED ต้องไม่บังคับมี POD ก่อนเลย (ดู utils/podImage.ts — ย้ายจาก Firebase
-   *  Storage มาเป็น Base64 ฝั่ง Frontend, POD กลายเป็นขั้นตอนแยกที่แนบทีหลังได้ ไม่ใช่เงื่อนไขก่อน DELIVERED อีกต่อไป) */
-  it('marks the item DELIVERED with no POD at all when podImage is undefined', () => {
+  /** ตามที่ตกลงให้บังคับถ่ายรูป "ลงสินค้า" ก่อนยืนยันส่งของได้ (เดิมไม่บังคับ) — ไม่มี podImage มาด้วยต้องไม่ทำอะไรเลย */
+  it('refuses to deliver the item when podImage is missing (ลงสินค้าภาพบังคับ)', () => {
     const store = useBookingStore()
     const itemA = makeJobItem({ id: 'a' })
     const booking = makeBooking({ status: 'IN_TRANSIT', items: [itemA] })
@@ -127,10 +126,9 @@ describe('deliverJobItem', () => {
     store.deliverJobItem(booking.id, 'a', undefined, 'สมชาย')
 
     const item = booking.items.find((i) => i.id === 'a')!
-    expect(item.deliveryStatus).toBe('DELIVERED')
+    expect(item.deliveryStatus).not.toBe('DELIVERED')
     expect(item.podImage).toBeUndefined()
-    expect(item.deliveredBy).toBe('สมชาย')
-    expect(booking.status).toBe('DELIVERING')
+    expect(booking.status).toBe('IN_TRANSIT')
   })
 })
 
@@ -184,13 +182,30 @@ describe('finishDriverJob', () => {
     expect(booking.status).toBe('DELIVERING') // ยังไม่ครบ ห้ามจบงาน
   })
 
-  it('moves to DELIVERED and PENDING_REVIEW once every item is delivered — even with zero POD attached anywhere', () => {
+  /** ตามที่ตกลง (ข้อ 4) ต้องมีรูป POD ครบทุกรายการที่ส่งแล้วก่อนจบงานฝั่งคนขับได้ — deliverJobItem บังคับแนบรูปไว้แล้ว
+   *  แต่เช็คซ้ำตรงนี้อีกชั้นกันข้อมูลเก่า/กรณีพิเศษที่รายการถูกมาร์คส่งแล้วโดยไม่มีรูป */
+  it('refuses to finish while a delivered item has no POD photo attached', () => {
     const store = useBookingStore()
     const booking = makeBooking({
       status: 'DELIVERING',
       items: [
-        makeJobItem({ id: 'a', deliveryStatus: 'DELIVERED', deliveredAt: new Date('2026-08-20') }),
-        makeJobItem({ id: 'b', deliveryStatus: 'DELIVERED', deliveredAt: new Date('2026-08-21') }),
+        makeJobItem({ id: 'a', deliveryStatus: 'DELIVERED', deliveredAt: new Date('2026-08-20'), podImage: 'pod-a' }),
+        makeJobItem({ id: 'b', deliveryStatus: 'DELIVERED', deliveredAt: new Date('2026-08-21') }), // ไม่มี POD
+      ],
+    })
+    store.bookings.push(booking)
+
+    store.finishDriverJob(booking.id)
+    expect(booking.status).toBe('DELIVERING') // ยังขาด POD ของ b ห้ามจบงาน
+  })
+
+  it('moves to DELIVERED and PENDING_REVIEW once every delivered item has a POD photo', () => {
+    const store = useBookingStore()
+    const booking = makeBooking({
+      status: 'DELIVERING',
+      items: [
+        makeJobItem({ id: 'a', deliveryStatus: 'DELIVERED', deliveredAt: new Date('2026-08-20'), podImage: 'pod-a' }),
+        makeJobItem({ id: 'b', deliveryStatus: 'DELIVERED', deliveredAt: new Date('2026-08-21'), podImage: 'pod-b' }),
       ],
     })
     store.bookings.push(booking)
@@ -199,8 +214,7 @@ describe('finishDriverJob', () => {
     expect(booking.status).toBe('DELIVERED')
     expect(booking.podReviewStatus).toBe('PENDING_REVIEW')
     expect(booking.completedAt).toBeInstanceOf(Date)
-    // ไม่มี item ไหนแนบ POD เลยตลอดทั้งงาน — ต้องจบงานได้ปกติ ไม่มีอะไร block, booking.podImage ก็ควรว่างตามจริง
-    expect(booking.podImage).toBeUndefined()
+    expect(booking.podImage).toBe('pod-b')
   })
 })
 
@@ -413,11 +427,12 @@ describe('Phase E.1 — Change Assignment (Driver/Vehicle) during Pickup/Deliver
 })
 
 /**
- * Test 8 — Remaining Cargo after a real vehicle change mid-delivery. A/B already DELIVERED, C still PENDING.
- * Vehicle physically changes (plate differs) while status is DELIVERING — C's cargo is not on the new truck yet,
- * so it must be re-confirmed (confirmRemainingPickup) before it can be delivered. A/B must never be touched.
+ * Test 8 (ปรับปรุงตามที่ตกลง) — เปลี่ยนรถจริงระหว่างส่งของ (A/B ส่งไปแล้ว, C ยังไม่ส่ง) ไม่ต้องยืนยัน "รับสินค้าขึ้นรถคันใหม่"
+ * แยกต่างหากอีกต่อไป (confirmRemainingPickup ถูกลบไปแล้ว — ดู dispatchBooking) เพราะตอนส่งของจริงบังคับถ่ายรูปสินค้า
+ * ตอนลงอยู่แล้ว (deliverJobItem) ซึ่งเป็นการยืนยันที่แน่นหนากว่าปุ่มกดเฉยๆ — C จึงส่งต่อได้ทันทีโดยไม่ต้องยืนยันเพิ่ม
+ * A/B ต้องไม่ถูกแตะเหมือนเดิม
  */
-describe('Phase E.1 Test 8 — Remaining Cargo after vehicle change mid-delivery', () => {
+describe('Phase E.1 Test 8 — Remaining Cargo after vehicle change mid-delivery (confirm step removed)', () => {
   function makeMidDeliveryBooking() {
     const a = makeJobItem({ id: 'a', pickupStatus: 'PICKED_UP', deliveryStatus: 'DELIVERED', deliverySequence: 0, deliveredAt: new Date('2026-08-24T09:00:00Z'), deliveredBy: 'สมชาย', podImage: 'pod-a' })
     const b = makeJobItem({ id: 'b', pickupStatus: 'PICKED_UP', deliveryStatus: 'DELIVERED', deliverySequence: 1, deliveredAt: new Date('2026-08-24T10:00:00Z'), deliveredBy: 'สมหญิง', podImage: 'pod-b' })
@@ -426,7 +441,7 @@ describe('Phase E.1 Test 8 — Remaining Cargo after vehicle change mid-delivery
     return { a, b, c, booking }
   }
 
-  it('a genuine plate change mid-delivery resets only the not-yet-delivered item back to pending pickup', () => {
+  it('a genuine plate change mid-delivery leaves the not-yet-delivered item deliverable immediately, no reconfirmation needed', () => {
     const store = useBookingStore()
     const { a, b, c, booking } = makeMidDeliveryBooking()
     store.bookings.push(booking)
@@ -434,42 +449,26 @@ describe('Phase E.1 Test 8 — Remaining Cargo after vehicle change mid-delivery
     store.dispatchBooking(booking.id, 'ใหม่-2222', { driverId: 'drv-new', driverName: 'คนขับใหม่' })
 
     expect(booking.status).toBe('DELIVERING') // เปลี่ยนรถไม่กระทบ Job status
+    expect(booking.plate).toBe('ใหม่-2222')
     expect(a.deliveryStatus).toBe('DELIVERED')
     expect(b.deliveryStatus).toBe('DELIVERED')
-    expect(c.pickupStatus).toBeUndefined() // ต้องยืนยันใหม่ก่อนถึงจะส่งได้
-    // nextPickup ต้องเจอ C ก่อนเสมอ — DriverJobDetailView.vue เช็ค nextPickup(job) เป็น v-if แรกในสถานะ
-    // IN_TRANSIT/DELIVERING (ก่อน nextDelivery) จึงบังคับ UI ให้ยืนยันรับสินค้าก่อนแสดงการ์ดส่งของจริง แม้
-    // nextDelivery() เองจะยังคืนค่า C ได้ตามปกติ (มันดู deliveryStatus อย่างเดียวโดยเจตนา ไม่ปนกับ pickupStatus)
-    expect(nextPickup(booking.items)?.id).toBe('c')
-  })
-
-  it('after confirming remaining pickup, C becomes deliverable — and only then', () => {
-    const store = useBookingStore()
-    const { a, b, c, booking } = makeMidDeliveryBooking()
-    store.bookings.push(booking)
-    store.dispatchBooking(booking.id, 'ใหม่-2222', { driverName: 'คนขับใหม่' })
-    expect(nextPickup(booking.items)?.id).toBe('c')
-
-    store.confirmRemainingPickup(booking.id, 'c')
-
-    expect(c.pickupStatus).toBe('PICKED_UP')
-    expect(nextPickup(booking.items)).toBeNull()
-    expect(nextDelivery(booking.items)?.id).toBe('c')
-    // A/B ต้องยังไม่ถูกแตะแม้แต่นิดเดียวตลอด flow นี้
-    expect(a.deliveryStatus).toBe('DELIVERED')
+    expect(c.pickupStatus).toBe('PICKED_UP') // ไม่ถูกล้างอีกต่อไป — ไม่มีขั้นยืนยันแยกแล้ว
+    expect(nextDelivery(booking.items)?.id).toBe('c') // ส่งต่อได้ทันที
+    // A/B ต้องยังไม่ถูกแตะแม้แต่นิดเดียว
     expect(a.deliveredAt).toEqual(new Date('2026-08-24T09:00:00Z'))
     expect(a.deliveredBy).toBe('สมชาย')
     expect(a.podImage).toBe('pod-a')
-    expect(b.deliveryStatus).toBe('DELIVERED')
     expect(b.podImage).toBe('pod-b')
   })
 
-  it('delivering C after confirmation completes the job through the existing state machine, unchanged', () => {
+  it('delivering C after a vehicle change still requires a POD photo like any other delivery, then completes the job normally', () => {
     const store = useBookingStore()
     const { booking } = makeMidDeliveryBooking()
     store.bookings.push(booking)
     store.dispatchBooking(booking.id, 'ใหม่-2222', { driverName: 'คนขับใหม่' })
-    store.confirmRemainingPickup(booking.id, 'c')
+
+    store.deliverJobItem(booking.id, 'c', undefined, 'สมศักดิ์') // ไม่มีรูป POD — ต้องไม่สำเร็จ
+    expect(booking.items.find((i) => i.id === 'c')!.deliveryStatus).not.toBe('DELIVERED')
 
     store.deliverJobItem(booking.id, 'c', 'https://storage/pod-c.jpg', 'สมศักดิ์')
 
@@ -488,39 +487,22 @@ describe('Phase E.1 Test 8 — Remaining Cargo after vehicle change mid-delivery
     store.bookings.push(booking)
 
     store.dispatchBooking(booking.id, 'ใหม่-2222', { driverName: 'คนขับใหม่' })
-    store.confirmRemainingPickup(booking.id, 'c')
 
     expect(booking.id).toBe(originalId)
     expect(booking.items.map((i) => i.id)).toEqual(originalItemIds)
     expect(store.bookings).toHaveLength(1)
   })
 
-  it('reassigning driver name only, on the SAME plate, does not reset any pickup state (not a real vehicle change)', () => {
+  it('reassigning driver name only, on the SAME plate, does not touch pickup/delivery state at all', () => {
     const store = useBookingStore()
     const { a, b, c, booking } = makeMidDeliveryBooking()
     store.bookings.push(booking)
 
     store.dispatchBooking(booking.id, booking.plate!, { driverName: 'คนขับใหม่ แต่รถคันเดิม' })
 
-    expect(c.pickupStatus).toBe('PICKED_UP') // ไม่ถูกล้าง เพราะ plate ไม่เปลี่ยนจริง
-    expect(nextPickup(booking.items)).toBeNull()
+    expect(c.pickupStatus).toBe('PICKED_UP')
     expect(nextDelivery(booking.items)?.id).toBe('c')
     expect(a.deliveryStatus).toBe('DELIVERED')
     expect(b.deliveryStatus).toBe('DELIVERED')
-  })
-
-  it('a plate change while still mid-pickup (LOADING, not yet all picked up) does not trigger the remaining-cargo gate — Test 3 territory, unaffected', () => {
-    const store = useBookingStore()
-    const c = makeJobItem({ id: 'c', pickupStatus: 'PICKED_UP', pickupSequence: 0 })
-    const b = makeJobItem({ id: 'b', pickupStatus: 'PICKED_UP', pickupSequence: 1 })
-    const a = makeJobItem({ id: 'a' })
-    const booking = makeBooking({ status: 'LOADING', items: [c, b, a], plate: 'เดิม-1111' })
-    store.bookings.push(booking)
-
-    store.dispatchBooking(booking.id, 'ใหม่-2222', { driverName: 'คนขับใหม่' })
-
-    expect(c.pickupStatus).toBe('PICKED_UP') // ไม่ถูกล้าง — gate นี้ใช้เฉพาะ IN_TRANSIT/DELIVERING เท่านั้น
-    expect(b.pickupStatus).toBe('PICKED_UP')
-    expect(nextPickup(booking.items)?.id).toBe('a')
   })
 })

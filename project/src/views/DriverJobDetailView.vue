@@ -30,12 +30,40 @@
 
       <template v-else>
         <!-- STEP 2: ACCEPTED — ตัดขั้น "รับน้ำมัน"/"เริ่มรับสินค้า"/"รับสินค้าจุดนี้" ออกจาก flow ใหม่แล้ว (ตาม
-             Requirement) เหลือแค่ถ่ายภาพสินค้า (ไม่บังคับ) แล้วกด "เริ่มขนส่ง" ที่แถบปุ่มด้านล่างได้เลย — สถานะ
-             FUEL_RECEIVED/LOADING/LOADED ยังไม่ถูกลบออกจากระบบ งานที่ค้างอยู่ในสถานะเหล่านี้ก่อนเปลี่ยนแปลงยังทำงาน
-             ต่อผ่านปุ่มเดิมได้จนจบ (ดู STEP 3/4/5 ด้านล่าง) -->
+             Requirement) ปุ่ม "ยืนยัน"/"แสดงรายละเอียด" ไม่เกี่ยวกับ flow หลักเลย เป็นแค่ขั้นตอนให้คนขับกดอ่านข้อมูล
+             จริงๆ ก่อน (ไม่ใช่ปุ่มเปลี่ยนสถานะ) ตัวที่บังคับจริงคือรูป "ขึ้นสินค้า" ด้านล่าง — ไม่มีรูปจะกด "เริ่มขนส่ง"
+             ไม่ได้เลย (ดู canStartTransit) — สถานะ FUEL_RECEIVED/LOADING/LOADED ยังไม่ถูกลบออกจากระบบ งานที่ค้างอยู่ใน
+             สถานะเหล่านี้ก่อนเปลี่ยนแปลงยังทำงานต่อผ่านปุ่มเดิมได้จนจบ (ดู STEP 3/4/5 ด้านล่าง) -->
         <template v-if="job.status === 'ACCEPTED'">
-          <div class="text-sm text-text bg-white border border-border rounded-xl p-4">
-            <span class="text-muted">ต้องรับน้ำมันทั้งหมด:</span> <span class="font-bold text-base">{{ job.fuelLiters || 0 }} ล.</span>
+          <div class="bg-white border border-border rounded-xl p-4 space-y-3">
+            <div class="text-sm text-text">
+              <span class="text-muted">ต้องรับน้ำมันทั้งหมด:</span> <span class="font-bold text-base">{{ job.fuelLiters || 0 }} ล.</span>
+            </div>
+            <div v-if="acceptedConfirmed" class="space-y-1.5 pt-2 border-t border-border">
+              <div v-for="item in job.items" :key="item.id" class="text-sm text-text flex items-center justify-between gap-2">
+                <span class="text-muted truncate">{{ item.siteName }}</span>
+                <span class="font-semibold whitespace-nowrap">{{ item.product }} {{ item.qty }} {{ item.unit }}</span>
+              </div>
+            </div>
+            <div class="flex gap-2 pt-1">
+              <button
+                @click="acceptedConfirmed = true"
+                :class="[
+                  'flex-1 h-11 rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5',
+                  acceptedConfirmed ? 'bg-green-100 text-green-700' : 'bg-teal-600 text-white active:bg-teal-700',
+                ]"
+              >
+                <span class="material-symbols-rounded text-base">{{ acceptedConfirmed ? 'check_circle' : 'task_alt' }}</span>
+                {{ acceptedConfirmed ? 'ยืนยันแล้ว' : 'ยืนยัน' }}
+              </button>
+              <button
+                @click="showJobDetails = true"
+                class="flex-1 h-11 rounded-lg border border-border text-sm font-semibold text-text flex items-center justify-center gap-1.5 active:bg-surface-2"
+              >
+                <span class="material-symbols-rounded text-base">list_alt</span>
+                แสดงรายละเอียด
+              </button>
+            </div>
           </div>
         </template>
 
@@ -69,28 +97,11 @@
         <!-- STEP 5: LOADED — ไม่มีข้อมูลเพิ่มเติม รอปุ่มด้านล่าง -->
 
         <!-- STEP 6/7: IN_TRANSIT/DELIVERING — แสดงจุดส่งของถัดไปเพียงจุดเดียว จนกว่าจะส่งครบแล้วจึงแสดงปุ่มดำเนินการเสร็จสิ้น
-             เปลี่ยนรถจริงระหว่างส่งของ (ดู dispatchBooking's vehicleChangedMidDelivery) ล้าง pickupStatus ของจุดที่ยัง
-             ไม่ส่งไว้ — nextPickup ตรวจเจอจุดที่ต้องยืนยันย้ายขึ้นรถคันใหม่ก่อนเสมอ ก่อนจะกลับไปแสดง delivery card ตามปกติ
-             (Phase E.1 Test 8: ห้ามส่ง C ทันทีถ้ายังไม่ได้ยืนยันว่าอยู่บนรถคันใหม่) -->
+             เปลี่ยนรถจริงระหว่างส่งของไม่ต้องยืนยัน "รับสินค้าขึ้นรถคันใหม่" แยกต่างหากอีกต่อไปตามที่ตกลง (ขั้นตอนนั้น
+             ถูกตัดออกจาก dispatchBooking แล้ว) เพราะตอนส่งของจริงบังคับถ่ายรูปสินค้าตอนลงอยู่แล้ว ถือเป็นการยืนยันที่
+             แน่นหนากว่า — แสดงการ์ดส่งของตรงๆ ได้เลยไม่ต้องมีขั้นกลาง -->
         <template v-else-if="job.status === 'IN_TRANSIT' || job.status === 'DELIVERING'">
-          <template v-if="nextPickup(job)">
-            <div class="text-sm font-semibold text-amber-700 bg-amber-50 rounded-xl px-3 py-2.5">
-              มีการเปลี่ยนรถระหว่างทาง ต้องยืนยันว่าสินค้าที่เหลืออยู่บนรถคันนี้ก่อนจึงจะส่งของต่อได้
-            </div>
-            <div class="rounded-xl bg-white border border-border p-3.5 space-y-2">
-              <div class="text-base font-semibold text-text">
-                {{ nextPickup(job)!.siteName }} <span class="text-sm text-muted font-normal">— {{ nextPickup(job)!.product }} {{ nextPickup(job)!.qty }} {{ nextPickup(job)!.unit }}</span>
-              </div>
-              <button
-                @click="bookingStore.confirmRemainingPickup(job.id, nextPickup(job)!.id)"
-                class="w-full h-12 rounded-lg bg-teal-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-teal-700"
-              >
-                <span class="material-symbols-rounded text-base">local_shipping</span>
-                ยืนยันรับสินค้าขึ้นรถคันนี้
-              </button>
-            </div>
-          </template>
-          <template v-else-if="nextDelivery(job)">
+          <template v-if="nextDelivery(job)">
             <div class="text-sm text-muted">
               ส่งสินค้าจุดที่ {{ (nextDelivery(job)!.deliverySequence ?? 0) + 1 }} จาก {{ job.items.length }}
               <span class="text-green-700 font-medium">· ส่งแล้ว {{ deliveryProgress(job.items).completed }}/{{ deliveryProgress(job.items).total }}</span>
@@ -147,16 +158,18 @@
           ส่งของเสร็จสิ้นแล้ว
         </div>
 
-        <!-- รูปตอนขึ้นสินค้า — ไม่บังคับ ไม่ขวางการเปลี่ยนสถานะ (ออฟฟิศแนบให้ทีหลังได้ถ้าคนขับไม่ได้ถ่าย) — flow ใหม่ถ่ายได้
-             ตั้งแต่ ACCEPTED เลย (ก่อนกด "เริ่มขนส่ง") ส่วน LOADING/LOADED ยังคงไว้ให้งาน flow เก่าที่ค้างอยู่ -->
+        <!-- รูปตอนขึ้นสินค้า — บังคับ เพราะเป็นขั้นตอนที่คนขับต้องลงมือถ่ายจริง ไม่ใช่แค่อ่านข้อมูลเฉยๆ ไม่มีรูปกด
+             "เริ่มขนส่ง" ที่แถบล่างไม่ได้เลย (ดู canStartTransit) — flow ใหม่ถ่ายได้ตั้งแต่ ACCEPTED เลย ส่วน LOADING/
+             LOADED ยังคงไว้ให้งาน flow เก่าที่ค้างอยู่ -->
         <div v-if="job.status === 'ACCEPTED' || job.status === 'LOADING' || job.status === 'LOADED'" class="rounded-xl bg-white border border-border p-3.5">
           <PhotoPicker
-            label="รูปตอนขึ้นสินค้า (ไม่บังคับ)"
+            label="รูปตอนขึ้นสินค้า (บังคับ)"
             :preview="job.loadingImage"
             :busy="loadingPhotoBusy"
             :error="loadingPhotoError"
             @file="onLoadingPhoto"
           />
+          <div v-if="!job.loadingImage" class="text-xs text-amber-700 mt-1.5">ต้องถ่ายรูปขึ้นสินค้าก่อนถึงจะกด "เริ่มขนส่ง" ได้</div>
         </div>
 
         <!-- รายละเอียดงาน — จุดที่ deliveryStatus=DELIVERED แล้วต้องยังโชว์เป็น "ส่งแล้ว" ต่อไปเสมอ (แม้ Job ถูก Reset/
@@ -188,8 +201,9 @@
       v-if="job && showBottomActionBar"
       class="sticky bottom-0 bg-white border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex-shrink-0"
     >
-      <!-- flow ใหม่: ตัดปุ่ม "รับน้ำมัน"/"เริ่มรับสินค้า" ออก — ACCEPTED กด "เริ่มขนส่ง" ได้ตรงๆ เลย (ถ่ายรูปสินค้าด้านบน
-           ไม่บังคับ) ปุ่ม "เริ่มรับสินค้า" ของ flow เก่า (FUEL_RECEIVED) ยังคงไว้ให้งานที่ค้างอยู่ก่อนเปลี่ยนแปลงเท่านั้น -->
+      <!-- flow ใหม่: ตัดปุ่ม "รับน้ำมัน"/"เริ่มรับสินค้า" ออก — ACCEPTED กด "เริ่มขนส่ง" ได้ตรงๆ เลย (ต้องมีรูปขึ้นสินค้า
+           ก่อนเท่านั้น — ดู canStartTransit) ปุ่ม "เริ่มรับสินค้า" ของ flow เก่า (FUEL_RECEIVED) ยังคงไว้ให้งานที่ค้างอยู่
+           ก่อนเปลี่ยนแปลงเท่านั้น -->
       <button
         v-if="job.status === 'FUEL_RECEIVED'"
         @click="bookingStore.startLoading(job.id)"
@@ -200,8 +214,9 @@
       </button>
       <button
         v-else-if="job.status === 'LOADED' || job.status === 'ACCEPTED'"
-        @click="bookingStore.startTransit(job.id)"
-        class="w-full h-12 rounded-lg bg-indigo-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 active:bg-indigo-700"
+        @click="canStartTransit && bookingStore.startTransit(job.id)"
+        :disabled="!canStartTransit"
+        class="w-full h-12 rounded-lg bg-indigo-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 active:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <span class="material-symbols-rounded text-xl">directions</span>
         เริ่มขนส่ง
@@ -236,17 +251,17 @@
                 {{ deliverTarget!.siteContactName || 'ไม่มีข้อมูลผู้ติดต่อ' }}
               </div>
             </div>
-            <PhotoPicker label="รูปสินค้าตอนลง (ไม่บังคับ)" :preview="goodsPhotoUrl" :busy="photoBusy === 'goods'" :error="photoError.goods" @file="(f) => onDeliveryPhoto('goods', f)" />
+            <PhotoPicker label="รูปสินค้าตอนลง (บังคับ)" :preview="goodsPhotoUrl" :busy="photoBusy === 'goods'" :error="photoError.goods" @file="(f) => onDeliveryPhoto('goods', f)" />
             <PhotoPicker label="รูปใบส่งของ (ไม่บังคับ)" :preview="notePhotoUrl" :busy="photoBusy === 'note'" :error="photoError.note" @file="(f) => onDeliveryPhoto('note', f)" />
             <div class="text-sm text-muted">
-              ไม่บังคับแนบรูป — ถ้าไม่ได้ถ่าย ออฟฟิศแนบให้ทีหลังได้จากหน้ารายละเอียดงาน
+              ต้องถ่ายรูปสินค้าตอนลงก่อนถึงจะยืนยันส่งของได้ — รูปใบส่งของไม่บังคับ ไม่ได้ถ่ายออฟฟิศแนบให้ทีหลังได้จากหน้ารายละเอียดงาน
             </div>
           </div>
           <div class="flex gap-3 px-5 py-4 border-t border-border">
             <button @click="closeDeliverItem" class="flex-1 h-12 rounded-lg border border-border text-base font-medium text-text">ยกเลิก</button>
             <button
               @click="confirmDeliverItem"
-              :disabled="!!photoBusy"
+              :disabled="!!photoBusy || !goodsPhotoUrl"
               class="flex-[2] h-12 rounded-lg bg-green-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-xl">task_alt</span>
@@ -274,16 +289,58 @@
               <label class="block text-xs font-semibold text-muted mb-1">เลขไมล์สิ้นสุด (กม.)</label>
               <input v-model.number="finishOdometerAfter" type="number" placeholder="0" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
             </div>
+            <!-- เช็คซ้ำอีกชั้นก่อนจบงาน — ตามปกติทุกรายการควรมี POD ครบอยู่แล้วเพราะ deliverJobItem บังคับแนบรูปไว้ตั้งแต่
+                 ตอนส่งของแต่ละจุด เผื่อกรณีข้อมูลเก่าที่ส่งไปแล้วก่อนเปลี่ยนมาบังคับ -->
+            <div v-if="missingPodItems.length" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+              ยังไม่มีรูป POD ของ {{ missingPodItems.length }} รายการ ({{ missingPodItems.map((i) => i.siteName).join(', ') }}) — แนบรูปให้ครบก่อนจึงจะจบงานได้
+            </div>
           </div>
           <div class="flex gap-3 px-5 py-4 border-t border-border">
             <button @click="closeFinishJob" class="flex-1 h-12 rounded-lg border border-border text-base font-medium text-text">ยกเลิก</button>
             <button
               @click="confirmFinishJob"
-              class="flex-[2] h-12 rounded-lg bg-primary text-white text-base font-semibold flex items-center justify-center gap-1.5"
+              :disabled="missingPodItems.length > 0"
+              class="flex-[2] h-12 rounded-lg bg-primary text-white text-base font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-xl">flag_circle</span>
               ยืนยันดำเนินการเสร็จสิ้น
             </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Job Details — card แสดงรายละเอียดงาน ไม่เกี่ยวกับ flow หลักเลย กดปิดได้ตลอดเวลา -->
+    <Teleport to="body" v-if="showJobDetails && job">
+      <div @click="showJobDetails = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-end justify-center">
+        <div @click.stop class="w-full bg-white rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+          <div class="w-10 h-1.5 bg-border rounded-full mx-auto mt-3 mb-1"></div>
+          <div class="flex items-center justify-between px-5 py-3 border-b border-border">
+            <div class="font-bold text-text text-lg truncate">รายละเอียดงาน {{ bookingTitle(job) }}</div>
+            <button @click="showJobDetails = false" class="w-11 h-11 -mr-2 flex-shrink-0 rounded-lg hover:bg-surface-2 flex items-center justify-center">
+              <span class="material-symbols-rounded text-xl">close</span>
+            </button>
+          </div>
+          <div class="p-5 space-y-3">
+            <div class="grid grid-cols-2 gap-3 text-sm">
+              <div class="bg-surface-2 rounded-lg p-3">
+                <div class="text-xs text-muted mb-0.5">ลูกค้า</div>
+                <div class="font-semibold text-text truncate">{{ job.customer || '-' }}</div>
+              </div>
+              <div class="bg-surface-2 rounded-lg p-3">
+                <div class="text-xs text-muted mb-0.5">น้ำมันที่ต้องรับ</div>
+                <div class="font-semibold text-text">{{ job.fuelLiters || 0 }} ล.</div>
+              </div>
+            </div>
+            <div class="text-xs font-bold text-muted uppercase tracking-wide pt-1">รายการสินค้า ({{ job.items.length }})</div>
+            <div v-for="item in job.items" :key="item.id" class="rounded-lg border border-border p-3 space-y-1">
+              <div class="font-semibold text-text">{{ item.product }} <span class="font-normal text-muted">{{ item.qty }} {{ item.unit }}</span></div>
+              <div class="text-sm text-muted">{{ item.siteName }} ({{ item.province }} · {{ item.district }})</div>
+              <div v-if="item.jobType" class="text-sm text-muted">ประเภทงาน: {{ item.jobType }}</div>
+            </div>
+          </div>
+          <div class="px-5 py-4 border-t border-border">
+            <button @click="showJobDetails = false" class="w-full h-12 rounded-lg bg-surface-2 text-text text-base font-semibold">ปิด</button>
           </div>
         </div>
       </div>
@@ -357,6 +414,19 @@ const showBottomActionBar = computed(() => {
   if ((job.value.status === 'IN_TRANSIT' || job.value.status === 'DELIVERING') && !nextDelivery(job.value)) return true
   return false
 })
+
+// --- ACCEPTED step: ปุ่ม "ยืนยัน"/"แสดงรายละเอียด" ไม่เกี่ยวกับ flow หลักเลย (ดู template's comment) ---
+/** กดครั้งเดียวค้างไว้ตลอด ไม่รีเซตกลับเพราะเปลี่ยนอย่างอื่น — แค่ขยายการ์ดให้เห็นสินค้า/จำนวน ไม่ส่งผลกับสถานะงานใดๆ */
+const acceptedConfirmed = ref(false)
+const showJobDetails = ref(false)
+
+/** บังคับต้องมีรูป "ขึ้นสินค้า" ก่อนถึงจะกด "เริ่มขนส่ง" ได้ — เป็น UI-level gate เฉพาะปุ่มของคนขับเท่านั้น
+ *  (startTransit ฝั่ง store ไม่ได้บังคับ เพราะออฟฟิศยังต้องกดดันงานต่อเองได้จาก BookingActionMenu.vue แม้ไม่มีรูป) */
+const canStartTransit = computed(() => !!job.value?.loadingImage)
+
+/** ต้องมีรูป POD ครบทุกรายการที่ส่งแล้วก่อนจบงานฝั่งคนขับได้ — ตามปกติไม่มีทางเกิดเพราะ deliverJobItem บังคับแนบรูปไว้แล้ว
+ *  ทุกครั้งที่ส่งของ เช็คซ้ำตรงนี้เผื่อข้อมูลเก่าที่ยังค้าง DELIVERING อยู่ก่อนเปลี่ยนมาบังคับ */
+const missingPodItems = computed(() => finishTarget.value?.items.filter((i) => i.deliveryStatus === 'DELIVERED' && !i.podImage) ?? [])
 
 const destinationLabel = (b: Booking) => {
   if (!b.items.length) return '-'
