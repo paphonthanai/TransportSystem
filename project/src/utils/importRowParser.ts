@@ -1,5 +1,6 @@
 import type { BookingJobType } from '@/types'
 import { normalizePlateCode } from '@/utils/importReconciliation'
+import { parseGpsInput } from '@/utils/gps'
 
 // --- นำเข้า Booking จากไฟล์ Excel งานจริง (Requirement: "Import Excel เพื่อสร้างงาน" ตามคอลัมน์ที่หน้างานใช้อยู่จริง) ---
 // 1 แถว Excel = 1 Booking เสมอ (ไม่มีคอลัมน์กลุ่มงานแล้วเหมือนเทมเพลตเดิม) — เจตนาของฟีเจอร์นี้เปลี่ยนจาก "สร้างงานใหม่
@@ -32,6 +33,7 @@ export const IMPORT_HEADERS = {
   price: 'ราคาปูน',
   fuel: 'น้ำมัน',
   jobType: 'ประเภทงาน',
+  mapLink: 'พิกัด/ลิงก์ Google Maps หน้างาน',
   note: 'หมายเหตุ',
 } as const
 
@@ -50,6 +52,11 @@ export interface ImportRowResult {
   province: string
   siteContactName: string
   phone: string
+  /** ข้อความ/ลิงก์ Google Maps ดิบจากคอลัมน์ "พิกัด/ลิงก์ Google Maps หน้างาน" (ไม่บังคับ) — เก็บไว้เป็น JobItem.mapUrl
+   *  เสมอไม่ว่าจะ parse พิกัดได้หรือไม่ (เหมือน pattern เดียวกับหน้ากรอกเอง ดู utils/gps.ts) undefined = ไม่มีคอลัมน์/เซลล์ว่าง */
+  mapUrl?: string
+  latitude?: number
+  longitude?: number
   product: string
   /** แยกจาก product ด้วยเครื่องหมาย "+" (เช่น "23 + 52" → ["23","52"]) — กรณีแถวเดียวมีหลายชนิดสินค้าปนกัน
    *  ตัวแรกใช้เป็นสินค้าหลักของ Item เดิม ตัวที่เหลือไปเป็น extraProducts (ดู confirmImport) */
@@ -170,6 +177,10 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   // คอลัมน์ "เบอร์" มักกรอกชื่อผู้ติดต่อ+เบอร์โทรปนกันมาในช่องเดียว — แยกเบอร์ออกมาเป็น field ใช้งานง่าย
   // (sitePhone) ส่วนข้อความเต็มเก็บไว้ที่ siteContactName ไม่ให้ข้อมูลหาย
   const { contactName: siteContactName, phone } = splitContactPhone(str(raw[IMPORT_HEADERS.phone]))
+  // ไม่บังคับมีคอลัมน์นี้/ไม่บังคับกรอก — ไม่มีค่าก็ใส่ว่างไว้เหมือนเดิม ไม่เตือนอะไร (เหมือนหน้ากรอกเองที่แค่ขึ้น
+  // ข้อความเตือนเบาๆ ใต้ช่องถ้า parse พิกัดไม่ได้ ไม่ใช่ warning ที่ไปต่อท้าย note ของ Booking)
+  const mapLinkRaw = str(raw[IMPORT_HEADERS.mapLink])
+  const mapGps = parseGpsInput(mapLinkRaw)
   const product = str(raw[IMPORT_HEADERS.product])
   // "23 + 52" หรือ "52 + 13 + 23" หมายถึงหลายชนิดสินค้าปนมาในเที่ยวเดียว ไม่ใช่ชื่อสินค้าชื่อเดียวที่มีเครื่องหมาย +
   // อยู่ในชื่อ — แยกออกเป็นรายการเดี่ยวๆ ไปแสดงแบบคอลัมน์ (ดู productColumns + JobItem.extraProducts) ยืนยันจากไฟล์จริง
@@ -275,6 +286,9 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
     province,
     siteContactName,
     phone,
+    mapUrl: mapLinkRaw || undefined,
+    latitude: mapGps.latitude,
+    longitude: mapGps.longitude,
     product,
     productCodes,
     productQtyPairs,

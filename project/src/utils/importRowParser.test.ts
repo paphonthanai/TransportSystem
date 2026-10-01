@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchCustomerForImport, matchDriverForImport } from './importRowParser'
+import { matchCustomerForImport, matchDriverForImport, parseImportRow, IMPORT_HEADERS, type ParseImportRowDeps } from './importRowParser'
 
 /** ลูกค้าในไฟล์ Excel มักกรอกแบบย่อ (เช่น "Sccc") ต้องจับคู่กับ "รหัสผู้ติดต่อ" ก่อนเสมอ ถ้าไม่เจอค่อยลองชื่อเต็ม
  *  เจอแล้วต้องได้ record คืนมา (ผู้เรียกจะเอา .name ไปใช้เป็นชื่อเต็มบน booking.customer เสมอ) */
@@ -53,5 +53,46 @@ describe('matchDriverForImport', () => {
 
   it('ชื่อเล่นไม่ตรงเลยคืน undefined', () => {
     expect(matchDriverForImport('สาม', '', drivers, vehicleForDriver)).toBeUndefined()
+  })
+})
+
+/** คอลัมน์ "พิกัด/ลิงก์ Google Maps หน้างาน" (ไม่บังคับ) — reuse parseGpsInput เดียวกับหน้ากรอกเองทุกประการ
+ *  ไม่เคยมีเทสตรงของ parseImportRow เองมาก่อนเลย (เทสเดิมมีแค่ helper ย่อยด้านบน) นี่คือเทสแรกของฟังก์ชันนี้โดยตรง */
+describe('parseImportRow — คอลัมน์พิกัด/ลิงก์ Google Maps หน้างาน', () => {
+  const deps: ParseImportRowDeps = {
+    matchDriver: () => undefined,
+    findFuelRate: () => undefined,
+    matchCustomer: () => undefined,
+  }
+  const baseRow: Record<string, unknown> = {
+    [IMPORT_HEADERS.siteName]: 'ไซต์ทดสอบ',
+    [IMPORT_HEADERS.districtProvince]: 'เมือง/นครสวรรค์',
+  }
+
+  it('ลิงก์ Google Maps ที่ parse พิกัดได้ — เก็บ mapUrl ดิบ + latitude/longitude ตรงกับที่ parse ได้', () => {
+    const row = parseImportRow(
+      { ...baseRow, [IMPORT_HEADERS.mapLink]: 'https://maps.google.com/?q=13.736717,100.523186' },
+      1,
+      deps
+    )
+    expect(row.mapUrl).toBe('https://maps.google.com/?q=13.736717,100.523186')
+    expect(row.latitude).toBe(13.736717)
+    expect(row.longitude).toBe(100.523186)
+  })
+
+  it('มีข้อความแต่ parse พิกัดไม่ได้ — ยังเก็บ mapUrl ไว้ใช้เป็นลิงก์อ้างอิง แต่ latitude/longitude เป็น undefined', () => {
+    const row = parseImportRow({ ...baseRow, [IMPORT_HEADERS.mapLink]: 'หน้าโรงงาน ประตู 2' }, 1, deps)
+    expect(row.mapUrl).toBe('หน้าโรงงาน ประตู 2')
+    expect(row.latitude).toBeUndefined()
+    expect(row.longitude).toBeUndefined()
+  })
+
+  it('ไม่มีคอลัมน์นี้ในไฟล์เลย/เซลล์ว่าง — ทั้ง mapUrl/latitude/longitude เป็น undefined ไม่มี warning ติดไปใน note', () => {
+    const row = parseImportRow(baseRow, 1, deps)
+    expect(row.mapUrl).toBeUndefined()
+    expect(row.latitude).toBeUndefined()
+    expect(row.longitude).toBeUndefined()
+    expect(row.note).not.toContain('พิกัด')
+    expect(row.note).not.toContain('Google Maps')
   })
 })
