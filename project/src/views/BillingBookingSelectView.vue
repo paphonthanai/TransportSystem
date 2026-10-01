@@ -45,7 +45,7 @@
               <th class="text-left px-3 py-2 font-semibold">ทะเบียน</th>
               <th class="text-left px-3 py-2 font-semibold">ชนิดปูน</th>
               <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('po')">
-                เลขที่ PO<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('po') }}</span>
+                เลขที่ PO ลูกค้า<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('po') }}</span>
               </th>
               <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('shipDate')">
                 วันที่ส่งงาน<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('shipDate') }}</span>
@@ -70,7 +70,7 @@
               </td>
               <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ bookingProducts(b) }}</td>
-              <td class="px-3 py-2 text-text">{{ b.po || '-' }}</td>
+              <td class="px-3 py-2 text-text">{{ b.reference || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ formatDateShort(b.shipDate || b.loadingDate) }}</td>
               <td class="px-3 py-2 text-right text-text">1</td>
               <td class="px-3 py-2 text-text">เที่ยว</td>
@@ -153,7 +153,7 @@ const sortIcon = (key: SortKey) => (sortKey.value !== key ? 'unfold_more' : sort
 const sortedEligibleBookings = computed(() => {
   const list = [...eligibleBookings.value]
   const dir = sortDir.value === 'asc' ? 1 : -1
-  if (sortKey.value === 'po') list.sort((a, b) => (a.po || '').localeCompare(b.po || '') * dir)
+  if (sortKey.value === 'po') list.sort((a, b) => (a.reference || '').localeCompare(b.reference || '') * dir)
   else if (sortKey.value === 'shipDate') list.sort((a, b) => (new Date(a.shipDate || a.loadingDate || 0).getTime() - new Date(b.shipDate || b.loadingDate || 0).getTime()) * dir)
   else if (sortKey.value === 'index' && dir === -1) list.reverse()
   return list
