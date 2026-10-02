@@ -73,20 +73,22 @@ describe('เรทน้ำมันแยกตามประเภทรถ 
     expect(b.fuelRate).toBe(36)
   })
 
-  it('resyncFuelRates คำนวณเรทใหม่ให้งานที่ยังไม่จบและมีทะเบียน ไม่แตะ DELIVERED', () => {
+  it('resyncFuelRates คำนวณเรทใหม่ให้ทุกงานที่มีทะเบียน รวมงาน DELIVERED แต่ข้ามงานที่ไม่มีทะเบียน', () => {
     const bookingStore = useBookingStore()
     const fuel = useFuelRateStore()
     const vehicles = useVehiclesStore()
     vehicles.vehicles.push(vehicle('70-1111', 'รถร่วม'))
     const open = makeBooking({ status: 'ACCEPTED', fuelRate: 36.83, plate: '70-1111 สระบุรี' })
     const closed = makeBooking({ status: 'DELIVERED', fuelRate: 36.83, plate: '70-1111 สระบุรี' })
-    bookingStore.bookings.push(open, closed)
+    const noPlate = makeBooking({ status: 'WAITING_DISPATCH', fuelRate: 36.83, plate: undefined })
+    bookingStore.bookings.push(open, closed, noPlate)
 
     fuel.settings.pricePerLiterByVehicleType = { รถร่วม: 41.61 }
     bookingStore.resyncFuelRates()
 
     expect(open.fuelRate).toBe(41.61)
-    expect(closed.fuelRate).toBe(36.83)
+    expect(closed.fuelRate).toBe(41.61)
+    expect(noPlate.fuelRate).toBe(36.83) // ไม่มีทะเบียน = ไม่รู้ประเภทรถ ข้าม (รอจ่ายงาน)
   })
 })
 

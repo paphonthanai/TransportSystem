@@ -149,10 +149,11 @@ export const useBookingStore = defineStore('booking', () => {
   /** งานที่ยังเปลี่ยนเรทน้ำมันได้ — ก่อนคนขับรับน้ำมัน (หลังจากนั้นจ่ายน้ำมันไปแล้วตามเรทเดิม) */
   const FUEL_RATE_EDITABLE_STATUSES: BookingStatus[] = ['WAITING_DISPATCH', 'ASSIGNED', 'ACCEPTED']
 
-  /** คำนวณเรทน้ำมันใหม่ของงานที่ยังไม่จบทุกงานที่มีทะเบียน (เรียกตอนกดบันทึกเรทในหน้าตั้งค่าน้ำมัน) ไม่แตะ DELIVERED
-   *  (ตัวเลขปิดบัญชี/จ่ายเงินเดือนไปแล้ว ห้ามเปลี่ยนย้อนหลัง) */
+  /** คำนวณเรทน้ำมันใหม่ของ "ทุกงาน" ที่มีทะเบียน รวมงานที่ส่งของเสร็จสิ้นแล้ว (เรียกตอนกดบันทึกเรทในหน้าตั้งค่าน้ำมัน) ตามที่ตกลง
+   *  เพราะมีผลกับการแสดงผล Dashboard — เอกสารรายได้รถร่วม/เงินเดือนคนขับที่ออกไปแล้ว (snapshot) ยังไม่ถูกคำนวณใหม่ รอ Phase ถัดไป
+   *  งานที่ไม่มีทะเบียนไม่รู้ประเภทรถจึงข้ามไป */
   function resyncFuelRates() {
-    bookings.value.filter((b) => b.status !== 'DELIVERED' && b.plate).forEach((b) => applyFuelRate(b))
+    bookings.value.filter((b) => b.plate).forEach((b) => applyFuelRate(b))
   }
 
   const bookings = ref<Booking[]>([])

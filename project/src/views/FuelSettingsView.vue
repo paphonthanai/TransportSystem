@@ -46,7 +46,7 @@
         </button>
         <span v-if="priceSaved" class="text-xs font-semibold text-green-700 flex items-center gap-1">
           <span class="material-symbols-rounded text-base">check_circle</span>
-          บันทึกแล้ว — อัปเดตค่าน้ำมันของงานที่ยังไม่จบให้ด้วยแล้ว
+          บันทึกแล้ว — อัปเดตเรทน้ำมันของทุกงานที่มีทะเบียนรถ (รวมงานที่เสร็จแล้ว) ให้ด้วยแล้ว
         </span>
       </div>
     </div>
@@ -155,9 +155,8 @@ watch(
 )
 const priceSaved = ref(false)
 
-/** บันทึกราคาน้ำมันจาก draft ลง store จริง แล้วรีเฟรช booking.fuelRate ของงานที่ยังไม่จบ (ไม่แตะงาน DELIVERED เพราะ
- *  ค่าน้ำมันของงานที่จบแล้วถือเป็นตัวเลขปิดบัญชี/จ่ายเงินเดือนไปแล้ว ห้ามเปลี่ยนย้อนหลัง) ใช้สูตรเดียวกับตอนจัดรถเป๊ะ
- *  (ดู dispatchBooking ใน stores/booking.ts) แก้ปัญหาที่พบจริง: แก้เรทในหน้านี้แล้วงานที่จัดรถไปก่อนหน้าไม่เห็นค่าเปลี่ยนตาม */
+/** บันทึกราคาน้ำมันจาก draft ลง store จริง แล้วรีเฟรช booking.fuelRate ของทุกงานที่มีทะเบียน รวมงานที่ส่งของเสร็จสิ้นแล้วด้วย
+ *  (ตามที่ตกลง มีผลกับ Dashboard — ดู resyncFuelRates ใน stores/booking.ts) ใช้สูตรเดียวกับตอนจัดรถเป๊ะ */
 const saveFuelPrices = () => {
   fuelRateStore.settings.pricePerLiterByVehicleType = { ...priceDraft.value.byType }
   bookingStore.resyncFuelRates()
