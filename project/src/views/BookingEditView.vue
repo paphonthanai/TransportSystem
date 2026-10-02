@@ -118,12 +118,13 @@
             น้ำมัน (ลิตร)
             <span class="font-normal text-[10px]">(มาตรฐานตามปลายทาง: {{ standardFuelEstimate }} ล.)</span>
           </label>
-          <input v-model.number="editForm.fuelLiters" type="number" placeholder="0" class="input-field w-full" :readonly="fuelLiterLocked" :class="fuelLiterLocked && 'bg-surface-2 cursor-not-allowed'" />
-          <div v-if="fuelLiterLocked" class="text-[10px] text-amber-600 mt-1">ปลายทางนี้ยังไม่ได้ตั้งค่าน้ำมันไว้ล่วงหน้า ต้องให้ผู้จัดการเป็นผู้กรอกค่านี้</div>
+          <input v-model.number="editForm.fuelLiters" type="number" placeholder="0" class="input-field w-full" />
+          <div v-if="fuelLitersWarning" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-1">{{ fuelLitersWarning }}</div>
         </div>
         <div>
           <label class="block text-xs font-semibold text-muted mb-1">เรทน้ำมัน (บาท/ลิตร)</label>
           <input v-model.number="editForm.fuelRate" type="number" placeholder="0" class="input-field w-full" />
+          <div v-if="!editForm.fuelRate" class="text-[11px] text-amber-700 mt-1">ยังไม่มีเรท — ดูสาเหตุในช่องหมายเหตุ (เรทตั้งตามประเภทรถตอนจ่ายงาน)</div>
         </div>
       </div>
     </div>
@@ -286,7 +287,6 @@ import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useInventoryStore } from '@/stores/inventory'
 import { useFuelRateStore } from '@/stores/fuelRates'
-import { useAuthStore } from '@/stores/auth'
 import { useCustomerStore } from '@/stores/customers'
 import type { Booking, BookingCategory, JobItem, PricingMode } from '@/types'
 import { parseGpsInput } from '@/utils/gps'
@@ -298,12 +298,8 @@ const router = useRouter()
 const bookingStore = useBookingStore()
 const inventoryStore = useInventoryStore()
 const fuelRateStore = useFuelRateStore()
-const authStore = useAuthStore()
 const customerStore = useCustomerStore()
 
-/** ล็อกช่องน้ำมันถ้ามีปลายทางที่ยังไม่ได้ตั้งค่าน้ำมันไว้ล่วงหน้า — ต้องเป็นบัญชีที่มีสิทธิ์ผู้จัดการ (canOverrideFuelRate) เท่านั้นที่กรอกค่านอกเหนือจากที่ตั้งไว้ได้ */
-const hasUnconfiguredDistrict = computed(() => editLineItems.value.some((li) => !fuelRateStore.findRate(li.province, li.district)))
-const fuelLiterLocked = computed(() => hasUnconfiguredDistrict.value && !authStore.currentUser?.canOverrideFuelRate)
 
 const isCements = computed(() => props.fleet === 'cements')
 const productOptionsForFleet = computed(() => inventoryStore.products.filter((p) => p.category === props.fleet))
@@ -355,6 +351,9 @@ const editPricingMode = ref<PricingMode>('SINGLE_DESTINATION')
 const pricingModeChangeConfirm = ref<{ from: PricingMode; to: PricingMode } | null>(null)
 const pendingSingleTripFee = ref(0)
 
+/** เรทน้ำมัน ณ ตอนโหลดฟอร์ม — ใช้แยกว่าผู้ใช้แก้ช่องเรทเองหรือไม่ (ไม่แก้ = ไม่ส่งไปบันทึก กันเขียนเรทเก่าทับเรทที่ระบบเพิ่งตั้งตามประเภทรถ) */
+const initialFuelRate = ref(0)
+
 watch(
   target,
   (booking) => {
@@ -380,11 +379,23 @@ watch(
       fuelLiters: booking.fuelLiters || 0,
       fuelRate: booking.fuelRate || 0,
     }
+    initialFuelRate.value = booking.fuelRate || 0
     editLineItems.value = booking.items.map((i) => ({ ...i }))
     editPricingMode.value = booking.pricingMode ?? 'SINGLE_DESTINATION'
     pricingModeChangeConfirm.value = null
   },
   { immediate: true }
+)
+
+/** ระบบตั้ง/เปลี่ยนเรทน้ำมันแบบ mutate booking เดิม (ตอนจ่ายงาน/บันทึกหน้าตั้งค่าน้ำมัน) watch(target) ข้างบนไม่ทำงานเพราะ object เดิม
+ *  — เฝ้า fuelRate ตรงๆ แล้วอัปเดตช่องเรทตาม เฉพาะตอนผู้ใช้ยังไม่ได้แก้ช่องนี้เอง (ไม่ทับที่กำลังพิมพ์) */
+watch(
+  () => target.value?.fuelRate,
+  (rate) => {
+    if (rate === undefined) return
+    if (editForm.value.fuelRate === initialFuelRate.value) editForm.value.fuelRate = rate || 0
+    initialFuelRate.value = rate || 0
+  }
 )
 
 /** รวมค่าเที่ยวจากทุกรายการในฟอร์มแก้ไข (tripFee * tripCount) — ใช้เฉพาะงาน MULTI_DESTINATION เป็น booking.tripFee โดยอัตโนมัติ */
@@ -397,8 +408,18 @@ const editCalculatedAllowance = computed(() => {
 })
 const editDisplayedAllowance = computed(() => (isCements.value ? editForm.value.allowance || 0 : editCalculatedAllowance.value))
 
-/** น้ำมันมาตรฐานโดยประมาณตามปลายทางปัจจุบัน (อ้างอิงเท่านั้น ไม่ทับค่า fuelLiters จริงที่กรอกไว้ — ค่าจริงถูกล็อกไว้ตั้งแต่ตอนจัดรถแล้ว) */
+/** น้ำมันมาตรฐานโดยประมาณตามปลายทางปัจจุบัน (อ้างอิง/เตือนเท่านั้น ไม่ทับค่า fuelLiters ที่กรอกไว้ — ระบบยึดค่าที่กรอกเสมอ) */
 const standardFuelEstimate = computed(() => fuelRateStore.standardFuelLiters(editLineItems.value, editPricingMode.value))
+
+/** เตือน (ไม่บล็อกการบันทึก) เมื่อลิตรที่กรอกไม่ตรงมาตรฐานปลายทาง หรือยังไม่มีมาตรฐาน/ยังไม่ได้กรอกลิตร */
+const fuelLitersWarning = computed(() => {
+  const entered = editForm.value.fuelLiters || 0
+  const standard = standardFuelEstimate.value
+  if (!standard) return entered ? 'ยังไม่มีปลายทางน้ำมัน — ปลายทางนี้ยังไม่ได้ตั้งลิตรมาตรฐาน กรุณาตรวจสอบลิตรที่กรอกเอง' : 'ยังไม่มีปลายทางน้ำมัน และยังไม่ได้กรอกลิตรน้ำมัน'
+  if (!entered) return `ยังไม่ได้กรอกลิตรน้ำมัน (มาตรฐานปลายทาง ${standard} ล.)`
+  if (entered !== standard) return `ลิตรที่กรอก (${entered} ล.) ไม่ตรงกับมาตรฐานปลายทาง (${standard} ล.) — ระบบใช้ค่าที่กรอก`
+  return ''
+})
 
 const destinationSummary = computed(() => {
   if (!editLineItems.value.length) return '-'
@@ -585,7 +606,8 @@ const confirmEditBooking = () => {
     agreedPrice: resolvedTripFee,
     allowance: editDisplayedAllowance.value,
     fuelLiters: f.fuelLiters,
-    fuelRate: f.fuelRate,
+    // ส่งเรทเฉพาะเมื่อผู้ใช้แก้ช่องนี้เอง — ไม่งั้นเรทที่ระบบตั้งตามประเภทรถถูกเขียนทับด้วยค่าเก่าในฟอร์ม
+    fuelRate: f.fuelRate !== initialFuelRate.value ? f.fuelRate : undefined,
     pricingMode: editPricingMode.value,
   })
   goBack()

@@ -120,18 +120,39 @@ export const useBookingStore = defineStore('booking', () => {
   const fuelRateStore = useFuelRateStore()
 
   /**
-   * ป้องกันในชั้น Business Logic (ไม่ใช่แค่ UI) — ถ้าปลายทางของงานนี้มี Configuration ลิตรมาตรฐานครบทุกจุด ค่าที่บันทึกได้
-   * ต้องเป็นค่าตาม Configuration เท่านั้น (เพิกเฉยค่าที่ส่งมาจาก client แม้พยายามส่งค่าอื่นมาก็ตาม) ถ้ามีปลายทางที่ยังไม่มี
-   * Configuration ตั้งไว้ อนุญาตให้ใช้ค่าที่ส่งมาได้เฉพาะบัญชีที่มีสิทธิ์ canOverrideFuelRate เท่านั้น บัญชีอื่นถูกบังคับกลับ
-   * เป็นค่ามาตรฐานที่คำนวณได้ (0 ถ้าไม่มี Configuration เลยสักปลายทาง) เสมอ — Override เป็นค่าเฉพาะ Booking นี้ ไม่มีจุดใดเขียน
-   * กลับไปที่ fuelRateStore (Configuration กลาง) เลย
+   * ยึดลิตรน้ำมันที่ส่งมา (กรอกเอง/จาก Excel) เสมอ ไม่ทับด้วยลิตรมาตรฐานปลายทางอีกต่อไป (เดิมบังคับเป็นมาตรฐานเงียบๆ ทุกครั้ง
+   * ที่ปลายทางมี Configuration ครบ — ทำให้ค่าจาก Excel/ค่าที่พิมพ์ในหน้าแก้ไขถูกทิ้ง) ถ้าไม่ได้ส่งค่ามาเลย (undefined) ค่อยใช้มาตรฐาน
+   * (0 ถ้าไม่มี Configuration เลย) — ฝั่ง UI/Excel import มีหน้าที่เตือนเมื่อค่าที่กรอกไม่ตรงมาตรฐานแทน (ไม่บล็อก)
    */
   function resolveFuelLiters(requested: number | undefined, items: JobItem[], pricingMode: PricingMode | undefined): number {
-    const standard = fuelRateStore.standardFuelLiters(items, pricingMode)
-    const hasUnconfiguredDistrict = items.some((li) => li.siteName && !fuelRateStore.findRate(li.province, li.district))
-    if (!hasUnconfiguredDistrict) return standard
-    if (authStore.currentUser?.canOverrideFuelRate) return requested ?? standard
-    return standard
+    return requested ?? fuelRateStore.standardFuelLiters(items, pricingMode)
+  }
+
+  /** ท่อนหมายเหตุอัตโนมัติเรื่องเรทน้ำมัน (ขึ้นต้นด้วยคำนี้เสมอ) — ลบ/เติมใหม่ได้โดยไม่แตะหมายเหตุที่ผู้ใช้พิมพ์เอง */
+  const FUEL_RATE_NOTE_PREFIX = 'เรทน้ำมัน: '
+
+  /**
+   * ตั้งเรทน้ำมัน (บาท/ลิตร) ของงานตามประเภทรถของทะเบียนที่ใช้อยู่ (ไม่มีเรทกลางแล้ว) — ไม่รู้ประเภทรถ/ยังไม่ได้ตั้งเรทของประเภทนั้น
+   * เว้นเรทเป็น 0 แล้วแปะสาเหตุไว้ที่หมายเหตุแทน (ตามที่ตกลง) เรียกซ้ำกี่ครั้งก็ไม่ซ้ำ และท่อนสาเหตุหายเองเมื่อรู้ประเภทรถ/ตั้งเรทแล้ว
+   */
+  function applyFuelRate(booking: Booking) {
+    const vehicle = booking.plate ? useVehiclesStore().findByFullPlate(booking.plate) : undefined
+    const { rate, reason } = fuelRateStore.fuelRateFor(vehicle?.department)
+    booking.fuelRate = rate
+    const kept = (booking.note || '')
+      .split(' | ')
+      .filter((part) => part && !part.startsWith(FUEL_RATE_NOTE_PREFIX))
+    if (reason) kept.push(FUEL_RATE_NOTE_PREFIX + reason)
+    booking.note = kept.length ? kept.join(' | ') : undefined
+  }
+
+  /** งานที่ยังเปลี่ยนเรทน้ำมันได้ — ก่อนคนขับรับน้ำมัน (หลังจากนั้นจ่ายน้ำมันไปแล้วตามเรทเดิม) */
+  const FUEL_RATE_EDITABLE_STATUSES: BookingStatus[] = ['WAITING_DISPATCH', 'ASSIGNED', 'ACCEPTED']
+
+  /** คำนวณเรทน้ำมันใหม่ของงานที่ยังไม่จบทุกงานที่มีทะเบียน (เรียกตอนกดบันทึกเรทในหน้าตั้งค่าน้ำมัน) ไม่แตะ DELIVERED
+   *  (ตัวเลขปิดบัญชี/จ่ายเงินเดือนไปแล้ว ห้ามเปลี่ยนย้อนหลัง) */
+  function resyncFuelRates() {
+    bookings.value.filter((b) => b.status !== 'DELIVERED' && b.plate).forEach((b) => applyFuelRate(b))
   }
 
   const bookings = ref<Booking[]>([])
@@ -318,6 +339,7 @@ export const useBookingStore = defineStore('booking', () => {
       createdAt: createdAt || new Date(),
       billingStatus: 'UNBILLED',
     }
+    applyFuelRate(booking)
     bookings.value.unshift(booking)
     addLog(`ลงงานใหม่ ${booking.docNo} (${booking.customer})`, { bookingId: booking.id })
     onboardingStore.markDone('createdFirstBooking')
@@ -440,7 +462,14 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.allowance !== undefined) booking.allowance = data.allowance
     if (data.pricingMode !== undefined) booking.pricingMode = data.pricingMode
     if (data.fuelLiters !== undefined) booking.fuelLiters = resolveFuelLiters(data.fuelLiters, booking.items, booking.pricingMode)
-    if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
+    if (data.fuelRate !== undefined) {
+      booking.fuelRate = data.fuelRate
+      // ผู้ใช้ตั้งเรทเองแล้ว ท่อนหมายเหตุ "ยังไม่มีเรท…" ที่ระบบแปะไว้ก่อนหน้าไม่จริงอีกต่อไป
+      if (data.fuelRate > 0 && booking.note) {
+        const kept = booking.note.split(' | ').filter((part) => part && !part.startsWith(FUEL_RATE_NOTE_PREFIX))
+        booking.note = kept.length ? kept.join(' | ') : undefined
+      }
+    }
     addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`, { bookingId: booking.id })
   }
 
@@ -564,12 +593,9 @@ export const useBookingStore = defineStore('booking', () => {
       booking.driverLastName = extra.driverLastName
     }
     if (extra?.odometerBefore !== undefined) booking.odometerBefore = extra.odometerBefore
-    /** เรทน้ำมันแยกตามประเภทรถ — ตอนสร้างงานยังไม่รู้ว่าจะใช้รถคันไหน (ใช้เรทกลางไปก่อน) จึงอัปเดตเรทตอนจัดรถ/เปลี่ยนรถ
+    /** เรทน้ำมันแยกตามประเภทรถ — ตอนสร้างงานอาจยังไม่รู้ว่าจะใช้รถคันไหน (เรทว่าง + หมายเหตุบอกสาเหตุ) จึงตั้งเรทตอนจัดรถ/เปลี่ยนรถ
      *  เฉพาะก่อนคนขับรับน้ำมัน (หลังจากนั้นน้ำมันจ่ายไปแล้วตามเรทเดิม ห้ามเปลี่ยนย้อนหลัง) */
-    if (booking.status === 'WAITING_DISPATCH' || booking.status === 'ASSIGNED' || booking.status === 'ACCEPTED') {
-      const vehicle = useVehiclesStore().findByFullPlate(plate)
-      booking.fuelRate = fuelRateStore.pricePerLiterFor(vehicle?.department)
-    }
+    if (FUEL_RATE_EDITABLE_STATUSES.includes(booking.status)) applyFuelRate(booking)
     // น้ำมันคำนวณและล็อกไว้ตั้งแต่ตอนสร้างงานแล้ว (จากจังหวัด/อำเภอของแต่ละปลายทาง) ตอนจัดรถจึงไม่ต้องกรอก/คำนวณซ้ำ
     // การวางบิลแยกอิสระจากการจัดรถโดยเจตนา — booking.billingStatus ยังคง UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล (ดู addBookingsToBatch)
     const alreadyAccepted = booking.status !== 'WAITING_DISPATCH'
@@ -1160,6 +1186,8 @@ export const useBookingStore = defineStore('booking', () => {
     switchPricingMode,
     addJobItem,
     dispatchBooking,
+    applyFuelRate,
+    resyncFuelRates,
     acceptDispatch,
     declineDispatch,
     resetBookingStatus,

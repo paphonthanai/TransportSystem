@@ -8,7 +8,7 @@
       </button>
     </div>
     <div class="text-xs text-muted">
-      ตั้งค่าลิตรมาตรฐานต่อเที่ยวตามอำเภอ และราคาน้ำมัน ณ วันนี้ — ระบบจะดึงมากรอกให้อัตโนมัติตอนสร้างงานเมื่อกรอกอำเภอ (แก้ไขเองได้เพื่อป้องกันการโกงน้ำมัน)
+      ตั้งค่าลิตรมาตรฐานต่อเที่ยวตามอำเภอ และเรทราคาน้ำมันแยกตามประเภทรถ — ระบบจะดึงมากรอกให้อัตโนมัติตอนสร้างงานเมื่อกรอกอำเภอ (แก้ไขเองได้เพื่อป้องกันการโกงน้ำมัน)
     </div>
     <!-- เดิมบันทึกไม่สำเร็จ (เช่น หลุดสิทธิ์/หลุดเน็ต) แล้วเงียบ — ไม่มีจุดไหนแสดง fuelRateStore.error เลยสักที่ ผู้ใช้เห็นรายการ
          ที่เพิ่งเพิ่มในหน้าจอตามปกติ (แค่ยังไม่ได้ขึ้น Firestore จริง) พอรีเฟรชเลยดูเหมือนข้อมูลหายไปทั้งที่กดบันทึกแล้ว -->
@@ -18,16 +18,11 @@
     </div>
 
     <div class="card-lg">
-      <div class="font-bold text-text mb-3">ราคาน้ำมัน ณ วันนี้</div>
-      <div class="max-w-xs">
-        <label class="block text-xs font-semibold text-muted mb-1">ราคาน้ำมัน (บาท/ลิตร)</label>
-        <input v-model.number="priceDraft.today" @input="priceDraftDirty = true" type="number" min="0" step="0.01" class="input-field w-full" />
-        <div class="text-[11px] text-muted mt-1">ใช้เป็นเรทตั้งต้นทุกอำเภอ อัปเดตทุกวันที่ราคาน้ำมันเปลี่ยน</div>
-      </div>
-      <div class="mt-5 pt-4 border-t border-border">
-        <div class="font-semibold text-text mb-1">เรทน้ำมันแยกตามประเภทรถ</div>
+      <div class="font-bold text-text mb-1">เรทน้ำมันแยกตามประเภทรถ</div>
+      <div>
         <div class="text-[11px] text-muted mb-3">
-          ระบบจะใช้เรทของประเภทรถที่จัดให้ตอนจ่ายงาน/จัดรถ (ก่อนคนขับรับน้ำมัน) — เว้นว่างหรือใส่ 0 = ใช้ราคาน้ำมัน ณ วันนี้ด้านบน
+          ระบบจะใช้เรทของประเภทรถที่จัดให้ตอนจ่ายงาน/จัดรถ (ก่อนคนขับรับน้ำมัน) — เว้นว่างหรือใส่ 0 = ยังไม่มีเรทของประเภทนี้
+          (งานของรถประเภทนั้นจะเว้นเรทไว้และแสดงสาเหตุในหมายเหตุของงาน)
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div v-for="type in vehicleTypeOptions" :key="type">
@@ -38,7 +33,7 @@
               type="number"
               min="0"
               step="0.01"
-              :placeholder="String(priceDraft.today)"
+              placeholder="ยังไม่มีเรท"
               class="input-field w-full"
             />
           </div>
@@ -135,30 +130,27 @@
 import { ref, computed, watch } from 'vue'
 import { useFuelRateStore, type FuelRate } from '@/stores/fuelRates'
 import { useBookingStore } from '@/stores/booking'
-import { useVehiclesStore } from '@/stores/vehicles'
 import type { CurrentVehicleType } from '@/types'
 
 const fuelRateStore = useFuelRateStore()
 const bookingStore = useBookingStore()
-const vehiclesStore = useVehiclesStore()
 
 /**
- * ราคาน้ำมัน (ทั่วไป + แยกตามประเภทรถ) เปลี่ยนจาก auto-save ทุกครั้งที่พิมพ์ (v-model ตรงเข้า store) เป็น draft
+ * เรทราคาน้ำมันแยกตามประเภทรถ เปลี่ยนจาก auto-save ทุกครั้งที่พิมพ์ (v-model ตรงเข้า store) เป็น draft
  * ในเครื่อง + ปุ่ม "บันทึก" ชัดเจนแทน — กันเผลอบันทึกค่าที่พิมพ์ยังไม่เสร็จ และให้เห็นชัดว่าบันทึกสำเร็จเมื่อไหร่
  * (ต่างจากช่องอำเภอ/สาย/ลิตร ที่มี dialog + ปุ่มบันทึกของตัวเองอยู่แล้ว)
  */
 const priceDraft = ref({
-  today: fuelRateStore.settings.todayPricePerLiter,
   byType: { ...(fuelRateStore.settings.pricePerLiterByVehicleType || {}) } as Partial<Record<CurrentVehicleType, number>>,
 })
 // ถ้าค่าจาก Firestore เปลี่ยน (เช่น แอดมินอีกคนแก้ไว้) ก่อนที่หน้านี้จะเคยกดบันทึกเอง ให้ sync draft ตาม — แต่หยุด sync
 // ทันทีที่ผู้ใช้เริ่มพิมพ์เอง (priceDraftDirty) กันพิมพ์อยู่แล้วโดนค่าจากที่อื่นทับกลางคัน
 const priceDraftDirty = ref(false)
 watch(
-  () => [fuelRateStore.settings.todayPricePerLiter, fuelRateStore.settings.pricePerLiterByVehicleType] as const,
-  ([today, byType]) => {
+  () => fuelRateStore.settings.pricePerLiterByVehicleType,
+  (byType) => {
     if (priceDraftDirty.value) return
-    priceDraft.value = { today, byType: { ...(byType || {}) } }
+    priceDraft.value = { byType: { ...(byType || {}) } }
   }
 )
 const priceSaved = ref(false)
@@ -167,14 +159,8 @@ const priceSaved = ref(false)
  *  ค่าน้ำมันของงานที่จบแล้วถือเป็นตัวเลขปิดบัญชี/จ่ายเงินเดือนไปแล้ว ห้ามเปลี่ยนย้อนหลัง) ใช้สูตรเดียวกับตอนจัดรถเป๊ะ
  *  (ดู dispatchBooking ใน stores/booking.ts) แก้ปัญหาที่พบจริง: แก้เรทในหน้านี้แล้วงานที่จัดรถไปก่อนหน้าไม่เห็นค่าเปลี่ยนตาม */
 const saveFuelPrices = () => {
-  fuelRateStore.settings.todayPricePerLiter = priceDraft.value.today
   fuelRateStore.settings.pricePerLiterByVehicleType = { ...priceDraft.value.byType }
-  bookingStore.bookings
-    .filter((b) => b.status !== 'DELIVERED' && b.plate)
-    .forEach((b) => {
-      const vehicle = vehiclesStore.findByFullPlate(b.plate!)
-      b.fuelRate = fuelRateStore.pricePerLiterFor(vehicle?.department)
-    })
+  bookingStore.resyncFuelRates()
   priceDraftDirty.value = false
   priceSaved.value = true
   setTimeout(() => (priceSaved.value = false), 2500)

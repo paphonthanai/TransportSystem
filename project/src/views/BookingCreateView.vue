@@ -461,9 +461,12 @@ const computedFuel = computed(() => fuelRateStore.standardFuelLiters(lineItems.v
 const fuelDataMissingForCreate = computed(() => lineItems.value.some((li) => li.siteName) && computedFuel.value <= 0)
 const goToFuelSettings = () => router.push('/settings/fuel')
 
+/** เรทน้ำมันตามประเภทรถของทะเบียนที่เลือกในฟอร์ม (ไม่มีเรทกลางแล้ว — ยังไม่เลือกรถ/ไม่รู้ประเภท = 0 ประเมินเบี้ยเลี้ยงโดยยังไม่หักค่าน้ำมัน) */
+const headerFuelRate = computed(() => fuelRateStore.fuelRateFor(vehiclesStore.findByFullPlate(header.value.plate)?.department).rate)
+
 const headerCalculatedAllowance = computed(() => {
   const fee = header.value.pricingMode === 'MULTI_DESTINATION' ? multiTripFeeTotal.value : header.value.tripFee || 0
-  return Math.round((fee * 0.99 * 0.62 - computedFuel.value * fuelRateStore.settings.todayPricePerLiter) * 100) / 100
+  return Math.round((fee * 0.99 * 0.62 - computedFuel.value * headerFuelRate.value) * 100) / 100
 })
 
 /** รวมค่าเที่ยวจากทุกรายการ (tripFee * tripCount) — ใช้เฉพาะงาน MULTI_DESTINATION เป็น booking.tripFee โดยอัตโนมัติ */
@@ -698,7 +701,8 @@ const saveAllItems = () => {
     vatRate: header.value.vatRate || undefined,
     pricingMode: header.value.pricingMode,
     fuelLiters: computedFuel.value,
-    fuelRate: fuelRateStore.settings.todayPricePerLiter,
+    // เรทจริงตั้งโดย bookingStore.addBooking ตามประเภทรถของทะเบียนที่เลือก (ไม่เลือก/ไม่รู้ประเภท = 0 + หมายเหตุสาเหตุ)
+    fuelRate: 0,
     plate: header.value.plate || '',
     driverName: header.value.driverName || undefined,
     driverId: selectedDriver?.id,

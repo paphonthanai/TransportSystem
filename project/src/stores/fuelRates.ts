@@ -14,9 +14,8 @@ export interface FuelRate {
 
 export interface FuelSettings {
   rates: FuelRate[]
-  /** ราคาน้ำมัน ณ วันนี้ (บาท/ลิตร) ใช้เป็นค่าตั้งต้นในทุกอำเภอ อัปเดตเองทุกวันที่ราคาเปลี่ยน */
-  todayPricePerLiter: number
-  /** ราคาน้ำมันแยกตามประเภทรถ (บาท/ลิตร) — ประเภทไหนไม่ได้ตั้ง (หรือตั้งเป็น 0) ใช้ todayPricePerLiter แทน */
+  /** ราคาน้ำมันแยกตามประเภทรถ (บาท/ลิตร) — เป็นเรทเดียวที่ระบบใช้ (เลิกใช้ "ราคา ณ วันนี้" เรทกลางแล้ว) ประเภทไหนไม่ได้ตั้ง
+   *  (หรือตั้งเป็น 0) = ยังไม่มีเรท ดู fuelRateFor */
   pricePerLiterByVehicleType?: Partial<Record<VehicleType, number>>
 }
 
@@ -28,7 +27,6 @@ function defaultSettings(): FuelSettings {
       { province: 'ชลบุรี', district: 'ศรีราชา', liters: 30 },
       { province: 'พระนครศรีอยุธยา', district: 'บางปะอิน', liters: 25 },
     ],
-    todayPricePerLiter: 32,
   }
 }
 
@@ -47,10 +45,13 @@ export const useFuelRateStore = defineStore('fuelRates', () => {
     )
   }
 
-  /** เรทน้ำมัน (บาท/ลิตร) ของรถประเภทนี้ — ไม่รู้ประเภทรถ/ไม่ได้ตั้งเรทเฉพาะประเภท ใช้เรทกลาง (todayPricePerLiter) */
-  const pricePerLiterFor = (vehicleType?: VehicleType): number => {
-    const specific = vehicleType ? settings.value.pricePerLiterByVehicleType?.[vehicleType] : undefined
-    return specific && specific > 0 ? specific : settings.value.todayPricePerLiter
+  /** เรทน้ำมัน (บาท/ลิตร) ของรถประเภทนี้ — ไม่มี fallback เรทกลาง: ไม่รู้ประเภทรถ/ไม่ได้ตั้งเรทของประเภทนั้น = เรท 0 พร้อม
+   *  reason บอกสาเหตุ (ผู้เรียกเอาไปแปะที่หมายเหตุของงาน ดู applyFuelRate ใน stores/booking.ts) */
+  const fuelRateFor = (vehicleType?: VehicleType): { rate: number; reason?: string } => {
+    if (!vehicleType) return { rate: 0, reason: 'ยังไม่ทราบประเภทรถ (ยังไม่ได้จัดรถ/ไม่พบรถในทะเบียนรถ) จึงยังไม่มีเรทน้ำมัน' }
+    const specific = settings.value.pricePerLiterByVehicleType?.[vehicleType]
+    if (specific && specific > 0) return { rate: specific }
+    return { rate: 0, reason: `ยังไม่ได้ตั้งเรทน้ำมันของ${vehicleType} ในหน้าตั้งค่าน้ำมัน` }
   }
 
   /** รายชื่อจังหวัดทั้งหมดที่ตั้งค่าไว้ (ไม่ซ้ำ) ใช้เป็น datalist ตอนสร้างงาน */
@@ -93,5 +94,5 @@ export const useFuelRateStore = defineStore('fuelRates', () => {
     })
   }
 
-  return { settings, loading, error, findRate, pricePerLiterFor, provincesList, districtsForProvince, standardFuelLiters, isDifferentCorridor }
+  return { settings, loading, error, findRate, fuelRateFor, provincesList, districtsForProvince, standardFuelLiters, isDifferentCorridor }
 })

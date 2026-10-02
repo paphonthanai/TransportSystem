@@ -323,7 +323,10 @@
               <div class="text-xs font-semibold text-muted mb-1">น้ำมัน (คำนวณไว้ตั้งแต่ตอนสร้างงาน)</div>
               <div class="font-bold text-text">
                 ต้องรับน้ำมันทั้งหมด {{ dispatchTarget?.fuelLiters || 0 }} ลิตร
-                <span class="text-xs font-normal text-muted">(เรท {{ formatBaht(dispatchTarget?.fuelRate || 0) }}/ล.)</span>
+                <span class="text-xs font-normal text-muted">
+                  ({{ dispatchFuelRatePreview.rate > 0 ? `เรท ${formatBaht(dispatchFuelRatePreview.rate)}/ล.` : 'ยังไม่มีเรท' }})
+                </span>
+                <div v-if="dispatchFuelRatePreview.reason" class="text-[11px] font-normal text-amber-700 mt-0.5">{{ dispatchFuelRatePreview.reason }}</div>
               </div>
             </div>
             <div>
@@ -1114,6 +1117,10 @@ const canAddDispatchItem = computed(
 )
 
 /** เมื่อรายการในงานนี้เปลี่ยน (เพิ่ม/ลบระหว่างจัดรถ) คำนวณน้ำมันมาตรฐานรวมใหม่ตาม pricingMode (SINGLE_DESTINATION คิดจากรายการหลักเพียงครั้งเดียว, MULTI_DESTINATION รวมทุกรายการ) */
+/** เรทน้ำมันตามประเภทรถของทะเบียนที่กำลังเลือกในไดอะล็อก (พรีวิวก่อนกดจ่ายงาน — ค่าจริงถูกตั้งตอน dispatchBooking ด้วยสูตรเดียวกัน)
+ *  ยังไม่เลือกรถ = ยังไม่มีเรท พร้อมสาเหตุ */
+const dispatchFuelRatePreview = computed(() => fuelRateStore.fuelRateFor(vehiclesStore.findByFullPlate(dispatchForm.value.plate)?.department))
+
 const recomputeDispatchFuel = () => {
   if (!dispatchTarget.value) return
   dispatchTarget.value.fuelLiters = fuelRateStore.standardFuelLiters(dispatchTarget.value.items, dispatchTarget.value.pricingMode)
@@ -1667,7 +1674,8 @@ const confirmImport = () => {
       // ใบสั่งงานที่พิมพ์ออกมามี VAT ติดทุกใบทั้งที่ไม่มีใครกรอก (ดู JobDocumentView.vue's showVatRow)
       pricingMode: 'SINGLE_DESTINATION',
       fuelLiters: row.fuelLiters,
-      fuelRate: fuelRateStore.settings.todayPricePerLiter,
+      // เรทจริงตั้งโดย bookingStore.addBooking ตามประเภทรถของทะเบียน (ไม่รู้ประเภท = 0 + หมายเหตุสาเหตุ)
+      fuelRate: 0,
       plate: row.plate || undefined,
       driverName: row.driverName || undefined,
       driverId: row.driverId,
