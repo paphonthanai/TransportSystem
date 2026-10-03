@@ -1,6 +1,8 @@
 import { computed, ref, type Ref } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
+import { useVehiclesStore } from '@/stores/vehicles'
+import { computeBookingMoney } from '@/utils/bookingMoney'
 import { isBookingConfirmedForBilling } from '@/utils/bookingStatus'
 import type { Booking, BookingCategory } from '@/types'
 
@@ -40,6 +42,7 @@ export const defaultCompletedJobsFilters = (fleet?: BookingCategory): CompletedJ
 export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
   const bookingStore = useBookingStore()
   const salesDocumentsStore = useSalesDocumentsStore()
+  const vehiclesStore = useVehiclesStore()
 
   const matchesSearch = (b: Booking, q: string) =>
     b.docNo.toLowerCase().includes(q) ||
@@ -138,6 +141,39 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     }
   }
 
+  /** เงินของงานนี้ (ยอดขาย/เบี้ยเลี้ยง/ค่าน้ำมัน/รายจ่าย/รายได้บริษัท) — ประเภทรถหาจากทะเบียนรถ ดู utils/bookingMoney.ts */
+  const moneyForBooking = (booking: Booking) =>
+    computeBookingMoney(booking, booking.plate ? vehiclesStore.findByFullPlate(booking.plate)?.department : undefined)
+
+  /** แถว Excel ของงานเสร็จสิ้น 1 งาน — ใช้ร่วมกันทั้งหน้า "งานเสร็จสิ้นทั้งหมด" และ "งานเสร็จสิ้น" รายกองรถ ให้คอลัมน์ตรงกันเสมอ
+   *  ลูกค้าใช้ชื่อเต็ม (ไม่ใช่ชื่อย่อ) รายได้คงเหลือ (รายได้บริษัท) เว้นว่างถ้าคิดไม่ได้ พร้อมหมายเหตุสาเหตุ (ห้ามนำไปคำนวณ) */
+  const buildExportRow = (b: Booking) => {
+    const docs = documentsForBooking(b)
+    const money = moneyForBooking(b)
+    const dateLabel = (d?: Date) => (d ? new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '')
+    return {
+      เลขที่เอกสาร: b.docNo,
+      'เลข PO': b.po || '',
+      กองรถ: b.category === 'cements' ? 'Cements' : 'Ceramics',
+      ลูกค้า: b.customer,
+      ปลายทาง: b.items.map((i) => i.siteName).filter(Boolean).join(', '),
+      'อำเภอ/จังหวัด': [...new Set(b.items.map((i) => [i.district, i.province].filter(Boolean).join('/')).filter(Boolean))].join(', '),
+      สินค้า: productLabel(b),
+      'น้ำหนัก/จำนวน': weightQtyLabel(b),
+      ทะเบียนรถ: b.plate || '',
+      คนขับ: b.driverName || '',
+      วันที่ส่งของสำเร็จ: dateLabel(b.completedAt),
+      ราคา: b.agreedPrice || b.tripFee || 0,
+      เบี้ยเลี้ยง: money.allowance,
+      ค่าน้ำมัน: money.fuelCost,
+      'รายได้คงเหลือ (รายได้บริษัท)': money.companyIncome ?? '',
+      หมายเหตุรายได้: money.incomeNote || '',
+      เลขใบวางบิล: docs.billing?.number || '',
+      เลขใบแจ้งหนี้: docs.taxInvoice?.number || '',
+      เลขใบเสร็จ: docs.receipt?.number || '',
+    }
+  }
+
   const distinctCustomers = computed(() => [...new Set(bookingStore.bookings.filter((b) => b.status === 'DELIVERED').map((b) => b.customer))].sort())
   const distinctDrivers = computed(() =>
     [...new Set(bookingStore.bookings.filter((b) => b.status === 'DELIVERED' && b.driverName).map((b) => b.driverName as string))].sort()
@@ -157,6 +193,8 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     firstPodImage,
     bookingPhotos,
     documentsForBooking,
+    moneyForBooking,
+    buildExportRow,
     distinctCustomers,
     distinctDrivers,
     distinctDistricts,

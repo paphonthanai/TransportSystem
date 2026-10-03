@@ -1,3 +1,5 @@
+import type { Booking } from '@/types'
+
 export type DiscountableRow = {
   qty: number
   unitPrice: number
@@ -22,6 +24,21 @@ export function computeRowVat(row: DiscountableRow & { vatRate?: number }): numb
 
 export function computeRowWht(row: DiscountableRow & { whtRate?: number }): number {
   return (computeRowAmount(row) * (row.whtRate || 0)) / 100
+}
+
+/** แถวคำนวณเงินของ 1 booking ป้อนเข้า computeRowDiscountBaht/computeRowAmount/computeRowVat ด้านบน — ยอดก่อนส่วนลด = ค่าเที่ยว +
+ *  extraCharges รวม (ยอดที่เรียกเก็บลูกค้าจริง) ส่วนลด/VAT ใช้ discountMode/discountPercent/discountAmount/vatRate ของ booking นี้ตรงๆ
+ *  ไม่คำนวณเปอร์เซ็นต์ใหม่เอง — ย้ายมาไว้ที่นี่ (เดิมเป็น closure ใน stores/salesDocuments.ts) เพื่อให้ใบวางบิลและ Dashboard ใช้ตัวเดียวกัน
+ *  ยอดขายบน Dashboard จึงตรงกับใบวางบิลเสมอ Booking ไม่มี field whtRate ของตัวเอง เอกสารที่สร้างจากงานขนส่งจึงไม่มี WHT ติดไปด้วย */
+export function bookingBillingRow(b: Pick<Booking, 'tripFee' | 'extraCharges' | 'discountMode' | 'discountPercent' | 'discountAmount' | 'vatRate'>) {
+  return {
+    qty: 1,
+    unitPrice: (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0),
+    discountMode: b.discountMode,
+    discountPercent: b.discountPercent,
+    discountAmount: b.discountAmount,
+    vatRate: b.vatRate,
+  }
 }
 
 export type TaxableRow = DiscountableRow & { vatRate?: number; whtRate?: number }

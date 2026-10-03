@@ -256,6 +256,7 @@ const {
   firstPodImage,
   bookingPhotos,
   documentsForBooking,
+  buildExportRow,
   distinctCustomers,
   distinctDrivers,
   distinctDistricts,
@@ -320,28 +321,7 @@ const toggleSelectAll = () => {
 const exportToExcel = () => {
   const targets = selectedIds.value.length > 0 ? completedBookings.value.filter((b) => selected.value[b.id]) : completedBookings.value
   if (!targets.length) return
-  const dateLabel = (d?: Date) => (d ? new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '')
-  const rows = targets.map((b) => {
-    const docs = documentsForBooking(b)
-    return {
-      เลขที่เอกสาร: b.docNo,
-      'เลข PO': b.po || '',
-      กองรถ: b.category === 'cements' ? 'Cements' : 'Ceramics',
-      ลูกค้า: b.customer,
-      ปลายทาง: b.items.map((i) => i.siteName).filter(Boolean).join(', '),
-      'อำเภอ/จังหวัด': [...new Set(b.items.map((i) => [i.district, i.province].filter(Boolean).join('/')).filter(Boolean))].join(', '),
-      สินค้า: productLabel(b),
-      'น้ำหนัก/จำนวน': weightQtyLabel(b),
-      ทะเบียนรถ: b.plate || '',
-      คนขับ: b.driverName || '',
-      วันที่ส่งของสำเร็จ: dateLabel(b.completedAt),
-      ราคา: b.agreedPrice || b.tripFee || 0,
-      เลขใบวางบิล: docs.billing?.number || '',
-      เลขใบแจ้งหนี้: docs.taxInvoice?.number || '',
-      เลขใบเสร็จ: docs.receipt?.number || '',
-    }
-  })
-  exportRowsToExcel(`งานเสร็จสิ้น_${new Date().toISOString().slice(0, 10)}`, rows, 'งานเสร็จสิ้น')
+  exportRowsToExcel(`งานเสร็จสิ้น_${new Date().toISOString().slice(0, 10)}`, targets.map(buildExportRow), 'งานเสร็จสิ้น')
 }
 
 const bulkDeleting = ref(false)

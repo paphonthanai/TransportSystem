@@ -2,10 +2,19 @@
   <div class="space-y-4">
     <div class="card-lg">
       <div class="font-bold text-text mb-3">สรุปสถานะการเงิน</div>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <!-- ยอด 3 ใบนี้คิดจากงานที่ส่งของเสร็จแล้ว + วางบิลแล้ว (ดู summarizeBilledMoney ใน utils/bookingMoney.ts) -->
+        <div class="border-l-4 border-primary pl-2">
+          <div class="text-[11px] text-muted">ยอดขายรวม</div>
+          <div class="text-sm font-bold text-blue-600">{{ formatBaht(billedMoney.totals.sales) }}</div>
+        </div>
+        <div class="border-l-4 border-red-500 pl-2">
+          <div class="text-[11px] text-muted">รายจ่าย (ค่าแรง + ค่าน้ำมัน)</div>
+          <div class="text-sm font-bold text-red-600">{{ formatBaht(billedMoney.totals.expense) }}</div>
+        </div>
         <div class="border-l-4 border-green-500 pl-2">
-          <div class="text-[11px] text-muted">รายรับรวม (ชำระแล้ว)</div>
-          <div class="text-sm font-bold text-text">{{ formatBaht(totalPaidRevenue) }}</div>
+          <div class="text-[11px] text-muted">รายได้บริษัท</div>
+          <div class="text-sm font-bold text-green-600">{{ formatBaht(billedMoney.totals.companyIncome) }}</div>
         </div>
         <div class="border-l-4 border-primary pl-2">
           <div class="text-[11px] text-muted">รอรับชำระ</div>
@@ -20,22 +29,27 @@
           <div class="text-sm font-bold text-text">{{ invoicesThisMonth }} ใบ</div>
         </div>
       </div>
+      <div v-if="billedMoney.uncomputableCount > 0" class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+        <span class="material-symbols-rounded text-base">warning</span>
+        {{ billedMoney.uncomputableCount }} งานยังคิดรายได้บริษัทไม่ได้ (ไม่ทราบประเภทรถ/ไม่มีทะเบียน/ไม่มีเรทน้ำมัน) — ไม่ถูกนับในยอดขาย/รายจ่าย/รายได้บริษัท จนกว่าจะแก้ไขข้อมูล
+        <router-link to="/completed-jobs" class="underline font-semibold ml-1">ดูงานที่เสร็จสิ้น</router-link>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4 items-start">
       <!-- รายรับและรายจ่าย -->
       <div class="card-lg">
         <div class="flex items-center justify-between mb-3">
-          <div class="font-bold text-text">รายรับและรายจ่าย</div>
+          <div class="font-bold text-text">ยอดขาย รายจ่าย และรายได้บริษัท</div>
           <button class="w-8 h-8 rounded-lg hover:bg-surface-2 flex items-center justify-center text-muted">
             <span class="material-symbols-rounded text-lg">refresh</span>
           </button>
         </div>
         <div class="grid grid-cols-2 gap-3 mb-3">
           <div>
-            <div class="text-xs text-muted mb-1">หน่วยงาน</div>
+            <div class="text-xs text-muted mb-1">ประเภทงาน</div>
             <select v-model="unitFilter" class="input-field w-full">
-              <option value="all">ทุกหน่วยงาน</option>
+              <option value="all">ทุกประเภทงาน</option>
               <option value="cements">Fleet Cements</option>
               <option value="ceramics">Fleet Ceramics</option>
             </select>
@@ -115,9 +129,9 @@
         </div>
         <div class="text-[11px] text-red-500 font-medium mb-3">** ยกเว้นถึงกำหนดภายใน 3 วัน **</div>
         <div class="mb-3">
-          <div class="text-xs text-muted mb-1">หน่วยงาน</div>
+          <div class="text-xs text-muted mb-1">ประเภทงาน</div>
           <select v-model="dueUnitFilter" class="input-field w-full">
-            <option value="all">ทุกหน่วยงาน</option>
+            <option value="all">ทุกประเภทงาน</option>
             <option value="cements">Fleet Cements</option>
             <option value="ceramics">Fleet Ceramics</option>
           </select>
@@ -152,9 +166,9 @@
         </div>
         <div class="grid grid-cols-2 gap-2 mb-3">
           <div>
-            <div class="text-xs text-muted mb-1">หน่วยงาน</div>
+            <div class="text-xs text-muted mb-1">ประเภทงาน</div>
             <select v-model="billingUnitFilter" class="input-field w-full">
-              <option value="all">ทุกหน่วยงาน</option>
+              <option value="all">ทุกประเภทงาน</option>
               <option value="cements">Fleet Cements</option>
               <option value="ceramics">Fleet Ceramics</option>
             </select>
@@ -197,9 +211,9 @@
           </button>
         </div>
         <div class="mb-3">
-          <div class="text-xs text-muted mb-1">หน่วยงาน</div>
+          <div class="text-xs text-muted mb-1">ประเภทงาน</div>
           <select v-model="repairUnitFilter" class="input-field w-full">
-            <option value="all">ทุกหน่วยงาน</option>
+            <option value="all">ทุกประเภทงาน</option>
             <option value="cements">Fleet Cements</option>
             <option value="ceramics">Fleet Ceramics</option>
           </select>
@@ -240,10 +254,13 @@ import Pager from '@/components/Pager.vue'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
+import { useVehiclesStore } from '@/stores/vehicles'
+import { summarizeBilledMoney } from '@/utils/bookingMoney'
 
 const salesDocumentsStore = useSalesDocumentsStore()
 const bookingStore = useBookingStore()
 const customerStore = useCustomerStore()
+const vehiclesStore = useVehiclesStore()
 
 const taxInvoices = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE'))
 const receipts = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'RECEIPT'))
@@ -259,7 +276,9 @@ const fleetOfDoc = (bookingIds: string[]) => {
 }
 const matchesFleet = (bookingIds: string[], filter: string) => filter === 'all' || !fleetOfDoc(bookingIds) || fleetOfDoc(bookingIds) === filter
 
-const totalPaidRevenue = computed(() => receipts.value.filter((d) => d.status === 'PAID').reduce((sum, d) => sum + d.amount, 0))
+/** ยอดขายรวม/รายจ่าย/รายได้บริษัท — คิดจากงานที่ส่งของเสร็จแล้ว + วางบิลแล้ว (billingNoteDocId) ตามประเภทรถของทะเบียนรถ
+ *  คิดสดทุกครั้งจากข้อมูลปัจจุบัน แก้ทะเบียน/ประเภทรถแล้วตัวเลขเปลี่ยนตามเอง */
+const billedMoney = computed(() => summarizeBilledMoney(bookingStore.bookings, (plate) => vehiclesStore.findByFullPlate(plate)?.department))
 const totalPendingReceivable = computed(() => taxInvoices.value.filter((d) => d.status === 'SENT').reduce((sum, d) => sum + d.amount, 0))
 const totalOverdue = computed(() => {
   const today = new Date()
@@ -296,33 +315,19 @@ const monthLabels = computed(() => {
   })
 })
 
-/** รายรับรายเดือน 12 เดือนล่าสุด = ยอดใบเสร็จที่ชำระแล้วจริง ตามวันที่ชำระจริง (paidDate)
- *  รายจ่าย/กำไร ยังไม่มีข้อมูลจริงในระบบ (ไม่มีฟีเจอร์บันทึกค่าใช้จ่าย) จึงเป็น 0 จนกว่าจะมีฟีเจอร์นั้น */
-const monthlyRevenue = computed(() => {
-  const now = new Date()
-  return Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)
-    return receipts.value
-      .filter((doc) => doc.status === 'PAID' && doc.paidDate)
-      .filter((doc) => {
-        const paid = new Date(doc.paidDate!)
-        return paid.getFullYear() === d.getFullYear() && paid.getMonth() === d.getMonth()
-      })
-      .reduce((sum, doc) => sum + doc.amount, 0)
-  })
-})
-
+/** กราฟรายเดือน 12 เดือนล่าสุด — ยอดขายรวม/รายจ่าย/รายได้บริษัท ของงานที่ส่งของเสร็จแล้ว + วางบิลแล้ว จัดเดือนตามวันที่ส่งของเสร็จ
+ *  (ดู summarizeBilledMoney) */
 const revenueSeries = ref([
-  { key: 'income', label: 'รายรับ', color: '#2563eb', visible: true, data: [] as number[] },
+  { key: 'income', label: 'ยอดขายรวม', color: '#2563eb', visible: true, data: [] as number[] },
   { key: 'expense', label: 'รายจ่าย', color: '#f97316', visible: true, data: [] as number[] },
-  { key: 'profit', label: 'กำไร', color: '#16a34a', visible: true, data: [] as number[] },
+  { key: 'profit', label: 'รายได้บริษัท', color: '#16a34a', visible: true, data: [] as number[] },
 ])
 watch(
-  monthlyRevenue,
+  billedMoney,
   (val) => {
-    revenueSeries.value[0].data = val
-    revenueSeries.value[1].data = val.map(() => 0)
-    revenueSeries.value[2].data = val
+    revenueSeries.value[0].data = val.monthly.sales
+    revenueSeries.value[1].data = val.monthly.expense
+    revenueSeries.value[2].data = val.monthly.income
   },
   { immediate: true }
 )

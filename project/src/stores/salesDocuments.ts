@@ -7,7 +7,7 @@ import { useCustomerStore } from './customers'
 import { useContactStore } from './contacts'
 import { salesDocumentRepository } from '@/repositories/salesDocumentRepository'
 import { salesDocumentItemRepository } from '@/repositories/salesDocumentItemRepository'
-import { computeRowAmount, computeRowDiscountBaht, computeRowVat, computeDocumentTotals } from '@/utils/documentTotals'
+import { computeRowAmount, computeRowDiscountBaht, computeRowVat, computeDocumentTotals, bookingBillingRow } from '@/utils/documentTotals'
 import { sortBookingsForDocumentMerge } from '@/utils/bookingMergeSort'
 import { isBookingConfirmedForBilling } from '@/utils/bookingStatus'
 import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
@@ -1804,22 +1804,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    * แสดงผลเป็นตารางราย 1 บรรทัดต่อ 1 เที่ยว ให้ตรงกับฟอร์แมตเอกสารวางบิลจริงของบริษัท (ดู tripDescription/bookingReferenceDoc)
    * (เหมือน createTaxInvoiceFromBookings) — Booking ยังเป็น Source of Truth เหมือนเดิม (bookingIds เก็บครบ trace ได้)
    */
-  /** แถวคำนวณเงินของ 1 booking ป้อนเข้า computeRowDiscountBaht/computeRowAmount/computeRowVat (documentTotals.ts) ตัวเดียวกับที่
-   *  BookingCreateView.vue/JobDocumentView.vue ใช้กับงานนี้เอง — ยอดก่อนส่วนลด = ค่าเที่ยว + extraCharges รวม (ยอดที่เรียกเก็บลูกค้าจริง),
-   *  ส่วนลด/VAT ใช้ discountMode/discountPercent/discountAmount/vatRate ของ booking นี้ตรงๆ ไม่คำนวณเปอร์เซ็นต์ใหม่เอง */
-  function bookingBillingRow(b: Booking) {
-    return {
-      qty: 1,
-      unitPrice: (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0),
-      discountMode: b.discountMode,
-      discountPercent: b.discountPercent,
-      discountAmount: b.discountAmount,
-      vatRate: b.vatRate,
-      /** Booking ไม่มี field whtRate ของตัวเอง (หัก ณ ที่จ่ายของงานขนส่งไม่ได้เก็บระดับ booking) เอกสารที่สร้างจากงาน
-       *  ขนส่งตรงจึงไม่มีค่า WHT ติดไปด้วยโดยธรรมชาติ ต่างจากเอกสารที่กรอกเองที่ผู้ใช้กรอก whtRate ในฟอร์มได้เอง */
-    }
-  }
-
   /** ใช้เลขที่เอกสารใบสั่งสินค้าต้นทาง (booking.sourceDocumentId) เป็นเลขที่อ้างอิง ไม่ใช่ docNo ของ Booking ตรงๆ —
    *  เพื่อให้ "เลขที่อ้างอิงเอกสาร" ที่พิมพ์บนใบวางบิล/ใบแจ้งหนี้ ชี้กลับไปเอกสารขั้นก่อนหน้าจริงๆ ตาม Document Flow
    *  ถ้างานไหนไม่มีใบสั่งสินค้าผูกอยู่ (เช่นยังไม่ได้ซิงก์) ใช้ docNo เป็น fallback เหมือนเดิม */

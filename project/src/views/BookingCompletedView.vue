@@ -11,6 +11,10 @@
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
+      <button @click="exportToExcel" :disabled="completedBookings.length === 0" class="btn-sm !h-10 !px-3 !border-green-200 !bg-green-50 !text-green-700 disabled:opacity-50">
+        <span class="material-symbols-rounded text-base">download</span>
+        นำออก Excel ({{ completedBookings.length }})
+      </button>
     </div>
 
     <!-- Completed Table -->
@@ -100,6 +104,7 @@ import { documentClaimBadges } from '@/utils/bookingStatus'
 import { useCompletedJobs, useCompletedJobsFilters } from '@/composables/useCompletedJobs'
 import { useCustomerStore } from '@/stores/customers'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
+import { exportRowsToExcel } from '@/utils/exportExcel'
 
 const props = defineProps<{ fleet: BookingCategory }>()
 
@@ -109,7 +114,13 @@ const customerStore = useCustomerStore()
 const isCements = computed(() => props.fleet === 'cements')
 const filters = useCompletedJobsFilters(props.fleet)
 
-const { completedBookings, productLabel, destinationLabel, weightQtyLabel, documentsForBooking, formatBaht, formatShortDate } = useCompletedJobs(filters)
+const { completedBookings, productLabel, destinationLabel, weightQtyLabel, documentsForBooking, buildExportRow, formatBaht, formatShortDate } = useCompletedJobs(filters)
+
+/** นำออกทุกงานที่ผ่านตัวค้นหาอยู่ตอนนี้ — คอลัมน์ตรงกับหน้า "งานเสร็จสิ้นทั้งหมด" (buildExportRow ตัวเดียวกัน รวมเบี้ยเลี้ยง/ค่าน้ำมัน/รายได้บริษัท) */
+const exportToExcel = () => {
+  if (!completedBookings.value.length) return
+  exportRowsToExcel(`งานเสร็จสิ้น_${isCements.value ? 'Cements' : 'Ceramics'}_${new Date().toISOString().slice(0, 10)}`, completedBookings.value.map(buildExportRow), 'งานเสร็จสิ้น')
+}
 </script>
 
 <style scoped>
