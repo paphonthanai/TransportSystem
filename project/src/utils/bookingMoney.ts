@@ -37,7 +37,7 @@ type MoneyInput = Pick<
  * คิดเงินของ 1 งาน — ยอดขาย/รายจ่ายคิดได้เสมอ (ไม่ขึ้นกับประเภทรถ) ส่วน "รายได้บริษัท" ขึ้นกับประเภทรถ:
  *  - รถบริษัท: ราคาเต็ม − 1% − (ค่าน้ำมัน + ค่าแรง)
  *  - รถหุ้นส่วน/รถอู่เสริม: (ราคาเต็ม − 1%) × 8%   รถร่วม: (ราคาเต็ม − 1%) × 10%
- *  - ไม่มีทะเบียน/หารถไม่เจอ/ประเภทยังเป็น "รถร่วมใน/รถร่วมนอก" แบบเก่า/รถบริษัทที่ยังไม่มีเรทน้ำมัน → คิดไม่ได้ (null + หมายเหตุ)
+ *  - ยังไม่ได้ใส่ราคา/ไม่มีทะเบียน/หารถไม่เจอ/ประเภทยังเป็น "รถร่วมใน/รถร่วมนอก" แบบเก่า/รถบริษัทที่ยังไม่มีเรทน้ำมัน → คิดไม่ได้ (null + หมายเหตุ)
  * vehicleType = ประเภทรถที่ผู้เรียกหาจากทะเบียนรถแล้ว (undefined = หาไม่เจอ)
  */
 export function computeBookingMoney(b: MoneyInput, vehicleType: VehicleType | undefined): BookingMoney {
@@ -48,6 +48,7 @@ export function computeBookingMoney(b: MoneyInput, vehicleType: VehicleType | un
   const base = { sales, allowance, fuelCost, expense }
   const afterWithholding = sales * (1 - WITHHOLDING_RATE)
 
+  if (sales <= 0) return { ...base, companyIncome: null, incomeNote: 'ยังไม่ได้ใส่ราคา (ยอดขาย 0) จึงคิดรายได้ไม่ได้' }
   if (!b.plate) return { ...base, companyIncome: null, incomeNote: 'ยังไม่มีทะเบียนรถ จึงยังไม่ทราบประเภทรถ' }
   if (!vehicleType) return { ...base, companyIncome: null, incomeNote: `ไม่พบรถทะเบียน ${b.plate} ในทะเบียนรถ จึงไม่ทราบประเภทรถ` }
   if (vehicleType === 'รถร่วมใน' || vehicleType === 'รถร่วมนอก') {
@@ -72,12 +73,12 @@ export interface BilledMoneySummary {
 }
 
 /**
- * สรุปเงินของงานที่ "ส่งของเสร็จแล้ว + วางบิลแล้ว" (billingNoteDocId) — จัดเข้าเดือนตามวันที่ส่งของเสร็จ (completedAt) ย้อนหลัง 12 เดือน
+ * สรุปเงินของงานที่ "ส่งของเสร็จสิ้น" (DELIVERED) ตั้งแต่ปิดงาน ไม่ต้องรอวางบิล — จัดเข้าเดือนตามวันที่ส่งของเสร็จ (completedAt) ย้อนหลัง 12 เดือน
  * (เดือนปัจจุบันเป็นช่องสุดท้าย เหมือน monthLabels ของ Dashboard) ยอดรวม (totals) เป็นยอดสะสมทุกงานที่เข้าเกณฑ์ ไม่จำกัด 12 เดือน
- * งานที่คิดรายได้บริษัทไม่ได้ (companyIncome เป็น null) ถูกข้ามทั้งหมด ไม่นับในทั้งยอดขาย/รายจ่าย/รายได้บริษัท (นับแค่จำนวนไว้เตือน)
+ * งานที่คิดไม่ได้ (companyIncome เป็น null เช่น ยังไม่ได้ใส่ราคา/ข้อมูลรถไม่ครบ) ถูกข้ามทั้งหมด ไม่นับในทั้งยอดขาย/รายจ่าย/รายได้บริษัท (นับแค่จำนวนไว้เตือน)
  */
 export function summarizeBilledMoney(
-  bookings: Array<MoneyInput & Pick<Booking, 'status' | 'billingNoteDocId' | 'completedAt'>>,
+  bookings: Array<MoneyInput & Pick<Booking, 'status' | 'completedAt'>>,
   vehicleTypeOf: (plate: string) => VehicleType | undefined,
   now: Date = new Date()
 ): BilledMoneySummary {
@@ -86,7 +87,7 @@ export function summarizeBilledMoney(
   let uncomputableCount = 0
 
   for (const b of bookings) {
-    if (b.status !== 'DELIVERED' || !b.billingNoteDocId) continue
+    if (b.status !== 'DELIVERED') continue
     const m = computeBookingMoney(b, b.plate ? vehicleTypeOf(b.plate) : undefined)
     if (m.companyIncome === null) {
       uncomputableCount++

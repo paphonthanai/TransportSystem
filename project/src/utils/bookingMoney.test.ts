@@ -39,6 +39,11 @@ describe('computeBookingMoney — รายได้บริษัทตาม�
 })
 
 describe('computeBookingMoney — คิดรายได้บริษัทไม่ได้ (null + หมายเหตุ ห้ามนำไปคำนวณ)', () => {
+  it('ยังไม่ได้ใส่ราคา', () => {
+    const m = computeBookingMoney({ ...base, tripFee: 0 }, 'รถบริษัท')
+    expect(m.companyIncome).toBeNull()
+    expect(m.incomeNote).toContain('ยังไม่ได้ใส่ราคา')
+  })
   it('ไม่มีทะเบียนรถ', () => {
     const m = computeBookingMoney({ ...base, plate: undefined }, undefined)
     expect(m.companyIncome).toBeNull()
@@ -74,14 +79,20 @@ describe('summarizeBilledMoney', () => {
   const typeOf = (plate: string): VehicleType | undefined => ({ '70-1111 สระบุรี': 'รถร่วม' as VehicleType })[plate]
   const job = (over: Record<string, unknown>) => ({ ...base, status: 'DELIVERED' as const, billingNoteDocId: 'doc1', completedAt: new Date('2026-10-02'), ...over })
 
-  it('นับเฉพาะ DELIVERED + วางบิลแล้ว', () => {
+  it('นับทุกงานที่ DELIVERED ตั้งแต่ปิดงาน ไม่ต้องรอวางบิล แต่ไม่นับงานที่ยังไม่จบ', () => {
     const s = summarizeBilledMoney(
       [job({}), job({ billingNoteDocId: undefined }), job({ status: 'IN_TRANSIT' as const })] as never,
       typeOf,
       now
     )
-    expect(s.totals.sales).toBe(10000)
-    expect(s.totals.companyIncome).toBe(990)
+    expect(s.totals.sales).toBe(20000)
+    expect(s.totals.companyIncome).toBe(1980)
+  })
+
+  it('งานที่ยังไม่ได้ใส่ราคา คิดไม่ได้ ไม่ถูกนับเลย (ไม่ทำให้รายได้ติดลบ) จนกว่าจะใส่ราคา', () => {
+    const s = summarizeBilledMoney([job({ tripFee: 0, plate: '70-1111 สระบุรี' })] as never, () => 'รถบริษัท', now)
+    expect(s.uncomputableCount).toBe(1)
+    expect(s.totals).toEqual({ sales: 0, expense: 0, companyIncome: 0 })
   })
 
   it('จัดเดือนตามวันที่ส่งของเสร็จ (เดือนปัจจุบันเป็นช่องสุดท้าย) และข้ามงานที่เก่ากว่า 12 เดือนจากกราฟแต่ยังอยู่ในยอดรวม', () => {
