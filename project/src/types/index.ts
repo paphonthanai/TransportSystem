@@ -201,6 +201,9 @@ export interface Booking {
   /** อัตราภาษีมูลค่าเพิ่ม (%) ของงานนี้ — ไม่มีค่า/0 = ไม่มี VAT, ค่าเริ่มต้นดึงจาก documentSettingsStore.settings.vatRate ตอนสร้างงานใหม่ */
   vatRate?: number
   fuelLiters: number
+  /** ช่องน้ำมันใน Excel อ่านค่าไม่ได้ (ข้อความไม่มีตัวเลข/ผลคำนวณติดลบ) — ไม่เดา ไม่ใช้ลิตรมาตรฐาน เว้นลิตรไว้ (0) และงานนี้ยังไม่ถูกนำไปคิดเงิน
+   *  จนกว่าจะแก้ลิตรให้ถูกต้อง (แก้ค่าลิตรที่หน้าแก้ไขงานแล้วธงนี้หายเอง) */
+  fuelUnreadable?: boolean
   fuelRate: number
   plate?: string
   driverName?: string

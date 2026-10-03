@@ -31,7 +31,7 @@
       </div>
       <div v-if="billedMoney.uncomputableCount > 0" class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
         <span class="material-symbols-rounded text-base">warning</span>
-        {{ billedMoney.uncomputableCount }} งานยังคิดเงินไม่ได้ (ยังไม่ได้ใส่ราคา/ไม่ทราบประเภทรถ/ไม่มีทะเบียน/ไม่มีเรทน้ำมัน) — ไม่ถูกนับในยอดขาย/รายจ่าย/รายได้บริษัท จนกว่าจะแก้ไขข้อมูล
+        {{ billedMoney.uncomputableCount }} งานยังคิดเงินไม่ได้ (ค่าเที่ยว/เบี้ยเลี้ยง/ลิตร/เรทน้ำมันเป็น 0 หรือไม่มี, ไม่ทราบประเภทรถ, ไม่มีทะเบียน) — ไม่ถูกนับในยอดขาย/รายจ่าย/รายได้บริษัท จนกว่าจะแก้ไขข้อมูล
         <router-link to="/completed-jobs" class="underline font-semibold ml-1">ดูงานที่เสร็จสิ้น</router-link>
       </div>
     </div>

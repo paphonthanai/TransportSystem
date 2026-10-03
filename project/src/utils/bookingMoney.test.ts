@@ -59,18 +59,31 @@ describe('computeBookingMoney — คิดรายได้บริษัท�
     expect(m.companyIncome).toBeNull()
     expect(m.incomeNote).toContain(t)
   })
-  it('รถบริษัทที่ยังไม่มีเรทน้ำมัน (เรท 0 ทั้งที่มีลิตร)', () => {
-    const m = computeBookingMoney({ ...base, fuelRate: 0 }, 'รถบริษัท')
+  it.each(['รถบริษัท', 'รถหุ้นส่วน', 'รถร่วม', 'รถอู่เสริม'] as VehicleType[])('%s: มีลิตรน้ำมันแต่เรทน้ำมันเป็น 0 → คิดไม่ได้', (t) => {
+    const m = computeBookingMoney({ ...base, fuelRate: 0 }, t)
     expect(m.companyIncome).toBeNull()
     expect(m.incomeNote).toContain('เรทน้ำมัน')
   })
-  it('รถบริษัทที่ไม่มีลิตรน้ำมันเลย ยังคิดได้ (ไม่มีน้ำมันให้หัก)', () => {
-    expect(computeBookingMoney({ ...base, fuelLiters: 0, fuelRate: 0 }, 'รถบริษัท').companyIncome).toBe(8900)
+  it('ช่องน้ำมันจาก Excel อ่านไม่ได้ (fuelUnreadable) → คิดไม่ได้ ไม่เดาเป็นลิตร 0', () => {
+    const m = computeBookingMoney({ ...base, fuelLiters: 0, fuelRate: 0, fuelUnreadable: true } as never, 'รถบริษัท')
+    expect(m.companyIncome).toBeNull()
+    expect(m.incomeNote).toContain('อ่านค่าน้ำมันจาก Excel ไม่ได้')
   })
-  it('ยอดขาย/รายจ่ายยังคิดได้แม้รายได้บริษัทคิดไม่ได้', () => {
+  it('เบี้ยเลี้ยง = 0 คิดเงินได้ปกติ (ค่าแรง 0)', () => {
+    const m = computeBookingMoney({ ...base, allowance: 0, finalAllowance: undefined }, 'รถบริษัท')
+    expect(m.allowance).toBe(0)
+    expect(m.companyIncome).toBe(7900) // 10000 − 1% − (2000 + 0)
+  })
+  it('ลิตรน้ำมัน = 0 คิดเงินได้ปกติ ค่าน้ำมัน 0 และไม่ต้องมีเรท', () => {
+    const m = computeBookingMoney({ ...base, fuelLiters: 0, fuelRate: 0 }, 'รถบริษัท')
+    expect(m.fuelCost).toBe(0)
+    expect(m.companyIncome).toBe(8900) // 10000 − 1% − (0 + 1000)
+  })
+  it('ตัวเลขดิบของงาน (ยอดขาย/รายจ่าย) ยังคำนวณให้ดูได้ แต่รายได้เป็น null เพื่อให้ผู้เรียกข้ามงานนี้ทั้งหมด', () => {
     const m = computeBookingMoney(base, undefined)
     expect(m.sales).toBe(10000)
     expect(m.expense).toBe(3000)
+    expect(m.companyIncome).toBeNull()
   })
 })
 
@@ -87,6 +100,17 @@ describe('summarizeBilledMoney', () => {
     )
     expect(s.totals.sales).toBe(20000)
     expect(s.totals.companyIncome).toBe(1980)
+  })
+
+  it('ค่าเที่ยว = 0 → ไม่นับงานนั้นเลย (รวมเบี้ยเลี้ยง/น้ำมันที่มี) ส่วนเบี้ยเลี้ยง/ลิตร = 0 นับได้ปกติ', () => {
+    const s = summarizeBilledMoney(
+      [job({ tripFee: 0 }), job({ allowance: 0 }), job({ fuelLiters: 0, fuelRate: 0 }), job({ fuelRate: 0 })] as never,
+      typeOf,
+      now
+    )
+    expect(s.uncomputableCount).toBe(2) // ค่าเที่ยว 0 และมีลิตรแต่ไม่มีเรท
+    expect(s.totals.sales).toBe(20000)
+    expect(s.totals.expense).toBe(2000 + 1000) // งาน allowance=0: น้ำมัน 2000 / งานลิตร=0: ค่าแรง 1000
   })
 
   it('งานที่ยังไม่ได้ใส่ราคา คิดไม่ได้ ไม่ถูกนับเลย (ไม่ทำให้รายได้ติดลบ) จนกว่าจะใส่ราคา', () => {

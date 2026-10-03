@@ -37,6 +37,43 @@ export const IMPORT_HEADERS = {
   note: 'หมายเหตุ',
 } as const
 
+/**
+ * อ่านช่อง "น้ำมัน" จาก Excel — ลูกค้ากรอกมาทั้งตัวเลขล้วนและข้อความปนกัน:
+ *  - ตัวเลขล้วน/ว่าง → อ่านตรงๆ (ว่าง = ไม่มีข้อมูล ผู้เรียกใช้ลิตรมาตรฐานแทนตามเดิม)
+ *  - "ไม่เติม"/"No" → 0 ลิตรโดยตั้งใจ (explicitZero) ไม่ fallback ไปใช้ลิตรมาตรฐาน และคิดเงินได้
+ *  - "38 ก๊าซ" → 38 พร้อมหมายเหตุ "ก๊าซ" (ข้อความที่เหลือหลังตัดตัวเลขออก)
+ *  - "30 - 30"/"38-21"/"20+10" → คำนวณก่อนบันทึก (30-30 = 0 ถือเป็น 0 โดยตั้งใจ, 38-21 = 17) ผลลัพธ์ติดลบ = อ่านไม่ได้
+ *  - ข้อความที่ไม่มีตัวเลขเลย (และไม่ใช่ไม่เติม) → invalid ให้ผู้เรียกเตือนแล้วใช้ลิตรมาตรฐานแทน
+ */
+export interface FuelCell {
+  liters?: number
+  explicitZero?: boolean
+  remark?: string
+  invalid?: string
+}
+export function parseFuelCell(raw: unknown): FuelCell {
+  if (raw === undefined || raw === null) return {}
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw >= 0 ? { liters: raw, explicitZero: raw === 0 } : { invalid: String(raw) }
+  const text = String(raw).replace(/\s+/g, ' ').trim()
+  if (!text) return {}
+  if (/ไม่เติม/.test(text) || /^no$/i.test(text)) return { liters: 0, explicitZero: true, remark: text }
+  const expr = text.match(/\d+(?:\.\d+)?(?:\s*[-+]\s*\d+(?:\.\d+)?)*/)
+  if (!expr) return { invalid: text }
+  const terms = expr[0].match(/[-+]?\s*\d+(?:\.\d+)?/g) || []
+  let total = 0
+  terms.forEach((t, i) => {
+    const sign = t.trim().startsWith('-') ? -1 : 1
+    total += (i === 0 ? 1 : sign) * Number(t.replace(/[-+\s]/g, ''))
+  })
+  total = Math.round(total * 100) / 100
+  if (!Number.isFinite(total) || total < 0) return { invalid: text }
+  const leftover = text.replace(expr[0], ' ').replace(/\s+/g, ' ').replace(/^[\s,;:()\-]+|[\s,;:()\-]+$/g, '').trim()
+  const remarks: string[] = []
+  if (leftover) remarks.push(leftover)
+  if (terms.length > 1) remarks.push(`คำนวณจาก ${expr[0].replace(/\s+/g, '')} = ${total}`)
+  return { liters: total, explicitZero: total === 0, remark: remarks.join(' ') || undefined }
+}
+
 export interface ImportRowResult {
   rowNumber: number
   isEmpty: boolean
@@ -68,6 +105,8 @@ export interface ImportRowResult {
   allowance: number
   price: number
   fuelLiters: number
+  /** ช่องน้ำมันอ่านค่าไม่ได้ — ลิตรเว้นเป็น 0 ไม่ใช้ลิตรมาตรฐาน และยังไม่ถูกนำไปคิดเงิน (ดู Booking.fuelUnreadable) */
+  fuelUnreadable?: boolean
   jobType?: BookingJobType
   note: string
   warnings: string[]
@@ -244,10 +283,19 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
     warnings.push(`สินค้าหลายชนิดในเที่ยวเดียว (${productCodes.join(' + ')}) แต่จำนวนตันแยกไม่ตรงกับจำนวนชนิดสินค้า — ยกยอดรวมไปไว้ที่ "${productCodes[0]}" ก่อน ตรวจสอบแยกจำนวนตันต่อชนิดเองภายหลัง`)
   }
 
-  const fuelFromExcel = num(raw[IMPORT_HEADERS.fuel])
+  const fuelCell = parseFuelCell(raw[IMPORT_HEADERS.fuel])
+  const fuelFromExcel = fuelCell.liters ?? 0
   const configuredFuelRate = province && district ? deps.findFuelRate(province, district)?.liters : undefined
-  let fuelLiters = fuelFromExcel || configuredFuelRate || 0
-  if (!province || !district) {
+  // "ไม่เติม"/ผลคำนวณ 0 = 0 ลิตรโดยตั้งใจ ไม่ fallback ไปใช้ลิตรมาตรฐาน (เดิม 0 ถูกมองเป็น "ไม่มีข้อมูล" แล้วเติมมาตรฐานให้เงียบๆ)
+  const fuelNoRefill = !!fuelCell.explicitZero
+  // อ่านค่าไม่ได้ (ข้อความไม่มีตัวเลข/ผลคำนวณติดลบ) = ห้ามเดา ห้ามใช้ลิตรมาตรฐานแทน เว้นลิตรไว้ (0) แล้วเตือน
+  const fuelUnreadable = !!fuelCell.invalid
+  const fuelLiters = fuelUnreadable || fuelNoRefill ? 0 : fuelFromExcel || configuredFuelRate || 0
+  if (fuelUnreadable) {
+    warnings.push(`อ่านค่าน้ำมันจาก Excel ไม่ได้ ("${fuelCell.invalid}") — เว้นลิตรไว้ (ไม่ใช้ลิตรมาตรฐาน) งานนี้ยังไม่ถูกนำไปคิดเงินจนกว่าจะแก้ลิตรให้ถูกต้อง`)
+  } else if (fuelNoRefill) {
+    // ไม่มีอะไรให้เตือน — ตั้งใจไม่เติม
+  } else if (!province || !district) {
     warnings.push('ต้องกรอกเพิ่ม: อำเภอ/จังหวัด')
   } else if (!fuelLiters) {
     // ไม่มีค่าน้ำมันจาก Excel และปลายทาง (อำเภอ/จังหวัด) นี้ก็ยังไม่เคยตั้งค่าลิตรมาตรฐานไว้ในหน้าตั้งค่าน้ำมันเลย —
@@ -267,7 +315,8 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   const jobType = JOB_TYPE_OPTIONS.find((t) => t === jobTypeRaw)
   if (jobTypeRaw && !jobType) warnings.push(`ประเภทงานจาก Excel "${jobTypeRaw}" ไม่ตรงกับระบบเป๊ะ (มี "ลงมือ"/"พาเลทโรงงาน"/"พาเลทฟรี") — เว้นว่างไว้ก่อน ตรวจสอบเองภายหลัง`)
 
-  const note = [timeExtraText, noteRaw, ...warnings].filter(Boolean).join(' | ')
+  const fuelRemark = fuelCell.remark ? `น้ำมัน: ${fuelCell.remark}` : ''
+  const note = [timeExtraText, noteRaw, fuelRemark, ...warnings].filter(Boolean).join(' | ')
 
   return {
     rowNumber,
@@ -296,6 +345,7 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
     allowance,
     price,
     fuelLiters,
+    fuelUnreadable: fuelUnreadable || undefined,
     jobType,
     note,
     warnings,

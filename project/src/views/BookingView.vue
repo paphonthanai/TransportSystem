@@ -1674,6 +1674,7 @@ const confirmImport = () => {
       // ใบสั่งงานที่พิมพ์ออกมามี VAT ติดทุกใบทั้งที่ไม่มีใครกรอก (ดู JobDocumentView.vue's showVatRow)
       pricingMode: 'SINGLE_DESTINATION',
       fuelLiters: row.fuelLiters,
+      fuelUnreadable: row.fuelUnreadable,
       // เรทจริงตั้งโดย bookingStore.addBooking ตามประเภทรถของทะเบียน (ไม่รู้ประเภท = 0 + หมายเหตุสาเหตุ)
       fuelRate: 0,
       plate: row.plate || undefined,

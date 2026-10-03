@@ -37,7 +37,10 @@ type MoneyInput = Pick<
  * คิดเงินของ 1 งาน — ยอดขาย/รายจ่ายคิดได้เสมอ (ไม่ขึ้นกับประเภทรถ) ส่วน "รายได้บริษัท" ขึ้นกับประเภทรถ:
  *  - รถบริษัท: ราคาเต็ม − 1% − (ค่าน้ำมัน + ค่าแรง)
  *  - รถหุ้นส่วน/รถอู่เสริม: (ราคาเต็ม − 1%) × 8%   รถร่วม: (ราคาเต็ม − 1%) × 10%
- *  - ยังไม่ได้ใส่ราคา/ไม่มีทะเบียน/หารถไม่เจอ/ประเภทยังเป็น "รถร่วมใน/รถร่วมนอก" แบบเก่า/รถบริษัทที่ยังไม่มีเรทน้ำมัน → คิดไม่ได้ (null + หมายเหตุ)
+ *  - ค่าเที่ยวเป็น 0 → คิดไม่ได้ ห้ามคำนวณรายจ่าย (เบี้ยเลี้ยง/น้ำมัน) ของงานนั้นด้วย; ส่วนเบี้ยเลี้ยง 0 หรือลิตรน้ำมัน 0 เป็นค่าที่ถูกต้อง
+ *    คิดเงินได้ปกติ (ลิตร 0 = ไม่ได้เติม ค่าน้ำมัน 0 ไม่ต้องมีเรท) แต่ถ้ามีลิตรแล้วไม่มีเรทน้ำมัน → คิดค่าน้ำมันไม่ได้
+ *  - ไม่มีทะเบียน/หารถไม่เจอ/ประเภทยังเป็น "รถร่วมใน/รถร่วมนอก" แบบเก่า → คิดไม่ได้ (null + หมายเหตุ) ห้ามนำงานนั้นไปคำนวณทั้ง
+ *    รายได้และรายจ่าย จนกว่าจะแก้ข้อมูลให้ถูกต้อง (ทุกประเภทรถ)
  * vehicleType = ประเภทรถที่ผู้เรียกหาจากทะเบียนรถแล้ว (undefined = หาไม่เจอ)
  */
 export function computeBookingMoney(b: MoneyInput, vehicleType: VehicleType | undefined): BookingMoney {
@@ -46,18 +49,19 @@ export function computeBookingMoney(b: MoneyInput, vehicleType: VehicleType | un
   const fuelCost = roundMoney((b.fuelLiters || 0) * (b.fuelRate || 0))
   const expense = roundMoney(allowance + fuelCost)
   const base = { sales, allowance, fuelCost, expense }
+  const unreadableFuel = !!(b as { fuelUnreadable?: boolean }).fuelUnreadable
   const afterWithholding = sales * (1 - WITHHOLDING_RATE)
 
-  if (sales <= 0) return { ...base, companyIncome: null, incomeNote: 'ยังไม่ได้ใส่ราคา (ยอดขาย 0) จึงคิดรายได้ไม่ได้' }
+  if (sales <= 0) return { ...base, companyIncome: null, incomeNote: 'ยังไม่ได้ใส่ราคา/ค่าเที่ยว (ยอดขาย 0) จึงคิดเงินไม่ได้' }
+  if (unreadableFuel) return { ...base, companyIncome: null, incomeNote: 'อ่านค่าน้ำมันจาก Excel ไม่ได้ จึงยังไม่นำไปคิดเงิน — แก้ลิตรน้ำมันให้ถูกต้องก่อน' }
+  // เบี้ยเลี้ยง 0 / ลิตรน้ำมัน 0 ไม่ใช่เหตุให้คิดไม่ได้ (คิดเป็น 0 ได้) — เรทต้องมีเฉพาะตอนมีลิตรเท่านั้น
+  if ((b.fuelLiters || 0) > 0 && !((b.fuelRate || 0) > 0)) return { ...base, companyIncome: null, incomeNote: 'ยังไม่มีเรทน้ำมัน (0) จึงคิดเงินไม่ได้' }
   if (!b.plate) return { ...base, companyIncome: null, incomeNote: 'ยังไม่มีทะเบียนรถ จึงยังไม่ทราบประเภทรถ' }
   if (!vehicleType) return { ...base, companyIncome: null, incomeNote: `ไม่พบรถทะเบียน ${b.plate} ในทะเบียนรถ จึงไม่ทราบประเภทรถ` }
   if (vehicleType === 'รถร่วมใน' || vehicleType === 'รถร่วมนอก') {
     return { ...base, companyIncome: null, incomeNote: `ประเภทรถยังเป็น "${vehicleType}" (แบบเก่า) — กรุณาเลือกประเภทใหม่ในหน้ารถ` }
   }
   if (vehicleType === 'รถบริษัท') {
-    if ((b.fuelLiters || 0) > 0 && !(b.fuelRate || 0)) {
-      return { ...base, companyIncome: null, incomeNote: 'รถบริษัทยังไม่มีเรทน้ำมัน จึงคิดค่าน้ำมันไม่ได้' }
-    }
     return { ...base, companyIncome: roundMoney(afterWithholding - expense) }
   }
   const share = COMPANY_SHARE[vehicleType]

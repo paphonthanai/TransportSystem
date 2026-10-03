@@ -462,7 +462,11 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.agreedPrice !== undefined) booking.agreedPrice = data.agreedPrice
     if (data.allowance !== undefined) booking.allowance = data.allowance
     if (data.pricingMode !== undefined) booking.pricingMode = data.pricingMode
-    if (data.fuelLiters !== undefined) booking.fuelLiters = resolveFuelLiters(data.fuelLiters, booking.items, booking.pricingMode)
+    if (data.fuelLiters !== undefined) {
+      // แก้ลิตรเป็นค่าใหม่แล้ว = ผู้ใช้ตรวจสอบแล้ว ธง "อ่านค่าน้ำมันจาก Excel ไม่ได้" หายเอง (ไม่เปลี่ยนค่า ธงยังอยู่)
+      if (data.fuelLiters !== booking.fuelLiters) booking.fuelUnreadable = undefined
+      booking.fuelLiters = resolveFuelLiters(data.fuelLiters, booking.items, booking.pricingMode)
+    }
     if (data.fuelRate !== undefined) {
       booking.fuelRate = data.fuelRate
       // ผู้ใช้ตั้งเรทเองแล้ว ท่อนหมายเหตุ "ยังไม่มีเรท…" ที่ระบบแปะไว้ก่อนหน้าไม่จริงอีกต่อไป

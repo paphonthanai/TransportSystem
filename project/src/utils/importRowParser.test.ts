@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchCustomerForImport, matchDriverForImport, parseImportRow, IMPORT_HEADERS, type ParseImportRowDeps } from './importRowParser'
+import { matchCustomerForImport, matchDriverForImport, parseImportRow, parseFuelCell, IMPORT_HEADERS, type ParseImportRowDeps } from './importRowParser'
 
 /** ลูกค้าในไฟล์ Excel มักกรอกแบบย่อ (เช่น "Sccc") ต้องจับคู่กับ "รหัสผู้ติดต่อ" ก่อนเสมอ ถ้าไม่เจอค่อยลองชื่อเต็ม
  *  เจอแล้วต้องได้ record คืนมา (ผู้เรียกจะเอา .name ไปใช้เป็นชื่อเต็มบน booking.customer เสมอ) */
@@ -94,5 +94,79 @@ describe('parseImportRow — คอลัมน์พิกัด/ลิงก�
     expect(row.longitude).toBeUndefined()
     expect(row.note).not.toContain('พิกัด')
     expect(row.note).not.toContain('Google Maps')
+  })
+})
+
+/** ช่อง "น้ำมัน" ที่ลูกค้ากรอกมามีทั้งตัวเลขล้วนและข้อความปน (ตัวอย่างจริงจากไฟล์: 38, 30, ว่าง, 38-21, ไม่เติม ฯลฯ) */
+describe('parseFuelCell', () => {
+  it.each([
+    [38, 38],
+    ['30', 30],
+    [' 59 ', 59],
+    ['43', 43],
+  ])('ตัวเลขล้วน %s → %s ลิตร ไม่มีหมายเหตุ', (raw, liters) => {
+    expect(parseFuelCell(raw)).toEqual({ liters, explicitZero: false, remark: undefined })
+  })
+
+  it('เซลล์ว่าง/ไม่มีค่า → ไม่มีข้อมูล (ผู้เรียกใช้ลิตรมาตรฐานแทน)', () => {
+    expect(parseFuelCell('')).toEqual({})
+    expect(parseFuelCell(undefined)).toEqual({})
+    expect(parseFuelCell('   ')).toEqual({})
+  })
+
+  it('"ไม่เติม" และ "No" → 0 ลิตรโดยตั้งใจ', () => {
+    expect(parseFuelCell('ไม่เติม')).toMatchObject({ liters: 0, explicitZero: true })
+    expect(parseFuelCell('No')).toMatchObject({ liters: 0, explicitZero: true })
+  })
+
+  it('"38 ก๊าซ" → 38 ลิตร หมายเหตุ "ก๊าซ"', () => {
+    expect(parseFuelCell('38 ก๊าซ')).toMatchObject({ liters: 38, explicitZero: false, remark: 'ก๊าซ' })
+  })
+
+  it('"30 - 30" คำนวณก่อนบันทึก = 0 (ถือเป็น 0 โดยตั้งใจ), "38-21" = 17, "20+10" = 30 พร้อมหมายเหตุวิธีคำนวณ', () => {
+    expect(parseFuelCell('30 - 30')).toMatchObject({ liters: 0, explicitZero: true, remark: 'คำนวณจาก 30-30 = 0' })
+    expect(parseFuelCell('38-21')).toMatchObject({ liters: 17, explicitZero: false, remark: 'คำนวณจาก 38-21 = 17' })
+    expect(parseFuelCell('20+10')).toMatchObject({ liters: 30 })
+  })
+
+  it('ข้อความที่ไม่มีตัวเลขเลย หรือผลคำนวณติดลบ → invalid (ไม่เดา)', () => {
+    expect(parseFuelCell('รอเติม')).toEqual({ invalid: 'รอเติม' })
+    expect(parseFuelCell('10-30')).toEqual({ invalid: '10-30' })
+  })
+})
+
+describe('parseImportRow — น้ำมัน', () => {
+  const deps: ParseImportRowDeps = {
+    matchDriver: () => undefined,
+    findFuelRate: () => ({ liters: 43 }),
+    matchCustomer: () => undefined,
+  }
+  const row = (fuel: unknown) => ({
+    [IMPORT_HEADERS.siteName]: 'ไซต์',
+    [IMPORT_HEADERS.districtProvince]: 'เมือง/สระบุรี',
+    [IMPORT_HEADERS.fuel]: fuel,
+  })
+
+  it('"ไม่เติม" ได้ 0 ลิตร ไม่ถูกแทนด้วยลิตรมาตรฐาน', () => {
+    const r = parseImportRow(row('ไม่เติม'), 1, deps)
+    expect(r.fuelLiters).toBe(0)
+    expect(r.note).toContain('น้ำมัน: ไม่เติม')
+  })
+
+  it('"38 ก๊าซ" ได้ 38 ลิตร หมายเหตุก๊าซอยู่ใน note', () => {
+    const r = parseImportRow(row('38 ก๊าซ'), 1, deps)
+    expect(r.fuelLiters).toBe(38)
+    expect(r.note).toContain('น้ำมัน: ก๊าซ')
+  })
+
+  it('ช่องว่างใช้ลิตรมาตรฐานตามเดิม', () => {
+    expect(parseImportRow(row(''), 1, deps).fuelLiters).toBe(43)
+  })
+
+  it.each(['รอเติม', '10-30'])('อ่านไม่ได้ (%s) → ห้ามใช้ลิตรมาตรฐาน เว้นลิตร 0 + ธง fuelUnreadable + คำเตือน ไม่เดา', (text) => {
+    const bad = parseImportRow(row(text), 1, deps)
+    expect(bad.fuelLiters).toBe(0)
+    expect(bad.fuelUnreadable).toBe(true)
+    expect(bad.warnings.join(' ')).toContain('อ่านค่าน้ำมันจาก Excel ไม่ได้')
   })
 })
