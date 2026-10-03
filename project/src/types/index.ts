@@ -461,7 +461,7 @@ export interface Vehicle {
   chassisNo: string
   /** เลขเครื่อง */
   engineNo: string
-  /** หน่วยงาน (ประเภทรถ) */
+  /** ประเภทรถ */
   department: VehicleType
   /** ปีรถ (พ.ศ. หรือ ค.ศ. ตามที่กรอก — ไม่บังคับรูปแบบ) */
   year?: number

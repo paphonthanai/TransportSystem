@@ -22,7 +22,7 @@
             <th class="px-4 py-3 font-semibold">เลขตัวถัง</th>
             <th class="px-4 py-3 font-semibold">เลขเครื่อง</th>
             <th class="px-4 py-3 font-semibold">ปีรถ</th>
-            <th class="px-4 py-3 font-semibold">หน่วยงาน</th>
+            <th class="px-4 py-3 font-semibold">ประเภทรถ</th>
             <th class="px-4 py-3 font-semibold">Feed ที่วิ่งได้</th>
             <th class="px-4 py-3 font-semibold">คนขับประจำ</th>
             <th class="px-4 py-3 font-semibold text-right">เลขไมล์</th>
@@ -107,7 +107,7 @@
               <input v-model.number="form.year" type="number" class="input-field w-full" />
             </div>
             <div class="md:col-span-2">
-              <label class="block text-xs font-semibold text-muted mb-1">หน่วยงาน</label>
+              <label class="block text-xs font-semibold text-muted mb-1">ประเภทรถ</label>
               <div v-if="isLegacyDepartment(form.department)" class="text-xs text-amber-700 mb-2">
                 รถคันนี้ยังเป็นค่าเดิม "{{ form.department }}" (หมวดใหญ่) — กรุณาเลือกหมวดย่อยด้านล่าง
               </div>

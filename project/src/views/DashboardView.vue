@@ -76,7 +76,7 @@
             {{ s.label }}
           </button>
         </div>
-        <DashboardLineChart :labels="monthLabels" :series="revenueSeries" />
+        <DashboardBarChart :labels="monthLabels" :series="revenueSeries" />
       </div>
 
       <!-- รอรับชำระ/รอจ่าย -->
@@ -250,6 +250,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import DashboardLineChart from '@/components/DashboardLineChart.vue'
+import DashboardBarChart from '@/components/DashboardBarChart.vue'
 import Pager from '@/components/Pager.vue'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useBookingStore } from '@/stores/booking'
