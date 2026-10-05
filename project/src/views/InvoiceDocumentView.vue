@@ -132,18 +132,30 @@
           <!-- ตารางรายเที่ยว — ใบวางบิล/ใบแจ้งหนี้/ใบเสร็จที่มีรายการมาจากงานขนส่งโดยตรง (รวมใบเสร็จที่แตกรายการจากเอกสาร
                ต้นทางแล้ว ดู receiptItemRowsFromSourceDocs) ให้ตรงกับฟอร์แมตเอกสารจริงของบริษัท เช็คก่อนตารางอ้างอิงเอกสาร
                ต้นทางด้านล่าง เพื่อให้ใบเสร็จที่มีข้อมูลเที่ยวจริงแสดง table structure เดียวกับใบวางบิลเป๊ะ -->
-          <table v-if="hasTripColumns" class="w-full text-sm border border-gray-400 mb-4">
+          <table v-if="hasTripColumns" class="trip-table w-full text-sm border border-gray-400 mb-4">
+            <!-- ความกว้างคอลัมน์เป็น % + table-layout: fixed — ไม่ให้คอลัมน์เลข/วันที่ดันคอลัมน์ "รายการ" แคบจนแถวสูง (พิมพ์ A4 ล้นหน้า) -->
+            <colgroup>
+              <col style="width: 4%" />
+              <col style="width: 9%" />
+              <col style="width: 9%" />
+              <col style="width: 13%" />
+              <col style="width: 13%" />
+              <col style="width: 30%" />
+              <col style="width: 7%" />
+              <col style="width: 7%" />
+              <col style="width: 8%" />
+            </colgroup>
             <thead class="bg-gray-100">
               <tr>
-                <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-20">วันที่ส่ง</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-24">ทะเบียนรถ</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-28 whitespace-nowrap">อ้างถึงเอกสาร</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-28 whitespace-nowrap">ใบขนส่ง</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">#</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">วันที่ส่ง</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">ทะเบียนรถ</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">อ้างถึงเอกสาร</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">ใบขนส่ง</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">รายการ</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-16 whitespace-nowrap">{{ qtyColumnLabel }}</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-20 whitespace-nowrap">หน่วยละ</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-24 whitespace-nowrap">จำนวนเงิน</th>
+                <th class="border border-gray-400 px-2 py-1 text-right">จำนวน<template v-if="commonRowUnit"><br />({{ commonRowUnit }})</template></th>
+                <th class="border border-gray-400 px-2 py-1 text-right">หน่วยละ</th>
+                <th class="border border-gray-400 px-2 py-1 text-right">จำนวนเงิน</th>
               </tr>
             </thead>
             <tbody>
@@ -155,9 +167,9 @@
               >
                 <td class="border border-gray-400 px-2 py-1">{{ sheet.startIndex + ridx + 1 }}</td>
                 <td class="border border-gray-400 px-2 py-1">{{ row.shipDate ? formatDateShort(row.shipDate) : '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1">{{ plateNumberOnly(row.plate) || '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1 whitespace-nowrap">{{ row.referenceDoc || '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1 whitespace-nowrap">{{ row.deliveryNo || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1 whitespace-nowrap">{{ plateNumberOnly(row.plate) || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1 break-all">{{ row.referenceDoc || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1 break-all">{{ row.deliveryNo || '-' }}</td>
                 <td class="border border-gray-400 px-2 py-1 whitespace-pre-line">{{ row.description }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ commonRowUnit ? row.qty : `${row.qty} ${row.unit}` }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right whitespace-nowrap">{{ formatBaht(row.unitPrice) }}</td>
@@ -844,7 +856,7 @@ const copyLabels = computed(() => {
 
 /** จำนวนแถวรายเที่ยวต่อหน้า A4 ของเอกสารที่ใช้ตารางรายเที่ยว (hasTripColumns) — เกินนี้แบ่งเป็นหลายหน้า ทุกหน้าซ้ำส่วนหัว
  *  เอกสาร+หัวตาราง ลำดับแถวต่อเนื่อง ยอดรวม/ตัวอักษรบาทอยู่หน้าสุดท้ายหน้าเดียว ช่องลายเซ็นอยู่ทุกหน้า */
-const ROWS_PER_PAGE = 18
+const ROWS_PER_PAGE = 15
 
 /** 1 sheet = 1 หน้ากระดาษที่พิมพ์ = (สำเนาที่ N) × (หน้าที่ M) — เอกสารที่ไม่ใช่ตารางรายเที่ยว หรือรายเที่ยวไม่เกิน
  *  ROWS_PER_PAGE ได้หน้าเดียวต่อสำเนาเหมือนเดิมทุกประการ (rows ไม่ถูกใช้นอกโหมดตารางรายเที่ยว) */
@@ -918,6 +930,9 @@ const printDoc = () => window.print()
 </script>
 
 <style scoped>
+.trip-table {
+  table-layout: fixed;
+}
 .btn-primary {
   @apply h-10 px-4 rounded-lg border-0 bg-primary text-white font-semibold text-sm flex items-center gap-2 cursor-pointer transition-all hover:opacity-90 shadow-md;
 }
@@ -983,11 +998,27 @@ const printDoc = () => window.print()
   .no-print {
     display: none !important;
   }
+  /* A4 จริง: ขอบกระดาษ 8mm ให้แผ่นเอกสารใช้พื้นที่เต็ม (ไม่ซ้อน padding ของจอ) + ตารางรายเที่ยวใช้ตัวอักษรเล็ก/แถวกระชับ
+     เพื่อให้ ROWS_PER_PAGE แถว + หัวเอกสาร + ลายเซ็นพอดี 1 แผ่น ไม่ล้นไปหน้าถัดไป */
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
   .print-sheet {
     box-shadow: none !important;
     border: none !important;
     margin: 0 !important;
+    padding: 0 !important;
     max-width: 100% !important;
+    break-inside: avoid;
+  }
+  .print-sheet table {
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+  }
+  .print-sheet table th,
+  .print-sheet table td {
+    padding: 2px 4px !important;
   }
   .print-page-break {
     page-break-after: always;
