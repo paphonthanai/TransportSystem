@@ -34,14 +34,19 @@ export const useFuelRateStore = defineStore('fuelRates', () => {
   const { data: settings, loading, error } = useFirestoreSettings<FuelSettings>('fuelRates', defaultSettings)
 
   const matchText = (a: string, b: string) => a === b || a.includes(b) || b.includes(a)
+  /** เทียบชื่ออำเภอแบบตรงตัวเท่านั้น (ตัดช่องว่างหัวท้าย/ยุบช่องว่างซ้ำ/ไม่สนตัวพิมพ์เล็ก-ใหญ่) — ห้ามใช้ includes เหมือนจังหวัด
+   *  เพราะลูกค้าตั้งอำเภอเดียวกันไว้หลายพิกัดคนละเรท เช่น "บางพลี" (43 ล.) กับ "AP บางพลี" (40 ล.) การจับคู่แบบมีข้อความอยู่
+   *  ในกันทำให้หยิบรายการแรกที่เจอผิดตัว (ดู findRate) */
+  const normalizeDistrict = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase()
 
-  /** หาลิตรมาตรฐานตามจังหวัด+อำเภอ (จับคู่จังหวัดก่อน แล้วค่อยจับคู่อำเภอภายในจังหวัดนั้น กันชื่ออำเภอซ้ำกันคนละจังหวัด) */
+  /** หาลิตรมาตรฐานตามจังหวัด+อำเภอ (จับคู่จังหวัดแบบหลวมก่อน แล้วค่อยจับคู่อำเภอภายในจังหวัดนั้นแบบตรงตัว — ไม่ตรงตัว = ไม่เจอ
+   *  ไม่เดา กันหยิบเรทของพิกัดอื่นที่ชื่อมีคำนี้อยู่ข้างใน) */
   const findRate = (province: string, district: string): FuelRate | null => {
     const p = province.trim()
-    const d = district.trim()
+    const d = normalizeDistrict(district)
     if (!p || !d) return null
     return (
-      settings.value.rates.find((r) => matchText(r.province, p) && matchText(r.district, d)) || null
+      settings.value.rates.find((r) => matchText(r.province, p) && normalizeDistrict(r.district) === d) || null
     )
   }
 
