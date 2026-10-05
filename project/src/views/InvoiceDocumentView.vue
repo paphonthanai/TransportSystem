@@ -38,12 +38,12 @@
 
     <div v-if="!docExists" class="card-lg text-center text-muted py-12">ไม่พบเอกสาร</div>
 
-    <div v-else class="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 items-start">
+    <div v-else class="grid grid-cols-1 2xl:grid-cols-[1fr_260px] gap-4 items-start">
       <div id="print-area">
         <div
           v-for="(sheet, sidx) in sheets"
           :key="sidx"
-          class="print-sheet bg-white text-black rounded-xl shadow-default border border-border p-10 max-w-3xl mx-auto relative mb-4 last:mb-0"
+          class="print-sheet bg-white text-black rounded-xl shadow-default border border-border px-8 py-10 max-w-5xl mx-auto relative mb-4 last:mb-0"
           :class="!sheet.isLastSheet && 'print-page-break'"
         >
           <div v-if="showCornerFlag" class="corner-flag" :class="docMode === 'receipt' ? 'corner-flag-green' : 'corner-flag-blue'"></div>
@@ -137,13 +137,13 @@
               <tr>
                 <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
                 <th class="border border-gray-400 px-2 py-1 text-left w-20">วันที่ส่ง</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-20">ทะเบียนรถ</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-28">อ้างถึงเอกสาร</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-28">ใบขนส่ง</th>
+                <th class="border border-gray-400 px-2 py-1 text-left w-24">ทะเบียนรถ</th>
+                <th class="border border-gray-400 px-2 py-1 text-left w-28 whitespace-nowrap">อ้างถึงเอกสาร</th>
+                <th class="border border-gray-400 px-2 py-1 text-left w-28 whitespace-nowrap">ใบขนส่ง</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">รายการ</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-16">{{ qtyColumnLabel }}</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-20">หน่วยละ</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-24">จำนวนเงิน</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-16 whitespace-nowrap">{{ qtyColumnLabel }}</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-20 whitespace-nowrap">หน่วยละ</th>
+                <th class="border border-gray-400 px-2 py-1 text-right w-24 whitespace-nowrap">จำนวนเงิน</th>
               </tr>
             </thead>
             <tbody>
@@ -155,13 +155,13 @@
               >
                 <td class="border border-gray-400 px-2 py-1">{{ sheet.startIndex + ridx + 1 }}</td>
                 <td class="border border-gray-400 px-2 py-1">{{ row.shipDate ? formatDateShort(row.shipDate) : '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1">{{ row.plate || '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1">{{ row.referenceDoc || '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1">{{ row.deliveryNo || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1">{{ plateNumberOnly(row.plate) || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1 whitespace-nowrap">{{ row.referenceDoc || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1 whitespace-nowrap">{{ row.deliveryNo || '-' }}</td>
                 <td class="border border-gray-400 px-2 py-1 whitespace-pre-line">{{ row.description }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ commonRowUnit ? row.qty : `${row.qty} ${row.unit}` }}</td>
-                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.unitPrice) }}</td>
-                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right whitespace-nowrap">{{ formatBaht(row.unitPrice) }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right whitespace-nowrap">{{ formatBaht(row.amount) }}</td>
               </tr>
               <tr v-for="n in sheet.isLastPage ? fillerRows : 0" :key="'filler' + n">
                 <td class="border border-gray-400 px-2 py-1 h-7">&nbsp;</td>
@@ -366,7 +366,7 @@
         </div>
       </div>
 
-      <div class="no-print space-y-4 sticky top-4">
+      <div class="no-print space-y-4 2xl:sticky top-4">
         <div class="card-lg space-y-3">
           <div class="flex items-center justify-between text-sm">
             <span class="text-text font-medium">ต้นฉบับ</span>
@@ -447,6 +447,7 @@ import { useBookingStore } from '@/stores/booking'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
+import { useVehiclesStore } from '@/stores/vehicles'
 import { bahtText } from '@/utils/companyInfo'
 import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
 import { groupRowsByFeed, type FeedGroup } from '@/utils/feedGrouping'
@@ -463,6 +464,18 @@ const bookingStore = useBookingStore()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
+const vehiclesStore = useVehiclesStore()
+
+/** booking.plate เก็บเป็นทะเบียนเต็ม "เลข จังหวัด" — บนเอกสารแสดงเฉพาะเลขทะเบียน (แปลงตอนแสดงผลเท่านั้น ไม่แตะข้อมูลที่เก็บ)
+ *  หารถเจอ → ใช้ v.plate; ไม่เจอ → ตัดท้ายออกเมื่อเป็นชื่อจังหวัดของรถในทะเบียนรถ ไม่งั้นคืนค่าเดิม (ไม่เดา) */
+const plateNumberOnly = (raw?: string) => {
+  const text = (raw || '').trim()
+  if (!text) return ''
+  const vehicle = vehiclesStore.findByFullPlate(text)
+  if (vehicle) return vehicle.plate
+  const province = vehiclesStore.vehicles.map((v) => v.plateProvince).find((p) => p && text.endsWith(' ' + p))
+  return province ? text.slice(0, -province.length).trim() : text
+}
 
 // เอกสารเดิม (ใบแจ้งหนี้/ใบเสร็จ) ยังอยู่ใน bookingStore จนกว่าจะย้ายที่ Step 5 (migration)
 const legacyDoc = computed(() => bookingStore.documents.find((d) => d.id === route.params.docId))
