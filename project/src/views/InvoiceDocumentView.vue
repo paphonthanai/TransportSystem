@@ -41,13 +41,13 @@
     <div v-else class="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 items-start">
       <div id="print-area">
         <div
-          v-for="(label, idx) in copyLabels"
-          :key="idx"
+          v-for="(sheet, sidx) in sheets"
+          :key="sidx"
           class="print-sheet bg-white text-black rounded-xl shadow-default border border-border p-10 max-w-3xl mx-auto relative mb-4 last:mb-0"
-          :class="idx < copyLabels.length - 1 && 'print-page-break'"
+          :class="!sheet.isLastSheet && 'print-page-break'"
         >
           <div v-if="showCornerFlag" class="corner-flag" :class="docMode === 'receipt' ? 'corner-flag-green' : 'corner-flag-blue'"></div>
-          <div v-if="showCornerFlag" class="absolute top-2.5 right-3 text-white text-xs font-bold z-10">{{ idx + 1 }}</div>
+          <div v-if="showCornerFlag" class="absolute top-2.5 right-3 text-white text-xs font-bold z-10">{{ sheet.copyIdx + 1 }}</div>
 
           <div class="flex items-start justify-between mb-6">
             <div class="max-w-[55%] space-y-4">
@@ -68,7 +68,7 @@
 
             <div class="text-right flex-shrink-0">
               <div class="text-2xl font-bold text-primary">{{ docModeLabel[docMode].th }}</div>
-              <div class="text-xs text-gray-500">{{ label }}</div>
+              <div class="text-xs text-gray-500">{{ sheet.label }}<template v-if="sheet.pageCount > 1"> · หน้า {{ sheet.pageIdx + 1 }}/{{ sheet.pageCount }}</template></div>
               <div v-if="statusStampLabel" class="status-stamp">{{ statusStampLabel }}</div>
               <div class="doc-meta-box text-left text-xs w-64">
                 <div class="flex justify-between gap-4">
@@ -148,12 +148,12 @@
             </thead>
             <tbody>
               <tr
-                v-for="(row, ridx) in docRows"
+                v-for="(row, ridx) in sheet.rows"
                 :key="ridx"
                 :class="row.onClick ? 'cursor-pointer hover:bg-gray-50' : ''"
                 @click="row.onClick && row.onClick()"
               >
-                <td class="border border-gray-400 px-2 py-1">{{ ridx + 1 }}</td>
+                <td class="border border-gray-400 px-2 py-1">{{ sheet.startIndex + ridx + 1 }}</td>
                 <td class="border border-gray-400 px-2 py-1">{{ row.shipDate ? formatDateShort(row.shipDate) : '-' }}</td>
                 <td class="border border-gray-400 px-2 py-1">{{ row.plate || '-' }}</td>
                 <td class="border border-gray-400 px-2 py-1">{{ row.referenceDoc || '-' }}</td>
@@ -163,7 +163,7 @@
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.unitPrice) }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
               </tr>
-              <tr v-for="n in fillerRows" :key="'filler' + n">
+              <tr v-for="n in sheet.isLastPage ? fillerRows : 0" :key="'filler' + n">
                 <td class="border border-gray-400 px-2 py-1 h-7">&nbsp;</td>
                 <td class="border border-gray-400 px-2 py-1"></td>
                 <td class="border border-gray-400 px-2 py-1"></td>
@@ -254,6 +254,7 @@
             </tbody>
           </table>
 
+          <template v-if="sheet.isLastPage">
           <div class="flex justify-between items-start mb-6">
             <div class="text-sm">
               <div class="text-gray-600 text-xs">จำนวนเงินเป็นตัวอักษร</div>
@@ -339,6 +340,7 @@
           </div>
 
           <div v-if="docNote" class="text-xs text-gray-600 mb-6">{{ docNote }}</div>
+          </template>
 
           <div class="grid grid-cols-2 gap-8 text-sm mt-16">
             <div>
@@ -825,6 +827,38 @@ const copyLabels = computed(() => {
   for (let i = 0; i < originalCount.value; i++) labels.push('ต้นฉบับ')
   for (let i = 0; i < copyCount.value; i++) labels.push('สำเนา')
   return labels.length ? labels : ['ต้นฉบับ']
+})
+
+/** จำนวนแถวรายเที่ยวต่อหน้า A4 ของเอกสารที่ใช้ตารางรายเที่ยว (hasTripColumns) — เกินนี้แบ่งเป็นหลายหน้า ทุกหน้าซ้ำส่วนหัว
+ *  เอกสาร+หัวตาราง ลำดับแถวต่อเนื่อง ยอดรวม/ตัวอักษรบาทอยู่หน้าสุดท้ายหน้าเดียว ช่องลายเซ็นอยู่ทุกหน้า */
+const ROWS_PER_PAGE = 18
+
+/** 1 sheet = 1 หน้ากระดาษที่พิมพ์ = (สำเนาที่ N) × (หน้าที่ M) — เอกสารที่ไม่ใช่ตารางรายเที่ยว หรือรายเที่ยวไม่เกิน
+ *  ROWS_PER_PAGE ได้หน้าเดียวต่อสำเนาเหมือนเดิมทุกประการ (rows ไม่ถูกใช้นอกโหมดตารางรายเที่ยว) */
+const sheets = computed(() => {
+  const rows = docRows.value
+  const chunks: { rows: PrintRow[]; startIndex: number }[] = []
+  if (hasTripColumns.value && rows.length > ROWS_PER_PAGE) {
+    for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) chunks.push({ rows: rows.slice(i, i + ROWS_PER_PAGE), startIndex: i })
+  } else {
+    chunks.push({ rows, startIndex: 0 })
+  }
+  const out: { label: string; copyIdx: number; pageIdx: number; pageCount: number; isLastPage: boolean; rows: PrintRow[]; startIndex: number; isLastSheet: boolean }[] = []
+  copyLabels.value.forEach((label, copyIdx) => {
+    chunks.forEach((chunk, pageIdx) => {
+      out.push({
+        label,
+        copyIdx,
+        pageIdx,
+        pageCount: chunks.length,
+        isLastPage: pageIdx === chunks.length - 1,
+        rows: chunk.rows,
+        startIndex: chunk.startIndex,
+        isLastSheet: copyIdx === copyLabels.value.length - 1 && pageIdx === chunks.length - 1,
+      })
+    })
+  })
+  return out
 })
 
 const goPaymentSettings = () => router.push('/settings/documents/payment')

@@ -38,12 +38,7 @@
     </div>
 
     <div class="card-lg space-y-4">
-      <div class="flex items-center justify-between flex-wrap gap-3">
-        <select v-model="statusFilter" class="input-field w-44">
-          <option value="all">แสดงทั้งหมด</option>
-          <option value="DRAFT">รอเก็บเงิน</option>
-          <option value="PAID">เก็บเงิน</option>
-        </select>
+      <div class="flex items-center justify-end flex-wrap gap-3">
         <div class="relative w-full max-w-xs">
           <span class="material-symbols-rounded text-base text-muted absolute left-3 top-1/2 -translate-y-1/2">search</span>
           <input v-model="search" placeholder="ค้นหาลูกค้า/เลขที่เอกสาร" class="input-field w-full !pl-9" />
@@ -72,7 +67,13 @@
               <th class="text-right px-3 py-3 font-semibold text-muted cursor-pointer select-none" @click="toggleSort('amount')">
                 ยอดรวมสุทธิ<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('amount') }}</span>
               </th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">สถานะ</th>
+              <th class="text-left px-3 py-2 font-semibold text-muted">
+                <select v-model="statusFilter" class="input-field !py-1 !text-xs w-32 font-semibold" aria-label="กรองสถานะ">
+                  <option value="all">สถานะ: ทั้งหมด</option>
+                  <option value="DRAFT">รอเก็บเงิน</option>
+                  <option value="PAID">เก็บเงิน</option>
+                </select>
+              </th>
               <th class="px-3 py-3 w-10"></th>
             </tr>
           </thead>
