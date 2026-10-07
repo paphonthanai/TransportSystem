@@ -67,6 +67,10 @@ service cloud.firestore {
 
     match /drivers/{driverId} {
       allow read, write: if hasRole(['ADMIN', 'DISPATCHER']);
+      // เสมียน (STAFF) อ่านได้อย่างเดียว — จำเป็นต่อการ import งานจาก Excel/จัดงาน (จับคู่ชื่อเล่นคนขับกับทะเบียนรถ) ถ้าอ่านไม่ได้
+      // รายชื่อคนขับว่างทุกแถว (เขียนไม่ได้ และหน้าจัดการคนขับยังจำกัด ADMIN/DISPATCHER ที่ route guard) หมายเหตุ: เอกสารคนขับมี
+      // field การเงิน (เลขบัญชี/รายได้) Firestore จำกัดระดับ field ไม่ได้ จึงอ่านได้ทั้งเอกสารผ่านการเรียก API ตรงๆ
+      allow read: if hasRole(['STAFF']);
       // Self-service: คนขับอ่าน/แก้ไข record ของ "ตัวเอง" เท่านั้นได้ (เปลี่ยนอีเมล/PIN จาก Driver App — ดู
       // stores/auth.ts updateOwnCredentials) แก้ได้เฉพาะ field authEmail เท่านั้น ห้ามแตะ field อื่นของตัวเอง
       // หรือ record ของคนขับคนอื่นเลย
@@ -106,6 +110,8 @@ service cloud.firestore {
 
     match /vehicles/{vehicleId} {
       allow read, write: if hasRole(['ADMIN', 'DISPATCHER']);
+      // เสมียน (STAFF) อ่านได้อย่างเดียว — ใช้จับคู่ทะเบียน/ประเภทรถตอน import และจัดงาน
+      allow read: if hasRole(['STAFF']);
     }
 
     match /bookings/{bookingId} {
