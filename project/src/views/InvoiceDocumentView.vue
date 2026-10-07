@@ -38,16 +38,16 @@
 
     <div v-if="!docExists" class="card-lg text-center text-muted py-12">ไม่พบเอกสาร</div>
 
-    <div v-else class="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 items-start">
+    <div v-else class="grid grid-cols-1 2xl:grid-cols-[1fr_260px] gap-4 items-start">
       <div id="print-area">
         <div
-          v-for="(label, idx) in copyLabels"
-          :key="idx"
-          class="print-sheet bg-white text-black rounded-xl shadow-default border border-border p-10 max-w-3xl mx-auto relative mb-4 last:mb-0"
-          :class="idx < copyLabels.length - 1 && 'print-page-break'"
+          v-for="(sheet, sidx) in sheets"
+          :key="sidx"
+          class="print-sheet bg-white text-black rounded-xl shadow-default border border-border px-8 py-10 max-w-5xl mx-auto relative mb-4 last:mb-0"
+          :class="!sheet.isLastSheet && 'print-page-break'"
         >
           <div v-if="showCornerFlag" class="corner-flag" :class="docMode === 'receipt' ? 'corner-flag-green' : 'corner-flag-blue'"></div>
-          <div v-if="showCornerFlag" class="absolute top-2.5 right-3 text-white text-xs font-bold z-10">{{ idx + 1 }}</div>
+          <div v-if="showCornerFlag" class="absolute top-2.5 right-3 text-white text-xs font-bold z-10">{{ sheet.copyIdx + 1 }}</div>
 
           <div class="flex items-start justify-between mb-6">
             <div class="max-w-[55%] space-y-4">
@@ -68,7 +68,7 @@
 
             <div class="text-right flex-shrink-0">
               <div class="text-2xl font-bold text-primary">{{ docModeLabel[docMode].th }}</div>
-              <div class="text-xs text-gray-500">{{ label }}</div>
+              <div class="text-xs text-gray-500">{{ sheet.label }}<template v-if="sheet.pageCount > 1"> · หน้า {{ sheet.pageIdx + 1 }}/{{ sheet.pageCount }}</template></div>
               <div v-if="statusStampLabel" class="status-stamp">{{ statusStampLabel }}</div>
               <div class="doc-meta-box text-left text-xs w-64">
                 <div class="flex justify-between gap-4">
@@ -132,38 +132,50 @@
           <!-- ตารางรายเที่ยว — ใบวางบิล/ใบแจ้งหนี้/ใบเสร็จที่มีรายการมาจากงานขนส่งโดยตรง (รวมใบเสร็จที่แตกรายการจากเอกสาร
                ต้นทางแล้ว ดู receiptItemRowsFromSourceDocs) ให้ตรงกับฟอร์แมตเอกสารจริงของบริษัท เช็คก่อนตารางอ้างอิงเอกสาร
                ต้นทางด้านล่าง เพื่อให้ใบเสร็จที่มีข้อมูลเที่ยวจริงแสดง table structure เดียวกับใบวางบิลเป๊ะ -->
-          <table v-if="hasTripColumns" class="w-full text-sm border border-gray-400 mb-4">
+          <table v-if="hasTripColumns" class="trip-table w-full text-sm border border-gray-400 mb-4">
+            <!-- ความกว้างคอลัมน์เป็น % + table-layout: fixed — ไม่ให้คอลัมน์เลข/วันที่ดันคอลัมน์ "รายการ" แคบจนแถวสูง (พิมพ์ A4 ล้นหน้า) -->
+            <colgroup>
+              <col style="width: 4%" />
+              <col style="width: 9%" />
+              <col style="width: 9%" />
+              <col style="width: 13%" />
+              <col style="width: 13%" />
+              <col style="width: 30%" />
+              <col style="width: 7%" />
+              <col style="width: 7%" />
+              <col style="width: 8%" />
+            </colgroup>
             <thead class="bg-gray-100">
               <tr>
-                <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-20">วันที่ส่ง</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-20">ทะเบียนรถ</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-28">อ้างถึงเอกสาร</th>
-                <th class="border border-gray-400 px-2 py-1 text-left w-28">ใบขนส่ง</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">#</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">วันที่ส่ง</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">ทะเบียนรถ</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">อ้างถึงเอกสาร</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">ใบขนส่ง</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">รายการ</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-16">{{ qtyColumnLabel }}</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-20">หน่วยละ</th>
-                <th class="border border-gray-400 px-2 py-1 text-right w-24">จำนวนเงิน</th>
+                <th class="border border-gray-400 px-2 py-1 text-right">จำนวน<template v-if="commonRowUnit"><br />({{ commonRowUnit }})</template></th>
+                <th class="border border-gray-400 px-2 py-1 text-right">หน่วยละ</th>
+                <th class="border border-gray-400 px-2 py-1 text-right">จำนวนเงิน</th>
               </tr>
             </thead>
             <tbody>
               <tr
-                v-for="(row, ridx) in docRows"
+                v-for="(row, ridx) in sheet.rows"
                 :key="ridx"
                 :class="row.onClick ? 'cursor-pointer hover:bg-gray-50' : ''"
                 @click="row.onClick && row.onClick()"
               >
-                <td class="border border-gray-400 px-2 py-1">{{ ridx + 1 }}</td>
+                <td class="border border-gray-400 px-2 py-1">{{ sheet.startIndex + ridx + 1 }}</td>
                 <td class="border border-gray-400 px-2 py-1">{{ row.shipDate ? formatDateShort(row.shipDate) : '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1">{{ row.plate || '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1">{{ row.referenceDoc || '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1">{{ row.deliveryNo || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1 whitespace-nowrap">{{ plateNumberOnly(row.plate) || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1 break-all">{{ row.referenceDoc || '-' }}</td>
+                <td class="border border-gray-400 px-2 py-1 break-all">{{ row.deliveryNo || '-' }}</td>
                 <td class="border border-gray-400 px-2 py-1 whitespace-pre-line">{{ row.description }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ commonRowUnit ? row.qty : `${row.qty} ${row.unit}` }}</td>
-                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.unitPrice) }}</td>
-                <td class="border border-gray-400 px-2 py-1 text-right">{{ formatBaht(row.amount) }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right whitespace-nowrap">{{ formatBaht(row.unitPrice) }}</td>
+                <td class="border border-gray-400 px-2 py-1 text-right whitespace-nowrap">{{ formatBaht(row.amount) }}</td>
               </tr>
-              <tr v-for="n in fillerRows" :key="'filler' + n">
+              <tr v-for="n in sheet.isLastPage ? fillerRows : 0" :key="'filler' + n">
                 <td class="border border-gray-400 px-2 py-1 h-7">&nbsp;</td>
                 <td class="border border-gray-400 px-2 py-1"></td>
                 <td class="border border-gray-400 px-2 py-1"></td>
@@ -254,6 +266,7 @@
             </tbody>
           </table>
 
+          <template v-if="sheet.isLastPage">
           <div class="flex justify-between items-start mb-6">
             <div class="text-sm">
               <div class="text-gray-600 text-xs">จำนวนเงินเป็นตัวอักษร</div>
@@ -339,6 +352,7 @@
           </div>
 
           <div v-if="docNote" class="text-xs text-gray-600 mb-6">{{ docNote }}</div>
+          </template>
 
           <div class="grid grid-cols-2 gap-8 text-sm mt-16">
             <div>
@@ -364,7 +378,7 @@
         </div>
       </div>
 
-      <div class="no-print space-y-4 sticky top-4">
+      <div class="no-print space-y-4 2xl:sticky top-4">
         <div class="card-lg space-y-3">
           <div class="flex items-center justify-between text-sm">
             <span class="text-text font-medium">ต้นฉบับ</span>
@@ -445,6 +459,7 @@ import { useBookingStore } from '@/stores/booking'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
+import { useVehiclesStore } from '@/stores/vehicles'
 import { bahtText } from '@/utils/companyInfo'
 import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
 import { groupRowsByFeed, type FeedGroup } from '@/utils/feedGrouping'
@@ -461,6 +476,18 @@ const bookingStore = useBookingStore()
 const salesDocumentsStore = useSalesDocumentsStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
+const vehiclesStore = useVehiclesStore()
+
+/** booking.plate เก็บเป็นทะเบียนเต็ม "เลข จังหวัด" — บนเอกสารแสดงเฉพาะเลขทะเบียน (แปลงตอนแสดงผลเท่านั้น ไม่แตะข้อมูลที่เก็บ)
+ *  หารถเจอ → ใช้ v.plate; ไม่เจอ → ตัดท้ายออกเมื่อเป็นชื่อจังหวัดของรถในทะเบียนรถ ไม่งั้นคืนค่าเดิม (ไม่เดา) */
+const plateNumberOnly = (raw?: string) => {
+  const text = (raw || '').trim()
+  if (!text) return ''
+  const vehicle = vehiclesStore.findByFullPlate(text)
+  if (vehicle) return vehicle.plate
+  const province = vehiclesStore.vehicles.map((v) => v.plateProvince).find((p) => p && text.endsWith(' ' + p))
+  return province ? text.slice(0, -province.length).trim() : text
+}
 
 // เอกสารเดิม (ใบแจ้งหนี้/ใบเสร็จ) ยังอยู่ใน bookingStore จนกว่าจะย้ายที่ Step 5 (migration)
 const legacyDoc = computed(() => bookingStore.documents.find((d) => d.id === route.params.docId))
@@ -827,6 +854,38 @@ const copyLabels = computed(() => {
   return labels.length ? labels : ['ต้นฉบับ']
 })
 
+/** จำนวนแถวรายเที่ยวต่อหน้า A4 ของเอกสารที่ใช้ตารางรายเที่ยว (hasTripColumns) — เกินนี้แบ่งเป็นหลายหน้า ทุกหน้าซ้ำส่วนหัว
+ *  เอกสาร+หัวตาราง ลำดับแถวต่อเนื่อง ยอดรวม/ตัวอักษรบาทอยู่หน้าสุดท้ายหน้าเดียว ช่องลายเซ็นอยู่ทุกหน้า */
+const ROWS_PER_PAGE = 15
+
+/** 1 sheet = 1 หน้ากระดาษที่พิมพ์ = (สำเนาที่ N) × (หน้าที่ M) — เอกสารที่ไม่ใช่ตารางรายเที่ยว หรือรายเที่ยวไม่เกิน
+ *  ROWS_PER_PAGE ได้หน้าเดียวต่อสำเนาเหมือนเดิมทุกประการ (rows ไม่ถูกใช้นอกโหมดตารางรายเที่ยว) */
+const sheets = computed(() => {
+  const rows = docRows.value
+  const chunks: { rows: PrintRow[]; startIndex: number }[] = []
+  if (hasTripColumns.value && rows.length > ROWS_PER_PAGE) {
+    for (let i = 0; i < rows.length; i += ROWS_PER_PAGE) chunks.push({ rows: rows.slice(i, i + ROWS_PER_PAGE), startIndex: i })
+  } else {
+    chunks.push({ rows, startIndex: 0 })
+  }
+  const out: { label: string; copyIdx: number; pageIdx: number; pageCount: number; isLastPage: boolean; rows: PrintRow[]; startIndex: number; isLastSheet: boolean }[] = []
+  copyLabels.value.forEach((label, copyIdx) => {
+    chunks.forEach((chunk, pageIdx) => {
+      out.push({
+        label,
+        copyIdx,
+        pageIdx,
+        pageCount: chunks.length,
+        isLastPage: pageIdx === chunks.length - 1,
+        rows: chunk.rows,
+        startIndex: chunk.startIndex,
+        isLastSheet: copyIdx === copyLabels.value.length - 1 && pageIdx === chunks.length - 1,
+      })
+    })
+  })
+  return out
+})
+
 const goPaymentSettings = () => router.push('/settings/documents/payment')
 
 const settingsOpen = ref(route.query.settings === '1')
@@ -871,6 +930,9 @@ const printDoc = () => window.print()
 </script>
 
 <style scoped>
+.trip-table {
+  table-layout: fixed;
+}
 .btn-primary {
   @apply h-10 px-4 rounded-lg border-0 bg-primary text-white font-semibold text-sm flex items-center gap-2 cursor-pointer transition-all hover:opacity-90 shadow-md;
 }
@@ -936,11 +998,27 @@ const printDoc = () => window.print()
   .no-print {
     display: none !important;
   }
+  /* A4 จริง: ขอบกระดาษ 8mm ให้แผ่นเอกสารใช้พื้นที่เต็ม (ไม่ซ้อน padding ของจอ) + ตารางรายเที่ยวใช้ตัวอักษรเล็ก/แถวกระชับ
+     เพื่อให้ ROWS_PER_PAGE แถว + หัวเอกสาร + ลายเซ็นพอดี 1 แผ่น ไม่ล้นไปหน้าถัดไป */
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
   .print-sheet {
     box-shadow: none !important;
     border: none !important;
     margin: 0 !important;
+    padding: 0 !important;
     max-width: 100% !important;
+    break-inside: avoid;
+  }
+  .print-sheet table {
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+  }
+  .print-sheet table th,
+  .print-sheet table td {
+    padding: 2px 4px !important;
   }
   .print-page-break {
     page-break-after: always;
