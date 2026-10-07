@@ -110,8 +110,10 @@ service cloud.firestore {
 
     match /vehicles/{vehicleId} {
       allow read, write: if hasRole(['ADMIN', 'DISPATCHER']);
-      // เสมียน (STAFF) อ่านได้อย่างเดียว — ใช้จับคู่ทะเบียน/ประเภทรถตอน import และจัดงาน
-      allow read: if hasRole(['STAFF']);
+      // เสมียน (STAFF) อ่าน/แก้ไขได้ — ใช้จับคู่ทะเบียน/ประเภทรถตอน import และจัดงาน และต้องเขียนได้เพราะการจัดคนขับเข้ารถ
+      // (vehiclesStore.assignDriver ตอนสร้าง/จัดงาน) เขียน driverCode ลงเอกสารรถ ถ้าเขียนไม่ได้จะ error เงียบๆ ทุกครั้งที่จัดงาน
+      // ลบรถถาวรยังเป็น ADMIN/DISPATCHER เท่านั้น
+      allow read, create, update: if hasRole(['STAFF']);
     }
 
     match /bookings/{bookingId} {

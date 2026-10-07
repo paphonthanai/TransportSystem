@@ -102,6 +102,7 @@
 
       <!-- Content Area -->
       <main class="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
+        <PersistenceErrorBanner />
         <RouterView />
       </main>
     </div>
@@ -125,6 +126,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useContactStore } from '@/stores/contacts'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
 import OnboardingChecklist from '@/components/OnboardingChecklist.vue'
+import PersistenceErrorBanner from '@/components/PersistenceErrorBanner.vue'
 
 const router = useRouter()
 const currentRoute = useRoute()
