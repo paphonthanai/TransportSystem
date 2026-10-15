@@ -18,9 +18,11 @@ export function sanitizeDriver(data: Partial<DriverRecord>): Omit<DriverRecord, 
   return {
     code: data.code ?? '',
     prefix: data.prefix ?? '',
-    firstName: data.firstName ?? '',
-    lastName: data.lastName ?? '',
-    nickname: data.nickname ?? '',
+    // ตัดช่องว่างหัว-ท้ายของชื่อ/นามสกุล/ชื่อเล่น — ชื่อที่มีช่องว่างเกิน ("สุรพรชัย ") ทำให้ชื่อคนขับในงาน ("ชื่อ นามสกุล") มีช่องว่างซ้อน
+    // และเทียบชื่อ/จับคู่ชื่อเล่นไม่ตรงกัน
+    firstName: (data.firstName ?? '').trim(),
+    lastName: (data.lastName ?? '').trim(),
+    nickname: (data.nickname ?? '').trim(),
     idCard: data.idCard ?? '',
     licenseNo: data.licenseNo ?? '',
     licenseType: (data.licenseType as LicenseType) ?? 'ท.1',

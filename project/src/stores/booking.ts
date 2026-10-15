@@ -628,6 +628,39 @@ export const useBookingStore = defineStore('booking', () => {
     return { ok: true, deletedDocumentCount: referencedDocs.length }
   }
 
+  /**
+   * ผูกคนขับให้งานที่ยังไม่มีชื่อคนขับ (เช่น นำเข้า Excel แล้วจับคู่ชื่อเล่นไม่ได้) — ตั้งเฉพาะข้อมูลคนขับ ไม่เปลี่ยนสถานะ/ทะเบียน
+   * (ต่างจาก dispatchBooking ที่เลื่อนสถานะงาน) และลบหมายเหตุอัตโนมัติ "ชื่อเล่นคนขับ…ไม่ตรง" ที่ค้างจากตอนนำเข้า
+   */
+  function assignDriverToBooking(
+    id: string,
+    driver: { driverName: string; driverId?: string; driverFirstName?: string; driverLastName?: string }
+  ) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return
+    booking.driverName = driver.driverName
+    booking.driverId = driver.driverId
+    booking.driverFirstName = driver.driverFirstName
+    booking.driverLastName = driver.driverLastName
+    if (booking.note) {
+      const kept = booking.note.split(' | ').filter((part) => part && !part.startsWith('ชื่อเล่นคนขับ'))
+      booking.note = kept.length ? kept.join(' | ') : undefined
+    }
+    addLog(`ผูกคนขับ ${booking.docNo}: ${driver.driverName}`, { bookingId: booking.id })
+  }
+
+  /**
+   * ตั้งทะเบียนให้งานที่มีคนขับแล้วแต่ยังไม่มีทะเบียน (มีคนขับต้องรู้ทะเบียน — คนขับผูกกับรถประจำอยู่แล้ว) ตั้งเฉพาะทะเบียน
+   * ไม่เปลี่ยนสถานะ และคำนวณเรทน้ำมันของงานใหม่ตามประเภทรถของทะเบียนนั้น
+   */
+  function assignPlateToBooking(id: string, plate: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking || !plate) return
+    booking.plate = plate
+    applyFuelRate(booking)
+    addLog(`ตั้งทะเบียน ${booking.docNo}: ${plate}`, { bookingId: booking.id })
+  }
+
   /** เพิ่มรายการสินค้า/ปลายทางใหม่เข้าไปในงานที่มีอยู่แล้ว (ใช้ตอนจัดรถแล้วมีรายการเพิ่มทีหลัง) ไม่สร้างงาน/เลขที่เอกสารใหม่ */
   function addJobItem(id: string, item: Omit<JobItem, 'id'>) {
     const booking = bookings.value.find((b) => b.id === id)
@@ -1286,6 +1319,8 @@ export const useBookingStore = defineStore('booking', () => {
     deleteBooking,
     hardDeleteBooking,
     canDeleteBooking,
+    assignDriverToBooking,
+    assignPlateToBooking,
     updateBookingPrice,
     applyImportReconciliation,
     updateBookingOps,

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Vehicle, BookingCategory } from '@/types'
 import { vehicleRepository, sanitizeVehicle } from '@/repositories/vehicleRepository'
+import { normalizePlateCode } from '@/utils/importReconciliation'
 
 export const useVehiclesStore = defineStore('vehicles', () => {
   const vehicles = ref<Vehicle[]>([])
@@ -32,6 +33,16 @@ export const useVehiclesStore = defineStore('vehicles', () => {
     const trimmed = text.trim()
     if (!trimmed) return undefined
     return vehicles.value.find((v) => fullPlate(v) === trimmed || v.plate === trimmed)
+  }
+
+  /** หารถจากทะเบียนแบบหลวม — เหมือน findByFullPlate แต่รองรับทะเบียนที่ไม่ตรงรูปแบบเป๊ะ (มี/ไม่มีขีด, ต่อท้ายด้วยชื่อจังหวัดอื่น/สะกดจังหวัดต่าง)
+   *  โดยเทียบเฉพาะเลขทะเบียน (ส่วนหน้าช่องว่างแรก) — ใช้เมื่อต้องหาคนขับประจำรถจากทะเบียนในงาน/ไฟล์นำเข้า */
+  const findByPlateLoose = (text: string) => {
+    const exact = findByFullPlate(text)
+    if (exact) return exact
+    const head = normalizePlateCode((text || '').trim().split(/\s+/)[0] || '')
+    if (!head) return undefined
+    return vehicles.value.find((v) => normalizePlateCode(v.plate) === head)
   }
 
   /** รถที่มีคนขับรหัสนี้ประจำอยู่ (ถ้ามี) */
@@ -91,6 +102,7 @@ export const useVehiclesStore = defineStore('vehicles', () => {
     error,
     fullPlate,
     findByFullPlate,
+    findByPlateLoose,
     vehicleForDriver,
     availableFor,
     assignDriver,

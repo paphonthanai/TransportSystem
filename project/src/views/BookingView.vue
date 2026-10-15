@@ -4,13 +4,28 @@
   <div class="space-y-6 pb-32">
     <!-- Create Button -->
     <div class="flex justify-end gap-2">
+      <!-- ซ่อมค่าเที่ยวงาน Import: ซ่อนปุ่มไว้ตามที่ตกลง (ฟังก์ชัน/ไดอะล็อกเดิมยังอยู่ครบ เปิดกลับได้โดยเปลี่ยน v-if) -->
       <button
+        v-if="false"
         @click="openReconcileModal"
         class="btn-secondary"
         title="อัปโหลดไฟล์ Excel ต้นฉบับ จับคู่กับงานที่มีอยู่แล้ว แล้วเติมค่าเที่ยว/เบี้ยเลี้ยง/น้ำมัน/จำนวนตันที่ยังว่าง/เป็น 0 ให้"
       >
         <span class="material-symbols-rounded text-base">build</span>
         ซ่อมค่าเที่ยวงาน Import
+      </button>
+      <button
+        @click="fuelPriceDialogOpen = true"
+        class="btn-secondary relative"
+        title="ตั้งราคาน้ำมันประจำวันก่อนนำเข้า/จ่ายงาน (กันลืมเปลี่ยนเรทน้ำมัน)"
+      >
+        <span class="material-symbols-rounded text-base">local_gas_station</span>
+        ตั้งค่าน้ำมัน
+        <span v-if="missingTodayPriceTypes.length" class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-500 border-2 border-surface"></span>
+      </button>
+      <button @click="router.push(`/booking/${props.fleet}/sheet`)" class="btn-secondary" title="กรอก/วางข้อมูลงานเป็นตาราง ตรวจก่อนสร้างงานหรือส่งออก Excel">
+        <span class="material-symbols-rounded text-base">table_chart</span>
+        ตารางลงงาน
       </button>
       <button @click="openImportModal" class="btn-secondary">
         <span class="material-symbols-rounded text-base">upload_file</span>
@@ -32,6 +47,59 @@
           placeholder="ค้นหาเลขที่เอกสาร, PO, ลูกค้า, ชื่อหน้างาน, ทะเบียนรถ..."
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
+      </div>
+    </div>
+
+    <!-- การ์ดงานที่เลือก — กดแถวในตารางเพื่อดู ชื่อ-นามสกุลคนขับ/ทะเบียน/ชื่องาน และเรทน้ำมันของงานนั้น (ตั้ง/แก้เรทก่อนจ่ายงานได้ที่นี่) -->
+    <div v-if="selectedBooking" class="card-lg border-primary/40 space-y-3">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-xs font-semibold text-muted">งานที่เลือก {{ selectedBooking.docNo }}</div>
+          <div class="font-bold text-text truncate">{{ dispatchTitle(selectedBooking) }}</div>
+        </div>
+        <button @click="selectedBookingId = null" class="w-8 h-8 shrink-0 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+          <span class="material-symbols-rounded text-base">close</span>
+        </button>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+        <div class="bg-surface-2 rounded-lg p-3">
+          <div class="text-xs text-muted mb-0.5">ชื่อ-นามสกุล พขร.</div>
+          <div class="font-semibold text-text">
+            {{ selectedDriverFullName || 'ยังไม่ได้จัดคนขับ' }}
+            <span v-if="selectedDriverRecord?.nickname" class="text-xs font-normal text-muted">({{ selectedDriverRecord.nickname }})</span>
+          </div>
+        </div>
+        <div class="bg-surface-2 rounded-lg p-3">
+          <div class="text-xs text-muted mb-0.5">ทะเบียนรถ</div>
+          <div class="font-semibold text-text">
+            {{ selectedBooking.plate || 'ยังไม่ได้จัดรถ' }}
+            <span v-if="selectedVehicleType" class="text-xs font-normal text-muted">({{ selectedVehicleType }})</span>
+          </div>
+        </div>
+        <div class="bg-surface-2 rounded-lg p-3">
+          <div class="text-xs text-muted mb-0.5">ชื่องาน / ปลายทาง</div>
+          <div class="font-semibold text-text">{{ destinationLabel(selectedBooking) }}</div>
+        </div>
+      </div>
+      <div class="flex items-end gap-3 flex-wrap">
+        <div>
+          <label class="block text-xs font-semibold text-muted mb-1">
+            เรทน้ำมัน (บาท/ลิตร) · {{ selectedBooking.fuelLiters || 0 }} ลิตร{{ selectedBooking.fuelNotRefilled ? ' (ไม่เติมน้ำมัน)' : '' }}
+          </label>
+          <input v-model.number="cardRateInput" type="number" min="0" step="0.01" class="input-field w-44" />
+        </div>
+        <button @click="saveCardRate" :disabled="!(cardRateInput > 0)" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+          <span class="material-symbols-rounded text-base">save</span>
+          บันทึกเรทงานนี้
+        </button>
+        <button @click="resetCardRate" class="btn-secondary" title="ล้างเรทที่กรอกเอง แล้วใช้ราคาน้ำมันประจำวันของวันที่สร้างงาน">
+          ใช้ราคาประจำวัน
+        </button>
+        <div class="text-xs text-muted pb-2">
+          <template v-if="selectedBooking.fuelRateManual">เรทกรอกเอง (ระบบไม่คำนวณทับ)</template>
+          <template v-else-if="selectedBooking.fuelRatePriceDate">ใช้ราคาน้ำมันประจำวันที่ {{ selectedBooking.fuelRatePriceDate }}</template>
+          <span v-else class="text-amber-700 font-semibold">ยังไม่มีเรท — ตั้งราคาน้ำมันประจำวันหรือกรอกเรทเอง</span>
+        </div>
       </div>
     </div>
 
@@ -78,7 +146,9 @@
               v-for="booking in inProgressBookings"
               :key="booking.id"
               :style="customerRowStyle(booking)"
-              class="border-b border-border hover:bg-surface-2 transition-colors"
+              :class="{ 'ring-2 ring-primary ring-inset': selectedBookingId === booking.id }"
+              @click="onRowClick(booking, $event)"
+              class="border-b border-border hover:bg-surface-2 transition-colors cursor-pointer"
             >
               <td v-if="canSelectDelete" class="px-3 py-3">
                 <input
@@ -88,7 +158,7 @@
                 />
               </td>
               <td class="px-3 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
-              <td class="px-3 py-3 text-text">{{ booking.driverName || '-' }}</td>
+              <td class="px-3 py-3 text-text"><BookingDriverFixCell :booking="booking" /></td>
               <td class="px-3 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
               <td class="px-3 py-3 text-center">
                 <button
@@ -197,10 +267,12 @@
               v-for="booking in inTransitBookings"
               :key="booking.id"
               :style="customerRowStyle(booking)"
-              class="border-b border-border hover:bg-surface-2 transition-colors"
+              :class="{ 'ring-2 ring-primary ring-inset': selectedBookingId === booking.id }"
+              @click="onRowClick(booking, $event)"
+              class="border-b border-border hover:bg-surface-2 transition-colors cursor-pointer"
             >
               <td class="px-3 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
-              <td class="px-3 py-3 text-text">{{ booking.driverName || '-' }}</td>
+              <td class="px-3 py-3 text-text"><BookingDriverFixCell :booking="booking" /></td>
               <td class="px-3 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
               <td class="px-3 py-3 text-center">
                 <button
@@ -279,6 +351,43 @@
       </div>
     </div>
 
+    <!-- ป๊อปอัพ "ตั้งค่าน้ำมัน" — กรอกราคาน้ำมันประจำวันจากหน้า Booking ได้เลย (ฟอร์มเดียวกับหน้าตั้งค่าน้ำมัน) -->
+    <Teleport to="body" v-if="fuelPriceDialogOpen">
+      <div @click="fuelPriceDialogOpen = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6 animate-fade">
+        <div @click.stop class="w-full max-w-3xl bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto animate-slide">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
+            <div class="font-bold text-text">ตั้งค่าน้ำมัน — ราคาน้ำมันประจำวัน</div>
+            <button @click="fuelPriceDialogOpen = false" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+          <div class="px-6 py-5 space-y-4">
+            <div v-if="missingTodayPriceTypes.length" class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              ยังไม่มีราคาน้ำมันของวันนี้สำหรับ: {{ missingTodayPriceTypes.join(', ') }} — งานที่นำเข้า/สร้างวันนี้จะยังไม่มีเรทจนกว่าจะตั้งราคา
+            </div>
+            <FuelPriceForm />
+            <div v-if="recentFuelPrices.length">
+              <div class="text-xs font-semibold text-muted mb-1">ราคาล่าสุดที่ตั้งไว้</div>
+              <table class="w-full text-sm">
+                <thead class="text-xs text-muted text-left">
+                  <tr>
+                    <th class="py-1 font-semibold">มีผลตั้งแต่</th>
+                    <th v-for="t in fuelVehicleTypes" :key="t" class="py-1 font-semibold text-right">{{ t }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="e in recentFuelPrices" :key="e.date" class="border-t border-border">
+                    <td class="py-1.5 font-semibold text-text">{{ e.date }}</td>
+                    <td v-for="t in fuelVehicleTypes" :key="t" class="py-1.5 text-right text-text">{{ e.prices[t] || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Dispatch Dialog -->
     <Teleport to="body" v-if="dispatchTarget">
       <div @click="dispatchTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6 animate-fade">
@@ -291,37 +400,45 @@
               <span class="material-symbols-rounded">close</span>
             </button>
           </div>
-          <div class="px-6 py-5 space-y-3">
-            <div>
-              <label class="block text-xs font-semibold text-muted mb-1">
-                ทะเบียนรถ *
-                <span class="text-[10px] font-normal text-muted">(แสดงเฉพาะรถที่วิ่ง Feed นี้ได้)</span>
-              </label>
-              <select v-model="dispatchForm.plate" class="input-field w-full">
-                <option value="">เลือกทะเบียนรถ...</option>
-                <option
-                  v-for="v in availableVehiclesForDispatch"
-                  :key="v.id"
-                  :value="vehiclesStore.fullPlate(v)"
-                  :style="{ backgroundColor: vehicleOptionColor(v) }"
-                >
-                  {{ vehicleOptionLabel(v) }}
-                </option>
-              </select>
+          <div class="px-6 py-6 space-y-5">
+            <!-- สรุปงานที่กำลังจัดรถ: ชื่อคนขับ/ทะเบียน/หน้างาน/ยอดเติมน้ำมัน (อัปเดตตามที่เลือกด้านล่าง) -->
+            <div class="rounded-xl border border-border bg-surface-2 p-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              <div>
+                <div class="text-xs text-muted">คนขับ</div>
+                <div class="font-semibold text-text">
+                  {{ dispatchForm.driverName || '-' }}
+                  <span v-if="dispatchDriverRecord?.nickname" class="text-xs font-normal text-muted">({{ dispatchDriverRecord.nickname }})</span>
+                </div>
+              </div>
+              <div>
+                <div class="text-xs text-muted">ทะเบียนรถ</div>
+                <div class="font-semibold text-text">{{ dispatchForm.plate || '-' }}</div>
+              </div>
+              <div>
+                <div class="text-xs text-muted">หน้างาน</div>
+                <div class="font-semibold text-text">{{ destinationLabel(dispatchTarget) }}</div>
+              </div>
+              <div>
+                <div class="text-xs text-muted">ยอดเติมน้ำมัน</div>
+                <div class="font-semibold text-text">
+                  {{ dispatchTarget.fuelNotRefilled ? 'ไม่เติมน้ำมัน' : `${dispatchTarget.fuelLiters || 0} ลิตร` }}
+                  <span v-if="dispatchFuelRatePreview.rate > 0" class="text-xs font-normal text-muted">
+                    · {{ formatBaht(dispatchFuelRatePreview.rate) }}/ล. = {{ formatBaht((dispatchTarget.fuelLiters || 0) * dispatchFuelRatePreview.rate) }}
+                  </span>
+                  <span v-else class="text-xs font-normal text-amber-700">· ยังไม่มีเรท</span>
+                </div>
+              </div>
             </div>
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">คนขับ</label>
-              <select v-model="dispatchForm.driverName" class="input-field w-full">
-                <option value="">เลือกคนขับ...</option>
-                <option
-                  v-for="name in driverOptions"
-                  :key="name"
-                  :value="name"
-                  :style="{ backgroundColor: driverOptionColor(name) }"
-                >
-                  {{ driverOptionLabel(name) }}
-                </option>
-              </select>
+              <label class="block text-xs font-semibold text-muted mb-1.5">
+                ทะเบียนรถ *
+                <span class="text-[10px] font-normal text-muted">(พิมพ์ค้นหาได้ — แสดงเฉพาะรถที่วิ่ง Feed นี้ได้)</span>
+              </label>
+              <SearchableSelect v-model="dispatchForm.plate" :options="dispatchPlateOptions" placeholder="เลือกหรือพิมพ์ค้นหาทะเบียนรถ..." />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1.5">คนขับ</label>
+              <SearchableSelect v-model="dispatchForm.driverName" :options="dispatchDriverOptions" placeholder="เลือกหรือพิมพ์ค้นหาชื่อคนขับ..." />
             </div>
             <div class="bg-surface-2 rounded-lg p-3 text-sm">
               <div class="text-xs font-semibold text-muted mb-1">น้ำมัน (คำนวณไว้ตั้งแต่ตอนสร้างงาน)</div>
@@ -464,7 +581,10 @@
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="dispatchTarget = null" class="btn-secondary">ยกเลิก</button>
-            <button @click="confirmDispatch" :disabled="!dispatchForm.plate" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+            <div v-if="dispatchForm.plate && !dispatchForm.driverName" class="text-xs text-red-600 font-semibold mr-auto self-center">
+              มีทะเบียนต้องมีคนขับ — รถคันนี้ยังไม่มีคนขับประจำ กรุณาเลือกคนขับ
+            </div>
+            <button @click="confirmDispatch" :disabled="!dispatchForm.plate || !dispatchForm.driverName" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
               <span class="material-symbols-rounded">send</span>
               {{ isReassignDispatch ? 'ยืนยันเปลี่ยนคนขับ/รถ' : 'ส่งงาน' }}
             </button>
@@ -602,6 +722,18 @@
                 <span class="material-symbols-rounded text-base">download</span>
                 ดาวน์โหลด Template
               </button>
+            </div>
+
+            <!-- ตั้งราคาน้ำมันก่อนนำเข้า จะได้ไม่ลืม — งานที่นำเข้าวันนี้ใช้ราคาน้ำมันของวันที่นำเข้า -->
+            <div
+              v-if="missingTodayPriceTypes.length"
+              class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-3 flex-wrap"
+            >
+              <span class="material-symbols-rounded text-base">local_gas_station</span>
+              <span class="flex-1 min-w-0">
+                ยังไม่มีราคาน้ำมันของวันนี้ ({{ missingTodayPriceTypes.join(', ') }}) — งานที่นำเข้าจะยังไม่มีเรทน้ำมัน ตั้งราคาก่อนนำเข้าจะได้ไม่ลืม
+              </span>
+              <button type="button" @click="fuelPriceDialogOpen = true" class="btn-sm">ตั้งราคาน้ำมันวันนี้</button>
             </div>
 
             <div v-if="importRows.length === 0" class="text-sm text-muted text-center py-6">
@@ -799,7 +931,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
@@ -830,6 +962,11 @@ import {
 } from '@/utils/importRowParser'
 import * as XLSX from 'xlsx'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
+import { useImportDraftStore } from '@/stores/importDraft'
+import SearchableSelect, { type SearchableOption } from '@/components/booking/SearchableSelect.vue'
+import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
+import FuelPriceForm from '@/components/fuel/FuelPriceForm.vue'
+import { bangkokDay } from '@/utils/fuelPrice'
 import { bookingCompletionIssues, describeCompletionIssues, STATIC_COMPLETION_CODES } from '@/utils/bookingCompletion'
 
 const props = defineProps<{ fleet: BookingCategory }>()
@@ -859,7 +996,33 @@ const findDriverByName = (name: string) => driversStore.drivers.find((d) => driv
  *  ให้ parseImportRow ใช้ต่อ — แยกโมดูล parser ออกไม่ให้ผูกกับ Pinia store ตรงๆ จะได้เทสแยกได้จริงโดยไม่ต้อง mock store */
 const matchDriverForImportRow = (nickname: string, plate: string) => {
   const driver = matchDriverForImport(nickname, plate, driversStore.drivers, vehiclesStore.vehicleForDriver)
-  return driver ? { id: driver.id, fullName: driversStore.fullName(driver) } : undefined
+  if (!driver && plate) {
+    // มีทะเบียนต้องมีคนขับ — ชื่อเล่นจับคู่ไม่ได้/ว่าง แต่ทะเบียนเป็นรถที่มีคนขับประจำ → ใช้คนขับประจำรถ (parseImportRow เตือนให้ตรวจ)
+    const code = vehiclesStore.findByPlateLoose(plate)?.driverCode
+    const byPlate = code ? driversStore.drivers.find((d) => d.code === code) : undefined
+    if (byPlate) {
+      return {
+        id: byPlate.id,
+        fullName: `${byPlate.firstName} ${byPlate.lastName}`.trim(),
+        firstName: byPlate.firstName,
+        lastName: byPlate.lastName,
+        viaPlate: true,
+      }
+    }
+  }
+  // ชื่อเต็มรูปแบบเดียวกับตอนจัดรถ (ชื่อ นามสกุล ไม่มีคำนำหน้า) — เดิมงานนำเข้าเก็บแบบมีคำนำหน้า ("นายสมชาย ...") ทำให้คนขับคนเดียวกัน
+  // ถูกนับเป็นสองชื่อในการนับเที่ยว/จัดกลุ่มตามชื่อคนขับ
+  const driverVehicle = driver ? vehiclesStore.vehicleForDriver(driver.code) : undefined
+  return driver
+    ? {
+        id: driver.id,
+        fullName: `${driver.firstName} ${driver.lastName}`.trim(),
+        firstName: driver.firstName,
+        lastName: driver.lastName,
+        // มีคนขับต้องรู้ทะเบียน — คนขับผูกกับรถประจำ ถ้าแถวไม่ได้ระบุทะเบียนใช้ทะเบียนรถประจำนี้ (parseImportRow เตือนให้ตรวจ)
+        plate: driverVehicle ? vehiclesStore.fullPlate(driverVehicle) : undefined,
+      }
+    : undefined
 }
 
 /** ต่อ matchCustomerForImport เข้ากับ customerStore จริง — จับคู่กับรหัสผู้ติดต่อ (ชื่อย่อ) ก่อนเสมอ ไม่เจอค่อยลอง
@@ -870,6 +1033,59 @@ const matchCustomerForImportRow = (raw: string) => {
 }
 
 const searchQuery = ref('')
+
+// --- ตั้งค่าน้ำมัน (ป๊อปอัพราคาประจำวัน) ---
+const fuelPriceDialogOpen = ref(false)
+const fuelVehicleTypes = ['รถบริษัท', 'รถหุ้นส่วน', 'รถร่วม', 'รถอู่เสริม'] as const
+/** ประเภทรถที่ยังไม่มีราคาน้ำมันของ "วันนี้" (ตามประวัติราคา) — ใช้เตือนบนปุ่ม/ตอนนำเข้า กันลืมตั้งราคาก่อนนำเข้างาน */
+const missingTodayPriceTypes = computed(() =>
+  fuelVehicleTypes.filter((t) => !(fuelRateStore.fuelRateFor(t, bangkokDay(new Date())).rate > 0))
+)
+const recentFuelPrices = computed(() =>
+  [...(fuelRateStore.settings.priceHistory || [])].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)
+)
+
+// --- การ์ดงานที่เลือก (กดแถวในตาราง) ---
+const selectedBookingId = ref<string | null>(null)
+const selectedBooking = computed(() => (selectedBookingId.value ? bookingStore.bookings.find((b) => b.id === selectedBookingId.value) || null : null))
+const onRowClick = (booking: Booking, e: MouseEvent) => {
+  // กดปุ่ม/ลิงก์/ช่องกรอก/เมนูในแถว = ไม่ใช่การเลือกแถว
+  if ((e.target as HTMLElement).closest('button, a, input, select, textarea, label, [role="button"]')) return
+  selectedBookingId.value = selectedBookingId.value === booking.id ? null : booking.id
+}
+const selectedDriverRecord = computed(() => {
+  const b = selectedBooking.value
+  if (!b) return undefined
+  return (b.driverId && driversStore.drivers.find((d) => d.id === b.driverId)) || (b.driverName ? findDriverByName(b.driverName) : undefined)
+})
+/** ชื่อ-นามสกุลเต็มของคนขับ (ไม่รวมชื่อเล่น) — ใช้ข้อมูลจากทะเบียนคนขับก่อน ถ้าไม่พบใช้ชื่อที่เก็บไว้ในงาน */
+const selectedDriverFullName = computed(() => {
+  const d = selectedDriverRecord.value
+  if (d) return `${d.firstName} ${d.lastName}`.trim()
+  return selectedBooking.value?.driverName || ''
+})
+const selectedVehicleType = computed(() => {
+  const plate = selectedBooking.value?.plate
+  return plate ? vehiclesStore.findByFullPlate(plate)?.department : undefined
+})
+const cardRateInput = ref(0)
+watch(
+  () => [selectedBooking.value?.id, selectedBooking.value?.fuelRate] as const,
+  () => {
+    cardRateInput.value = selectedBooking.value?.fuelRate || 0
+  },
+  { immediate: true }
+)
+const saveCardRate = () => {
+  const b = selectedBooking.value
+  if (!b || !(cardRateInput.value > 0)) return
+  bookingStore.updateBookingFull(b.id, { fuelRate: cardRateInput.value })
+}
+const resetCardRate = () => {
+  const b = selectedBooking.value
+  if (!b) return
+  bookingStore.updateBookingFull(b.id, { fuelRate: 0 })
+}
 
 const isCements = computed(() => props.fleet === 'cements')
 const productOptionsForFleet = computed(() => inventoryStore.products.filter((p) => p.category === props.fleet))
@@ -1257,8 +1473,21 @@ watch(
   }
 )
 
+/** ตัวเลือกใน SearchableSelect ของป๊อปอัพจัดรถ (ป้ายกำกับ/สีตามจำนวนเที่ยวเหมือน dropdown เดิมทุกประการ) */
+const dispatchPlateOptions = computed<SearchableOption[]>(() =>
+  availableVehiclesForDispatch.value.map((v) => ({
+    value: vehiclesStore.fullPlate(v),
+    label: vehicleOptionLabel(v),
+    color: vehicleOptionColor(v),
+  }))
+)
+const dispatchDriverOptions = computed<SearchableOption[]>(() =>
+  driverOptions.value.map((name) => ({ value: name, label: driverOptionLabel(name), color: driverOptionColor(name) }))
+)
+const dispatchDriverRecord = computed(() => (dispatchForm.value.driverName ? findDriverByName(dispatchForm.value.driverName) : undefined))
+
 const confirmDispatch = () => {
-  if (!dispatchTarget.value || !dispatchForm.value.plate) return
+  if (!dispatchTarget.value || !dispatchForm.value.plate || !dispatchForm.value.driverName) return
   const selectedDriver = dispatchForm.value.driverName ? findDriverByName(dispatchForm.value.driverName) : undefined
   bookingStore.dispatchBooking(dispatchTarget.value.id, dispatchForm.value.plate, {
     driverName: dispatchForm.value.driverName || undefined,
@@ -1695,6 +1924,25 @@ const handleImportFile = async (e: Event) => {
   input.value = ''
 }
 
+/** รับแถวที่ส่งต่อมาจากหน้า "ตารางลงงาน" เข้าขั้นตอนพรีวิว/ยืนยันเดียวกับการนำเข้าไฟล์ Excel ทุกประการ */
+const importDraftStore = useImportDraftStore()
+onMounted(() => {
+  const draft = importDraftStore.take(props.fleet)
+  if (!draft) return
+  importFileName.value = 'ตารางลงงาน (กรอกในระบบ)'
+  const [y, m, d] = draft.shipDate.split('-').map(Number)
+  importShipDate.value = y && m && d ? new Date(y, m - 1, d) : undefined
+  importRows.value = draft.rows.map((r, idx) =>
+    parseImportRow(r, idx + 1, {
+      matchDriver: matchDriverForImportRow,
+      matchCustomer: matchCustomerForImportRow,
+      findFuelRate: (province, district) => fuelRateStore.findRate(province, district) ?? undefined,
+    })
+  )
+  flagPriceOutliers(importRows.value)
+  importModalOpen.value = true
+})
+
 const importableRows = computed(() => importRows.value.filter((r) => !r.isEmpty))
 const importWarningRowCount = computed(() => importableRows.value.filter((r) => r.warnings.length > 0).length)
 
@@ -1761,6 +2009,8 @@ const confirmImport = () => {
       plate: row.plate || undefined,
       driverName: row.driverName || undefined,
       driverId: row.driverId,
+      driverFirstName: row.driverFirstName,
+      driverLastName: row.driverLastName,
       // เดิมเซ็ตแค่ loadingDate จากวันที่หัวไฟล์ ไม่เคยเซ็ต shipDate เลย ทำให้หน้าเลือกวางบิล/ใบวางบิล/
       // ใบกำกับภาษีของงาน import ทุกงานขึ้น "วันที่ส่งงาน" เป็น "-" และช่วงวันที่ในคำอธิบายรายการว่างไปด้วย —
       // ต้องเซ็ตทั้งคู่เหมือนหน้าสร้าง/แก้ไขงานด้วยมือ (BookingCreateView.vue/BookingEditView.vue)

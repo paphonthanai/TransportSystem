@@ -54,6 +54,29 @@ describe('matchDriverForImport', () => {
   it('ชื่อเล่นไม่ตรงเลยคืน undefined', () => {
     expect(matchDriverForImport('สาม', '', drivers, vehicleForDriver)).toBeUndefined()
   })
+
+  it('ชื่อเล่นพิมพ์เพี้ยนแค่วรรณยุกต์/ไม้ไต่คู้ ("แจ๊ค" กับ "แจ็ค") ยังจับคู่ได้ ตามทะเบียนเดิม', () => {
+    const list = [{ code: 'D004', nickname: 'แจ็ค' }]
+    const plateOf = (code: string) => (code === 'D004' ? { plate: '72-2337' } : undefined)
+    expect(matchDriverForImport('แจ๊ค', '72-2337', list, plateOf)?.code).toBe('D004')
+    // ทะเบียนไม่ตรงกับรถที่ประจำคนขับคนนั้น = ไม่เดา
+    expect(matchDriverForImport('แจ๊ค', '70-0000', list, plateOf)).toBeUndefined()
+  })
+
+  it('ทะเบียนในไฟล์ต่อท้ายด้วยชื่อจังหวัด ("72-3825 สระบุรี") ยังจับคู่กับทะเบียนรถในระบบ (เลขล้วน) ได้', () => {
+    const list = [{ code: 'D012', nickname: 'หนุ่ม' }]
+    const plateOf = (code: string) => (code === 'D012' ? { plate: '72-3825' } : undefined)
+    expect(matchDriverForImport('หนุ่ม', '72-3825 สระบุรี', list, plateOf)?.code).toBe('D012')
+    expect(matchDriverForImport('หนุ่ม', '72-3826 สระบุรี', list, plateOf)).toBeUndefined()
+  })
+
+  it('จับคู่ตรงตัวก่อนเสมอ แม้จะมีคนที่ชื่อเล่นใกล้เคียงอยู่ด้วย', () => {
+    const list = [
+      { code: 'A', nickname: 'แจ็ค' },
+      { code: 'B', nickname: 'แจ๊ค' },
+    ]
+    expect(matchDriverForImport('แจ๊ค', '', list, () => undefined)?.code).toBe('B')
+  })
 })
 
 /** คอลัมน์ "พิกัด/ลิงก์ Google Maps หน้างาน" (ไม่บังคับ) — reuse parseGpsInput เดียวกับหน้ากรอกเองทุกประการ
@@ -168,5 +191,64 @@ describe('parseImportRow — น้ำมัน', () => {
     expect(bad.fuelLiters).toBe(0)
     expect(bad.fuelUnreadable).toBe(true)
     expect(bad.warnings.join(' ')).toContain('อ่านค่าน้ำมันจาก Excel ไม่ได้')
+  })
+})
+
+/** มีงานต้องมีทะเบียน มีทะเบียนต้องมีคนขับ (ผูกกันอยู่แล้ว) — ถ้าขาดอย่างใดอย่างหนึ่งให้เติมจากรถ/คนขับประจำ พร้อมคำเตือนให้ตรวจ */
+describe('parseImportRow — ทะเบียน ↔ คนขับ ผูกกัน', () => {
+  const baseRow = {
+    [IMPORT_HEADERS.siteName]: 'ไซต์',
+    [IMPORT_HEADERS.districtProvince]: 'เมือง/สระบุรี',
+  }
+  const mk = (matchDriver: ParseImportRowDeps['matchDriver']): ParseImportRowDeps => ({
+    matchDriver,
+    findFuelRate: () => undefined,
+    matchCustomer: () => undefined,
+  })
+
+  it('ชื่อเล่นจับคู่ไม่ได้แต่ทะเบียนมีคนขับประจำ (viaPlate) → ใช้คนขับประจำรถ + เตือนให้ตรวจ', () => {
+    const row = parseImportRow(
+      { ...baseRow, [IMPORT_HEADERS.driverName]: 'เดช', [IMPORT_HEADERS.plate]: '72-9836' },
+      1,
+      mk(() => ({ id: 'd1', fullName: 'วิทวัฒน์ สายกระสุน', viaPlate: true }))
+    )
+    expect(row.driverName).toBe('วิทวัฒน์ สายกระสุน')
+    expect(row.driverId).toBe('d1')
+    expect(row.warnings.join(' ')).toContain('ตรวจคนขับ')
+    expect(row.warnings.join(' ')).toContain('เดช')
+  })
+
+  it('ไม่ได้ใส่ชื่อเล่นเลยแต่มีทะเบียน → ถามหาคนขับจากทะเบียนด้วย', () => {
+    let called: [string, string] | null = null
+    const row = parseImportRow(
+      { ...baseRow, [IMPORT_HEADERS.plate]: '73-1124 สระบุรี' },
+      1,
+      mk((nick, plate) => {
+        called = [nick, plate]
+        return { id: 'd2', fullName: 'สายยนตร์ ภู่ถนนนอก', viaPlate: true }
+      })
+    )
+    expect(called).toEqual(['', '73-1124 สระบุรี'])
+    expect(row.driverName).toBe('สายยนตร์ ภู่ถนนนอก')
+  })
+
+  it('มีคนขับแต่ไม่ได้ใส่ทะเบียน → ใช้ทะเบียนรถประจำคนขับ + เตือนให้ตรวจ', () => {
+    const row = parseImportRow(
+      { ...baseRow, [IMPORT_HEADERS.driverName]: 'แจ็ค' },
+      1,
+      mk(() => ({ id: 'd4', fullName: 'ปัญญา เอี่ยมสะอาด', plate: '72-2337 สระบุรี' }))
+    )
+    expect(row.plate).toBe('72-2337 สระบุรี')
+    expect(row.driverName).toBe('ปัญญา เอี่ยมสะอาด')
+    expect(row.warnings.join(' ')).toContain('ตรวจทะเบียน')
+  })
+
+  it('ระบุทะเบียนมาเองแล้ว ไม่ถูกทับด้วยทะเบียนประจำคนขับ', () => {
+    const row = parseImportRow(
+      { ...baseRow, [IMPORT_HEADERS.driverName]: 'แจ็ค', [IMPORT_HEADERS.plate]: '72-0000' },
+      1,
+      mk(() => ({ id: 'd4', fullName: 'ปัญญา เอี่ยมสะอาด', plate: '72-2337 สระบุรี' }))
+    )
+    expect(row.plate).toBe('72-0000')
   })
 })

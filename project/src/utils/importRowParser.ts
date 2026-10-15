@@ -79,6 +79,9 @@ export interface ImportRowResult {
   isEmpty: boolean
   driverName: string
   driverId?: string
+  /** snapshot ชื่อ/นามสกุลคนขับ ณ ตอนจับคู่ (เหมือนที่จัดรถบันทึกไว้ — เงินเดือนใช้ field นี้) */
+  driverFirstName?: string
+  driverLastName?: string
   plate: string
   docRef: string
   customer: string
@@ -123,6 +126,14 @@ export const IMPORT_HEADER_MARKER = 'ลำดับ'
  *  ชื่อเล่นได้ (ไม่มีอะไรให้ขัดแย้ง) แต่ถ้ามีทะเบียนรถมาด้วย ต้องตรงกับรถที่ประจำคนขับคนนั้นจริงเท่านั้น ไม่งั้นถือว่า
  *  ข้อมูลไม่ตรงกับที่ผูกในระบบ คืน undefined (ให้ผู้เรียกเว้นว่างไว้ ไม่เดาสุ่ม) — เทียบทะเบียนด้วย normalizePlateCode
  *  (ตัดขีด/ช่องว่าง) แทนการเทียบตัวอักษรตรงๆ กันพลาดเพราะรูปแบบเขียนต่างกันนิดหน่อย (มี/ไม่มีขีด) */
+/** ชื่อเล่นแบบหลวม: ตัดวรรณยุกต์ (่ ้ ๊ ๋) ไม้ไต่คู้ (็) การันต์ (์) และช่องว่าง แล้วเทียบแบบไม่สนตัวพิมพ์ */
+export const looseNickname = (s: string | undefined) =>
+  (s || '')
+    .normalize('NFC')
+    .replace(/[\u0E47-\u0E4C]/g, '')
+    .replace(/\s+/g, '')
+    .toLowerCase()
+
 export function matchDriverForImport<D extends { code: string; nickname: string }>(
   nickname: string,
   plate: string,
@@ -131,18 +142,28 @@ export function matchDriverForImport<D extends { code: string; nickname: string 
 ): D | undefined {
   // (d.nickname || '') กันพัง — คนขับที่บันทึกไว้ก่อนฟีเจอร์นี้มีอยู่ใน Firestore จริงโดยไม่มี field นี้เลย (undefined
   // ไม่ใช่ '') เพราะ driverRepository.getAll() ไม่ได้ผ่าน sanitizeDriver() (ต่างจากตอนแก้ไขผ่านฟอร์มที่ผ่านเสมอ)
-  const candidates = drivers.filter((d) => (d.nickname || '').trim() === nickname.trim())
+  // จับคู่ชื่อเล่นตรงตัวก่อน ถ้าไม่เจอค่อยจับคู่แบบหลวม (ไม่สนวรรณยุกต์/ไม้ไต่คู้/การันต์/ช่องว่าง/ตัวพิมพ์เล็ก-ใหญ่) เพราะ
+  // ไฟล์ Excel พิมพ์ชื่อเล่นเพี้ยนนิดเดียวบ่อย เช่น "แจ๊ค" กับ "แจ็ค" ทั้งที่เป็นคนเดียวกัน — ผ่านเงื่อนไขทะเบียนเดิมต่อ ไม่เดาข้ามคน
+  const exact = drivers.filter((d) => (d.nickname || '').trim() === nickname.trim())
+  const candidates = exact.length ? exact : drivers.filter((d) => looseNickname(d.nickname) !== '' && looseNickname(d.nickname) === looseNickname(nickname))
   if (candidates.length === 0) return undefined
   const plateNorm = normalizePlateCode(plate)
+  // ทะเบียนในไฟล์มักต่อท้ายด้วยชื่อจังหวัด ("72-3825 สระบุรี") ขณะที่ทะเบียนรถในระบบเก็บเลขทะเบียนล้วน ("72-3825") จึงเทียบทั้งแบบเต็ม
+  // และแบบตัดจังหวัด (ส่วนหน้าช่องว่างแรก) — เดิมเทียบแบบเต็มอย่างเดียว ทำให้ชื่อเล่นที่ถูกต้องจับคู่ไม่ได้เพราะจังหวัดต่อท้าย
+  const plateHeadNorm = normalizePlateCode(plate.trim().split(/\s+/)[0] || '')
+  const samePlate = (vehiclePlate: string) => {
+    const v = normalizePlateCode(vehiclePlate)
+    return v === plateNorm || (!!plateHeadNorm && v === plateHeadNorm)
+  }
   if (candidates.length === 1) {
     if (!plateNorm) return candidates[0]
     const vehicle = vehicleForDriver(candidates[0].code)
-    return vehicle && normalizePlateCode(vehicle.plate) === plateNorm ? candidates[0] : undefined
+    return vehicle && samePlate(vehicle.plate) ? candidates[0] : undefined
   }
   if (!plateNorm) return undefined
   return candidates.find((d) => {
     const vehicle = vehicleForDriver(d.code)
-    return vehicle && normalizePlateCode(vehicle.plate) === plateNorm
+    return vehicle && samePlate(vehicle.plate)
   })
 }
 
@@ -189,7 +210,10 @@ export const splitContactPhone = (raw: string): { contactName: string; phone: st
 export interface ParseImportRowDeps {
   /** คืนคนขับที่จับคู่ได้ (จากชื่อเล่น+ทะเบียนรถ) แค่ id/fullName พอ — ตัวหา match จริงคือ matchDriverForImport
    *  ด้านบน ผู้เรียก (BookingView.vue) เป็นคนต่อกับ driversStore/vehiclesStore เพราะโมดูลนี้ไม่ผูกกับ Pinia store ตรงๆ */
-  matchDriver: (nickname: string, plate: string) => { id?: string; fullName: string } | undefined
+  matchDriver: (
+    nickname: string,
+    plate: string
+  ) => { id?: string; fullName: string; firstName?: string; lastName?: string; viaPlate?: boolean; plate?: string } | undefined
   findFuelRate: (province: string, district: string) => { liters: number } | undefined
   /** คืนลูกค้าที่จับคู่ได้ (จากรหัสผู้ติดต่อ/ชื่อย่อ หรือชื่อเต็ม) แค่ name (ชื่อเต็ม) พอ — ตัวหา match จริงคือ
    *  matchCustomerForImport ด้านบน ผู้เรียกเป็นคนต่อกับ customerStore เพราะโมดูลนี้ไม่ผูกกับ Pinia store ตรงๆ */
@@ -273,8 +297,16 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   const customer = matchedCustomer ? matchedCustomer.name : customerRaw
   if (customerRaw && !matchedCustomer) warnings.push(`ชื่อลูกค้าจาก Excel "${customerRaw}" ไม่ตรงกับรหัสผู้ติดต่อ/ชื่อเต็มในสมุดรายชื่อ — ใช้ข้อความดิบไปก่อน ตรวจสอบเองภายหลัง`)
 
-  const matchedDriver = driverName ? deps.matchDriver(driverName, plate) : undefined
-  if (driverName && !matchedDriver) warnings.push(`ชื่อเล่นคนขับ "${driverName}" ไม่ตรงกับที่ผูกไว้ในระบบ (เทียบกับทะเบียนรถแล้ว) — เว้นคนขับว่างไว้ก่อน`)
+  // มีทะเบียนต้องมีคนขับ: ชื่อเล่นจับคู่ไม่ได้/ไม่ได้กรอกมา แต่ทะเบียนเป็นรถที่มีคนขับประจำ → ใช้คนขับประจำรถ (viaPlate) พร้อมคำเตือนให้ตรวจ
+  const matchedDriver = driverName || plate ? deps.matchDriver(driverName, plate) : undefined
+  if (matchedDriver?.viaPlate) {
+    warnings.push(
+      `ตรวจคนขับ: ${driverName ? `ชื่อเล่น "${driverName}" ไม่ตรงกับรายชื่อคนขับ` : 'ไม่ได้ระบุคนขับ'} — ใช้คนขับประจำรถทะเบียน ${plate} (${matchedDriver.fullName}) กรุณาตรวจสอบว่าถูกต้อง`
+    )
+  } else if (matchedDriver && !plate && matchedDriver.plate) {
+    // มีคนขับต้องรู้ทะเบียน: คนขับผูกกับรถประจำอยู่แล้ว → ใช้ทะเบียนรถประจำคนขับ
+    warnings.push(`ตรวจทะเบียน: ไม่ได้ระบุทะเบียน — ใช้ทะเบียนรถประจำของ ${matchedDriver.fullName} (${matchedDriver.plate}) กรุณาตรวจสอบว่าถูกต้อง`)
+  } else if (driverName && !matchedDriver) warnings.push(`ชื่อเล่นคนขับ "${driverName}" ไม่ตรงกับที่ผูกไว้ในระบบ (เทียบกับทะเบียนรถแล้ว) — เว้นคนขับว่างไว้ก่อน`)
 
   if (!allowance) warnings.push('ต้องกรอกเพิ่ม: เบี้ยเลี้ยง')
   if (!price) warnings.push('ต้องกรอกเพิ่ม: ราคาปูน')
@@ -327,7 +359,9 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
     // Booking ใช้คำนวณเงินเดือนจริง ต้องเป็นชื่อ-นามสกุลที่ยืนยันแล้วเท่านั้น) — ชื่อเล่นดิบยังอยู่ใน warnings/note ด้านบน
     driverName: matchedDriver ? matchedDriver.fullName : '',
     driverId: matchedDriver?.id,
-    plate,
+    driverFirstName: matchedDriver?.firstName,
+    driverLastName: matchedDriver?.lastName,
+    plate: plate || matchedDriver?.plate || '',
     docRef,
     customer,
     ticketChecked: !!str(raw[IMPORT_HEADERS.ticketChecked]),

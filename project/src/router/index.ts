@@ -29,6 +29,13 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['ADMIN', 'DISPATCHER', 'STAFF'] },
       },
       {
+        path: 'booking/:fleet/sheet',
+        name: 'BookingSheet',
+        component: () => import('@/views/BookingSheetView.vue'),
+        props: true,
+        meta: { roles: ['ADMIN', 'DISPATCHER', 'STAFF'] },
+      },
+      {
         path: 'booking/:fleet/new',
         name: 'BookingCreate',
         component: () => import('@/views/BookingCreateView.vue'),
@@ -340,17 +347,28 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/VehiclesView.vue'),
         meta: { roles: ['ADMIN', 'DISPATCHER'] },
       },
+      // รวมหน้า "ผู้ใช้งาน / เสมียน / พนักงานขับรถ" เป็นหน้าเดียว (แท็บ) — route เดิมเปลี่ยนเป็น redirect เพื่อให้ลิงก์/บุ๊กมาร์กเก่ายังใช้ได้
+      {
+        path: 'settings/driver-data',
+        name: 'SettingsDriverData',
+        component: () => import('@/views/DriverDataCheckView.vue'),
+        meta: { roles: ['ADMIN', 'DISPATCHER', 'STAFF'] },
+      },
+      {
+        path: 'settings/personnel',
+        name: 'SettingsPersonnel',
+        component: () => import('@/views/PersonnelView.vue'),
+        meta: { roles: ['ADMIN', 'DISPATCHER'] },
+      },
       {
         path: 'settings/staff',
         name: 'SettingsStaff',
-        component: () => import('@/views/StaffView.vue'),
-        meta: { roles: ['ADMIN'] },
+        redirect: { name: 'SettingsPersonnel', query: { tab: 'staff' } },
       },
       {
         path: 'settings/drivers',
         name: 'SettingsDrivers',
-        component: () => import('@/views/DriversView.vue'),
-        meta: { roles: ['ADMIN', 'DISPATCHER'] },
+        redirect: { name: 'SettingsPersonnel', query: { tab: 'drivers' } },
       },
       {
         path: 'settings/customers',
@@ -366,8 +384,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'settings/users',
         name: 'SettingsUsers',
-        component: () => import('@/views/UserManagementView.vue'),
-        meta: { roles: ['ADMIN'] },
+        redirect: { name: 'SettingsPersonnel', query: { tab: 'users' } },
       },
       {
         path: 'settings/logs',

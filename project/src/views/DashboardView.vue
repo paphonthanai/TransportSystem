@@ -1,38 +1,119 @@
 <template>
   <div class="space-y-4">
-    <div class="card-lg">
-      <div class="font-bold text-text mb-3">สรุปสถานะการเงิน</div>
-      <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <!-- ยอด 3 ใบนี้คิดจากงานที่ส่งของเสร็จสิ้นแล้ว (ไม่ต้องรอวางบิล) — ดู summarizeBilledMoney ใน utils/bookingMoney.ts -->
-        <div class="border-l-4 border-primary pl-2">
-          <div class="text-[11px] text-muted">ยอดขายรวม</div>
-          <div class="text-sm font-bold text-blue-600">{{ formatBaht(billedMoney.totals.sales) }}</div>
+    <!-- ส่วนหัว: วันนี้ + ทางลัด -->
+    <div class="flex items-end justify-between gap-3 flex-wrap">
+      <div>
+        <div class="text-xs font-semibold text-muted">{{ todayLabel }}</div>
+        <h2 class="text-xl font-bold text-text">ภาพรวมการดำเนินงาน</h2>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <router-link to="/booking/cements" class="quick-link">
+          <span class="material-symbols-rounded text-base">local_shipping</span>
+          Fleet Cements
+        </router-link>
+        <router-link to="/booking/ceramics" class="quick-link">
+          <span class="material-symbols-rounded text-base">local_shipping</span>
+          Fleet Ceramics
+        </router-link>
+        <router-link to="/completed-jobs" class="quick-link">
+          <span class="material-symbols-rounded text-base">task_alt</span>
+          งานเสร็จสิ้น
+        </router-link>
+      </div>
+    </div>
+
+    <!-- สถานะงานตอนนี้ — กดเพื่อไปดูรายการ -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <router-link v-for="card in opsCards" :key="card.key" :to="card.to" class="ops-card group">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-muted">{{ card.label }}</span>
+          <span class="w-8 h-8 rounded-lg flex items-center justify-center" :class="card.tone">
+            <span class="material-symbols-rounded text-lg">{{ card.icon }}</span>
+          </span>
         </div>
-        <div class="border-l-4 border-red-500 pl-2">
-          <div class="text-[11px] text-muted">รายจ่าย (ค่าแรง + ค่าน้ำมัน)</div>
-          <div class="text-sm font-bold text-red-600">{{ formatBaht(billedMoney.totals.expense) }}</div>
+        <div class="mt-2 text-3xl font-bold text-text tabular-nums">{{ card.value }}</div>
+        <div class="text-[11px] text-muted mt-0.5">{{ card.hint }}</div>
+      </router-link>
+    </div>
+
+    <!-- การเงิน: ยอดคิดจากงานที่ส่งของเสร็จสิ้น (ไม่ต้องรอวางบิล) ดู summarizeBilledMoney ใน utils/bookingMoney.ts -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div v-for="card in moneyCards" :key="card.key" class="money-card">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-muted">{{ card.label }}</span>
+          <span class="w-8 h-8 rounded-lg flex items-center justify-center" :class="card.tone">
+            <span class="material-symbols-rounded text-lg">{{ card.icon }}</span>
+          </span>
         </div>
-        <div class="border-l-4 border-green-500 pl-2">
-          <div class="text-[11px] text-muted">รายได้บริษัท</div>
-          <div class="text-sm font-bold text-green-600">{{ formatBaht(billedMoney.totals.companyIncome) }}</div>
+        <div class="mt-2 text-2xl font-bold tabular-nums" :class="card.valueClass">{{ formatBaht(card.value) }}</div>
+        <div class="text-[11px] text-muted mt-1">เดือนนี้ {{ formatBaht(card.month) }}</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4 items-start">
+      <!-- ต้องดำเนินการ: รายการข้อมูลที่ยังไม่ครบ/รอตรวจ พร้อมลิงก์ไปแก้ -->
+      <div class="card-lg">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-bold text-text">ต้องดำเนินการ</div>
+          <span v-if="attentionItems.length" class="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+            {{ attentionItems.length }} เรื่อง
+          </span>
         </div>
-        <div class="border-l-4 border-primary pl-2">
-          <div class="text-[11px] text-muted">รอรับชำระ</div>
-          <div class="text-sm font-bold text-text">{{ formatBaht(totalPendingReceivable) }}</div>
+        <div v-if="attentionItems.length === 0" class="flex items-center gap-2 text-sm text-green-700 py-4">
+          <span class="material-symbols-rounded">check_circle</span>
+          ข้อมูลครบ ไม่มีรายการที่ต้องดำเนินการ
         </div>
-        <div class="border-l-4 border-amber-500 pl-2">
-          <div class="text-[11px] text-muted">ค้างชำระเกินกำหนด</div>
-          <div class="text-sm font-bold text-text">{{ formatBaht(totalOverdue) }}</div>
-        </div>
-        <div class="border-l-4 border-indigo-500 pl-2">
-          <div class="text-[11px] text-muted">ใบแจ้งหนี้เดือนนี้</div>
-          <div class="text-sm font-bold text-text">{{ invoicesThisMonth }} ใบ</div>
+        <div v-else class="divide-y divide-border">
+          <router-link
+            v-for="item in attentionItems"
+            :key="item.key"
+            :to="item.to"
+            class="flex items-center gap-3 py-2.5 hover:bg-surface-2 -mx-2 px-2 rounded-lg transition-colors"
+          >
+            <span class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" :class="item.tone">
+              <span class="material-symbols-rounded text-lg">{{ item.icon }}</span>
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-semibold text-text">{{ item.title }}</div>
+              <div class="text-xs text-muted">{{ item.detail }}</div>
+            </div>
+            <span class="material-symbols-rounded text-muted">chevron_right</span>
+          </router-link>
         </div>
       </div>
-      <div v-if="billedMoney.uncomputableCount > 0" class="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
-        <span class="material-symbols-rounded text-base">warning</span>
-        {{ billedMoney.uncomputableCount }} งานยังคิดเงินไม่ได้ (ค่าเที่ยว/เบี้ยเลี้ยง/ลิตร/เรทน้ำมันเป็น 0 หรือไม่มี, ไม่ทราบประเภทรถ, ไม่มีทะเบียน) — ไม่ถูกนับในยอดขาย/รายจ่าย/รายได้บริษัท จนกว่าจะแก้ไขข้อมูล
-        <router-link to="/completed-jobs" class="underline font-semibold ml-1">ดูงานที่เสร็จสิ้น</router-link>
+
+      <!-- ราคาน้ำมันวันนี้ -->
+      <div class="card-lg">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-bold text-text">ราคาน้ำมันวันนี้ (บาท/ลิตร)</div>
+          <router-link to="/settings/fuel" class="text-xs font-semibold text-primary hover:underline">ตั้งค่า</router-link>
+        </div>
+        <div class="space-y-2">
+          <div v-for="row in fuelToday" :key="row.type" class="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2">
+            <div class="text-sm font-medium text-text">{{ row.type }}</div>
+            <div class="text-right">
+              <div v-if="row.rate > 0" class="text-sm font-bold text-text tabular-nums">฿{{ row.rate.toFixed(2) }}</div>
+              <div v-else class="text-sm font-semibold text-amber-700">ยังไม่มีราคา</div>
+              <div v-if="row.priceDate" class="text-[11px] text-muted">ตั้งแต่ {{ row.priceDate }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- สถานะลูกหนี้ -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div class="border-l-4 border-primary bg-surface border border-border rounded-xl px-4 py-3">
+        <div class="text-[11px] text-muted">รอรับชำระ</div>
+        <div class="text-lg font-bold text-text tabular-nums">{{ formatBaht(totalPendingReceivable) }}</div>
+      </div>
+      <div class="border-l-4 border-amber-500 bg-surface border border-border rounded-xl px-4 py-3">
+        <div class="text-[11px] text-muted">ค้างชำระเกินกำหนด</div>
+        <div class="text-lg font-bold text-text tabular-nums">{{ formatBaht(totalOverdue) }}</div>
+      </div>
+      <div class="border-l-4 border-indigo-500 bg-surface border border-border rounded-xl px-4 py-3">
+        <div class="text-[11px] text-muted">ใบแจ้งหนี้เดือนนี้</div>
+        <div class="text-lg font-bold text-text tabular-nums">{{ invoicesThisMonth }} ใบ</div>
       </div>
     </div>
 
@@ -256,12 +337,15 @@ import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
 import { useVehiclesStore } from '@/stores/vehicles'
+import { useFuelRateStore } from '@/stores/fuelRates'
 import { summarizeBilledMoney } from '@/utils/bookingMoney'
+import { bangkokDay } from '@/utils/fuelPrice'
 
 const salesDocumentsStore = useSalesDocumentsStore()
 const bookingStore = useBookingStore()
 const customerStore = useCustomerStore()
 const vehiclesStore = useVehiclesStore()
+const fuelRateStore = useFuelRateStore()
 
 const taxInvoices = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE'))
 const receipts = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'RECEIPT'))
@@ -293,6 +377,117 @@ const invoicesThisMonth = computed(() => {
     const docDate = new Date(d.date)
     return docDate.getFullYear() === now.getFullYear() && docDate.getMonth() === now.getMonth()
   }).length
+})
+
+/** วันนี้ (ภาษาไทย) ใช้เป็นหัวหน้าแดชบอร์ด */
+const todayLabel = new Date().toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+// ---------- สถานะงานตอนนี้ ----------
+const IN_TRANSIT_STATUSES = ['ACCEPTED', 'FUEL_RECEIVED', 'LOADING', 'LOADED', 'IN_TRANSIT', 'DELIVERING']
+const waitingDispatchCount = computed(() => bookingStore.bookings.filter((b) => b.status === 'WAITING_DISPATCH').length)
+const inTransitCount = computed(() => bookingStore.bookings.filter((b) => IN_TRANSIT_STATUSES.includes(b.status)).length)
+const podReviewCount = computed(() => bookingStore.bookings.filter((b) => b.podReviewStatus === 'PENDING_REVIEW').length)
+const deliveredThisMonthCount = computed(() => {
+  const now = new Date()
+  return bookingStore.bookings.filter((b) => {
+    if (b.status !== 'DELIVERED' || !b.completedAt) return false
+    const d = new Date(b.completedAt)
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  }).length
+})
+
+const opsCards = computed(() => [
+  { key: 'waiting', label: 'รอจัดรถ', value: waitingDispatchCount.value, hint: 'งานที่ยังไม่ได้จ่ายให้คนขับ', icon: 'pending_actions', tone: 'bg-amber-500/10 text-amber-600', to: '/booking/cements' },
+  { key: 'transit', label: 'กำลังดำเนินการ/ขนส่ง', value: inTransitCount.value, hint: 'จ่ายงานแล้ว ยังส่งไม่เสร็จ', icon: 'local_shipping', tone: 'bg-blue-500/10 text-blue-600', to: '/booking/cements' },
+  { key: 'pod', label: 'รอตรวจ POD', value: podReviewCount.value, hint: 'คนขับส่งของแล้ว รอออฟฟิศตรวจ', icon: 'fact_check', tone: 'bg-indigo-500/10 text-indigo-600', to: '/booking/cements' },
+  { key: 'done', label: 'ส่งเสร็จเดือนนี้', value: deliveredThisMonthCount.value, hint: 'งานที่จบเดือนนี้', icon: 'task_alt', tone: 'bg-green-500/10 text-green-600', to: '/completed-jobs' },
+])
+
+const moneyCards = computed(() => [
+  { key: 'sales', label: 'ยอดขายรวม', icon: 'payments', tone: 'bg-blue-500/10 text-blue-600', valueClass: 'text-blue-600', value: billedMoney.value.totals.sales, month: billedMoney.value.monthly.sales[11] || 0 },
+  { key: 'expense', label: 'รายจ่าย (ค่าแรง + ค่าน้ำมัน)', icon: 'receipt_long', tone: 'bg-red-500/10 text-red-600', valueClass: 'text-red-600', value: billedMoney.value.totals.expense, month: billedMoney.value.monthly.expense[11] || 0 },
+  { key: 'income', label: 'รายได้บริษัท', icon: 'account_balance', tone: 'bg-green-500/10 text-green-600', valueClass: 'text-green-600', value: billedMoney.value.totals.companyIncome, month: billedMoney.value.monthly.income[11] || 0 },
+])
+
+// ---------- ราคาน้ำมันวันนี้ ----------
+const FUEL_TYPES = ['รถบริษัท', 'รถหุ้นส่วน', 'รถร่วม', 'รถอู่เสริม'] as const
+const formatPriceDate = (iso?: string) => {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-').map(Number)
+  return `${d} ${thaiMonthShort[m - 1]} ${buddhistYY(y)}`
+}
+const fuelToday = computed(() =>
+  FUEL_TYPES.map((type) => {
+    const r = fuelRateStore.fuelRateFor(type, bangkokDay(new Date()))
+    return { type, rate: r.rate, priceDate: formatPriceDate(r.priceDate) }
+  })
+)
+
+// ---------- ต้องดำเนินการ ----------
+const attentionItems = computed(() => {
+  const items: { key: string; icon: string; tone: string; title: string; detail: string; to: string }[] = []
+  const bs = bookingStore.bookings
+
+  const missingPrice = fuelToday.value.filter((r) => !(r.rate > 0)).map((r) => r.type)
+  if (missingPrice.length) {
+    items.push({
+      key: 'fuel-price',
+      icon: 'local_gas_station',
+      tone: 'bg-amber-500/10 text-amber-600',
+      title: 'ยังไม่มีราคาน้ำมันของวันนี้',
+      detail: `${missingPrice.join(', ')} — งานที่สร้าง/นำเข้าวันนี้จะยังไม่มีเรทน้ำมัน`,
+      to: '/settings/fuel',
+    })
+  }
+
+  const noDriver = bs.filter((b) => !b.driverName).length
+  const noPlate = bs.filter((b) => !b.plate).length
+  if (noDriver || noPlate) {
+    items.push({
+      key: 'driver-plate',
+      icon: 'badge',
+      tone: 'bg-red-500/10 text-red-600',
+      title: 'งานที่ไม่มีคนขับ/ทะเบียน',
+      detail: `ไม่มีชื่อคนขับ ${noDriver} งาน · ไม่มีทะเบียน ${noPlate} งาน`,
+      to: '/settings/driver-data',
+    })
+  }
+
+  const noRate = bs.filter((b) => b.plate && (b.fuelLiters || 0) > 0 && !(b.fuelRate > 0)).length
+  if (noRate) {
+    items.push({
+      key: 'no-rate',
+      icon: 'warning',
+      tone: 'bg-amber-500/10 text-amber-600',
+      title: 'งานที่มีลิตรน้ำมันแต่ยังไม่มีเรท',
+      detail: `${noRate} งาน — ไม่ถูกนับในรายได้จนกว่าจะมีราคาน้ำมันของวันนั้น`,
+      to: '/settings/fuel',
+    })
+  }
+
+  if (billedMoney.value.uncomputableCount > 0) {
+    items.push({
+      key: 'uncomputable',
+      icon: 'calculate',
+      tone: 'bg-orange-500/10 text-orange-600',
+      title: 'งานที่ยังคิดเงินไม่ได้',
+      detail: `${billedMoney.value.uncomputableCount} งาน (ค่าเที่ยว/ทะเบียน/ประเภทรถ/เรทน้ำมันไม่ครบ) — ไม่ถูกนับในยอดขาย/รายจ่าย/รายได้`,
+      to: '/completed-jobs',
+    })
+  }
+
+  if (podReviewCount.value > 0) {
+    items.push({
+      key: 'pod',
+      icon: 'fact_check',
+      tone: 'bg-indigo-500/10 text-indigo-600',
+      title: 'งานรอตรวจ POD',
+      detail: `${podReviewCount.value} งาน — ตรวจรูปส่งของแล้วยืนยันการจบงาน`,
+      to: '/booking/cements',
+    })
+  }
+
+  return items
 })
 
 const unitFilter = ref('all')
@@ -425,6 +620,18 @@ const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH',
 <style scoped>
 .card-lg {
   @apply bg-surface border border-border rounded-xl shadow-default p-5;
+}
+
+.quick-link {
+  @apply h-9 px-3 rounded-lg border border-border bg-surface text-text text-sm font-medium inline-flex items-center gap-1.5 hover:bg-surface-2 transition-colors;
+}
+
+.ops-card {
+  @apply block bg-surface border border-border rounded-xl p-4 shadow-default transition-all hover:border-primary hover:shadow-md;
+}
+
+.money-card {
+  @apply bg-surface border border-border rounded-xl p-4 shadow-default;
 }
 
 .input-field {

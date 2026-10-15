@@ -99,8 +99,8 @@ export const useAppStore = defineStore('app', () => {
           label: 'สมุดรายชื่อ',
           roles: ['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING'],
           children: [
-            { id: '5-2-1', icon: 'badge', label: 'เสมียน (พนักงานออฟฟิศ)', route: '/settings/staff', roles: ['ADMIN'] },
-            { id: '5-2-2', icon: 'person', label: 'พนักงานขับรถ', route: '/settings/drivers', roles: ['ADMIN', 'DISPATCHER'] },
+            { id: '5-2-1', icon: 'groups', label: 'ผู้ใช้งานและบุคลากร', route: '/settings/personnel', roles: ['ADMIN', 'DISPATCHER'] },
+            { id: '5-2-1b', icon: 'fact_check', label: 'ตรวจข้อมูลคนขับในงาน', route: '/settings/driver-data', roles: ['ADMIN', 'DISPATCHER', 'STAFF'] },
             { id: '5-2-3', icon: 'apartment', label: 'ลูกค้า/คู่ค้า', route: '/settings/customers', roles: ['ADMIN', 'STAFF', 'ACCOUNTING'] },
             // { id: '5-2-4', icon: 'storefront', label: 'ผู้จำหน่าย', route: '/settings/vendors' },
           ],
@@ -123,7 +123,6 @@ export const useAppStore = defineStore('app', () => {
         { id: '5-4b', icon: 'local_gas_station', label: 'ตั้งค่าน้ำมัน', route: '/settings/fuel', roles: ['ADMIN'] },
         { id: '5-4c', icon: 'factory', label: 'ต้นทาง/จุดรับสินค้า', route: '/settings/origins', roles: ['ADMIN'] },
         { id: '5-4d', icon: 'rule', label: 'เงื่อนไขวางบิล', route: '/settings/billing-rule', roles: ['ADMIN'] },
-        { id: '5-6', icon: 'manage_accounts', label: 'จัดการผู้ใช้งาน', route: '/settings/users', roles: ['ADMIN'] },
         { id: '5-5', icon: 'history', label: 'Log', route: '/settings/logs', roles: ['ADMIN'] },
       ],
     },

@@ -124,7 +124,7 @@
                 <td class="px-4 py-3 text-right text-text">{{ weightQtyLabel(booking) }}</td>
                 <td class="px-4 py-3 text-text">
                   <div class="font-semibold">{{ booking.plate || '-' }}</div>
-                  <div class="text-xs text-muted">{{ booking.driverName || '-' }}</div>
+                  <div class="text-xs text-muted"><BookingDriverFixCell :booking="booking" /></div>
                 </td>
                 <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.completedAt) }}</td>
                 <td class="px-4 py-3 text-right font-semibold" :class="(booking.agreedPrice || booking.tripFee) > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
@@ -219,6 +219,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
 import { useCompletedJobs, useCompletedJobsFilters, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'

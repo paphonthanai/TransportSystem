@@ -58,7 +58,7 @@
                 <td class="px-4 py-3 text-right text-text">{{ weightQtyLabel(booking) }}</td>
                 <td class="px-4 py-3 text-text">
                   <div class="font-semibold">{{ booking.plate || '-' }}</div>
-                  <div class="text-xs text-muted">{{ booking.driverName || '-' }}</div>
+                  <div class="text-xs text-muted"><BookingDriverFixCell :booking="booking" /></div>
                 </td>
                 <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.completedAt) }}</td>
                 <td class="px-4 py-3 text-right text-text font-semibold">{{ formatBaht(booking.agreedPrice || booking.tripFee) }}</td>
@@ -104,6 +104,7 @@ import { documentClaimBadges } from '@/utils/bookingStatus'
 import { useCompletedJobs, useCompletedJobsFilters } from '@/composables/useCompletedJobs'
 import { useCustomerStore } from '@/stores/customers'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
+import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
 import { exportRowsToExcel } from '@/utils/exportExcel'
 
 const props = defineProps<{ fleet: BookingCategory }>()

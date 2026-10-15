@@ -193,6 +193,8 @@ const getScreenTitle = () => {
     '/payroll/drivers': 'เงินเดือน · พนักงานขับรถ',
     '/payroll/vendor-fleet': 'รถร่วม / รถหุ้นส่วน',
     '/settings/vehicles': 'ตั้งค่า · รถบรรทุก',
+    '/settings/personnel': 'ตั้งค่า · ผู้ใช้งานและบุคลากร',
+    '/settings/driver-data': 'ตั้งค่า · ตรวจข้อมูลคนขับในงาน',
     '/settings/staff': 'สมุดรายชื่อ · เสมียน (พนักงานออฟฟิศ)',
     '/settings/drivers': 'สมุดรายชื่อ · พนักงานขับรถ',
     '/settings/customers': 'สมุดรายชื่อ · ลูกค้า/คู่ค้า',
