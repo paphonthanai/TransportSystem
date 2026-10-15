@@ -64,7 +64,7 @@ type TaskKey = keyof Omit<OnboardingState, 'dismissed'>
 const tasks: { key: TaskKey; icon: string; label: string; route: string }[] = [
   { key: 'signedUp', icon: 'login', label: 'สมัครใช้งาน', route: '/' },
   { key: 'configuredDocumentSettings', icon: 'tune', label: 'ตั้งค่ารูปแบบเอกสารเบื้องต้น', route: '/settings/documents/function' },
-  { key: 'addedVehicleOrDriver', icon: 'local_shipping', label: 'เพิ่มรถหรือคนขับของคุณ', route: '/settings/personnel?tab=drivers' },
+  { key: 'addedVehicleOrDriver', icon: 'local_shipping', label: 'เพิ่มรถหรือคนขับของคุณ', route: '/settings/personnel?role=DRIVER' },
   { key: 'createdFirstBooking', icon: 'assignment_add', label: 'ลงงานขนส่งแรกของคุณ', route: '/booking/cements' },
   { key: 'issuedFirstInvoice', icon: 'receipt_long', label: 'ออกใบแจ้งหนี้แรกของคุณ', route: '/billing-notes' },
 ]

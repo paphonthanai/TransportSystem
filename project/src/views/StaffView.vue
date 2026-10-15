@@ -1,5 +1,7 @@
 <template>
   <div class="space-y-6">
+    <!-- embedded = ฝังในหน้า "ผู้ใช้งานและบุคลากร" (PersonnelView): ซ่อนหัวเรื่อง/ตารางของหน้านี้ เหลือเฉพาะไดอะล็อก -->
+    <template v-if="!embedded">
     <div class="flex items-center gap-3 flex-wrap">
       <h2 class="text-lg font-bold text-text">สมุดรายชื่อ · เสมียน (พนักงานออฟฟิศ)</h2>
       <button @click="openDialog()" class="btn-primary">
@@ -56,6 +58,8 @@
         </tbody>
       </table>
     </div>
+
+    </template>
 
     <Teleport to="body" v-if="showDialog">
       <div @click="showDialog = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
@@ -220,6 +224,8 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+
+defineProps<{ embedded?: boolean }>()
 import { useStaffStore, type StaffRecord } from '@/stores/staff'
 
 const staffStore = useStaffStore()
@@ -299,6 +305,8 @@ const remove = async (staff: StaffRecord) => {
   if (!confirm(`ยืนยันลบพนักงาน ${fullName(staff)}? การลบนี้ไม่สามารถกู้คืนได้`)) return
   await staffStore.deleteStaff(staff.id)
 }
+
+defineExpose({ openDialog, remove })
 </script>
 
 <style scoped>

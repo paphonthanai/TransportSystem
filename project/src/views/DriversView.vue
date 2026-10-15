@@ -1,5 +1,7 @@
 <template>
   <div class="space-y-6">
+    <!-- embedded = ฝังในหน้า "ผู้ใช้งานและบุคลากร" (PersonnelView): ซ่อนหัวเรื่อง/ตารางของหน้านี้ เหลือเฉพาะไดอะล็อก -->
+    <template v-if="!embedded">
     <div class="flex items-center gap-3 flex-wrap">
       <h2 class="text-lg font-bold text-text">สมุดรายชื่อ · พนักงานขับรถ</h2>
       <button @click="openDialog()" class="btn-primary">
@@ -63,12 +65,15 @@
               <div class="flex items-center justify-end gap-1.5">
                 <RouterLink v-if="driver.id" :to="`/settings/drivers/${driver.id}`" class="btn-sm">รายละเอียด</RouterLink>
                 <button @click="openDialog(driver)" class="btn-sm">แก้ไข</button>
+                <button @click="remove(driver)" class="btn-sm text-red-600 hover:bg-red-50">ลบ</button>
               </div>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    </template>
 
     <Teleport to="body" v-if="showDialog">
       <div @click="showDialog = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
@@ -327,6 +332,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useBookingStore } from '@/stores/booking'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useDriversStore, type DriverRecord, type LicenseType, type IncomeType } from '@/stores/drivers'
 import { useVehiclesStore } from '@/stores/vehicles'
@@ -335,6 +341,9 @@ import { useAuthStore } from '@/stores/auth'
 import { internalDriverEmail, generateAuthBootstrapSecret } from '@/utils/driverAuth'
 import type { DriverLoginCredentials } from '@/repositories/driverLoginCredentialsRepository'
 
+defineProps<{ embedded?: boolean }>()
+
+const bookingStore = useBookingStore()
 const onboardingStore = useOnboardingStore()
 const driversStore = useDriversStore()
 const vehiclesStore = useVehiclesStore()
@@ -535,6 +544,29 @@ const save = async () => {
   }
   showDialog.value = false
 }
+
+/**
+ * ลบคนขับ — ถ้ายังมีงานอ้างอิงคนขับคนนี้อยู่ เตือนแล้วให้ลบได้ (ชื่อคนขับที่เก็บในงานเก่ายังอยู่ ไม่ถูกลบ) ถอดคนขับออกจากรถประจำให้
+ * ส่วนบัญชี login ที่ผูกอยู่ไม่ลบให้อัตโนมัติ ต้องปิด/ลบบัญชีเองในแถวบัญชีผู้ใช้
+ */
+const remove = async (driver: DriverRecord) => {
+  if (!driver.id) return
+  const jobCount = bookingStore.bookings.filter((b) => b.driverId === driver.id).length
+  const accounts = userStore.users.filter((u) => u.role === 'DRIVER' && u.driverId === driver.id)
+  const vehicle = vehiclesStore.vehicleForDriver(driver.code)
+  const lines = [`⚠️ ลบพนักงานขับรถ ${fullName(driver)} (${driver.code})`, '']
+  if (jobCount) lines.push(`• มีงานที่อ้างอิงคนขับคนนี้ ${jobCount} งาน (ชื่อคนขับที่เก็บในงานเก่ายังอยู่ ไม่ถูกลบ)`)
+  if (accounts.length) {
+    lines.push(`• มีบัญชี login ผูกอยู่ ${accounts.length} บัญชี (${accounts.map((a) => a.name).join(', ')}) — ระบบไม่ลบบัญชีให้ ต้องปิด/ลบบัญชีนั้นเอง`)
+  }
+  if (vehicle) lines.push(`• จะถอดออกจากรถประจำทะเบียน ${vehiclesStore.fullPlate(vehicle)}`)
+  lines.push('', 'การลบไม่สามารถกู้คืนได้ ยืนยันลบ?')
+  if (!confirm(lines.join('\n'))) return
+  if (vehicle) await vehiclesStore.assignDriver(vehicle.id, undefined)
+  await driversStore.deleteDriver(driver.id)
+}
+
+defineExpose({ openDialog, openSetupDialog, remove, driverLoginStatus, hasExistingAccount })
 </script>
 
 <style scoped>

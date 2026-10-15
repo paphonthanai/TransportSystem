@@ -1,5 +1,7 @@
 <template>
   <div class="space-y-6">
+    <!-- embedded = ฝังในหน้า "ผู้ใช้งานและบุคลากร" (PersonnelView): ซ่อนหัวเรื่อง/ตารางของหน้านี้ เหลือเฉพาะไดอะล็อก -->
+    <template v-if="!embedded">
     <div class="flex items-center gap-3 flex-wrap">
       <h2 class="text-lg font-bold text-text">ตั้งค่า · จัดการผู้ใช้งาน</h2>
       <button @click="openCreateDialog" class="btn-primary">
@@ -54,6 +56,8 @@
         </tbody>
       </table>
     </div>
+
+    </template>
 
     <Teleport to="body" v-if="showDialog">
       <div @click="showDialog = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
@@ -209,6 +213,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
 import { internalDriverEmail, generateAuthBootstrapSecret } from '@/utils/driverAuth'
 import UserActionMenu from '@/components/settings/UserActionMenu.vue'
+
+defineProps<{ embedded?: boolean }>()
 
 const userStore = useUserStore()
 const authStore = useAuthStore()
@@ -506,6 +512,7 @@ const hardDeleteUser = async (user: UserProfile) => {
   }
 }
 
+defineExpose({ openCreateDialog, openEditDialog, openPasswordDialog, toggleActive, hardDeleteUser })
 </script>
 
 <style scoped>

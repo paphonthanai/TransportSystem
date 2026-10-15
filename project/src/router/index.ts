@@ -363,12 +363,12 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'settings/staff',
         name: 'SettingsStaff',
-        redirect: { name: 'SettingsPersonnel', query: { tab: 'staff' } },
+        redirect: { name: 'SettingsPersonnel', query: { role: 'STAFF' } },
       },
       {
         path: 'settings/drivers',
         name: 'SettingsDrivers',
-        redirect: { name: 'SettingsPersonnel', query: { tab: 'drivers' } },
+        redirect: { name: 'SettingsPersonnel', query: { role: 'DRIVER' } },
       },
       {
         path: 'settings/customers',
@@ -384,7 +384,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'settings/users',
         name: 'SettingsUsers',
-        redirect: { name: 'SettingsPersonnel', query: { tab: 'users' } },
+        redirect: { name: 'SettingsPersonnel' },
       },
       {
         path: 'settings/logs',

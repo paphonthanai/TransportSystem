@@ -36,34 +36,61 @@
       </router-link>
     </div>
 
-    <!-- สรุปการเงินแยกตามช่วงเวลา: ทั้งหมด / ปีนี้ / เดือนนี้ / สัปดาห์นี้ — คิดจากงานที่ส่งของเสร็จสิ้น จัดตามวันที่ส่งของเสร็จ
-         (ไม่ต้องรอวางบิล) ดู summarizeBilledMoney ใน utils/bookingMoney.ts -->
+    <!-- สรุปสถานะการเงิน: เลือกประเภทงาน/ช่วงวันที่ได้ — คิดจากงานที่ส่งของเสร็จสิ้น จัดตามวันที่ส่งของเสร็จ (ไม่ต้องรอวางบิล)
+         ดู summarizeBilledMoney ใน utils/bookingMoney.ts -->
     <div class="card-lg">
-      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <div class="flex items-center justify-between mb-3">
         <div class="font-bold text-text">สรุปสถานะการเงิน</div>
-        <div class="text-[11px] text-muted">คิดจากงานที่ส่งของเสร็จสิ้น จัดตามวันที่ส่งของเสร็จ</div>
+        <div class="text-[11px] text-muted">{{ summaryRangeText }}</div>
       </div>
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div v-for="p in periodSummaries" :key="p.key" class="rounded-xl border border-border bg-surface-2/40 p-4">
-          <div class="flex items-baseline justify-between gap-2">
-            <div class="text-sm font-bold text-text">{{ p.label }}</div>
-            <div class="text-[10px] text-muted text-right">{{ p.range }}</div>
-          </div>
-          <div class="mt-3 space-y-2.5">
-            <div>
-              <div class="text-[11px] text-muted">ยอดขายรวม</div>
-              <div class="text-lg font-bold text-blue-600 tabular-nums">{{ formatBaht(p.sales) }}</div>
-            </div>
-            <div>
-              <div class="text-[11px] text-muted">รายจ่าย</div>
-              <div class="text-base font-bold text-red-600 tabular-nums">{{ formatBaht(p.expense) }}</div>
-            </div>
-            <div>
-              <div class="text-[11px] text-muted">รายได้บริษัท</div>
-              <div class="text-base font-bold text-green-600 tabular-nums">{{ formatBaht(p.income) }}</div>
-            </div>
-          </div>
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <div class="text-xs text-muted mb-1">ประเภทงาน</div>
+          <select v-model="summaryUnit" class="input-field w-full">
+            <option value="all">ทุกประเภทงาน</option>
+            <option value="cements">Fleet Cements</option>
+            <option value="ceramics">Fleet Ceramics</option>
+          </select>
         </div>
+        <div>
+          <div class="text-xs text-muted mb-1">ช่วงวันที่ (วันที่ส่งของเสร็จ)</div>
+          <select v-model="summaryRange" class="input-field w-full">
+            <option value="">ทั้งหมด</option>
+            <option value="week">สัปดาห์นี้</option>
+            <option value="month">เดือนนี้</option>
+            <option value="quarter">ไตรมาสนี้</option>
+            <option value="year">ปีนี้</option>
+            <option value="custom">กำหนดเอง</option>
+          </select>
+        </div>
+      </div>
+      <div v-if="summaryRange === 'custom'" class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <div class="text-xs text-muted mb-1">ตั้งแต่วันที่</div>
+          <input v-model="summaryFrom" type="date" class="input-field w-full" />
+        </div>
+        <div>
+          <div class="text-xs text-muted mb-1">ถึงวันที่</div>
+          <input v-model="summaryTo" type="date" class="input-field w-full" />
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="rounded-xl bg-blue-500/10 px-4 py-3">
+          <div class="text-xs text-muted">ยอดขายรวม</div>
+          <div class="text-xl font-bold text-blue-600 tabular-nums">{{ formatBaht(summaryMoney.totals.sales) }}</div>
+        </div>
+        <div class="rounded-xl bg-red-500/10 px-4 py-3">
+          <div class="text-xs text-muted">รายจ่าย (ค่าแรง + ค่าน้ำมัน)</div>
+          <div class="text-xl font-bold text-red-600 tabular-nums">{{ formatBaht(summaryMoney.totals.expense) }}</div>
+        </div>
+        <div class="rounded-xl bg-green-500/10 px-4 py-3">
+          <div class="text-xs text-muted">รายได้บริษัท</div>
+          <div class="text-xl font-bold text-green-600 tabular-nums">{{ formatBaht(summaryMoney.totals.companyIncome) }}</div>
+        </div>
+      </div>
+      <div v-if="summaryMoney.uncomputableCount > 0" class="mt-3 text-xs text-amber-700 flex items-center gap-1.5">
+        <span class="material-symbols-rounded text-base">info</span>
+        {{ summaryMoney.uncomputableCount }} งานในช่วงนี้ยังคิดเงินไม่ได้ จึงไม่ถูกนับในยอดข้างบน
       </div>
     </div>
 
@@ -172,21 +199,6 @@
           <div>
             <div class="text-xs text-muted mb-1">ถึงวันที่</div>
             <input v-model="customTo" type="date" class="input-field w-full" />
-          </div>
-        </div>
-        <!-- รวมของช่วงที่เลือก (กราฟแสดง 12 เดือนล่าสุด แต่ยอดรวมนี้ครอบคลุมทั้งช่วง) -->
-        <div class="grid grid-cols-3 gap-2 mb-3 text-center">
-          <div class="rounded-lg bg-blue-500/10 px-2 py-2">
-            <div class="text-[10px] text-muted">ยอดขายรวม</div>
-            <div class="text-sm font-bold text-blue-600 tabular-nums">{{ formatBaht(chartMoney.totals.sales) }}</div>
-          </div>
-          <div class="rounded-lg bg-red-500/10 px-2 py-2">
-            <div class="text-[10px] text-muted">รายจ่าย</div>
-            <div class="text-sm font-bold text-red-600 tabular-nums">{{ formatBaht(chartMoney.totals.expense) }}</div>
-          </div>
-          <div class="rounded-lg bg-green-500/10 px-2 py-2">
-            <div class="text-[10px] text-muted">รายได้บริษัท</div>
-            <div class="text-sm font-bold text-green-600 tabular-nums">{{ formatBaht(chartMoney.totals.companyIncome) }}</div>
           </div>
         </div>
         <div class="flex flex-wrap gap-2 mb-4">
@@ -382,7 +394,8 @@ import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useFuelRateStore } from '@/stores/fuelRates'
-import { summarizeBilledMoney } from '@/utils/bookingMoney'
+import { summarizeBilledMoney, computeBookingMoney } from '@/utils/bookingMoney'
+import { useDriversStore } from '@/stores/drivers'
 import { bangkokDay } from '@/utils/fuelPrice'
 import { rangeFor, inRange, startOfDay, endOfDay, type DateRange } from '@/utils/dateRanges'
 
@@ -391,6 +404,7 @@ const bookingStore = useBookingStore()
 const customerStore = useCustomerStore()
 const vehiclesStore = useVehiclesStore()
 const fuelRateStore = useFuelRateStore()
+const driversStore = useDriversStore()
 
 const taxInvoices = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'TAX_INVOICE'))
 const receipts = computed(() => salesDocumentsStore.documents.filter((d) => d.type === 'RECEIPT'))
@@ -454,36 +468,41 @@ const rangeText = (r: DateRange) => (r.from && r.to ? `${formatShortDay(r.from)}
 
 const vehicleTypeOf = (plate: string) => vehiclesStore.findByFullPlate(plate)?.department
 
-const periodSummaries = computed(() => {
-  const now = new Date()
-  return [
-    { key: 'all', label: 'ทั้งหมด' },
-    { key: 'year', label: 'ปีนี้' },
-    { key: 'month', label: 'เดือนนี้' },
-    { key: 'week', label: 'สัปดาห์นี้' },
-  ].map((p) => {
-    const r = rangeFor(p.key, now)
-    const t = summarizeBilledMoney(
-      bookingStore.bookings.filter((b) => inRange(b, r)),
-      vehicleTypeOf,
-      now
-    ).totals
-    return { ...p, range: rangeText(r), sales: t.sales, expense: t.expense, income: t.companyIncome }
-  })
+/** ช่วงวันที่จากตัวเลือก (รวม "กำหนดเอง") — ใช้ร่วมกันทั้งการ์ดสรุปและกราฟ */
+const resolveRange = (kind: string, from: string, to: string, now: Date): DateRange => {
+  if (kind === 'custom') {
+    return {
+      from: from ? startOfDay(new Date(from + 'T00:00:00')) : null,
+      to: to ? endOfDay(new Date(to + 'T00:00:00')) : null,
+    }
+  }
+  return rangeFor(kind, now)
+}
+
+const summaryUnit = ref('all')
+const summaryRange = ref('')
+const summaryFrom = ref('')
+const summaryTo = ref('')
+
+const summaryDateRange = computed(() => resolveRange(summaryRange.value, summaryFrom.value, summaryTo.value, new Date()))
+const summaryRangeText = computed(() => {
+  const r = summaryDateRange.value
+  if (r.from && r.to) return rangeText(r)
+  if (r.from) return `ตั้งแต่ ${formatShortDay(r.from)}`
+  if (r.to) return `ถึง ${formatShortDay(r.to)}`
+  return 'ทุกงานที่ส่งเสร็จ'
 })
+const summaryMoney = computed(() =>
+  summarizeBilledMoney(
+    bookingStore.bookings.filter((b) => (summaryUnit.value === 'all' || b.category === summaryUnit.value) && inRange(b, summaryDateRange.value)),
+    vehicleTypeOf,
+    new Date()
+  )
+)
 
 /** งานที่ผ่านตัวกรอง "ประเภทงาน" + "ช่วงวันที่" ของกราฟ (ใช้กับทั้งกราฟและยอดรวมใต้ตัวกรอง) */
 const chartBookings = computed(() => {
-  const now = new Date()
-  let range: DateRange
-  if (dateRangeFilter.value === 'custom') {
-    range = {
-      from: customFrom.value ? startOfDay(new Date(customFrom.value + 'T00:00:00')) : null,
-      to: customTo.value ? endOfDay(new Date(customTo.value + 'T00:00:00')) : null,
-    }
-  } else {
-    range = rangeFor(dateRangeFilter.value, now)
-  }
+  const range = resolveRange(dateRangeFilter.value, customFrom.value, customTo.value, new Date())
   return bookingStore.bookings.filter((b) => (unitFilter.value === 'all' || b.category === unitFilter.value) && inRange(b, range))
 })
 const chartMoney = computed(() => summarizeBilledMoney(chartBookings.value, vehicleTypeOf, new Date()))
@@ -503,10 +522,24 @@ const fuelToday = computed(() =>
 )
 
 // ---------- ต้องดำเนินการ ----------
+/** สาเหตุที่คิดเงินไม่ได้ (incomeNote ของ computeBookingMoney) ย่อเป็นป้ายสั้น ๆ ไว้นับแยกกลุ่ม */
+const shortReason = (note: string) => {
+  if (note.includes('ยอดขาย 0')) return 'ไม่มีค่าเที่ยว'
+  if (note.includes('อ่านค่าน้ำมัน')) return 'อ่านค่าน้ำมันไม่ได้'
+  if (note.includes('เรทน้ำมัน')) return 'ไม่มีเรทน้ำมัน'
+  if (note.includes('ยังไม่มีทะเบียน')) return 'ไม่มีทะเบียน'
+  if (note.includes('ไม่พบรถทะเบียน')) return 'ไม่พบรถในทะเบียนรถ'
+  if (note.includes('แบบเก่า')) return 'ประเภทรถแบบเก่า'
+  return 'อื่น ๆ'
+}
+
+const squish = (v?: string) => (v || '').replace(/\s+/g, ' ').trim()
+
 const attentionItems = computed(() => {
   const items: { key: string; icon: string; tone: string; title: string; detail: string; to: string }[] = []
   const bs = bookingStore.bookings
 
+  // 1) ราคาน้ำมันวันนี้
   const missingPrice = fuelToday.value.filter((r) => !(r.rate > 0)).map((r) => r.type)
   if (missingPrice.length) {
     items.push({
@@ -519,19 +552,50 @@ const attentionItems = computed(() => {
     })
   }
 
-  const noDriver = bs.filter((b) => !b.driverName).length
-  const noPlate = bs.filter((b) => !b.plate).length
-  if (noDriver || noPlate) {
+  // 2) งานไม่มีคนขับ/ทะเบียน (บอกเลขที่งานเมื่อมีไม่มาก)
+  const noDriverJobs = bs.filter((b) => !b.driverName)
+  const noPlateJobs = bs.filter((b) => !b.plate)
+  if (noDriverJobs.length || noPlateJobs.length) {
+    const ids = [...new Set([...noDriverJobs, ...noPlateJobs].map((b) => b.docNo))]
     items.push({
       key: 'driver-plate',
       icon: 'badge',
       tone: 'bg-red-500/10 text-red-600',
       title: 'งานที่ไม่มีคนขับ/ทะเบียน',
-      detail: `ไม่มีชื่อคนขับ ${noDriver} งาน · ไม่มีทะเบียน ${noPlate} งาน`,
+      detail: `ไม่มีชื่อคนขับ ${noDriverJobs.length} งาน · ไม่มีทะเบียน ${noPlateJobs.length} งาน${ids.length <= 3 ? ' (' + ids.join(', ') + ')' : ''}`,
       to: '/settings/driver-data',
     })
   }
 
+  // 3) ข้อมูลคนขับในงานไม่ตรงทะเบียนคนขับ / ไม่มีชื่อ-นามสกุลแยก / หมายเหตุชื่อเล่นค้าง
+  let mismatch = 0
+  let noSnapshot = 0
+  let staleNote = 0
+  for (const b of bs) {
+    if (!b.driverName) continue
+    const d = b.driverId ? driversStore.drivers.find((x) => x.id === b.driverId) : undefined
+    if (d) {
+      if (squish(b.driverName) !== squish(`${d.firstName} ${d.lastName}`)) mismatch++
+      else if (!b.driverFirstName || !b.driverLastName) noSnapshot++
+    }
+    if ((b.note || '').split(' | ').some((part) => part.startsWith('ชื่อเล่นคนขับ'))) staleNote++
+  }
+  if (mismatch || noSnapshot || staleNote) {
+    const parts: string[] = []
+    if (mismatch) parts.push(`ชื่อไม่ตรงทะเบียนคนขับ ${mismatch} งาน`)
+    if (noSnapshot) parts.push(`ยังไม่มีชื่อ/นามสกุลแยก ${noSnapshot} งาน`)
+    if (staleNote) parts.push(`หมายเหตุชื่อเล่นไม่ตรงค้าง ${staleNote} งาน`)
+    items.push({
+      key: 'driver-data',
+      icon: 'person_search',
+      tone: 'bg-orange-500/10 text-orange-600',
+      title: 'ข้อมูลคนขับในงานต้องตรวจ/ซิงก์',
+      detail: parts.join(' · '),
+      to: '/settings/driver-data',
+    })
+  }
+
+  // 4) งานมีลิตรแต่ไม่มีเรทน้ำมัน
   const noRate = bs.filter((b) => b.plate && (b.fuelLiters || 0) > 0 && !(b.fuelRate > 0)).length
   if (noRate) {
     items.push({
@@ -544,17 +608,29 @@ const attentionItems = computed(() => {
     })
   }
 
+  // 5) งานที่คิดเงินไม่ได้ แยกตามสาเหตุ
   if (billedMoney.value.uncomputableCount > 0) {
+    const reasons = new Map<string, number>()
+    for (const b of bs) {
+      if (b.status !== 'DELIVERED') continue
+      const m = computeBookingMoney(b, b.plate ? vehicleTypeOf(b.plate) : undefined)
+      if (m.companyIncome === null) {
+        const label = shortReason(m.incomeNote || '')
+        reasons.set(label, (reasons.get(label) || 0) + 1)
+      }
+    }
+    const breakdown = [...reasons.entries()].sort((x, y) => y[1] - x[1]).map(([label, n]) => `${label} ${n}`).join(' · ')
     items.push({
       key: 'uncomputable',
       icon: 'calculate',
       tone: 'bg-orange-500/10 text-orange-600',
-      title: 'งานที่ยังคิดเงินไม่ได้',
-      detail: `${billedMoney.value.uncomputableCount} งาน (ค่าเที่ยว/ทะเบียน/ประเภทรถ/เรทน้ำมันไม่ครบ) — ไม่ถูกนับในยอดขาย/รายจ่าย/รายได้`,
+      title: `งานที่ยังคิดเงินไม่ได้ ${billedMoney.value.uncomputableCount} งาน`,
+      detail: `${breakdown} — ไม่ถูกนับในยอดขาย/รายจ่าย/รายได้`,
       to: '/completed-jobs',
     })
   }
 
+  // 6) รอตรวจ POD
   if (podReviewCount.value > 0) {
     items.push({
       key: 'pod',
@@ -563,6 +639,19 @@ const attentionItems = computed(() => {
       title: 'งานรอตรวจ POD',
       detail: `${podReviewCount.value} งาน — ตรวจรูปส่งของแล้วยืนยันการจบงาน`,
       to: '/booking/cements',
+    })
+  }
+
+  // 7) ข้อมูลทดสอบค้างในรายชื่อคนขับ
+  const testDrivers = driversStore.drivers.filter((d) => /smoketest/i.test(`${d.firstName} ${d.lastName}`))
+  if (testDrivers.length) {
+    items.push({
+      key: 'test-drivers',
+      icon: 'bug_report',
+      tone: 'bg-slate-500/10 text-slate-600',
+      title: 'คนขับทดสอบค้างในรายชื่อ',
+      detail: `${testDrivers.length} รายการ (${testDrivers.map((d) => d.firstName + ' ' + d.lastName).join(', ')}) — ควรลบออกเพื่อไม่ให้เลือกผิด`,
+      to: '/settings/personnel?role=DRIVER',
     })
   }
 
