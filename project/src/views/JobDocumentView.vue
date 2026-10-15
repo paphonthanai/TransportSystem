@@ -365,6 +365,9 @@
           <div class="bg-surface-2 rounded-lg p-3">
             <div class="text-xs text-muted mb-1">น้ำมัน</div>
             <div class="font-bold text-text">{{ booking.fuelLiters || 0 }} ล. x {{ formatBaht(booking.fuelRate) }}</div>
+            <div v-if="booking.fuelRatePriceDate" class="text-[11px] text-muted mt-0.5">ราคาน้ำมันประจำวันที่ {{ booking.fuelRatePriceDate }}</div>
+            <div v-else-if="booking.fuelRateManual" class="text-[11px] text-muted mt-0.5">เรทกรอกเอง</div>
+            <div v-else-if="!(booking.fuelRate > 0)" class="text-[11px] text-amber-700 mt-0.5">ยังไม่มีราคาน้ำมันของวันนี้ในประวัติราคา</div>
           </div>
           <div class="bg-surface-2 rounded-lg p-3">
             <div class="text-xs text-muted mb-1">เบี้ยเลี้ยง</div>
@@ -543,7 +546,8 @@ const mileageSummary = computed(() => {
       .reduce((sum, x) => sum + ((x.odometerAfter || 0) - (x.odometerBefore || 0)), 0) + distanceKm
   const avgKmPerLiter = b.fuelLiters ? Math.round((distanceKm / b.fuelLiters) * 100) / 100 : null
   const standardFuelLiters = fuelRateStore.standardFuelLiters(b.items, b.pricingMode) || null
-  const fuelCompensation = standardFuelLiters !== null ? Math.round((standardFuelLiters - (b.fuelLiters || 0)) * (b.fuelRate || 0)) : null
+  // ปัด 2 ตำแหน่งเหมือนหน้าจัดการงาน (BookingView) — เดิมหน้านี้ปัดเต็มบาท ทำให้งานเดียวกันแสดงค่าชดเชยน้ำมันไม่ตรงกัน
+  const fuelCompensation = standardFuelLiters !== null ? Math.round((standardFuelLiters - (b.fuelLiters || 0)) * (b.fuelRate || 0) * 100) / 100 : null
   return { distanceKm, cumulativeKm, avgKmPerLiter, standardFuelLiters, fuelCompensation }
 })
 

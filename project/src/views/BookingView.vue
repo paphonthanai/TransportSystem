@@ -42,7 +42,7 @@
           งานที่กำลังดำเนินการ ({{ inProgressBookings.length }})
         </div>
         <button
-          v-if="isAdmin && selectedInProgressIds.length > 0"
+          v-if="canSelectDelete && selectedInProgressIds.length > 0"
           @click="bulkDeleteSelectedInProgress"
           :disabled="bulkDeletingInProgress"
           class="btn-sm !border-red-200 !bg-red-50 !text-red-700 disabled:opacity-50"
@@ -56,7 +56,7 @@
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
-              <th v-if="isAdmin" class="px-3 py-3 w-8">
+              <th v-if="canSelectDelete" class="px-3 py-3 w-8">
                 <input type="checkbox" :checked="allInProgressSelected" @change="toggleSelectAllInProgress" />
               </th>
               <th class="text-left px-3 py-3 font-semibold text-muted">เที่ยวที่</th>
@@ -80,7 +80,7 @@
               :style="customerRowStyle(booking)"
               class="border-b border-border hover:bg-surface-2 transition-colors"
             >
-              <td v-if="isAdmin" class="px-3 py-3">
+              <td v-if="canSelectDelete" class="px-3 py-3">
                 <input
                   type="checkbox"
                   :checked="!!selectedInProgress[booking.id]"
@@ -146,7 +146,9 @@
                   </button>
                   <BookingActionMenu
                     :booking="booking"
-                    :can-hard-delete="isAdmin"
+                    :can-hard-delete="bookingStore.canDeleteBooking(booking).ok"
+                    :complete-blocked-reason="completeBlockedReason(booking)"
+                    :confirm-blocked-reason="confirmBlockedReason(booking)"
                     @view="router.push(`/job/${booking.id}`)"
                     @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
                     @start-transit="bookingStore.startTransit(booking.id)"
@@ -158,7 +160,7 @@
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
-              <td :colspan="isAdmin ? 13 : 12" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td :colspan="canSelectDelete ? 13 : 12" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
             </tr>
           </tbody>
         </table>
@@ -252,7 +254,9 @@
                   </button>
                   <BookingActionMenu
                     :booking="booking"
-                    :can-hard-delete="isAdmin"
+                    :can-hard-delete="bookingStore.canDeleteBooking(booking).ok"
+                    :complete-blocked-reason="completeBlockedReason(booking)"
+                    :confirm-blocked-reason="confirmBlockedReason(booking)"
                     @view="router.push(`/job/${booking.id}`)"
                     @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
                     @start-transit="bookingStore.startTransit(booking.id)"
@@ -324,7 +328,11 @@
               <div class="font-bold text-text">
                 ต้องรับน้ำมันทั้งหมด {{ dispatchTarget?.fuelLiters || 0 }} ลิตร
                 <span class="text-xs font-normal text-muted">
-                  ({{ dispatchFuelRatePreview.rate > 0 ? `เรท ${formatBaht(dispatchFuelRatePreview.rate)}/ล.` : 'ยังไม่มีเรท' }})
+                  ({{
+                    dispatchFuelRatePreview.rate > 0
+                      ? `เรท ${formatBaht(dispatchFuelRatePreview.rate)}/ล. (ราคาน้ำมันวันที่ ${dispatchFuelRatePreview.priceDate})`
+                      : 'ยังไม่มีเรท'
+                  }})
                 </span>
                 <div v-if="dispatchFuelRatePreview.reason" class="text-[11px] font-normal text-amber-700 mt-0.5">{{ dispatchFuelRatePreview.reason }}</div>
               </div>
@@ -486,6 +494,28 @@
               </label>
               <input v-model.number="completeOdometerAfter" type="number" placeholder="0" class="input-field w-full" />
             </div>
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">
+                ลิตรน้ำมันที่เติม
+                <span class="text-[10px] font-normal text-muted">(มาตรฐานปลายทาง {{ standardFuelOf(completeTarget) ?? '-' }} ล.)</span>
+              </label>
+              <input
+                v-model.number="completeFuelLiters"
+                :disabled="completeFuelNotRefilled"
+                type="number"
+                min="0"
+                placeholder="0"
+                class="input-field w-full disabled:opacity-50"
+              />
+              <label class="mt-2 flex items-center gap-2 text-sm text-text cursor-pointer">
+                <input v-model="completeFuelNotRefilled" type="checkbox" />
+                ไม่เติมน้ำมัน (รถคันนี้ไม่ได้เติมน้ำมันเที่ยวนี้)
+              </label>
+            </div>
+            <div v-if="completeIssues.length" class="rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs px-3 py-2 space-y-0.5">
+              <div class="font-semibold">ข้อมูลยังไม่ครบ จึงยังจบงานไม่ได้:</div>
+              <div v-for="issue in completeIssues" :key="issue.code + issue.message">• {{ issue.message }}</div>
+            </div>
             <div v-if="completeMileageSummary" class="grid grid-cols-2 gap-2 text-xs bg-surface-2 rounded-lg p-3 border border-border">
               <div>ระยะทางเที่ยวนี้: <span class="font-semibold text-text">{{ completeMileageSummary.distanceKm }} กม.</span></div>
               <div>สะสม: <span class="font-semibold text-text">{{ completeMileageSummary.cumulativeKm }} กม.</span></div>
@@ -526,7 +556,7 @@
           </div>
           <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="completeTarget = null" class="btn-secondary">ยกเลิก</button>
-            <button @click="confirmComplete" class="btn-primary">
+            <button @click="confirmComplete" :disabled="completeIssues.length > 0" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
               <span class="material-symbols-rounded">task_alt</span>
               ยืนยันจบงาน
             </button>
@@ -800,6 +830,7 @@ import {
 } from '@/utils/importRowParser'
 import * as XLSX from 'xlsx'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
+import { bookingCompletionIssues, describeCompletionIssues, STATIC_COMPLETION_CODES } from '@/utils/bookingCompletion'
 
 const props = defineProps<{ fleet: BookingCategory }>()
 
@@ -818,6 +849,8 @@ const authStore = useAuthStore()
 /** เฉพาะ ADMIN เท่านั้นที่เห็นปุ่ม "ลบถาวร" (Hard Delete Booking) — ซ่อนที่ UI ชั้นแรก บังคับสิทธิ์ซ้ำอีกชั้นที่
  *  bookingStore.hardDeleteBooking() และอีกชั้นที่ Firestore Rules (ดู firestore.rules's /bookings allow delete) */
 const isAdmin = computed(() => authStore.role === 'ADMIN')
+/** แอดมิน + เสมียน เห็นช่องเลือกลบ — สิทธิ์จริงรายงาน (เสมียนลบได้เฉพาะงานที่ยังไม่วางบิล) ดู bookingStore.canDeleteBooking */
+const canSelectDelete = computed(() => authStore.role === 'ADMIN' || authStore.role === 'STAFF')
 
 /** หาคนขับจากชื่อเต็ม รองรับทั้งแบบมีคำนำหน้าและไม่มี (เดิมเคยอยู่ใน driversStore.findDriverByVehicle) */
 const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
@@ -1119,7 +1152,12 @@ const canAddDispatchItem = computed(
 /** เมื่อรายการในงานนี้เปลี่ยน (เพิ่ม/ลบระหว่างจัดรถ) คำนวณน้ำมันมาตรฐานรวมใหม่ตาม pricingMode (SINGLE_DESTINATION คิดจากรายการหลักเพียงครั้งเดียว, MULTI_DESTINATION รวมทุกรายการ) */
 /** เรทน้ำมันตามประเภทรถของทะเบียนที่กำลังเลือกในไดอะล็อก (พรีวิวก่อนกดจ่ายงาน — ค่าจริงถูกตั้งตอน dispatchBooking ด้วยสูตรเดียวกัน)
  *  ยังไม่เลือกรถ = ยังไม่มีเรท พร้อมสาเหตุ */
-const dispatchFuelRatePreview = computed(() => fuelRateStore.fuelRateFor(vehiclesStore.findByFullPlate(dispatchForm.value.plate)?.department))
+const dispatchFuelRatePreview = computed(() =>
+  fuelRateStore.fuelRateFor(
+    vehiclesStore.findByFullPlate(dispatchForm.value.plate)?.department,
+    dispatchTarget.value?.createdAt
+  )
+)
 
 const recomputeDispatchFuel = () => {
   if (!dispatchTarget.value) return
@@ -1250,7 +1288,11 @@ const confirmDispatch = () => {
  * (reuse ของเดิม ไม่สร้าง/ไม่แก้ logic คืนสต๊อก) แต่ย้ายมาทำ "หลัง" ลบสำเร็จจริงเท่านั้น กันคืนสต๊อกไปแล้วทั้งที่ลบไม่สำเร็จ
  */
 const deleteBooking = async (booking: Booking) => {
-  if (!isAdmin.value) return
+  const permission = bookingStore.canDeleteBooking(booking)
+  if (!permission.ok) {
+    alert(permission.reason || 'ไม่มีสิทธิ์ลบงานนี้')
+    return
+  }
   const refs = salesDocumentsStore.documentsReferencingBooking(booking.id)
 
   const confirmMessage =
@@ -1290,8 +1332,13 @@ const toggleSelectAllInProgress = () => {
 
 const bulkDeletingInProgress = ref(false)
 const bulkDeleteSelectedInProgress = async () => {
-  if (!isAdmin.value || bulkDeletingInProgress.value) return
-  const targets = inProgressBookings.value.filter((b) => selectedInProgress.value[b.id])
+  if (!canSelectDelete.value || bulkDeletingInProgress.value) return
+  const selected = inProgressBookings.value.filter((b) => selectedInProgress.value[b.id])
+  const targets = selected.filter((b) => bookingStore.canDeleteBooking(b).ok)
+  const skipped = selected.filter((b) => !bookingStore.canDeleteBooking(b).ok)
+  if (skipped.length) {
+    alert(`งานต่อไปนี้ลบไม่ได้ (วางบิลแล้ว/มีเอกสารวางบิลอ้างอิง) จะถูกข้าม:\n${skipped.map((b) => '- ' + b.docNo).join('\n')}`)
+  }
   if (!targets.length) return
 
   const preview = targets.slice(0, 20).map((b) => `- ${b.docNo} (${b.customer || '-'})`).join('\n')
@@ -1323,12 +1370,39 @@ const bulkDeleteSelectedInProgress = async () => {
 const completeTarget = ref<Booking | null>(null)
 const debtAdjustments = ref<DebtAdjustment[]>([])
 const completeOdometerAfter = ref(0)
+const completeFuelLiters = ref(0)
+const completeFuelNotRefilled = ref(false)
 
 const openCompleteDialog = (booking: Booking) => {
   completeTarget.value = booking
   debtAdjustments.value = []
   completeOdometerAfter.value = booking.odometerAfter || 0
+  completeFuelLiters.value = booking.fuelLiters || 0
+  completeFuelNotRefilled.value = !!booking.fuelNotRefilled
 }
+
+const standardFuelOf = (booking: Booking) => fuelRateStore.standardFuelLiters(booking.items, booking.pricingMode) || undefined
+
+/** ปัญหาที่ขวางการจบงานของแถวนี้ที่ต้องไปแก้ที่หน้าแก้ไขงาน/จัดรถ (ทะเบียน/คนขับ/ค่าเที่ยว) — ปุ่ม "จบงาน" ถูกปิดพร้อมบอกเหตุผล
+ *  (เลขไมล์/ลิตรน้ำมันกรอกได้ในไดอะล็อกจบงานเอง จึงไม่นับตรงนี้) */
+const completeBlockedReason = (booking: Booking) =>
+  describeCompletionIssues(bookingCompletionIssues(booking, { standardFuelLiters: standardFuelOf(booking) }).filter((i) => STATIC_COMPLETION_CODES.includes(i.code)))
+
+/** ปุ่ม "ยืนยันการจบงาน" (หลังตรวจ POD) — ข้อมูลไม่ครบ = กดไม่ได้ พร้อมบอกว่าขาดอะไร */
+const confirmBlockedReason = (booking: Booking) =>
+  describeCompletionIssues(bookingCompletionIssues(booking, { standardFuelLiters: standardFuelOf(booking) }))
+
+/** ปัญหาข้อมูลที่ยังขาดตามค่าที่กรอกอยู่ในไดอะล็อกจบงาน (ปุ่มยืนยันจะกดไม่ได้จนกว่าจะว่าง) */
+const completeIssues = computed(() => {
+  const booking = completeTarget.value
+  if (!booking) return []
+  return bookingCompletionIssues(booking, {
+    odometerAfter: completeOdometerAfter.value || undefined,
+    fuelLiters: completeFuelNotRefilled.value ? 0 : Number(completeFuelLiters.value) || 0,
+    fuelNotRefilled: completeFuelNotRefilled.value,
+    standardFuelLiters: standardFuelOf(booking),
+  })
+})
 
 const onCancelDispatch = (booking: Booking) => {
   if (!confirm(`ยกเลิกการจ่ายงาน ${booking.docNo} และคืนกลับไปที่ตารางจองงาน?`)) return
@@ -1349,7 +1423,8 @@ const approvePod = (booking: Booking) => {
  *  bookingStore.confirmJobCompletion ใน stores/booking.ts) จบงานแล้วจะไปโผล่ที่หน้า "งานเสร็จสิ้น" แทน */
 const onConfirmJobCompletion = (booking: Booking) => {
   if (!confirm(`ยืนยันการจบงาน ${booking.docNo}? หลังยืนยันจะสามารถนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
-  bookingStore.confirmJobCompletion(booking.id)
+  const result = bookingStore.confirmJobCompletion(booking.id)
+  if (!result.ok && result.issues.length) alert(`จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}`)
 }
 
 const addAdjustmentRow = () => {
@@ -1381,11 +1456,16 @@ const completeMileageSummary = computed(() => {
 const confirmComplete = () => {
   if (!completeTarget.value) return
   const bookingId = completeTarget.value.id
-  bookingStore.completeJob(
+  const result = bookingStore.completeJob(
     bookingId,
     debtAdjustments.value.filter((d) => d.label || d.amount),
-    completeOdometerAfter.value || undefined
+    completeOdometerAfter.value || undefined,
+    { liters: completeFuelNotRefilled.value ? 0 : Number(completeFuelLiters.value) || 0, notRefilled: completeFuelNotRefilled.value }
   )
+  if (!result.ok) {
+    alert(`จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}`)
+    return
+  }
   /** Phase 2: เลิกสร้างใบวางบิลอัตโนมัติตอนจบงาน — Booking ต้องไม่เป็น Trigger ของ Billing อีกต่อไป
    *  ผู้ใช้ต้องไปสร้างใบวางบิลเองที่หน้า "ใบวางบิล" (รวมหลายงาน) หรือปุ่ม "ออกใบวางบิล" ที่หน้าใบสั่งสินค้า (เดี่ยว) */
   completeTarget.value = null
@@ -1675,6 +1755,7 @@ const confirmImport = () => {
       pricingMode: 'SINGLE_DESTINATION',
       fuelLiters: row.fuelLiters,
       fuelUnreadable: row.fuelUnreadable,
+      fuelNotRefilled: row.fuelNotRefilled,
       // เรทจริงตั้งโดย bookingStore.addBooking ตามประเภทรถของทะเบียน (ไม่รู้ประเภท = 0 + หมายเหตุสาเหตุ)
       fuelRate: 0,
       plate: row.plate || undefined,

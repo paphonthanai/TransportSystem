@@ -4,6 +4,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import { exportRowsToExcel } from '@/utils/exportExcel'
+import { fuelCostOf } from '@/utils/bookingMoney'
 import type { Booking, VehicleType, DriverPaymentStatusValue } from '@/types'
 
 function currentMonthValue(): string {
@@ -79,7 +80,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
 
   const driverOptions = computed(() => [...new Set(bookingsInScope.value.map((b) => driverKeyFor(b)))].sort())
 
-  const fuelCost = (booking: Booking) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0) * 100) / 100
+  const fuelCost = (booking: Booking) => fuelCostOf(booking)
 
   const summaryRows = computed(() => {
     const byDriver = new Map<string, { trips: number; baseAllowance: number; debtNet: number; netIncome: number; fuelCost: number }>()

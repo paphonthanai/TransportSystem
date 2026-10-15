@@ -8,7 +8,7 @@
       </button>
     </div>
     <div class="text-xs text-muted">
-      ตั้งค่าลิตรมาตรฐานต่อเที่ยวตามอำเภอ และเรทราคาน้ำมันแยกตามประเภทรถ — ระบบจะดึงมากรอกให้อัตโนมัติตอนสร้างงานเมื่อกรอกอำเภอ (แก้ไขเองได้เพื่อป้องกันการโกงน้ำมัน)
+      ตั้งค่าลิตรมาตรฐานต่อเที่ยวตามอำเภอ และราคาน้ำมันประจำวันแยกตามประเภทรถ — ระบบจะดึงมากรอกให้อัตโนมัติตอนสร้างงานเมื่อกรอกอำเภอ (แก้ไขเองได้เพื่อป้องกันการโกงน้ำมัน)
     </div>
     <!-- เดิมบันทึกไม่สำเร็จ (เช่น หลุดสิทธิ์/หลุดเน็ต) แล้วเงียบ — ไม่มีจุดไหนแสดง fuelRateStore.error เลยสักที่ ผู้ใช้เห็นรายการ
          ที่เพิ่งเพิ่มในหน้าจอตามปกติ (แค่ยังไม่ได้ขึ้น Firestore จริง) พอรีเฟรชเลยดูเหมือนข้อมูลหายไปทั้งที่กดบันทึกแล้ว -->
@@ -18,36 +18,72 @@
     </div>
 
     <div class="card-lg">
-      <div class="font-bold text-text mb-1">เรทน้ำมันแยกตามประเภทรถ</div>
-      <div>
-        <div class="text-[11px] text-muted mb-3">
-          ระบบจะใช้เรทของประเภทรถที่จัดให้ตอนจ่ายงาน/จัดรถ (ก่อนคนขับรับน้ำมัน) — เว้นว่างหรือใส่ 0 = ยังไม่มีเรทของประเภทนี้
-          (งานของรถประเภทนั้นจะเว้นเรทไว้และแสดงสาเหตุในหมายเหตุของงาน)
+      <div class="font-bold text-text mb-1">ราคาน้ำมันประจำวัน (บาท/ลิตร) แยกตามประเภทรถ</div>
+      <div class="text-[11px] text-muted mb-3">
+        กรอกราคาของแต่ละวันที่ราคาเปลี่ยน — งานแต่ละงานใช้ราคาล่าสุดที่ไม่เกินวันที่สร้างงาน (งานนำเข้า Excel = วันที่นำเข้า) ของงานนั้น
+        การเพิ่มหรือแก้ราคาของวันหนึ่งจึงไม่ทำให้งานของวันอื่นเปลี่ยน ช่องที่เว้นว่าง = ไม่ประกาศราคาใหม่ของประเภทนั้นในวันนี้ (ใช้ราคาก่อนหน้าต่อ)
+      </div>
+      <div v-if="legacyPrices" class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 flex items-center gap-3 flex-wrap">
+        <span>
+          ราคาเดิมที่เคยตั้งไว้ (ไม่มีวันที่ ระบบเลิกใช้คำนวณแล้ว):
+          {{ legacyPrices.map(([type, price]) => type + ' ' + price).join(' · ') }}
+        </span>
+        <button @click="useLegacyPrices" class="btn-sm">ใช้เป็นค่าตั้งต้นของฟอร์มด้านล่าง</button>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-muted mb-1">ราคามีผลตั้งแต่วันที่</label>
+          <input v-model="priceDate" type="date" class="input-field w-full" />
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div v-for="type in vehicleTypeOptions" :key="type">
-            <label class="block text-xs font-semibold text-muted mb-1">{{ type }} (บาท/ลิตร)</label>
-            <input
-              :value="priceDraft.byType[type] ?? ''"
-              @input="(e) => setTypePrice(type, (e.target as HTMLInputElement).value)"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="ยังไม่มีเรท"
-              class="input-field w-full"
-            />
-          </div>
+        <div v-for="type in vehicleTypeOptions" :key="type">
+          <label class="block text-xs font-semibold text-muted mb-1">{{ type }}</label>
+          <input
+            :value="priceDraft[type] ?? ''"
+            @input="(e) => setTypePrice(type, (e.target as HTMLInputElement).value)"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="ไม่ประกาศ"
+            class="input-field w-full"
+          />
         </div>
       </div>
-      <div class="mt-5 pt-4 border-t border-border flex items-center gap-3">
-        <button @click="saveFuelPrices" class="btn-primary">
+      <div class="mt-5 pt-4 border-t border-border flex items-center gap-3 flex-wrap">
+        <button @click="saveFuelPrices" :disabled="!priceDate || !hasDraftPrice" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
           <span class="material-symbols-rounded text-base">save</span>
-          บันทึก
+          บันทึกราคาของวันที่นี้
         </button>
-        <span v-if="priceSaved" class="text-xs font-semibold text-green-700 flex items-center gap-1">
+        <span v-if="priceSavedMessage" class="text-xs font-semibold text-green-700 flex items-center gap-1">
           <span class="material-symbols-rounded text-base">check_circle</span>
-          บันทึกแล้ว — อัปเดตเรทน้ำมันของทุกงานที่มีทะเบียนรถ (รวมงานที่เสร็จแล้ว) ให้ด้วยแล้ว
+          {{ priceSavedMessage }}
         </span>
+      </div>
+
+      <div class="mt-5 overflow-x-auto">
+        <table class="min-w-[560px] w-full text-sm border-separate border-spacing-0">
+          <thead class="bg-surface-2 text-left text-xs text-muted">
+            <tr>
+              <th class="px-4 py-2 font-semibold">มีผลตั้งแต่วันที่</th>
+              <th v-for="type in vehicleTypeOptions" :key="type" class="px-4 py-2 font-semibold text-right">{{ type }}</th>
+              <th class="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="entry in sortedHistory" :key="entry.date" class="border-t border-border hover:bg-surface-2 transition-colors">
+              <td class="px-4 py-2 font-semibold text-text">{{ entry.date }}</td>
+              <td v-for="type in vehicleTypeOptions" :key="type" class="px-4 py-2 text-right text-text">{{ entry.prices[type] ? entry.prices[type] : '-' }}</td>
+              <td class="px-4 py-2 text-right">
+                <div class="flex justify-end gap-2">
+                  <button @click="editEntry(entry)" class="btn-sm">แก้ไข</button>
+                  <button @click="removeEntry(entry)" class="btn-sm text-red-600">ลบ</button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="sortedHistory.length === 0">
+              <td colspan="6" class="px-4 py-6 text-center text-muted">ยังไม่มีราคาน้ำมันประจำวัน — งานที่ยังไม่มีราคาจะขึ้น "ยังไม่มีเรท" และยังไม่ถูกนำไปคิดเงิน</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -127,52 +163,82 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useFuelRateStore, type FuelRate } from '@/stores/fuelRates'
 import { useBookingStore } from '@/stores/booking'
 import type { CurrentVehicleType } from '@/types'
+import { bangkokDay, type FuelPriceEntry } from '@/utils/fuelPrice'
 
 const fuelRateStore = useFuelRateStore()
 const bookingStore = useBookingStore()
 
-/**
- * เรทราคาน้ำมันแยกตามประเภทรถ เปลี่ยนจาก auto-save ทุกครั้งที่พิมพ์ (v-model ตรงเข้า store) เป็น draft
- * ในเครื่อง + ปุ่ม "บันทึก" ชัดเจนแทน — กันเผลอบันทึกค่าที่พิมพ์ยังไม่เสร็จ และให้เห็นชัดว่าบันทึกสำเร็จเมื่อไหร่
- * (ต่างจากช่องอำเภอ/สาย/ลิตร ที่มี dialog + ปุ่มบันทึกของตัวเองอยู่แล้ว)
- */
-const priceDraft = ref({
-  byType: { ...(fuelRateStore.settings.pricePerLiterByVehicleType || {}) } as Partial<Record<CurrentVehicleType, number>>,
-})
-// ถ้าค่าจาก Firestore เปลี่ยน (เช่น แอดมินอีกคนแก้ไว้) ก่อนที่หน้านี้จะเคยกดบันทึกเอง ให้ sync draft ตาม — แต่หยุด sync
-// ทันทีที่ผู้ใช้เริ่มพิมพ์เอง (priceDraftDirty) กันพิมพ์อยู่แล้วโดนค่าจากที่อื่นทับกลางคัน
-const priceDraftDirty = ref(false)
-watch(
-  () => fuelRateStore.settings.pricePerLiterByVehicleType,
-  (byType) => {
-    if (priceDraftDirty.value) return
-    priceDraft.value = { byType: { ...(byType || {}) } }
-  }
-)
-const priceSaved = ref(false)
-
-/** บันทึกราคาน้ำมันจาก draft ลง store จริง แล้วรีเฟรช booking.fuelRate ของทุกงานที่มีทะเบียน รวมงานที่ส่งของเสร็จสิ้นแล้วด้วย
- *  (ตามที่ตกลง มีผลกับ Dashboard — ดู resyncFuelRates ใน stores/booking.ts) ใช้สูตรเดียวกับตอนจัดรถเป๊ะ */
-const saveFuelPrices = () => {
-  fuelRateStore.settings.pricePerLiterByVehicleType = { ...priceDraft.value.byType }
-  bookingStore.resyncFuelRates()
-  priceDraftDirty.value = false
-  priceSaved.value = true
-  setTimeout(() => (priceSaved.value = false), 2500)
-}
-
 const vehicleTypeOptions: CurrentVehicleType[] = ['รถบริษัท', 'รถหุ้นส่วน', 'รถร่วม', 'รถอู่เสริม']
+
+/** วันนี้ตามเวลาไทย (YYYY-MM-DD) ใช้เป็นค่าเริ่มต้นของช่องวันที่ราคา */
+const todayDay = () => bangkokDay(new Date()) as string
+
+/**
+ * ฟอร์มกรอกราคาประจำวัน: เลือกวันที่ + ราคาแต่ละประเภทรถ (เว้นว่าง = ไม่ประกาศใหม่) กด "บันทึก" แล้วเขียนเป็นรายการของวันนั้นใน
+ * priceHistory (ถ้ามีวันนั้นอยู่แล้ว = รวม/แก้เฉพาะประเภทที่กรอก) จากนั้นคำนวณเรทของงานใหม่ตามวันที่ของแต่ละงาน (repriceFuelRates)
+ * — เรทของงานวันอื่นที่ราคาไม่เปลี่ยนจึงได้ค่าเดิมเป๊ะ ไม่ถูกเขียนทับด้วยราคาเดียวทั้งระบบเหมือนเดิม
+ */
+const priceDate = ref(todayDay())
+const priceDraft = ref<Partial<Record<CurrentVehicleType, number>>>({})
+const priceSavedMessage = ref('')
+const hasDraftPrice = computed(() => Object.values(priceDraft.value).some((v) => v && v > 0))
+
 const setTypePrice = (type: CurrentVehicleType, raw: string) => {
-  priceDraftDirty.value = true
-  const map = { ...priceDraft.value.byType }
+  const map = { ...priceDraft.value }
   const value = parseFloat(raw)
   if (Number.isFinite(value) && value > 0) map[type] = value
   else delete map[type]
-  priceDraft.value = { ...priceDraft.value, byType: map }
+  priceDraft.value = map
+}
+
+const sortedHistory = computed<FuelPriceEntry[]>(() =>
+  [...(fuelRateStore.settings.priceHistory || [])].sort((a, b) => b.date.localeCompare(a.date))
+)
+
+/** ราคาเดิมแบบค่าเดียวต่อประเภทรถ (ก่อนมีประวัติรายวัน) — แสดงเป็นข้อมูลอ้างอิงจนกว่าจะมีประวัติรายวัน */
+const legacyPrices = computed(() => {
+  if ((fuelRateStore.settings.priceHistory || []).length > 0) return null
+  const entries = Object.entries(fuelRateStore.settings.pricePerLiterByVehicleType || {}).filter(([, v]) => v && v > 0)
+  return entries.length ? entries : null
+})
+const useLegacyPrices = () => {
+  const next: Partial<Record<CurrentVehicleType, number>> = {}
+  for (const [type, price] of legacyPrices.value || []) next[type as CurrentVehicleType] = price as number
+  priceDraft.value = next
+}
+
+const describeReprice = (r: { updated: number; noPrice: number; manual: number }) => {
+  const parts = [`คำนวณเรทน้ำมันของงานตามราคาประจำวันแล้ว (เปลี่ยน ${r.updated} งาน)`]
+  if (r.noPrice > 0) parts.push(`${r.noPrice} งานยังไม่มีราคาน้ำมันของวันนั้น จึงยังไม่ถูกนำไปคิดเงิน`)
+  if (r.manual > 0) parts.push(`${r.manual} งานกรอกเรทเองจึงไม่ถูกแก้`)
+  return parts.join(' · ')
+}
+
+const saveFuelPrices = () => {
+  if (!priceDate.value || !hasDraftPrice.value) return
+  const history = [...(fuelRateStore.settings.priceHistory || [])]
+  const idx = history.findIndex((e) => e.date === priceDate.value)
+  const prices = { ...(idx !== -1 ? history[idx].prices : {}), ...priceDraft.value }
+  const entry: FuelPriceEntry = { date: priceDate.value, prices }
+  if (idx !== -1) history[idx] = entry
+  else history.push(entry)
+  fuelRateStore.settings.priceHistory = history
+  priceDraft.value = {}
+  priceSavedMessage.value = describeReprice(bookingStore.repriceFuelRates())
+}
+
+const editEntry = (entry: FuelPriceEntry) => {
+  priceDate.value = entry.date
+  priceDraft.value = { ...entry.prices } as Partial<Record<CurrentVehicleType, number>>
+}
+
+const removeEntry = (entry: FuelPriceEntry) => {
+  fuelRateStore.settings.priceHistory = (fuelRateStore.settings.priceHistory || []).filter((e) => e.date !== entry.date)
+  priceSavedMessage.value = describeReprice(bookingStore.repriceFuelRates())
 }
 
 const sortedRates = computed(() =>

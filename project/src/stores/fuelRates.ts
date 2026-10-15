@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed } from 'vue'
 import { useFirestoreSettings } from '@/composables/useFirestoreSettings'
 import type { JobItem, PricingMode, VehicleType } from '@/types'
+import { bangkokDay, lookupFuelPrice, type FuelPriceEntry } from '@/utils/fuelPrice'
 
 export interface FuelRate {
   province: string
@@ -12,10 +13,14 @@ export interface FuelRate {
   corridor?: string
 }
 
+export type { FuelPriceEntry }
+
 export interface FuelSettings {
   rates: FuelRate[]
-  /** ราคาน้ำมันแยกตามประเภทรถ (บาท/ลิตร) — เป็นเรทเดียวที่ระบบใช้ (เลิกใช้ "ราคา ณ วันนี้" เรทกลางแล้ว) ประเภทไหนไม่ได้ตั้ง
-   *  (หรือตั้งเป็น 0) = ยังไม่มีเรท ดู fuelRateFor */
+  /** ประวัติราคาน้ำมันประจำวัน (บาท/ลิตร) แยกตามประเภทรถ — งานแต่ละงานใช้ราคาของวันที่ตัวเอง (ดู lookupFuelPrice) การเพิ่ม/แก้ราคา
+   *  ของวันหนึ่งจึงไม่ทำให้งานของวันอื่นเพี้ยน ไม่มีรายการ/ไม่มีราคาของประเภทรถนั้น = ยังไม่มีเรท (ไม่เดา) */
+  priceHistory?: FuelPriceEntry[]
+  /** ค่าเดียวต่อประเภทรถแบบเดิม (ไม่มีวันที่) — เลิกใช้คำนวณแล้ว เก็บไว้ให้หน้าตั้งค่าแสดงเป็นข้อมูลอ้างอิงตอนย้ายเข้าประวัติรายวัน */
   pricePerLiterByVehicleType?: Partial<Record<VehicleType, number>>
 }
 
@@ -50,13 +55,12 @@ export const useFuelRateStore = defineStore('fuelRates', () => {
     )
   }
 
-  /** เรทน้ำมัน (บาท/ลิตร) ของรถประเภทนี้ — ไม่มี fallback เรทกลาง: ไม่รู้ประเภทรถ/ไม่ได้ตั้งเรทของประเภทนั้น = เรท 0 พร้อม
-   *  reason บอกสาเหตุ (ผู้เรียกเอาไปแปะที่หมายเหตุของงาน ดู applyFuelRate ใน stores/booking.ts) */
-  const fuelRateFor = (vehicleType?: VehicleType): { rate: number; reason?: string } => {
-    if (!vehicleType) return { rate: 0, reason: 'ยังไม่ทราบประเภทรถ (ยังไม่ได้จัดรถ/ไม่พบรถในทะเบียนรถ) จึงยังไม่มีเรทน้ำมัน' }
-    const specific = settings.value.pricePerLiterByVehicleType?.[vehicleType]
-    if (specific && specific > 0) return { rate: specific }
-    return { rate: 0, reason: `ยังไม่ได้ตั้งเรทน้ำมันของ${vehicleType} ในหน้าตั้งค่าน้ำมัน` }
+  /** เรทน้ำมัน (บาท/ลิตร) ของรถประเภทนี้ ตามราคาประจำวันของวันที่ date (ค่าเริ่มต้น = วันนี้ เวลาไทย) — ไม่มี fallback เรทกลาง:
+   *  ไม่รู้ประเภทรถ/ไม่มีราคาของประเภทนั้นถึงวันที่นั้น = เรท 0 พร้อม reason บอกสาเหตุ (ผู้เรียกเอาไปแปะที่หมายเหตุของงาน
+   *  ดู applyFuelRate ใน stores/booking.ts) priceDate = วันที่ของราคาที่ใช้ */
+  const fuelRateFor = (vehicleType?: VehicleType, date?: Date | string): { rate: number; reason?: string; priceDate?: string } => {
+    const day = bangkokDay(date ?? new Date())
+    return lookupFuelPrice(settings.value.priceHistory, vehicleType, day)
   }
 
   /** รายชื่อจังหวัดทั้งหมดที่ตั้งค่าไว้ (ไม่ซ้ำ) ใช้เป็น datalist ตอนสร้างงาน */

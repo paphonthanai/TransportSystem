@@ -39,7 +39,36 @@ describe('hardDeleteBooking — permission', () => {
     expect(bookingStore.bookings.find((b) => b.id === booking.id)).toBeUndefined()
   })
 
-  it.each<UserRole>(['STAFF', 'DISPATCHER', 'ACCOUNTING', 'DRIVER'])('%s cannot hard delete a booking', async (role) => {
+  it('STAFF (เสมียน) ลบงานที่ยังไม่วางบิลและไม่มีเอกสารวางบิลอ้างอิงได้', async () => {
+    loginAs('STAFF')
+    const bookingStore = useBookingStore()
+    const booking = makeBooking({ billingStatus: 'UNBILLED' })
+    bookingStore.bookings.push(booking)
+
+    expect(bookingStore.canDeleteBooking(booking).ok).toBe(true)
+    const result = await bookingStore.hardDeleteBooking(booking.id)
+
+    expect(result.ok).toBe(true)
+    expect(bookingStore.bookings.find((b) => b.id === booking.id)).toBeUndefined()
+  })
+
+  it('STAFF (เสมียน) ลบงานที่วางบิลแล้วไม่ได้ — ขั้นตอนวางบิลเสมียนไม่มีสิทธิ์จัดการ', async () => {
+    loginAs('STAFF')
+    const bookingStore = useBookingStore()
+    const billed = makeBooking({ billingStatus: 'INVOICED' })
+    const withBillingDoc = makeBooking({ billingStatus: 'UNBILLED', billingNoteDocId: 'doc-1' })
+    bookingStore.bookings.push(billed, withBillingDoc)
+
+    for (const b of [billed, withBillingDoc]) {
+      expect(bookingStore.canDeleteBooking(b).ok).toBe(false)
+      const result = await bookingStore.hardDeleteBooking(b.id)
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('วางบิลแล้ว')
+      expect(bookingStore.bookings.find((x) => x.id === b.id)).toBeDefined()
+    }
+  })
+
+  it.each<UserRole>(['DISPATCHER', 'ACCOUNTING', 'DRIVER'])('%s cannot hard delete a booking', async (role) => {
     loginAs(role)
     const bookingStore = useBookingStore()
     const booking = makeBooking()

@@ -118,10 +118,13 @@ service cloud.firestore {
 
     match /bookings/{bookingId} {
       allow read, create, update: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING']);
-      // Hard Delete Booking — เฉพาะ ADMIN เท่านั้น (แยกจาก create/update ด้านบนโดยเจตนา DISPATCHER/STAFF/ACCOUNTING
-      // ยังคงสร้าง/แก้ไข Booking ได้เหมือนเดิมทุกประการ แค่ลบถาวรไม่ได้) ดู stores/booking.ts's hardDeleteBooking
-      // ที่บังคับสิทธิ์เดียวกันซ้ำอีกชั้นฝั่ง Application ก่อนเรียกมาถึงจุดนี้
-      allow delete: if hasRole(['ADMIN']);
+      // Hard Delete Booking — ADMIN ลบได้ทุกงาน, เสมียน (STAFF) ลบได้เฉพาะงานที่ยังไม่วางบิล (billingStatus ไม่ใช่
+      // ค่าอื่นนอกจาก UNBILLED) เพราะขั้นตอนวางบิลเสมียนไม่มีสิทธิ์จัดการ (แยกจาก create/update ด้านบนโดยเจตนา DISPATCHER/
+      // ACCOUNTING ลบไม่ได้) ดู stores/booking.ts's canDeleteBooking/hardDeleteBooking ที่บังคับสิทธิ์เดียวกันซ้ำอีกชั้น
+      // ฝั่ง Application (รวมเช็คว่าไม่มีเอกสารวางบิล/ใบแจ้งหนี้อ้างอิงอยู่) ก่อนเรียกมาถึงจุดนี้
+      allow delete: if hasRole(['ADMIN']) ||
+        (hasRole(['STAFF']) && resource.data.get('billingStatus', 'UNBILLED') == 'UNBILLED' &&
+          !('billingNoteDocId' in resource.data) && !('taxInvoiceDocId' in resource.data) && !('receiptDocId' in resource.data));
       // DRIVER: อ่าน/แก้ไขได้เฉพาะงานของตัวเอง (Driver App ใช้ booking document เป็น state ของการปฏิบัติงานจริง —
       // รับงาน/รับสินค้า/ส่งของ/จบงาน ดู stores/booking.ts acceptDispatch/pickupJobItem/deliverJobItem/finishDriverJob)
       // ห้ามสร้าง/ลบงานเด็ดขาด — งานทั้งหมดสร้าง/ลบจากฝั่งหลังบ้านเท่านั้น (ไม่มี allow create/delete ให้ DRIVER ตรงนี้

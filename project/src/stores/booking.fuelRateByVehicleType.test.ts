@@ -14,37 +14,55 @@ const vehicle = (plate: string, department: Vehicle['department']) =>
   ({ id: `v-${plate}`, plate, plateProvince: 'สระบุรี', department }) as Vehicle
 
 const NOTE_PREFIX = 'เรทน้ำมัน: '
+const day = (d: string) => new Date(d + 'T00:00:00+07:00')
 
-describe('เรทน้ำมันแยกตามประเภทรถ (ไม่มีเรทกลางแล้ว)', () => {
-  it('fuelRateFor ใช้เรทของประเภทนั้น ไม่รู้ประเภท/ไม่ได้ตั้ง/ตั้งเป็น 0 = เรท 0 พร้อมสาเหตุ', () => {
+const history = [
+  { date: '2026-09-24', prices: { รถร่วม: 36.83, รถบริษัท: 36.83 } },
+  { date: '2026-10-03', prices: { รถร่วม: 37.52 } },
+]
+
+describe('เรทน้ำมันตามราคาประจำวัน + ประเภทรถ (ไม่มีเรทกลาง ไม่เขียนทับย้อนหลัง)', () => {
+  it('fuelRateFor ใช้ราคาล่าสุดที่ไม่เกินวันที่ของงาน แยกตามประเภท ไม่มีราคา = เรท 0 พร้อมสาเหตุ', () => {
     const fuel = useFuelRateStore()
-    fuel.settings.pricePerLiterByVehicleType = { รถร่วม: 34.5, รถอู่เสริม: 0 }
+    fuel.settings.priceHistory = history
 
-    expect(fuel.fuelRateFor('รถร่วม')).toEqual({ rate: 34.5 })
-    expect(fuel.fuelRateFor('รถอู่เสริม').rate).toBe(0)
-    expect(fuel.fuelRateFor('รถอู่เสริม').reason).toContain('รถอู่เสริม')
-    expect(fuel.fuelRateFor('รถบริษัท').rate).toBe(0)
-    expect(fuel.fuelRateFor(undefined).rate).toBe(0)
-    expect(fuel.fuelRateFor(undefined).reason).toContain('ยังไม่ทราบประเภทรถ')
+    expect(fuel.fuelRateFor('รถร่วม', '2026-09-30')).toEqual({ rate: 36.83, priceDate: '2026-09-24' })
+    expect(fuel.fuelRateFor('รถร่วม', '2026-10-03')).toEqual({ rate: 37.52, priceDate: '2026-10-03' })
+    // รถบริษัทไม่มีราคาใหม่ในวันที่ 3 ต.ค. = ใช้ราคาล่าสุดของประเภทตัวเอง (36.83) ไม่ใช่ของรถร่วม
+    expect(fuel.fuelRateFor('รถบริษัท', '2026-10-05')).toEqual({ rate: 36.83, priceDate: '2026-09-24' })
+    // ก่อนวันที่มีราคาแรก = ไม่เดา
+    const before = fuel.fuelRateFor('รถร่วม', '2026-09-01')
+    expect(before.rate).toBe(0)
+    expect(before.reason).toContain('รถร่วม')
+    expect(fuel.fuelRateFor('รถอู่เสริม', '2026-10-05').rate).toBe(0)
+    expect(fuel.fuelRateFor(undefined, '2026-10-05').reason).toContain('ยังไม่ทราบประเภทรถ')
   })
 
-  it('จ่ายงานแล้วตั้ง fuelRate ตามประเภทของรถที่จัด และลบหมายเหตุสาเหตุเมื่อรู้เรทแล้ว', () => {
+  it('ใช้ราคาตามวันเวลาไทย (ISO UTC 17:00 = วันถัดไปของไทย)', () => {
+    const fuel = useFuelRateStore()
+    fuel.settings.priceHistory = history
+    expect(fuel.fuelRateFor('รถร่วม', new Date('2026-10-02T17:00:00Z')).rate).toBe(37.52)
+    expect(fuel.fuelRateFor('รถร่วม', new Date('2026-10-02T16:59:00Z')).rate).toBe(36.83)
+  })
+
+  it('จ่ายงานแล้วตั้ง fuelRate ตามประเภทรถ+วันที่สร้างงาน และลบหมายเหตุสาเหตุเมื่อรู้เรทแล้ว', () => {
     const bookingStore = useBookingStore()
     const fuel = useFuelRateStore()
     const vehicles = useVehiclesStore()
-    fuel.settings.pricePerLiterByVehicleType = { รถร่วม: 34.5 }
-    vehicles.vehicles.push(vehicle('70-1111', 'รถร่วม'), vehicle('70-2222', 'รถบริษัท'))
-    const b1 = makeBooking({ status: 'WAITING_DISPATCH', note: 'ติดต่อหน้างานก่อน | เรทน้ำมัน: ยังไม่ทราบประเภทรถ' })
-    const b2 = makeBooking({ status: 'WAITING_DISPATCH' })
+    fuel.settings.priceHistory = history
+    vehicles.vehicles.push(vehicle('70-1111', 'รถร่วม'), vehicle('70-2222', 'รถอู่เสริม'))
+    const b1 = makeBooking({ status: 'WAITING_DISPATCH', createdAt: day('2026-09-30'), note: 'ติดต่อหน้างานก่อน | เรทน้ำมัน: ยังไม่ทราบประเภทรถ' })
+    const b2 = makeBooking({ status: 'WAITING_DISPATCH', createdAt: day('2026-10-05') })
     bookingStore.bookings.push(b1, b2)
 
     bookingStore.dispatchBooking(b1.id, '70-1111 สระบุรี')
     bookingStore.dispatchBooking(b2.id, '70-2222 สระบุรี')
 
-    expect(b1.fuelRate).toBe(34.5)
+    expect(b1.fuelRate).toBe(36.83) // ราคาของวันที่สร้างงาน 30 ก.ย. ไม่ใช่ราคาล่าสุด
+    expect(b1.fuelRatePriceDate).toBe('2026-09-24')
     expect(b1.note).toBe('ติดต่อหน้างานก่อน') // หมายเหตุที่ผู้ใช้พิมพ์เองอยู่ครบ ท่อนสาเหตุหายไป
-    expect(b2.fuelRate).toBe(0) // รถบริษัทยังไม่ได้ตั้งเรท = ไม่มีเรท ไม่ใช่เรทกลาง
-    expect(b2.note).toContain(NOTE_PREFIX + 'ยังไม่ได้ตั้งเรทน้ำมันของรถบริษัท')
+    expect(b2.fuelRate).toBe(0) // รถอู่เสริมยังไม่มีราคา = ไม่มีเรท ไม่ใช่เรทกลาง
+    expect(b2.note).toContain(NOTE_PREFIX + 'ยังไม่มีราคาน้ำมันของรถอู่เสริม')
   })
 
   it('สร้างงาน (addBooking) ที่ยังไม่มีทะเบียน = เรท 0 + หมายเหตุสาเหตุ ไม่ซ้ำแม้เรียกซ้ำ', () => {
@@ -63,9 +81,9 @@ describe('เรทน้ำมันแยกตามประเภทรถ 
     const bookingStore = useBookingStore()
     const fuel = useFuelRateStore()
     const vehicles = useVehiclesStore()
-    fuel.settings.pricePerLiterByVehicleType = { รถร่วม: 34.5 }
+    fuel.settings.priceHistory = history
     vehicles.vehicles.push(vehicle('70-1111', 'รถร่วม'))
-    const b = makeBooking({ status: 'FUEL_RECEIVED', fuelRate: 36, plate: '70-9999 สระบุรี' })
+    const b = makeBooking({ status: 'FUEL_RECEIVED', fuelRate: 36, plate: '70-9999 สระบุรี', createdAt: day('2026-10-05') })
     bookingStore.bookings.push(b)
 
     bookingStore.dispatchBooking(b.id, '70-1111 สระบุรี')
@@ -73,22 +91,53 @@ describe('เรทน้ำมันแยกตามประเภทรถ 
     expect(b.fuelRate).toBe(36)
   })
 
-  it('resyncFuelRates คำนวณเรทใหม่ให้ทุกงานที่มีทะเบียน รวมงาน DELIVERED แต่ข้ามงานที่ไม่มีทะเบียน', () => {
+  it('repriceFuelRates คำนวณตามราคาของวันที่แต่ละงาน (รวมงาน DELIVERED) ไม่ทำให้งานวันอื่นเพี้ยน และไม่แตะงานที่กรอกเรทเอง/ไม่มีทะเบียน', () => {
     const bookingStore = useBookingStore()
     const fuel = useFuelRateStore()
     const vehicles = useVehiclesStore()
     vehicles.vehicles.push(vehicle('70-1111', 'รถร่วม'))
-    const open = makeBooking({ status: 'ACCEPTED', fuelRate: 36.83, plate: '70-1111 สระบุรี' })
-    const closed = makeBooking({ status: 'DELIVERED', fuelRate: 36.83, plate: '70-1111 สระบุรี' })
+    const sep = makeBooking({ status: 'DELIVERED', fuelRate: 43.11, fuelLiters: 40, plate: '70-1111 สระบุรี', createdAt: day('2026-09-25') })
+    const oct = makeBooking({ status: 'DELIVERED', fuelRate: 43.11, fuelLiters: 40, plate: '70-1111 สระบุรี', createdAt: day('2026-10-05') })
+    const early = makeBooking({ status: 'DELIVERED', fuelRate: 43.11, fuelLiters: 40, plate: '70-1111 สระบุรี', createdAt: day('2026-09-01') })
+    const manual = makeBooking({ status: 'DELIVERED', fuelRate: 50, fuelRateManual: true, plate: '70-1111 สระบุรี', createdAt: day('2026-10-05') })
     const noPlate = makeBooking({ status: 'WAITING_DISPATCH', fuelRate: 36.83, plate: undefined })
-    bookingStore.bookings.push(open, closed, noPlate)
+    bookingStore.bookings.push(sep, oct, early, manual, noPlate)
 
-    fuel.settings.pricePerLiterByVehicleType = { รถร่วม: 41.61 }
-    bookingStore.resyncFuelRates()
+    fuel.settings.priceHistory = history
+    const summary = bookingStore.repriceFuelRates()
 
-    expect(open.fuelRate).toBe(41.61)
-    expect(closed.fuelRate).toBe(41.61)
-    expect(noPlate.fuelRate).toBe(36.83) // ไม่มีทะเบียน = ไม่รู้ประเภทรถ ข้าม (รอจ่ายงาน)
+    expect(sep.fuelRate).toBe(36.83)
+    expect(oct.fuelRate).toBe(37.52)
+    expect(early.fuelRate).toBe(0) // ก่อนมีราคาแรก = ยังไม่มีเรท (คิดเงินไม่ได้จนกว่าจะมีราคา)
+    expect(manual.fuelRate).toBe(50)
+    expect(noPlate.fuelRate).toBe(36.83)
+    expect(summary).toEqual({ updated: 3, noPrice: 1, manual: 1 })
+
+    // แก้ราคาของวันที่ 3 ต.ค. แล้วคำนวณใหม่ — งานเดือน ก.ย. ต้องไม่ขยับ
+    fuel.settings.priceHistory = [history[0], { date: '2026-10-03', prices: { รถร่วม: 38 } }]
+    bookingStore.repriceFuelRates()
+    expect(sep.fuelRate).toBe(36.83)
+    expect(oct.fuelRate).toBe(38)
+  })
+
+  it('แก้เรทเองในหน้าแก้ไขงาน = ล็อกเรท (fuelRateManual) กรอก 0 = ปล่อยให้ระบบหาราคาตามวันใหม่', () => {
+    const bookingStore = useBookingStore()
+    const fuel = useFuelRateStore()
+    const vehicles = useVehiclesStore()
+    fuel.settings.priceHistory = history
+    vehicles.vehicles.push(vehicle('70-1111', 'รถร่วม'))
+    const b = makeBooking({ status: 'ACCEPTED', plate: '70-1111 สระบุรี', createdAt: day('2026-10-05'), fuelRate: 37.52 })
+    bookingStore.bookings.push(b)
+
+    bookingStore.updateBookingFull(b.id, { fuelRate: 40 })
+    expect(b.fuelRate).toBe(40)
+    expect(b.fuelRateManual).toBe(true)
+    bookingStore.repriceFuelRates()
+    expect(b.fuelRate).toBe(40)
+
+    bookingStore.updateBookingFull(b.id, { fuelRate: 0 })
+    expect(b.fuelRateManual).toBeUndefined()
+    expect(b.fuelRate).toBe(37.52)
   })
 })
 

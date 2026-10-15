@@ -107,6 +107,8 @@ export interface ImportRowResult {
   fuelLiters: number
   /** ช่องน้ำมันอ่านค่าไม่ได้ — ลิตรเว้นเป็น 0 ไม่ใช้ลิตรมาตรฐาน และยังไม่ถูกนำไปคิดเงิน (ดู Booking.fuelUnreadable) */
   fuelUnreadable?: boolean
+  /** ช่องน้ำมันเขียนว่า "ไม่เติม"/คำนวณได้ 0 โดยตั้งใจ — งานนี้ติ๊ก "ไม่เติมน้ำมัน" ให้เอง (ข้อมูลน้ำมันครบ จบงานได้) */
+  fuelNotRefilled?: boolean
   jobType?: BookingJobType
   note: string
   warnings: string[]
@@ -346,6 +348,7 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
     price,
     fuelLiters,
     fuelUnreadable: fuelUnreadable || undefined,
+    fuelNotRefilled: fuelNoRefill || undefined,
     jobType,
     note,
     warnings,

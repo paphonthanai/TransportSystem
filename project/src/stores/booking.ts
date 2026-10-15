@@ -10,6 +10,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { bookingRepository } from '@/repositories/bookingRepository'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import type { Booking, BookingCategory, BookingStatus, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
+import { bookingCompletionIssues, maxFuelLitersFor, type CompletionIssue } from '@/utils/bookingCompletion'
 
 /** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง, ไม่มีค่า pricingMode (ข้อมูลเก่า) ถือเป็น SINGLE_DESTINATION เสมอ */
 export function isMultiPricing(booking: Booking) {
@@ -125,20 +126,31 @@ export const useBookingStore = defineStore('booking', () => {
    * (0 ถ้าไม่มี Configuration เลย) — ฝั่ง UI/Excel import มีหน้าที่เตือนเมื่อค่าที่กรอกไม่ตรงมาตรฐานแทน (ไม่บล็อก)
    */
   function resolveFuelLiters(requested: number | undefined, items: JobItem[], pricingMode: PricingMode | undefined): number {
-    return requested ?? fuelRateStore.standardFuelLiters(items, pricingMode)
+    const standard = fuelRateStore.standardFuelLiters(items, pricingMode)
+    // เพดานลิตรต่อเที่ยว: ไม่เกิน 200 (หรือลิตรมาตรฐานของปลายทางถ้าสูงกว่า) — ค่าที่ผิดปกติ (เช่นพิมพ์เลขเกิน) ถูกตัดลงมา
+    return Math.min(Math.max(requested ?? standard, 0), maxFuelLitersFor(standard))
   }
 
   /** ท่อนหมายเหตุอัตโนมัติเรื่องเรทน้ำมัน (ขึ้นต้นด้วยคำนี้เสมอ) — ลบ/เติมใหม่ได้โดยไม่แตะหมายเหตุที่ผู้ใช้พิมพ์เอง */
   const FUEL_RATE_NOTE_PREFIX = 'เรทน้ำมัน: '
 
+  /** วันที่ที่ใช้เลือกราคาน้ำมันประจำวันของงาน = วันที่สร้างงาน (งานนำเข้า Excel คือวันที่นำเข้า, งานกรอกเองคือ "วันที่" ในฟอร์ม)
+   *  ตามที่ตกลง — ไม่ผูกกับ shipDate/loadingDate เพราะวันที่เหล่านั้นแก้ไขย้อนหลังได้และไม่ใช่วันที่ตั้งเรทน้ำมัน */
+  function fuelPriceDateOf(booking: Booking): Date | string | undefined {
+    return booking.createdAt
+  }
+
   /**
-   * ตั้งเรทน้ำมัน (บาท/ลิตร) ของงานตามประเภทรถของทะเบียนที่ใช้อยู่ (ไม่มีเรทกลางแล้ว) — ไม่รู้ประเภทรถ/ยังไม่ได้ตั้งเรทของประเภทนั้น
-   * เว้นเรทเป็น 0 แล้วแปะสาเหตุไว้ที่หมายเหตุแทน (ตามที่ตกลง) เรียกซ้ำกี่ครั้งก็ไม่ซ้ำ และท่อนสาเหตุหายเองเมื่อรู้ประเภทรถ/ตั้งเรทแล้ว
+   * ตั้งเรทน้ำมัน (บาท/ลิตร) ของงานตามประเภทรถของทะเบียนที่ใช้อยู่ และ "ราคาน้ำมันประจำวัน" ของวันที่ของงาน (ดู fuelPriceDateOf)
+   * ไม่รู้ประเภทรถ/ยังไม่มีราคาของวันนั้น = เว้นเรทเป็น 0 แล้วแปะสาเหตุไว้ที่หมายเหตุแทน (ไม่เดา) เรียกซ้ำกี่ครั้งก็ไม่ซ้ำ
+   * และท่อนสาเหตุหายเองเมื่อมีราคาแล้ว — งานที่ผู้ใช้กรอกเรทเอง (fuelRateManual) ไม่ถูกแตะ
    */
   function applyFuelRate(booking: Booking) {
+    if (booking.fuelRateManual) return
     const vehicle = booking.plate ? useVehiclesStore().findByFullPlate(booking.plate) : undefined
-    const { rate, reason } = fuelRateStore.fuelRateFor(vehicle?.department)
+    const { rate, reason, priceDate } = fuelRateStore.fuelRateFor(vehicle?.department, fuelPriceDateOf(booking))
     booking.fuelRate = rate
+    booking.fuelRatePriceDate = priceDate
     const kept = (booking.note || '')
       .split(' | ')
       .filter((part) => part && !part.startsWith(FUEL_RATE_NOTE_PREFIX))
@@ -146,14 +158,32 @@ export const useBookingStore = defineStore('booking', () => {
     booking.note = kept.length ? kept.join(' | ') : undefined
   }
 
-  /** งานที่ยังเปลี่ยนเรทน้ำมันได้ — ก่อนคนขับรับน้ำมัน (หลังจากนั้นจ่ายน้ำมันไปแล้วตามเรทเดิม) */
+  /** งานที่ยังเปลี่ยนเรทน้ำมันได้ตอนจัดรถ/เปลี่ยนรถ — ก่อนคนขับรับน้ำมัน (หลังจากนั้นจ่ายน้ำมันไปแล้ว) */
   const FUEL_RATE_EDITABLE_STATUSES: BookingStatus[] = ['WAITING_DISPATCH', 'ASSIGNED', 'ACCEPTED']
 
-  /** คำนวณเรทน้ำมันใหม่ของ "ทุกงาน" ที่มีทะเบียน รวมงานที่ส่งของเสร็จสิ้นแล้ว (เรียกตอนกดบันทึกเรทในหน้าตั้งค่าน้ำมัน) ตามที่ตกลง
-   *  เพราะมีผลกับการแสดงผล Dashboard — เอกสารรายได้รถร่วม/เงินเดือนคนขับที่ออกไปแล้ว (snapshot) ยังไม่ถูกคำนวณใหม่ รอ Phase ถัดไป
-   *  งานที่ไม่มีทะเบียนไม่รู้ประเภทรถจึงข้ามไป */
-  function resyncFuelRates() {
-    bookings.value.filter((b) => b.plate).forEach((b) => applyFuelRate(b))
+  /**
+   * คำนวณเรทน้ำมันของงานที่มีทะเบียนใหม่จาก "ประวัติราคาน้ำมันประจำวัน" ตามวันที่ของแต่ละงาน (เรียกหลังบันทึกราคาในหน้าตั้งค่าน้ำมัน)
+   * ผลลัพธ์ของแต่ละงานขึ้นกับวันที่ของงานเอง การแก้ราคาของวันหนึ่งจึงไม่กระทบงานของวันอื่น (ต่างจากเดิมที่ทุกงานถูกทับด้วยเรทเดียว)
+   * รวมงานที่ส่งของเสร็จสิ้นแล้ว เพราะต้องการให้ข้อมูลย้อนหลังถูกต้องตามราคาของวันนั้น — ยกเว้นงานที่กรอกเรทเอง ไม่มีทะเบียน
+   * (ไม่รู้ประเภทรถ) ข้ามไป เอกสารรายได้/เงินเดือนที่ออกไปแล้ว (snapshot) ไม่ถูกคำนวณใหม่
+   */
+  function repriceFuelRates() {
+    let updated = 0
+    let noPrice = 0
+    let manual = 0
+    for (const b of bookings.value) {
+      if (!b.plate) continue
+      if (b.fuelRateManual) {
+        manual++
+        continue
+      }
+      const before = b.fuelRate
+      const beforeDate = b.fuelRatePriceDate
+      applyFuelRate(b)
+      if (b.fuelRate !== before || b.fuelRatePriceDate !== beforeDate) updated++
+      if (!(b.fuelRate > 0) && (b.fuelLiters || 0) > 0) noPrice++
+    }
+    return { updated, noPrice, manual }
   }
 
   const bookings = ref<Booking[]>([])
@@ -403,7 +433,11 @@ export const useBookingStore = defineStore('booking', () => {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
     if (data.fuelLiters !== undefined) booking.fuelLiters = data.fuelLiters
-    if (data.fuelRate !== undefined) booking.fuelRate = data.fuelRate
+    if (data.fuelRate !== undefined) {
+      booking.fuelRate = data.fuelRate
+      booking.fuelRateManual = data.fuelRate > 0 ? true : undefined
+      booking.fuelRatePriceDate = undefined
+    }
     if (data.returnDate !== undefined) booking.returnDate = data.returnDate
     addLog(`แก้ไขข้อมูลปฏิบัติงาน ${booking.docNo} (น้ำมัน/วันที่กลับ)`, { bookingId: booking.id })
   }
@@ -432,6 +466,8 @@ export const useBookingStore = defineStore('booking', () => {
       agreedPrice?: number
       allowance?: number
       fuelLiters?: number
+      /** ติ๊ก "ไม่เติมน้ำมัน" (true = ลิตรเป็น 0 โดยตั้งใจ, false = ยกเลิกการติ๊ก) */
+      fuelNotRefilled?: boolean
       fuelRate?: number
       /** ค่านี้เป็นแค่ passthrough setter สำหรับกรณีบันทึกแบบปกติ (โหมดไม่เปลี่ยน) — การ "เปลี่ยนโหมด" จริงต้องผ่าน switchPricingMode เท่านั้น เพื่อให้มี confirmation/reset ตามกฎ */
       pricingMode?: PricingMode
@@ -466,13 +502,30 @@ export const useBookingStore = defineStore('booking', () => {
       // แก้ลิตรเป็นค่าใหม่แล้ว = ผู้ใช้ตรวจสอบแล้ว ธง "อ่านค่าน้ำมันจาก Excel ไม่ได้" หายเอง (ไม่เปลี่ยนค่า ธงยังอยู่)
       if (data.fuelLiters !== booking.fuelLiters) booking.fuelUnreadable = undefined
       booking.fuelLiters = resolveFuelLiters(data.fuelLiters, booking.items, booking.pricingMode)
+      // ใส่ลิตรมากกว่า 0 แล้ว = ไม่ใช่งานที่ไม่เติมน้ำมันอีกต่อไป
+      if (booking.fuelLiters > 0 && data.fuelNotRefilled === undefined) booking.fuelNotRefilled = undefined
+    }
+    if (data.fuelNotRefilled !== undefined) {
+      booking.fuelNotRefilled = data.fuelNotRefilled ? true : undefined
+      if (data.fuelNotRefilled) {
+        booking.fuelLiters = 0
+        booking.fuelUnreadable = undefined
+      }
     }
     if (data.fuelRate !== undefined) {
       booking.fuelRate = data.fuelRate
-      // ผู้ใช้ตั้งเรทเองแล้ว ท่อนหมายเหตุ "ยังไม่มีเรท…" ที่ระบบแปะไว้ก่อนหน้าไม่จริงอีกต่อไป
-      if (data.fuelRate > 0 && booking.note) {
-        const kept = booking.note.split(' | ').filter((part) => part && !part.startsWith(FUEL_RATE_NOTE_PREFIX))
-        booking.note = kept.length ? kept.join(' | ') : undefined
+      // ผู้ใช้ตั้งเรทเองแล้ว ท่อนหมายเหตุ "ยังไม่มีเรท…" ที่ระบบแปะไว้ก่อนหน้าไม่จริงอีกต่อไป และล็อกเรทไว้ ระบบไม่คำนวณทับอีก
+      if (data.fuelRate > 0) {
+        booking.fuelRateManual = true
+        booking.fuelRatePriceDate = undefined
+        if (booking.note) {
+          const kept = booking.note.split(' | ').filter((part) => part && !part.startsWith(FUEL_RATE_NOTE_PREFIX))
+          booking.note = kept.length ? kept.join(' | ') : undefined
+        }
+      } else {
+        // กรอก 0 = ปล่อยให้ระบบหาราคาประจำวันตามวันที่ของงานใหม่
+        booking.fuelRateManual = undefined
+        if (booking.plate) applyFuelRate(booking)
       }
     }
     addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`, { bookingId: booking.id })
@@ -526,13 +579,29 @@ export const useBookingStore = defineStore('booking', () => {
    *
    * items=[] ไม่ใช่เงื่อนไขที่ห้าม Hard Delete — ฟังก์ชันนี้ไม่เช็ค booking.items เลย ตามข้อกำหนด
    */
-  async function hardDeleteBooking(id: string): Promise<{ ok: boolean; message?: string; deletedDocumentCount: number }> {
-    const authStore = useAuthStore()
-    if (authStore.role !== 'ADMIN') {
-      return { ok: false, message: 'ไม่มีสิทธิ์ลบงานขนส่งถาวร (เฉพาะ ADMIN เท่านั้น)', deletedDocumentCount: 0 }
+  /**
+   * ผู้ใช้ปัจจุบันลบงานนี้ถาวรได้ไหม — ADMIN ลบได้ทุกงาน, เสมียน (STAFF) ลบได้เฉพาะงานที่ "ยังไม่วางบิล" และไม่มีเอกสารขายอ้างอิง
+   * นอกจากใบเสนอราคา/ใบสั่งสินค้า (เพราะขั้นตอนวางบิลเสมียนไม่มีสิทธิ์จัดการ) ตรงกับ Firestore Rules (bookings allow delete)
+   */
+  function canDeleteBooking(booking: Booking): { ok: boolean; reason?: string } {
+    const role = useAuthStore().role
+    if (role === 'ADMIN') return { ok: true }
+    if (role !== 'STAFF') return { ok: false, reason: 'ไม่มีสิทธิ์ลบงานขนส่งถาวร (เฉพาะ ADMIN และเสมียน)' }
+    if ((booking.billingStatus || 'UNBILLED') !== 'UNBILLED' || booking.billingNoteDocId || booking.taxInvoiceDocId || booking.receiptDocId) {
+      return { ok: false, reason: 'งานนี้วางบิลแล้ว เสมียนลบไม่ได้ (ให้ผู้ดูแลระบบลบ)' }
     }
+    const referenced = useSalesDocumentsStore().documentsReferencingBooking(booking.id)
+    if (referenced.some((d) => d.type !== 'QUOTATION' && d.type !== 'SALES_ORDER')) {
+      return { ok: false, reason: 'งานนี้มีเอกสารวางบิล/ใบแจ้งหนี้อ้างอิงอยู่ เสมียนลบไม่ได้ (ให้ผู้ดูแลระบบลบ)' }
+    }
+    return { ok: true }
+  }
+
+  async function hardDeleteBooking(id: string): Promise<{ ok: boolean; message?: string; deletedDocumentCount: number }> {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return { ok: false, message: 'ไม่พบงานขนส่งนี้', deletedDocumentCount: 0 }
+    const permission = canDeleteBooking(booking)
+    if (!permission.ok) return { ok: false, message: permission.reason, deletedDocumentCount: 0 }
 
     const salesDocumentsStore = useSalesDocumentsStore()
     const referencedDocs = salesDocumentsStore.documentsReferencingBooking(id)
@@ -838,9 +907,34 @@ export const useBookingStore = defineStore('booking', () => {
    * จบงานฝั่งออฟฟิศ (มีเพิ่ม/ลดหนี้ แต่ไม่บังคับ POD) — ปิดงานทั้งหมดทีเดียว รวมถึงรายการที่ยังไม่ได้กดส่งของทีละรายการ
    * ไม่ตัดสต๊อกซ้ำที่นี่ เพราะสต๊อกถูกตัดไปแล้วตอนรับสินค้าแต่ละรายการ (ดู pickupJobItem)
    */
-  function completeJob(id: string, debtAdjustments: DebtAdjustment[], odometerAfter?: number) {
+  function completeJob(
+    id: string,
+    debtAdjustments: DebtAdjustment[],
+    odometerAfter?: number,
+    fuel?: { liters?: number; notRefilled?: boolean }
+  ): { ok: boolean; issues: CompletionIssue[] } {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking) return
+    if (!booking) return { ok: false, issues: [] }
+    // ข้อมูลไม่ครบ = จบงานไม่ได้ (ต้องมีทะเบียน/คนขับ/ค่าเที่ยว/เลขไมล์สิ้นสุด/ลิตรน้ำมันหรือติ๊กไม่เติม ฯลฯ — ดู bookingCompletionIssues)
+    // ตรวจกับค่าที่กรอกมาพร้อมกันนี้ก่อนแตะข้อมูลงานจริง ไม่ผ่าน = ไม่เปลี่ยนอะไรเลย
+    const issues = bookingCompletionIssues(booking, {
+      odometerAfter: odometerAfter ?? booking.odometerAfter,
+      fuelLiters: fuel?.notRefilled ? 0 : fuel?.liters,
+      fuelNotRefilled: fuel ? !!fuel.notRefilled : undefined,
+      standardFuelLiters: fuelRateStore.standardFuelLiters(booking.items, booking.pricingMode) || undefined,
+    })
+    if (issues.length) return { ok: false, issues }
+    if (fuel) {
+      if (fuel.notRefilled) {
+        booking.fuelNotRefilled = true
+        booking.fuelLiters = 0
+        booking.fuelUnreadable = undefined
+      } else if (fuel.liters !== undefined) {
+        booking.fuelNotRefilled = undefined
+        if (fuel.liters !== booking.fuelLiters) booking.fuelUnreadable = undefined
+        booking.fuelLiters = fuel.liters
+      }
+    }
     booking.items.forEach((item) => {
       if (item.deliveryStatus !== 'DELIVERED') {
         item.deliveryStatus = 'DELIVERED'
@@ -855,6 +949,7 @@ export const useBookingStore = defineStore('booking', () => {
     // billingStatus ไม่เกี่ยวกับสถานะงานเลย ปล่อยไว้ตามเดิม (UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล)
     booking.completedAt = new Date()
     addLog(`จบงาน ${booking.docNo}${booking.podImage ? ' (แนบ POD จากคนขับ)' : ' (ปิดงานโดยออฟฟิศ)'}`, { bookingId: booking.id })
+    return { ok: true, issues: [] }
   }
 
   /**
@@ -965,12 +1060,18 @@ export const useBookingStore = defineStore('booking', () => {
    * ใน utils/bookingStatus.ts ที่ใช้ field นี้เป็นเงื่อนไขวางบิล/ออกเอกสารขายทุกเส้นทาง) กดได้เฉพาะงานที่ POD อนุมัติ
    * แล้วเท่านั้น (ต้องผ่านขั้นตรวจสอบ POD ก่อนเสมอ) จบงานแล้วจะไปโผล่ที่หน้า "งานเสร็จสิ้น" (ดู useCompletedJobs.ts)
    */
-  function confirmJobCompletion(id: string) {
+  function confirmJobCompletion(id: string): { ok: boolean; issues: CompletionIssue[] } {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking || booking.status !== 'DELIVERED' || booking.podReviewStatus !== 'APPROVED') return
+    if (!booking || booking.status !== 'DELIVERED' || booking.podReviewStatus !== 'APPROVED') return { ok: false, issues: [] }
+    // ข้อมูลไม่ครบ = ยืนยันจบงานไม่ได้ (งานที่คนขับจบผ่านแอปก็ต้องครบก่อนนำไปวางบิลเช่นกัน)
+    const issues = bookingCompletionIssues(booking, {
+      standardFuelLiters: fuelRateStore.standardFuelLiters(booking.items, booking.pricingMode) || undefined,
+    })
+    if (issues.length) return { ok: false, issues }
     booking.completionConfirmedAt = new Date()
     booking.completionConfirmedBy = authStore.userName || undefined
     addLog(`ยืนยันการจบงาน ${booking.docNo}`, { bookingId: booking.id })
+    return { ok: true, issues: [] }
   }
 
   /**
@@ -1184,6 +1285,7 @@ export const useBookingStore = defineStore('booking', () => {
     addBooking,
     deleteBooking,
     hardDeleteBooking,
+    canDeleteBooking,
     updateBookingPrice,
     applyImportReconciliation,
     updateBookingOps,
@@ -1192,7 +1294,7 @@ export const useBookingStore = defineStore('booking', () => {
     addJobItem,
     dispatchBooking,
     applyFuelRate,
-    resyncFuelRates,
+    repriceFuelRates,
     acceptDispatch,
     declineDispatch,
     resetBookingStatus,

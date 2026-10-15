@@ -163,6 +163,7 @@ import { useVehicleIncomeDocumentsStore } from '@/stores/vehicleIncomeDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useAuthStore } from '@/stores/auth'
 import { bahtText } from '@/utils/companyInfo'
+import { fuelCostOf } from '@/utils/bookingMoney'
 
 /**
  * เอกสารรายได้รถร่วม/รถหุ้นส่วน — เวอร์ชันนี้เป็น viewer ของ VehicleIncomeDocument ที่ persisted จริงแล้ว (สร้างจากการ
@@ -189,7 +190,7 @@ const periodThaiLabel = computed(() => {
   return `${thaiMonths[monthIndex] || m} ${Number(y) + 543}`
 })
 
-const fuelCost = (booking: { fuelLiters?: number; fuelRate?: number }) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0) * 100) / 100
+const fuelCost = (booking: { fuelLiters?: number; fuelRate?: number }) => fuelCostOf(booking)
 
 const rows = computed(() => {
   if (!doc.value) return []

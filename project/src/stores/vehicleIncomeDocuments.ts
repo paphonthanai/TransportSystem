@@ -4,6 +4,7 @@ import { useBookingStore } from './booking'
 import { useVehiclesStore } from './vehicles'
 import { useVehicleExpensesStore } from './vehicleExpenses'
 import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
+import { fuelCostOf } from '@/utils/bookingMoney'
 import { vehicleIncomeDocumentRepository } from '@/repositories/vehicleIncomeDocumentRepository'
 
 /**
@@ -89,7 +90,8 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     if (!allEligible) return null
 
     const tripIncomeTotal = Math.round(targetBookings.reduce((sum, b) => sum + (b.tripFee || 0), 0) * 100) / 100
-    const fuelCostTotal = Math.round(targetBookings.reduce((sum, b) => sum + (b.fuelLiters || 0) * (b.fuelRate || 0), 0) * 100) / 100
+    // รวมจากค่าที่ปัดต่องานแล้ว (fuelCostOf) เพื่อให้ผลรวมตรงกับแถวที่แสดงในเอกสาร/หน้ารถเสมอ (เดิมรวมก่อนแล้วปัดทีเดียว ต่างกันเป็นสตางค์)
+    const fuelCostTotal = Math.round(targetBookings.reduce((sum, b) => sum + fuelCostOf(b), 0) * 100) / 100
     const vehicleExpenseTotal = Math.round(vehicleExpensesStore.expensesForVehicle(vehicle.id).reduce((sum, e) => sum + e.amount, 0) * 100) / 100
     const netTotal = tripIncomeTotal - fuelCostTotal - vehicleExpenseTotal
 

@@ -118,7 +118,11 @@
             น้ำมัน (ลิตร)
             <span class="font-normal text-[10px]">(มาตรฐานตามปลายทาง: {{ standardFuelEstimate }} ล.)</span>
           </label>
-          <input v-model.number="editForm.fuelLiters" type="number" placeholder="0" class="input-field w-full" />
+          <input v-model.number="editForm.fuelLiters" :disabled="editForm.fuelNotRefilled" type="number" placeholder="0" class="input-field w-full disabled:opacity-50" />
+          <label class="mt-2 flex items-center gap-2 text-sm text-text cursor-pointer">
+            <input v-model="editForm.fuelNotRefilled" type="checkbox" @change="onFuelNotRefilledChange" />
+            ไม่เติมน้ำมัน (ข้อมูลน้ำมันครบ ลิตร = 0)
+          </label>
           <div v-if="fuelLitersWarning" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-1">{{ fuelLitersWarning }}</div>
         </div>
         <div>
@@ -290,6 +294,7 @@ import { useFuelRateStore } from '@/stores/fuelRates'
 import { useCustomerStore } from '@/stores/customers'
 import type { Booking, BookingCategory, JobItem, PricingMode } from '@/types'
 import { parseGpsInput } from '@/utils/gps'
+import { maxFuelLitersFor } from '@/utils/bookingCompletion'
 import JobItemEditorModal, { type JobItemDraft } from '@/components/booking/JobItemEditorModal.vue'
 
 const props = defineProps<{ fleet: BookingCategory; id: string }>()
@@ -342,6 +347,7 @@ const editForm = ref({
   agreedPrice: 0,
   allowance: 0,
   fuelLiters: 0,
+  fuelNotRefilled: false,
   fuelRate: 0,
 })
 const editLineItems = ref<JobItem[]>([])
@@ -377,6 +383,7 @@ watch(
       agreedPrice: booking.agreedPrice,
       allowance: booking.allowance || 0,
       fuelLiters: booking.fuelLiters || 0,
+      fuelNotRefilled: !!booking.fuelNotRefilled,
       fuelRate: booking.fuelRate || 0,
     }
     initialFuelRate.value = booking.fuelRate || 0
@@ -401,10 +408,10 @@ watch(
 /** รวมค่าเที่ยวจากทุกรายการในฟอร์มแก้ไข (tripFee * tripCount) — ใช้เฉพาะงาน MULTI_DESTINATION เป็น booking.tripFee โดยอัตโนมัติ */
 const editMultiTripFeeTotal = computed(() => editLineItems.value.reduce((sum, i) => sum + (i.tripFee || 0) * (i.tripCount || 1), 0))
 
-const editFuelCost = computed(() => (editForm.value.fuelLiters || 0) * (editForm.value.fuelRate || 0))
+/** เบี้ยเลี้ยงงานเซรามิก = ค่าเที่ยว × 0.99 × 0.62 — ไม่หักค่าน้ำมัน (แยกจากเรทน้ำมันโดยสิ้นเชิง) */
 const editCalculatedAllowance = computed(() => {
   const fee = editPricingMode.value === 'MULTI_DESTINATION' ? editMultiTripFeeTotal.value : editForm.value.tripFee || 0
-  return Math.round((fee * 0.99 * 0.62 - editFuelCost.value) * 100) / 100
+  return Math.round(fee * 0.99 * 0.62 * 100) / 100
 })
 const editDisplayedAllowance = computed(() => (isCements.value ? editForm.value.allowance || 0 : editCalculatedAllowance.value))
 
@@ -412,9 +419,15 @@ const editDisplayedAllowance = computed(() => (isCements.value ? editForm.value.
 const standardFuelEstimate = computed(() => fuelRateStore.standardFuelLiters(editLineItems.value, editPricingMode.value))
 
 /** เตือน (ไม่บล็อกการบันทึก) เมื่อลิตรที่กรอกไม่ตรงมาตรฐานปลายทาง หรือยังไม่มีมาตรฐาน/ยังไม่ได้กรอกลิตร */
+const onFuelNotRefilledChange = () => {
+  if (editForm.value.fuelNotRefilled) editForm.value.fuelLiters = 0
+}
+
 const fuelLitersWarning = computed(() => {
   const entered = editForm.value.fuelLiters || 0
   const standard = standardFuelEstimate.value
+  if (editForm.value.fuelNotRefilled) return ''
+  if (entered > maxFuelLitersFor(standard)) return `ลิตรที่กรอก (${entered} ล.) เกินเพดาน ${maxFuelLitersFor(standard)} ล. — ระบบจะตัดลงเหลือ ${maxFuelLitersFor(standard)} ล. ตอนบันทึก`
   if (!standard) return entered ? 'ยังไม่มีปลายทางน้ำมัน — ปลายทางนี้ยังไม่ได้ตั้งลิตรมาตรฐาน กรุณาตรวจสอบลิตรที่กรอกเอง' : 'ยังไม่มีปลายทางน้ำมัน และยังไม่ได้กรอกลิตรน้ำมัน'
   if (!entered) return `ยังไม่ได้กรอกลิตรน้ำมัน (มาตรฐานปลายทาง ${standard} ล.)`
   if (entered !== standard) return `ลิตรที่กรอก (${entered} ล.) ไม่ตรงกับมาตรฐานปลายทาง (${standard} ล.) — ระบบใช้ค่าที่กรอก`
@@ -605,7 +618,8 @@ const confirmEditBooking = () => {
     // "ราคาที่ตกลง" ไม่ใช่ field ที่แสดง/แก้แยกให้ผู้ใช้เห็นอีกต่อไป — ให้เท่ากับค่าเที่ยวเสมอ
     agreedPrice: resolvedTripFee,
     allowance: editDisplayedAllowance.value,
-    fuelLiters: f.fuelLiters,
+    fuelLiters: f.fuelNotRefilled ? 0 : f.fuelLiters,
+    fuelNotRefilled: !!f.fuelNotRefilled,
     // ส่งเรทเฉพาะเมื่อผู้ใช้แก้ช่องนี้เอง — ไม่งั้นเรทที่ระบบตั้งตามประเภทรถถูกเขียนทับด้วยค่าเก่าในฟอร์ม
     fuelRate: f.fuelRate !== initialFuelRate.value ? f.fuelRate : undefined,
     pricingMode: editPricingMode.value,

@@ -12,14 +12,49 @@ beforeEach(() => {
  * โดยเจตนาตาม Requirement — กดได้เฉพาะงานที่ POD อนุมัติแล้ว (APPROVED) เท่านั้น ดู isBookingConfirmedForBilling
  * ใน utils/bookingStatus.ts ที่ใช้ completionConfirmedAt เป็นเงื่อนไขวางบิลจริง
  */
+/** ข้อมูลครบพอยืนยันจบงานได้ (ดู utils/bookingCompletion.ts) */
+const completeData = {
+  plate: '70-1111 สระบุรี',
+  driverName: 'สมชาย ใจดี',
+  tripFee: 3500,
+  fuelLiters: 40,
+  fuelRate: 37.52,
+  odometerBefore: 1000,
+  odometerAfter: 1200,
+}
+
 describe('confirmJobCompletion', () => {
   it('sets completionConfirmedAt/completionConfirmedBy when the booking is DELIVERED with POD already APPROVED', () => {
     const bookingStore = useBookingStore()
-    const booking = makeBooking({ status: 'DELIVERED', podReviewStatus: 'APPROVED' })
+    const booking = makeBooking({ status: 'DELIVERED', podReviewStatus: 'APPROVED', ...completeData })
     bookingStore.bookings.push(booking)
 
-    bookingStore.confirmJobCompletion(booking.id)
+    const result = bookingStore.confirmJobCompletion(booking.id)
 
+    expect(result.ok).toBe(true)
+    expect(booking.completionConfirmedAt).toBeInstanceOf(Date)
+  })
+
+  it('ข้อมูลไม่ครบ (ไม่มีเลขไมล์/ลิตรน้ำมัน) = ยืนยันจบงานไม่ได้ จนกว่าจะแก้ข้อมูลหรือติ๊กไม่เติมน้ำมัน', () => {
+    const bookingStore = useBookingStore()
+    const booking = makeBooking({
+      status: 'DELIVERED',
+      podReviewStatus: 'APPROVED',
+      ...completeData,
+      odometerAfter: undefined,
+      fuelLiters: 0,
+      fuelRate: 0,
+    })
+    bookingStore.bookings.push(booking)
+
+    const blocked = bookingStore.confirmJobCompletion(booking.id)
+    expect(blocked.ok).toBe(false)
+    expect(blocked.issues.map((i) => i.code)).toEqual(['odometer', 'fuelLiters'])
+    expect(booking.completionConfirmedAt).toBeUndefined()
+
+    booking.odometerAfter = 1200
+    booking.fuelNotRefilled = true
+    expect(bookingStore.confirmJobCompletion(booking.id).ok).toBe(true)
     expect(booking.completionConfirmedAt).toBeInstanceOf(Date)
   })
 

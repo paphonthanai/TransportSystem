@@ -329,7 +329,11 @@ const hasActiveBillingDoc = (booking: Booking) =>
 const onStatusSelect = (booking: Booking, action: string) => {
   if (action === 'COMPLETE') {
     if (!confirm(`ยืนยันจบงาน ${booking.docNo}?`)) return
-    bookingStore.completeJob(booking.id, [], undefined)
+    const result = bookingStore.completeJob(booking.id, [], undefined)
+    // ข้อมูลไม่ครบ (ไม่มีเลขไมล์/ลิตรน้ำมัน/ทะเบียน ฯลฯ) จบงานทางลัดนี้ไม่ได้ ให้ไปจบที่หน้ารายการงานขนส่งที่กรอกข้อมูลเพิ่มได้
+    if (!result.ok && result.issues.length) {
+      alert(`จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}\n\nกรุณาไปจบงานที่หน้ารายการงานขนส่ง`)
+    }
     return
   }
   if (action === 'CREATE_BILLING') {

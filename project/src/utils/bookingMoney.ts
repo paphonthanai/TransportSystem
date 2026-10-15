@@ -3,6 +3,10 @@ import { bookingBillingRow, computeRowAmount } from '@/utils/documentTotals'
 
 export const roundMoney = (x: number) => Math.round(x * 100) / 100
 
+/** ค่าน้ำมันของงาน = ลิตร × เรท ปัด 2 ตำแหน่ง "ต่องาน" — สูตรเดียวของทั้งระบบ (Dashboard/เงินเดือนคนขับ/รายได้รถร่วม/เอกสาร)
+ *  ผลรวมต้องรวมจากค่าที่ปัดต่องานแล้วเสมอ จึงตรงกับผลรวมของแถวที่แสดงในตาราง */
+export const fuelCostOf = (b: { fuelLiters?: number; fuelRate?: number }) => roundMoney((b.fuelLiters || 0) * (b.fuelRate || 0))
+
 /** หัก 1% จากราคาเต็มทุกประเภทรถ */
 export const WITHHOLDING_RATE = 0.01
 
@@ -46,7 +50,7 @@ type MoneyInput = Pick<
 export function computeBookingMoney(b: MoneyInput, vehicleType: VehicleType | undefined): BookingMoney {
   const sales = roundMoney(computeRowAmount(bookingBillingRow(b)))
   const allowance = roundMoney(b.finalAllowance ?? b.allowance ?? 0)
-  const fuelCost = roundMoney((b.fuelLiters || 0) * (b.fuelRate || 0))
+  const fuelCost = fuelCostOf(b)
   const expense = roundMoney(allowance + fuelCost)
   const base = { sales, allowance, fuelCost, expense }
   const unreadableFuel = !!(b as { fuelUnreadable?: boolean }).fuelUnreadable

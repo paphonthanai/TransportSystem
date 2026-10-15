@@ -82,6 +82,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
 import { useVehicleExpensesStore } from '@/stores/vehicleExpenses'
 import { exportRowsToExcel } from '@/utils/exportExcel'
+import { fuelCostOf } from '@/utils/bookingMoney'
 import type { Booking, Vehicle, VehicleType } from '@/types'
 import { vehicleGroupOf, type VehicleGroup } from '@/utils/vehicleType'
 
@@ -129,7 +130,7 @@ function inPeriod(date: Date | undefined, monthValue: string): boolean {
 
 const period = ref(currentMonthValue())
 
-const fuelCost = (booking: Booking) => Math.round((booking.fuelLiters || 0) * (booking.fuelRate || 0) * 100) / 100
+const fuelCost = (booking: Booking) => fuelCostOf(booking)
 
 /** งานของรถคันนี้ในรอบที่เลือก — Trace ตรงจาก Booking.plate เหมือน VendorFleetVehicleDetailView.vue (ไม่ใช้ currentDriver ของรถมาไล่ย้อนหลัง) */
 const bookingsForVehicle = (vehicle: Vehicle) => {

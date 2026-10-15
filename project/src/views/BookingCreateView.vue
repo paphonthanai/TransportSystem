@@ -461,12 +461,11 @@ const computedFuel = computed(() => fuelRateStore.standardFuelLiters(lineItems.v
 const fuelDataMissingForCreate = computed(() => lineItems.value.some((li) => li.siteName) && computedFuel.value <= 0)
 const goToFuelSettings = () => router.push('/settings/fuel')
 
-/** เรทน้ำมันตามประเภทรถของทะเบียนที่เลือกในฟอร์ม (ไม่มีเรทกลางแล้ว — ยังไม่เลือกรถ/ไม่รู้ประเภท = 0 ประเมินเบี้ยเลี้ยงโดยยังไม่หักค่าน้ำมัน) */
-const headerFuelRate = computed(() => fuelRateStore.fuelRateFor(vehiclesStore.findByFullPlate(header.value.plate)?.department).rate)
-
+/** เบี้ยเลี้ยงงานเซรามิก = ค่าเที่ยว × 0.99 × 0.62 — ไม่นำค่าน้ำมัน/เรทน้ำมันมาหักอีกต่อไป (เบี้ยเลี้ยงกับค่าน้ำมันเป็นรายจ่ายคนละก้อน
+ *  รวมกันที่รายจ่ายของงาน ดู utils/bookingMoney.ts) */
 const headerCalculatedAllowance = computed(() => {
   const fee = header.value.pricingMode === 'MULTI_DESTINATION' ? multiTripFeeTotal.value : header.value.tripFee || 0
-  return Math.round((fee * 0.99 * 0.62 - computedFuel.value * headerFuelRate.value) * 100) / 100
+  return Math.round(fee * 0.99 * 0.62 * 100) / 100
 })
 
 /** รวมค่าเที่ยวจากทุกรายการ (tripFee * tripCount) — ใช้เฉพาะงาน MULTI_DESTINATION เป็น booking.tripFee โดยอัตโนมัติ */

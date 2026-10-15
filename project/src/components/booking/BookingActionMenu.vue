@@ -23,10 +23,13 @@
           <span class="material-symbols-rounded text-base">directions</span>
           เริ่มขนส่ง
         </button>
+        <!-- ข้อมูลไม่ครบ (ไม่มีทะเบียน/คนขับ/ค่าเที่ยว) = จบงานไม่ได้ ปุ่มถูกปิดพร้อมบอกเหตุผล (เลขไมล์/ลิตรน้ำมันกรอกในไดอะล็อกจบงาน) -->
         <button
           v-if="booking.status !== 'DELIVERED' && booking.items.length > 0"
-          @click="fire('complete')"
-          class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-green-700"
+          @click="completeBlockedReason ? undefined : fire('complete')"
+          :disabled="!!completeBlockedReason"
+          :title="completeBlockedReason ? 'จบงานไม่ได้: ' + completeBlockedReason : undefined"
+          class="w-full flex items-center gap-2 px-3 py-2 text-left text-green-700 disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-surface-2"
         >
           <span class="material-symbols-rounded text-base">task_alt</span>
           จบงาน{{ booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING' ? '' : ' (ข้ามขั้นตอน)' }}
@@ -70,8 +73,10 @@
              stores/booking.ts) — กดได้เฉพาะหลัง POD ยืนยันแล้วเท่านั้น จบงานแล้วจะไปโผล่ที่หน้า "งานเสร็จสิ้น" -->
         <button
           v-if="booking.status === 'DELIVERED' && booking.podReviewStatus === 'APPROVED' && !booking.completionConfirmedAt"
-          @click="fire('confirm-completion')"
-          class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-primary"
+          @click="confirmBlockedReason ? undefined : fire('confirm-completion')"
+          :disabled="!!confirmBlockedReason"
+          :title="confirmBlockedReason ? 'ข้อมูลยังไม่ครบ: ' + confirmBlockedReason : undefined"
+          class="w-full flex items-center gap-2 px-3 py-2 text-left text-primary disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:bg-surface-2"
         >
           <span class="material-symbols-rounded text-base">flag_circle</span>
           ยืนยันการจบงาน
@@ -85,7 +90,14 @@
 import { ref, nextTick } from 'vue'
 import type { Booking } from '@/types'
 
-defineProps<{ booking: Booking; canHardDelete?: boolean }>()
+defineProps<{
+  booking: Booking
+  canHardDelete?: boolean
+  /** มีค่า = ข้อมูลไม่ครบ ปุ่ม "จบงาน" กดไม่ได้ (ข้อความคือสิ่งที่ยังขาด) */
+  completeBlockedReason?: string
+  /** มีค่า = ข้อมูลไม่ครบ ปุ่ม "ยืนยันการจบงาน" กดไม่ได้ */
+  confirmBlockedReason?: string
+}>()
 
 const emit = defineEmits<{
   view: []
