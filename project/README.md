@@ -45,6 +45,11 @@ src/
 └── main.ts             # Application entry point
 ```
 
+## เอกสารประกอบ
+
+- คู่มือการใช้งาน (ฉบับล่าสุด): `docs/คู่มือการใช้งาน.md`
+- แผนผังข้อมูลและการเชื่อมโยง: `docs/data-map/tms-data-map.html`
+
 ## Getting Started
 
 ### Prerequisites

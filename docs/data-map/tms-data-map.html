@@ -1,0 +1,414 @@
+﻿<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>TMS Data Map</title>
+<style>
+  :root {
+    --ink: #1f2937; --muted: #6b7280; --line: #94a3b8;
+    --set: #475569; --set-bg: #f1f5f9;
+    --ppl: #15803d; --ppl-bg: #f0fdf4;
+    --job: #c2410c; --job-bg: #fff7ed;
+    --doc: #7c3aed; --doc-bg: #f5f3ff;
+    --pay: #0f766e; --pay-bg: #f0fdfa;
+    --oth: #be185d; --oth-bg: #fdf2f8;
+    --warn: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; color: var(--ink);
+         font-family: "Leelawadee UI", "Tahoma", sans-serif; font-size: 15px; line-height: 1.45; }
+  #board { position: relative; width: 2900px; padding: 36px 40px 40px; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 22px; }
+  h1 { margin: 0; font-size: 34px; }
+  .subtitle { color: var(--muted); font-size: 16px; margin-top: 4px; }
+  .legend { display: flex; gap: 14px; font-size: 14px; flex-wrap: wrap; justify-content: flex-end; max-width: 1300px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+
+  .band-title { font-weight: 700; font-size: 18px; margin: 0 0 10px; letter-spacing: .2px; }
+  .row-top { display: grid; grid-template-columns: 680px 1fr 1fr 327px 327px; gap: 26px; align-items: start; }
+  #origins { order: -1; }
+  .row-mid { display: grid; grid-template-columns: 680px 1fr 680px; gap: 0; margin-top: 90px; align-items: start; }
+  .row-bot { display: grid; grid-template-columns: repeat(5, 1fr); gap: 26px; margin-top: 70px; align-items: start; }
+  #staffsal { order: 1; } #drvpay { order: 2; } #drvcalc { order: 3; } #vehinc { order: 4; } #deduct { order: 5; }
+  .stack { display: flex; flex-direction: column; gap: 22px; }
+  .center { display: flex; flex-direction: column; gap: 22px; padding: 0 190px; }
+
+  .card { border: 2px solid var(--c); background: var(--bg); border-radius: 12px; overflow: hidden; position: relative; z-index: 2; }
+  .card h3 { margin: 0; background: var(--c); color: #fff; padding: 9px 14px; font-size: 18px; display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .card h3 code { font-family: Consolas, monospace; font-size: 13px; font-weight: 400; opacity: .9; text-align: right; }
+  .card .body { padding: 10px 14px 12px; }
+  .sec { display: grid; grid-template-columns: 74px 1fr; gap: 8px; padding: 5px 0; border-top: 1px dashed rgba(0,0,0,.12); }
+  .sec:first-child { border-top: 0; }
+  .sec b { color: var(--c); font-size: 13.5px; }
+  .warn { margin-top: 8px; padding: 7px 10px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca; color: var(--warn); font-size: 14px; }
+  .note { margin-top: 8px; padding: 7px 10px; border-radius: 8px; background: rgba(255,255,255,.7); color: var(--muted); font-size: 13.5px; }
+  code { font-family: Consolas, monospace; font-size: 13.5px; background: rgba(0,0,0,.05); padding: 0 4px; border-radius: 4px; }
+  h3 code { background: transparent; }
+
+  .set { --c: var(--set); --bg: var(--set-bg); }
+  .ppl { --c: var(--ppl); --bg: var(--ppl-bg); }
+  .job { --c: var(--job); --bg: var(--job-bg); }
+  .doc { --c: var(--doc); --bg: var(--doc-bg); }
+  .pay { --c: var(--pay); --bg: var(--pay-bg); }
+  .oth { --c: var(--oth); --bg: var(--oth-bg); }
+
+  .job.main h3 { font-size: 24px; padding: 12px 16px; }
+  .job.main { border-width: 3px; }
+  .status { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13.5px; }
+  .status span { background: #fff; border: 1px solid #fdba74; border-radius: 999px; padding: 1px 9px; }
+
+  svg#wires { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+  .lbl { position: absolute; z-index: 3; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+         padding: 1px 7px; font-size: 13px; color: #334155; white-space: nowrap; transform: translate(-50%, -50%); }
+  .lbl.w { border-color: #fecaca; color: var(--warn); }
+
+  footer { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 26px; }
+  footer .box { border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 12px 16px; background: #f8fafc; }
+  footer h4 { margin: 0 0 6px; font-size: 17px; }
+  footer ul { margin: 0; padding-left: 20px; }
+  table.rules { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  table.rules th, table.rules td { border: 1px solid #e2e8f0; padding: 3px 6px; text-align: center; }
+  table.rules td:first-child, table.rules th:first-child { text-align: left; }
+</style>
+</head>
+<body>
+<div id="board">
+  <svg id="wires"></svg>
+
+  <header>
+    <div>
+      <h1>แผนที่ข้อมูลระบบ TMS: เก็บอะไร · ใช้ที่ไหน · เชื่อมกันยังไง</h1>
+      <div class="subtitle">ใช้ตรวจสอบเวลาระบบมีปัญหา: ดูว่าข้อมูลอยู่ collection ไหน หน้าไหนเขียน หน้าไหนอ่าน และไปผูกกับข้อมูลอื่นด้วยฟิลด์อะไร · อัปเดตตามโค้ด commit 7bf9eef</div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--set)"></i>ตั้งค่า</span>
+      <span><i style="background:var(--ppl)"></i>คน · รถ · ลูกค้า</span>
+      <span><i style="background:var(--job)"></i>งานขนส่ง</span>
+      <span><i style="background:var(--doc)"></i>เอกสารขาย</span>
+      <span><i style="background:var(--pay)"></i>เงินเดือน · รายได้</span>
+      <span><i style="background:var(--oth)"></i>รูปภาพ · Dashboard</span>
+      <span>── ผูกด้วย id</span>
+      <span>- - - จับคู่ด้วยชื่อ/ข้อความ (เสี่ยงไม่ตรง)</span>
+    </div>
+  </header>
+
+  <!-- ===== TOP: SETTINGS ===== -->
+  <div class="band-title" style="color:var(--set)">ตั้งค่า (ADMIN เขียน · role อื่นอ่านได้)</div>
+  <div class="row-top">
+    <div class="card set" id="fuel">
+      <h3>ตั้งค่าน้ำมัน <code>settings/fuelRates</code></h3>
+      <div class="body">
+        <div class="sec"><b>เก็บ</b><div>จังหวัด · อำเภอ · สาย (corridor) · ลิตรมาตรฐาน/เที่ยว · <b>ประวัติราคาน้ำมันประจำวัน</b> <code>priceHistory[]</code> = วันที่ + ราคา/ลิตร แยกตามประเภทรถ</div></div>
+        <div class="sec"><b>ใช้ที่</b><div>สร้าง/แก้งาน (น้ำมันมาตรฐาน + เรทน้ำมัน) · Dashboard รายจ่าย · รายได้รถร่วม</div></div>
+        <div class="sec"><b>เชื่อม</b><div>จับคู่กับ <code>งาน.items[].province + district</code> (อำเภอตรงตัว: "AP บางบ่อ" แยกจาก "บางบ่อ") · ราคา/ลิตร เลือกจาก <code>รถ.department</code> + <code>งาน.createdAt</code></div></div>
+        <div class="note">งานใช้ราคาล่าสุดที่ไม่เกินวันที่สร้างงาน (เวลาไทย) · เก็บ <code>fuelRatePriceDate</code> ไว้ที่งาน · แก้ราคาของวันหนึ่งไม่กระทบงานวันอื่น · ไม่มีราคา = เรท 0 + งานไม่ถูกนับเงิน · หลายปลายทาง: เอาลิตรสูงสุดของแต่ละสาย แล้วรวมทุกสาย</div>
+      </div>
+    </div>
+    <div class="card set" id="origins">
+      <h3>ต้นทาง / จุดรับสินค้า <code>origins</code></h3>
+      <div class="body">
+        <div class="sec"><b>เก็บ</b><div>ชื่อจุดรับ · จังหวัด · อำเภอ · พิกัด / ลิงก์แผนที่</div></div>
+        <div class="sec"><b>ใช้ที่</b><div>ฟอร์มสร้างงาน: เลือกจุดรับสินค้าของแต่ละรายการ</div></div>
+        <div class="sec"><b>เชื่อม</b><div><code>งาน.items[].pickupOriginName</code> (เก็บเป็นชื่อ)</div></div>
+      </div>
+    </div>
+    <div class="card set" id="products">
+      <h3>สินค้า &amp; คลัง <code>products · stockMovements</code></h3>
+      <div class="body">
+        <div class="sec"><b>เก็บ</b><div>สินค้า: รหัส · ชื่อ · หน่วย · ราคา · VAT<br>เคลื่อนไหว: in/out · จำนวน · วันที่ · หมายเหตุ</div></div>
+        <div class="sec"><b>ใช้ที่</b><div>รายการสินค้าในงาน · ใบเสนอราคา / ขายเงินสด · หน้าคลังสินค้า (คงเหลือ = in − out)</div></div>
+        <div class="sec"><b>เชื่อม</b><div><code>งาน.items[].productId</code> · <code>stockMovements.productId</code> · <code>refBookingId → งาน</code></div></div>
+        <div class="warn">⚠ ตัดสต๊อกเฉพาะขั้น "รับสินค้าทีละรายการ" (flow เก่า) และจับคู่สินค้าด้วย<b>ชื่อ</b> · flow คนขับใหม่ไม่ผ่านขั้นนี้ จึงไม่ตัดสต๊อก</div>
+      </div>
+    </div>
+    <div class="card set" id="billrule">
+      <h3>เงื่อนไขวางบิล <code>settings/billingRule</code></h3>
+      <div class="body">
+        <div class="sec"><b>เก็บ</b><div>สถานะงานที่วางบิลได้ · ต้องมี POD · ราคาต้องตรงที่ตกลง · ต้องอนุมัติ</div></div>
+        <div class="sec"><b>ใช้ที่</b><div>ตอนเลือกงานมาออกใบวางบิล / ใบกำกับภาษี / ใบเสร็จ</div></div>
+        <div class="sec"><b>เชื่อม</b><div>ตรวจ <code>งาน.status</code> · <code>items[].podImage</code> · <code>tripFee/agreedPrice</code> · <code>completionConfirmedAt</code></div></div>
+      </div>
+    </div>
+    <div class="card set" id="docset">
+      <h3>ตั้งค่าเอกสาร <code>settings/documentSettings</code></h3>
+      <div class="body">
+        <div class="sec"><b>เก็บ</b><div>ข้อมูลบริษัท · โลโก้/ตรายาง · VAT % · หัก ณ ที่จ่าย % · เลขรันเอกสาร · ข้อมูลรับชำระ · สกุลเงิน · หมายเหตุ</div></div>
+        <div class="sec"><b>ใช้ที่</b><div>ทุกฟอร์ม/หน้าพิมพ์เอกสารขาย · ใบงาน</div></div>
+        <div class="sec"><b>เชื่อม</b><div>เลขที่เอกสารใน <code>salesDocuments.number</code> (ห้ามซ้ำ)</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MIDDLE ===== -->
+  <div class="row-mid">
+    <div>
+      <div class="band-title" style="color:var(--ppl)">คน · รถ · ลูกค้า (สมุดรายชื่อ)</div>
+      <div class="stack">
+        <div class="card ppl" id="users">
+          <h3>ผู้ใช้งาน <code>users/{uid}</code></h3>
+          <div class="body">
+            <div class="sec"><b>เก็บ</b><div>อีเมล · ชื่อ · role (ADMIN / STAFF / DISPATCHER / ACCOUNTING / DRIVER) · active</div></div>
+            <div class="sec"><b>ใช้ที่</b><div>ล็อกอิน → โหลด role → เมนู + Route Guard + Firestore Rules · หน้าจัดการผู้ใช้</div></div>
+            <div class="sec"><b>เชื่อม</b><div><code>driverId → drivers</code> (บัญชีคนขับ) · uid = Firebase Auth</div></div>
+          </div>
+        </div>
+        <div class="card ppl" id="drivers">
+          <h3>พนักงานขับรถ <code>drivers</code></h3>
+          <div class="body">
+            <div class="sec"><b>เก็บ</b><div>รหัสคนขับ · ชื่อ-สกุล · ชื่อเล่น · ประเภท/อัตรารายได้ · บัญชีธนาคาร</div></div>
+            <div class="sec"><b>ใช้ที่</b><div>จัดรถ (เลือกคนขับ) · แอปคนขับ · เงินเดือนคนขับ · 50 ทวิ</div></div>
+            <div class="sec"><b>เชื่อม</b><div><code>driverLoginCredentials/{code}</code> + <code>driverAuthEmails/{code}</code> (ล็อกอินด้วยรหัส) · <code>งาน.driverId</code></div></div>
+          </div>
+        </div>
+        <div class="card ppl" id="vehicles">
+          <h3>รถบรรทุก <code>vehicles · vehicleExpenses</code></h3>
+          <div class="body">
+            <div class="sec"><b>เก็บ</b><div>ทะเบียน · จังหวัด · เบอร์รถ · ประเภท (รถบริษัท/หุ้นส่วน/รถร่วม/อู่เสริม) · Fleet ที่วิ่งได้ · คนขับประจำ · ค่าใช้จ่ายรถ</div></div>
+            <div class="sec"><b>ใช้ที่</b><div>จัดรถ (กรองตาม Fleet) · เรทน้ำมัน · กำไรบริษัท · รายได้รถร่วม</div></div>
+            <div class="sec"><b>เชื่อม</b><div><code>driverCode → drivers.code</code> · งานผูกด้วย <code>plate</code> (ข้อความทะเบียน)</div></div>
+          </div>
+        </div>
+        <div class="card ppl" id="customers">
+          <h3>ลูกค้า/คู่ค้า <code>customers · contacts</code></h3>
+          <div class="body">
+            <div class="sec"><b>เก็บ</b><div>รหัส (ใช้ในเลข PO) + สี · ชื่อกิจการ · เลขภาษี · สาขา · เครดิต (วัน) · ที่อยู่ · ธนาคาร · ผู้ติดต่อ (หลัก 1 คน)</div></div>
+            <div class="sec"><b>ใช้ที่</b><div>สร้างงาน · เอกสารขายทุกประเภท · ตารางลูกค้า (งานสะสม / ยอดค้างรับ)</div></div>
+            <div class="sec"><b>เชื่อม</b><div><code>contacts.customerId</code> · งานและเอกสารเก็บ<b>ชื่อลูกค้า</b> (snapshot)</div></div>
+            <div class="note">งานสะสม = งาน DELIVERED ที่ยังไม่มี billingNoteDocId · ยอดรวม = ใบวางบิล/ใบกำกับ/ใบเสร็จที่ยังไม่ชำระ</div>
+          </div>
+        </div>
+        <div class="card ppl" id="staff">
+          <h3>เสมียน <code>staff</code> (ADMIN)</h3>
+          <div class="body">
+            <div class="sec"><b>เก็บ</b><div>รหัส · ชื่อ-สกุล · ตำแหน่ง · สถานะการจ้าง</div></div>
+            <div class="sec"><b>ใช้ที่</b><div>เงินเดือนเสมียน (<code>staffSalaries.staffId</code>)</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="center">
+      <div class="band-title" style="color:var(--job)">ศูนย์กลาง: งานขนส่ง</div>
+      <div class="card job main" id="bookings">
+        <h3>งานขนส่ง (Booking) <code>bookings</code></h3>
+        <div class="body">
+          <div class="sec"><b>เก็บ</b><div>เลขงาน · PO · Fleet (cements / ceramics) · ลูกค้า · วันที่ลงงาน · ค่าเที่ยว / ราคาที่ตกลง · เบี้ยเลี้ยง · ลิตร + เรทน้ำมัน · ทะเบียน · คนขับ · เลขไมล์เริ่ม/สิ้นสุด · รูปขึ้นสินค้า</div></div>
+          <div class="sec"><b>items[]</b><div>ปลายทางแต่ละจุด: สินค้า · จำนวน · หน่วย · จังหวัด/อำเภอ · จุดรับ · สถานะรับ/ส่ง · รูป POD · รูปใบส่งของ</div></div>
+          <div class="sec"><b>สถานะ</b><div class="status"><span>WAITING_DISPATCH รอจัดรถ</span>→<span>ACCEPTED (จัดรถแล้ว)</span>→<span>IN_TRANSIT / DELIVERING</span>→<span>DELIVERED</span>→ POD: <span>PENDING_REVIEW</span>→<span>APPROVED / REJECTED</span>→<span>completionConfirmedAt</span></div></div>
+          <div class="sec"><b>ใช้ที่</b><div>Fleet Cements / Ceramics · สร้าง/แก้งาน · งานเสร็จสิ้น (ตรวจ POD + ยืนยันจบ) · ใบงาน · แอปคนขับ · เอกสารขาย · เงินเดือน · Dashboard</div></div>
+          <div class="sec"><b>ผูกออก</b><div>
+            <code>driverId</code>→คนขับ · <code>plate</code>→รถ · <code>customer</code>→ลูกค้า (ชื่อ) · <code>items[].productId</code>→สินค้า · <code>pickupOriginName</code>→ต้นทาง<br>
+            <code>sourceDocumentId</code>→ใบสั่งสินค้า/ใบเสนอราคา · <code>billingNoteDocId</code> · <code>taxInvoiceDocId</code> · <code>receiptDocId</code>→เอกสารขาย<br>
+            <code>driverPayrollDocId</code>→รายได้คนขับ · <code>vehicleIncomeDocId</code>→รายได้รถ
+          </div></div>
+          <div class="sec"><b>น้ำมัน/จบงาน</b><div><code>fuelRate</code> + <code>fuelRatePriceDate</code> (ราคาประจำวันของวันที่สร้างงาน) · <code>fuelRateManual</code> (กรอกเรทเอง ล็อกไม่ให้คำนวณทับ) · <code>fuelNotRefilled</code> (ติ๊กไม่เติมน้ำมัน) · ลิตรสูงสุด 200 (หรือลิตรมาตรฐานปลายทางถ้าสูงกว่า) · จบงานต้องมีทะเบียน + คนขับ + ค่าเที่ยว + เลขไมล์สิ้นสุด + ลิตร/เรทน้ำมัน</div></div>
+          <div class="note">งาน 1 งานผูกเอกสารแต่ละประเภทได้ครั้งเดียว (ช่อง *DocId ว่าง = ยังเลือกได้) · ลบงานถาวร (ADMIN) จะลบเอกสารขายที่อ้างถึงไปด้วย · เลขไมล์เริ่ม = เลขไมล์สิ้นสุดเที่ยวก่อนของทะเบียนเดียวกัน</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="band-title" style="color:var(--doc)">เอกสารขาย · รูปภาพ · Dashboard</div>
+      <div class="stack">
+        <div class="card doc" id="sales">
+          <h3>เอกสารขาย <code>salesDocuments</code></h3>
+          <div class="body">
+            <div class="sec"><b>ประเภท</b><div>ใบเสนอราคา · ใบสั่งสินค้า · ใบวางบิล · ใบกำกับภาษี/ใบแจ้งหนี้ · ใบเสร็จ · ขายเงินสด · ใบสั่งซื้อ (ทุกประเภทอยู่ collection เดียว แยกด้วย <code>type</code>)</div></div>
+            <div class="sec"><b>เก็บ</b><div>เลขที่ · สถานะ · วันที่ · ยอด · VAT · หัก ณ ที่จ่าย · ครบกำหนด · วันชำระ · ข้อมูลลูกค้า (snapshot)</div></div>
+            <div class="sec"><b>เชื่อม</b><div><code>bookingIds[]</code>→งาน · <code>parentDocumentId</code> / <code>sourceDocumentIds[]</code> / <code>convertedToDocumentIds[]</code>→เอกสารต้นทาง/ปลายทาง · <code>contactId</code>→ผู้ติดต่อ</div></div>
+            <div class="note">ออกใบวางบิล/ใบกำกับ/ใบเสร็จ → ระบบเขียนเลขเอกสารกลับไปที่งาน (<code>*DocId</code>) · ใบสั่งสินค้าสร้างอัตโนมัติคู่กับงาน 1:1</div>
+          </div>
+        </div>
+        <div class="card doc" id="salesitems">
+          <h3>รายการในเอกสาร <code>salesDocumentItems</code></h3>
+          <div class="body">
+            <div class="sec"><b>เก็บ</b><div>รายละเอียด · จำนวน · หน่วย · ราคา/หน่วย · ส่วนลด · ยอด (ใช้กับใบเสนอราคา / ขายเงินสด)</div></div>
+            <div class="sec"><b>เชื่อม</b><div><code>documentId</code>→เอกสารขาย · <code>productId</code>→สินค้า</div></div>
+          </div>
+        </div>
+        <div class="card doc" id="audit">
+          <h3>ประวัติเอกสาร <code>auditLogs</code></h3>
+          <div class="body">
+            <div class="sec"><b>เก็บ</b><div>การกระทำ · เลขเอกสาร · ใครทำ (uid + role) · ฟิลด์ที่เปลี่ยน · เขียนเพิ่มอย่างเดียว ห้ามแก้/ลบ</div></div>
+            <div class="sec"><b>เชื่อม</b><div><code>documentId</code>→เอกสารขาย · <code>actorUserId</code>→ผู้ใช้</div></div>
+          </div>
+        </div>
+        <div class="card doc" id="wht">
+          <h3>หนังสือรับรองหัก ณ ที่จ่าย <code>whtCertificates</code></h3>
+          <div class="body">
+            <div class="sec"><b>เก็บ</b><div>เลขที่ · ประเภทผู้รับ (คนขับ / รถร่วม / ผู้จำหน่าย) · ชื่อ · เลขภาษี · ยอดก่อนหัก · อัตรา</div></div>
+            <div class="sec"><b>เชื่อม</b><div>ไม่ผูก id (พิมพ์/เลือกชื่อผู้รับ แล้วเก็บเป็นข้อความ)</div></div>
+          </div>
+        </div>
+      <div class="card oth" id="storage">
+        <h3>รูปภาพ <code>Firebase Storage</code></h3>
+        <div class="body">
+          <div class="sec"><b>เก็บ</b><div><code>driver-uploads/{bookingId}/…</code> (คนขับถ่าย) · <code>office-uploads/{bookingId}/…</code> (ออฟฟิศอัปโหลด) · loading- / goods- / note- *.jpg ≈350KB</div></div>
+          <div class="sec"><b>เชื่อม</b><div>URL ไปเก็บที่ <code>งาน.loadingImage</code> · <code>items[].podImage</code> · <code>items[].deliveryNoteImage</code></div></div>
+          <div class="note">รูป POD เก่าบางงานเป็น Base64 อยู่ในเอกสารงานเลย · คนขับอัปโหลดได้เฉพาะงานที่ driverId ตรงกับตัวเอง</div>
+        </div>
+      </div>
+
+      <div class="card oth" id="dashboard">
+        <h3>Dashboard <code>คำนวณสด (ไม่เก็บ)</code></h3>
+        <div class="body">
+          <div class="sec"><b>ดึงจาก</b><div>งาน DELIVERED + รถ (ประเภท) + เอกสารขาย + ลูกค้า</div></div>
+          <div class="sec"><b>สูตร</b><div>ยอดขาย = ค่าเที่ยว + ค่าใช้จ่ายเพิ่ม − ส่วนลด · รายจ่าย = เบี้ยเลี้ยง + ลิตร × เรท · กำไรตามประเภทรถ (รถบริษัท = ขาย×0.99 − จ่าย · หุ้นส่วน/อู่เสริม 8% · รถร่วม 10%) · บิลเกินกำหนด = ใบกำกับ SENT ที่เลย dueDate</div></div>
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== BOTTOM: PAYROLL ===== -->
+  <div class="band-title" style="color:var(--pay); margin-top:70px">เงินเดือน · รายได้ (ADMIN)</div>
+  <div class="row-bot" style="margin-top:0">
+    <div class="card pay" id="drvpay">
+      <h3>รายได้คนขับ <code>driverPayrollDocuments</code></h3>
+      <div class="body">
+        <div class="sec"><b>เก็บ</b><div>เลขที่ PR · รอบเดือน · รวมเบี้ยเลี้ยง · รายการเพิ่ม/หัก (snapshot) · สุทธิ · สถานะจ่าย</div></div>
+        <div class="sec"><b>เชื่อม</b><div><code>driverId</code>→คนขับ · <code>bookingIds[]</code>→งาน (เขียน <code>driverPayrollDocId</code> กลับที่งาน)</div></div>
+        <div class="warn">⚠ firestore.rules ไม่มีกฎของ collection นี้ → ถูกปฏิเสธทุกการอ่าน/เขียน</div>
+      </div>
+    </div>
+    <div class="card pay" id="vehinc">
+      <h3>รายได้รถร่วม <code>vehicleIncomeDocuments</code></h3>
+      <div class="body">
+        <div class="sec"><b>เก็บ</b><div>เลขที่ VI · ทะเบียน · รอบ · รายได้งาน − ค่าน้ำมัน − ค่าใช้จ่ายรถ = สุทธิ</div></div>
+        <div class="sec"><b>เชื่อม</b><div><code>vehicleId</code>→รถ · <code>bookingIds[]</code>→งาน (จับงานด้วย plate) · ค่าใช้จ่ายจาก <code>vehicleExpenses</code></div></div>
+        <div class="warn">⚠ firestore.rules ไม่มีกฎของ collection นี้ → ถูกปฏิเสธทุกการอ่าน/เขียน</div>
+      </div>
+    </div>
+    <div class="card pay" id="deduct">
+      <h3>รายการหัก/เพิ่ม · สถานะจ่าย <code>payrollDeductions · driverPayments</code></h3>
+      <div class="body">
+        <div class="sec"><b>เก็บ</b><div>ชื่อคนขับ · รอบ (พ.ศ. เช่น 2569-08) · เพิ่ม/หัก · ประเภท · จำนวน · ยังไม่จ่าย/จ่ายแล้ว</div></div>
+        <div class="sec"><b>เชื่อม</b><div>จับคู่ด้วย <b>ชื่อคนขับ + รอบ</b> (ไม่มี driverId)</div></div>
+        <div class="warn">⚠ เปลี่ยนชื่อคนขับ = รายการหัก/สถานะจ่ายเดิมจับคู่ไม่เจอ</div>
+      </div>
+    </div>
+    <div class="card pay" id="drvcalc">
+      <h3>หน้ารายได้คนขับ <code>คำนวณสด</code></h3>
+      <div class="body">
+        <div class="sec"><b>ดึงจาก</b><div>งานในรอบเดือน (shipDate/completedAt) จับคู่ด้วย<b>ชื่อคนขับ</b>ใน snapshot ของงาน · ประเภทรถ · รายการหัก/เพิ่ม · สถานะจ่าย</div></div>
+        <div class="sec"><b>สูตร</b><div>เบี้ยเลี้ยง (finalAllowance ถ้ามี) + รายได้อื่น − รายการหัก = สุทธิ</div></div>
+      </div>
+    </div>
+    <div class="card pay" id="staffsal">
+      <h3>เงินเดือนเสมียน <code>staffSalaries</code></h3>
+      <div class="body">
+        <div class="sec"><b>เก็บ</b><div>รอบ · เงินเดือนฐาน · รายการเพิ่ม/หัก · สุทธิ · เลขเอกสาร · สถานะ (ร่าง/ออกแล้ว · รอจ่าย/จ่ายแล้ว)</div></div>
+        <div class="sec"><b>เชื่อม</b><div><code>staffId</code>→เสมียน</div></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="box">
+      <h4>สิทธิ์เขียนข้อมูล (Firestore Rules)</h4>
+      <table class="rules">
+        <tr><th>ข้อมูล</th><th>ADMIN</th><th>STAFF</th><th>DISP.</th><th>ACC.</th><th>DRIVER</th></tr>
+        <tr><td>งานขนส่ง</td><td>✔ +ลบ</td><td>✔</td><td>✔</td><td>✔</td><td>งานตัวเอง</td></tr>
+        <tr><td>เอกสารขาย</td><td>✔</td><td>เสนอราคา/สั่งสินค้า</td><td>เสนอราคา/สั่งสินค้า</td><td>✔</td><td>–</td></tr>
+        <tr><td>ลูกค้า/ผู้ติดต่อ</td><td>✔</td><td>✔</td><td>–</td><td>✔</td><td>–</td></tr>
+        <tr><td>คนขับ</td><td>✔</td><td>อ่าน</td><td>✔</td><td>–</td><td>บางฟิลด์ของตัวเอง</td></tr>
+        <tr><td>รถ</td><td>✔</td><td>เพิ่ม/แก้ (ไม่ลบ)</td><td>✔</td><td>–</td><td>–</td></tr>
+        <tr><td>สินค้า / สต๊อก</td><td>✔</td><td>สต๊อก</td><td>✔</td><td>อ่าน</td><td>✔</td></tr>
+        <tr><td>ตั้งค่า settings/*</td><td>✔</td><td>อ่าน</td><td>อ่าน</td><td>อ่าน</td><td>อ่าน</td></tr>
+        <tr><td>เงินเดือน / เสมียน / ค่าใช้จ่ายรถ</td><td>✔</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>
+      </table>
+    </div>
+    <div class="box">
+      <h4>จุดที่จับคู่ด้วย "ชื่อ/ข้อความ" (ตรวจก่อนเมื่อข้อมูลไม่ขึ้น)</h4>
+      <ul>
+        <li>งาน → ลูกค้า: <code>customer</code> = ชื่อลูกค้า</li>
+        <li>งาน → รถ: <code>plate</code> = ข้อความทะเบียน (เรทน้ำมัน, เลขไมล์, รายได้รถร่วม)</li>
+        <li>งาน → น้ำมัน: จังหวัด + อำเภอ ต้องสะกดตรงกับตั้งค่าน้ำมัน</li>
+        <li>งาน → สต๊อก: ชื่อสินค้า</li>
+        <li>รายได้คนขับ / รายการหัก / สถานะจ่าย: ชื่อคนขับ + รอบเดือน (พ.ศ.)</li>
+        <li>งาน → ต้นทาง: <code>pickupOriginName</code></li>
+      </ul>
+    </div>
+    <div class="box">
+      <h4>ข้อมูลที่ไม่ได้อยู่ใน Firestore</h4>
+      <ul>
+        <li>Log การแก้ไขงาน (<code>tms_logs_v1</code>) เก็บใน localStorage ของเบราว์เซอร์เครื่องนั้น: เครื่องอื่นมองไม่เห็น</li>
+        <li>รอบวางบิลแบบเก่า (<code>tms_batches_v3</code>) และเอกสารเก่า (<code>tms_documents_v2</code>): localStorage</li>
+        <li>ไฟล์แนบ/หลักฐานชำระในเอกสารขาย เก็บเป็น Base64 ในเอกสารเลย</li>
+        <li>Dashboard, งานสะสม, ยอดค้างรับ, รายได้คนขับ: คำนวณสดทุกครั้ง ไม่ได้บันทึก</li>
+      </ul>
+    </div>
+  </footer>
+</div>
+
+<script>
+  // [from, to, label, dashed(name-match), warn]
+  const wires = [
+    ['users', 'drivers', 'driverId', false],
+    ['drivers', 'bookings', 'driverId', false],
+    ['vehicles', 'bookings', 'plate (ทะเบียน)', true],
+    ['customers', 'bookings', 'customer (ชื่อ)', true],
+    ['fuel', 'bookings', 'จังหวัด + อำเภอ → น้ำมันมาตรฐาน', true],
+    ['origins', 'bookings', 'pickupOriginName', true],
+    ['products', 'bookings', 'items[].productId · ตัดสต๊อก', false],
+    ['billrule', 'sales', 'เงื่อนไขก่อนออกเอกสาร', false],
+    ['docset', 'sales', 'เลขรัน · VAT · โลโก้', false],
+    ['bookings', 'sales', 'bookingIds[] ↔ *DocId', false],
+    ['salesitems', 'sales', 'documentId', false],
+    ['storage', 'bookings', 'URL รูป', false],
+    ['dashboard', 'bookings', 'อ่านงาน DELIVERED + ประเภทรถ', false],
+    ['drvpay', 'bookings', 'bookingIds[] ↔ driverPayrollDocId', false, true],
+    ['vehinc', 'bookings', 'bookingIds[] ↔ vehicleIncomeDocId', false, true],
+    ['drvcalc', 'bookings', 'ชื่อคนขับ + รอบ', true],
+    ['staffsal', 'staff', 'staffId', false],
+  ];
+  const board = document.getElementById('board');
+  const svg = document.getElementById('wires');
+  const B = board.getBoundingClientRect();
+  svg.setAttribute('width', board.scrollWidth);
+  svg.setAttribute('height', board.scrollHeight);
+  svg.innerHTML = `<defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+    <marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/></marker></defs>`;
+  function box(id) {
+    const r = document.getElementById(id).getBoundingClientRect();
+    return { l: r.left - B.left, t: r.top - B.top, r: r.right - B.left, b: r.bottom - B.top,
+             cx: (r.left + r.right) / 2 - B.left, cy: (r.top + r.bottom) / 2 - B.top };
+  }
+  function anchor(a, b) {
+    // pick side of a facing b
+    if (b.l > a.r) return [a.r, Math.min(Math.max(b.cy, a.t + 30), a.b - 30)];
+    if (b.r < a.l) return [a.l, Math.min(Math.max(b.cy, a.t + 30), a.b - 30)];
+    if (b.t > a.b) return [Math.min(Math.max(b.cx, a.l + 40), a.r - 40), a.b];
+    return [Math.min(Math.max(b.cx, a.l + 40), a.r - 40), a.t];
+  }
+  const used = {};
+  for (const [f, t, label, dashed, warn] of wires) {
+    const a = box(f), b = box(t);
+    let [x1, y1] = anchor(a, b), [x2, y2] = anchor(b, a);
+    // spread multiple arrows arriving on the same side
+    const key = t + ':' + (x2 === b.l ? 'l' : x2 === b.r ? 'r' : y2 === b.t ? 't' : 'b');
+    used[key] = (used[key] || 0) + 1;
+    const n = used[key] - 1;
+    if (key.endsWith('t') || key.endsWith('b')) x2 = Math.min(b.r - 30, b.l + 60 + n * 120);
+    else y2 = Math.min(b.b - 30, b.t + 60 + n * 90);
+    const vertical = key.endsWith('t') || key.endsWith('b');
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const d = vertical
+      ? `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`
+      : `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+    const col = warn ? '#b91c1c' : '#64748b';
+    svg.insertAdjacentHTML('beforeend',
+      `<path d="${d}" fill="none" stroke="${col}" stroke-width="2.2" ${dashed ? 'stroke-dasharray="8 6"' : ''} marker-end="url(#${warn ? 'aw' : 'a'})"/>`);
+    const lbl = document.createElement('div');
+    lbl.className = 'lbl' + (warn ? ' w' : '');
+    lbl.textContent = label;
+    lbl.style.left = mx + 'px';
+    lbl.style.top = my + 'px';
+    board.appendChild(lbl);
+  }
+  document.title = 'h=' + board.scrollHeight;
+</script>
+</body>
+</html>
