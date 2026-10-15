@@ -36,17 +36,34 @@
       </router-link>
     </div>
 
-    <!-- การเงิน: ยอดคิดจากงานที่ส่งของเสร็จสิ้น (ไม่ต้องรอวางบิล) ดู summarizeBilledMoney ใน utils/bookingMoney.ts -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <div v-for="card in moneyCards" :key="card.key" class="money-card">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold text-muted">{{ card.label }}</span>
-          <span class="w-8 h-8 rounded-lg flex items-center justify-center" :class="card.tone">
-            <span class="material-symbols-rounded text-lg">{{ card.icon }}</span>
-          </span>
+    <!-- สรุปการเงินแยกตามช่วงเวลา: ทั้งหมด / ปีนี้ / เดือนนี้ / สัปดาห์นี้ — คิดจากงานที่ส่งของเสร็จสิ้น จัดตามวันที่ส่งของเสร็จ
+         (ไม่ต้องรอวางบิล) ดู summarizeBilledMoney ใน utils/bookingMoney.ts -->
+    <div class="card-lg">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <div class="font-bold text-text">สรุปสถานะการเงิน</div>
+        <div class="text-[11px] text-muted">คิดจากงานที่ส่งของเสร็จสิ้น จัดตามวันที่ส่งของเสร็จ</div>
+      </div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div v-for="p in periodSummaries" :key="p.key" class="rounded-xl border border-border bg-surface-2/40 p-4">
+          <div class="flex items-baseline justify-between gap-2">
+            <div class="text-sm font-bold text-text">{{ p.label }}</div>
+            <div class="text-[10px] text-muted text-right">{{ p.range }}</div>
+          </div>
+          <div class="mt-3 space-y-2.5">
+            <div>
+              <div class="text-[11px] text-muted">ยอดขายรวม</div>
+              <div class="text-lg font-bold text-blue-600 tabular-nums">{{ formatBaht(p.sales) }}</div>
+            </div>
+            <div>
+              <div class="text-[11px] text-muted">รายจ่าย</div>
+              <div class="text-base font-bold text-red-600 tabular-nums">{{ formatBaht(p.expense) }}</div>
+            </div>
+            <div>
+              <div class="text-[11px] text-muted">รายได้บริษัท</div>
+              <div class="text-base font-bold text-green-600 tabular-nums">{{ formatBaht(p.income) }}</div>
+            </div>
+          </div>
         </div>
-        <div class="mt-2 text-2xl font-bold tabular-nums" :class="card.valueClass">{{ formatBaht(card.value) }}</div>
-        <div class="text-[11px] text-muted mt-1">เดือนนี้ {{ formatBaht(card.month) }}</div>
       </div>
     </div>
 
@@ -136,13 +153,40 @@
             </select>
           </div>
           <div>
-            <div class="text-xs text-muted mb-1">ช่วงวันที่</div>
+            <div class="text-xs text-muted mb-1">ช่วงวันที่ (วันที่ส่งของเสร็จ)</div>
             <select v-model="dateRangeFilter" class="input-field w-full">
-              <option value="">ไม่กำหนด - ไม่กำหนด</option>
+              <option value="">ทั้งหมด</option>
+              <option value="week">สัปดาห์นี้</option>
               <option value="month">เดือนนี้</option>
               <option value="quarter">ไตรมาสนี้</option>
               <option value="year">ปีนี้</option>
+              <option value="custom">กำหนดเอง</option>
             </select>
+          </div>
+        </div>
+        <div v-if="dateRangeFilter === 'custom'" class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <div class="text-xs text-muted mb-1">ตั้งแต่วันที่</div>
+            <input v-model="customFrom" type="date" class="input-field w-full" />
+          </div>
+          <div>
+            <div class="text-xs text-muted mb-1">ถึงวันที่</div>
+            <input v-model="customTo" type="date" class="input-field w-full" />
+          </div>
+        </div>
+        <!-- รวมของช่วงที่เลือก (กราฟแสดง 12 เดือนล่าสุด แต่ยอดรวมนี้ครอบคลุมทั้งช่วง) -->
+        <div class="grid grid-cols-3 gap-2 mb-3 text-center">
+          <div class="rounded-lg bg-blue-500/10 px-2 py-2">
+            <div class="text-[10px] text-muted">ยอดขายรวม</div>
+            <div class="text-sm font-bold text-blue-600 tabular-nums">{{ formatBaht(chartMoney.totals.sales) }}</div>
+          </div>
+          <div class="rounded-lg bg-red-500/10 px-2 py-2">
+            <div class="text-[10px] text-muted">รายจ่าย</div>
+            <div class="text-sm font-bold text-red-600 tabular-nums">{{ formatBaht(chartMoney.totals.expense) }}</div>
+          </div>
+          <div class="rounded-lg bg-green-500/10 px-2 py-2">
+            <div class="text-[10px] text-muted">รายได้บริษัท</div>
+            <div class="text-sm font-bold text-green-600 tabular-nums">{{ formatBaht(chartMoney.totals.companyIncome) }}</div>
           </div>
         </div>
         <div class="flex flex-wrap gap-2 mb-4">
@@ -340,6 +384,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { summarizeBilledMoney } from '@/utils/bookingMoney'
 import { bangkokDay } from '@/utils/fuelPrice'
+import { rangeFor, inRange, startOfDay, endOfDay, type DateRange } from '@/utils/dateRanges'
 
 const salesDocumentsStore = useSalesDocumentsStore()
 const bookingStore = useBookingStore()
@@ -403,11 +448,45 @@ const opsCards = computed(() => [
   { key: 'done', label: 'ส่งเสร็จเดือนนี้', value: deliveredThisMonthCount.value, hint: 'งานที่จบเดือนนี้', icon: 'task_alt', tone: 'bg-green-500/10 text-green-600', to: '/completed-jobs' },
 ])
 
-const moneyCards = computed(() => [
-  { key: 'sales', label: 'ยอดขายรวม', icon: 'payments', tone: 'bg-blue-500/10 text-blue-600', valueClass: 'text-blue-600', value: billedMoney.value.totals.sales, month: billedMoney.value.monthly.sales[11] || 0 },
-  { key: 'expense', label: 'รายจ่าย (ค่าแรง + ค่าน้ำมัน)', icon: 'receipt_long', tone: 'bg-red-500/10 text-red-600', valueClass: 'text-red-600', value: billedMoney.value.totals.expense, month: billedMoney.value.monthly.expense[11] || 0 },
-  { key: 'income', label: 'รายได้บริษัท', icon: 'account_balance', tone: 'bg-green-500/10 text-green-600', valueClass: 'text-green-600', value: billedMoney.value.totals.companyIncome, month: billedMoney.value.monthly.income[11] || 0 },
-])
+// ---------- สรุปการเงินแยกตามช่วงเวลา + ตัวกรองกราฟ ----------
+const formatShortDay = (d: Date) => `${d.getDate()} ${thaiMonthShort[d.getMonth()]} ${buddhistYY(d.getFullYear())}`
+const rangeText = (r: DateRange) => (r.from && r.to ? `${formatShortDay(r.from)} – ${formatShortDay(r.to)}` : 'ทุกงานที่ส่งเสร็จ')
+
+const vehicleTypeOf = (plate: string) => vehiclesStore.findByFullPlate(plate)?.department
+
+const periodSummaries = computed(() => {
+  const now = new Date()
+  return [
+    { key: 'all', label: 'ทั้งหมด' },
+    { key: 'year', label: 'ปีนี้' },
+    { key: 'month', label: 'เดือนนี้' },
+    { key: 'week', label: 'สัปดาห์นี้' },
+  ].map((p) => {
+    const r = rangeFor(p.key, now)
+    const t = summarizeBilledMoney(
+      bookingStore.bookings.filter((b) => inRange(b, r)),
+      vehicleTypeOf,
+      now
+    ).totals
+    return { ...p, range: rangeText(r), sales: t.sales, expense: t.expense, income: t.companyIncome }
+  })
+})
+
+/** งานที่ผ่านตัวกรอง "ประเภทงาน" + "ช่วงวันที่" ของกราฟ (ใช้กับทั้งกราฟและยอดรวมใต้ตัวกรอง) */
+const chartBookings = computed(() => {
+  const now = new Date()
+  let range: DateRange
+  if (dateRangeFilter.value === 'custom') {
+    range = {
+      from: customFrom.value ? startOfDay(new Date(customFrom.value + 'T00:00:00')) : null,
+      to: customTo.value ? endOfDay(new Date(customTo.value + 'T00:00:00')) : null,
+    }
+  } else {
+    range = rangeFor(dateRangeFilter.value, now)
+  }
+  return bookingStore.bookings.filter((b) => (unitFilter.value === 'all' || b.category === unitFilter.value) && inRange(b, range))
+})
+const chartMoney = computed(() => summarizeBilledMoney(chartBookings.value, vehicleTypeOf, new Date()))
 
 // ---------- ราคาน้ำมันวันนี้ ----------
 const FUEL_TYPES = ['รถบริษัท', 'รถหุ้นส่วน', 'รถร่วม', 'รถอู่เสริม'] as const
@@ -492,6 +571,8 @@ const attentionItems = computed(() => {
 
 const unitFilter = ref('all')
 const dateRangeFilter = ref('')
+const customFrom = ref('')
+const customTo = ref('')
 const dueUnitFilter = ref('all')
 const billingUnitFilter = ref('all')
 const billingDateFilter = ref('')
@@ -519,7 +600,7 @@ const revenueSeries = ref([
   { key: 'profit', label: 'รายได้บริษัท', color: '#16a34a', visible: true, data: [] as number[] },
 ])
 watch(
-  billedMoney,
+  chartMoney,
   (val) => {
     revenueSeries.value[0].data = val.monthly.sales
     revenueSeries.value[1].data = val.monthly.expense
@@ -554,8 +635,8 @@ const monthlyReceivable = computed(() => {
 })
 
 const arApSeries = computed(() => [
-  { key: 'ar', color: '#2563eb', visible: showReceivable.value, data: monthlyReceivable.value },
-  { key: 'ap', color: '#f97316', visible: showPayable.value, data: monthlyReceivable.value.map(() => 0) },
+  { key: 'ar', label: 'ลูกหนี้', color: '#2563eb', visible: showReceivable.value, data: monthlyReceivable.value },
+  { key: 'ap', label: 'เจ้าหนี้', color: '#f97316', visible: showPayable.value, data: monthlyReceivable.value.map(() => 0) },
 ])
 
 const overdueReceivable = computed(() => totalOverdue.value)
