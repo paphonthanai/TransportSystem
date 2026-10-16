@@ -93,10 +93,11 @@ const useLegacyPrices = () => {
   priceDraft.value = next
 }
 
-const describeReprice = (r: { updated: number; noPrice: number; manual: number }) => {
-  const parts = [`คำนวณเรทน้ำมันของงานตามราคาประจำวันแล้ว (เปลี่ยน ${r.updated} งาน)`]
+const describeReprice = (r: { updated: number; noPrice: number; manual: number; paid?: number }) => {
+  const parts = [`คำนวณเรทน้ำมันของงานที่ยังไม่จ่ายคนขับตามราคาประจำวันแล้ว (เปลี่ยน ${r.updated} งาน)`]
   if (r.noPrice > 0) parts.push(`${r.noPrice} งานยังไม่มีราคาน้ำมันของวันนั้น จึงยังไม่ถูกนำไปคิดเงิน`)
   if (r.manual > 0) parts.push(`${r.manual} งานกรอกเรทเองจึงไม่ถูกแก้`)
+  if (r.paid) parts.push(`${r.paid} งานจ่ายคนขับแล้ว คงเรท ณ ตอนนั้นไว้`)
   return parts.join(' · ')
 }
 

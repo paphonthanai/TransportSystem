@@ -35,7 +35,7 @@ export interface CompletionOverrides {
 /**
  * ตรวจว่าข้อมูลของงานครบพอจะ "จบงาน" ไหม — คืนรายการสิ่งที่ยังขาด/ผิด (ว่าง = ครบ ห้ามจบงานถ้ายังไม่ว่าง)
  *  - ต้องมีทะเบียนรถ + คนขับ + ค่าเที่ยว > 0 (เบี้ยเลี้ยง 0 ถือว่าครบ ตามกติกาการคิดเงิน)
- *  - ต้องมีเลขไมล์สิ้นสุด และมากกว่าเลขไมล์ก่อนออก (ถ้ามี)
+ *  - เลขไมล์สิ้นสุดไม่บังคับ (ชั่วคราว) แต่ถ้ากรอกต้องมากกว่าเลขไมล์ก่อนออก
  *  - น้ำมัน: ต้องมีลิตร > 0 หรือติ๊ก "ไม่เติมน้ำมัน" (ข้อยกเว้นรถที่ไม่ได้เติม) ถ้ามีลิตรต้องมีเรทน้ำมัน และห้ามเกินเพดาน
  *  - ช่องน้ำมันจาก Excel ที่อ่านไม่ได้ (fuelUnreadable) ต้องแก้ลิตรก่อน
  */
@@ -49,9 +49,8 @@ export function bookingCompletionIssues(b: CompletionInput, overrides: Completio
   if (!b.driverName && !b.driverId) issues.push({ code: 'driver', message: 'ยังไม่มีชื่อคนขับ' })
   if (!((b.tripFee || 0) > 0)) issues.push({ code: 'tripFee', message: 'ยังไม่ได้ใส่ค่าเที่ยว' })
 
-  if (!odometerAfter || odometerAfter <= 0) {
-    issues.push({ code: 'odometer', message: 'ต้องกรอกเลขไมล์สิ้นสุด' })
-  } else if ((b.odometerBefore || 0) > 0 && odometerAfter <= (b.odometerBefore || 0)) {
+  // เลขไมล์สิ้นสุด "ไม่บังคับ" ชั่วคราว (ไม่กรอกก็จบงานได้) — แต่ถ้ากรอกมาแล้วต้องสมเหตุสมผล (มากกว่าเลขไมล์ก่อนออก)
+  if (odometerAfter && odometerAfter > 0 && (b.odometerBefore || 0) > 0 && odometerAfter <= (b.odometerBefore || 0)) {
     issues.push({ code: 'odometer', message: 'เลขไมล์สิ้นสุดต้องมากกว่าเลขไมล์ก่อนออก' })
   }
 

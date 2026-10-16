@@ -28,9 +28,9 @@ describe('bookingCompletionIssues', () => {
     expect(codes({ ...complete, driverName: undefined, driverId: 'd1' })).toEqual([])
   })
 
-  it('ต้องมีเลขไมล์สิ้นสุด และต้องมากกว่าเลขไมล์ก่อนออก', () => {
-    expect(codes({ ...complete, odometerAfter: undefined })).toEqual(['odometer'])
-    expect(codes({ ...complete, odometerAfter: 0 })).toEqual(['odometer'])
+  it('เลขไมล์สิ้นสุดไม่บังคับ แต่ถ้ากรอกต้องมากกว่าเลขไมล์ก่อนออก', () => {
+    expect(codes({ ...complete, odometerAfter: undefined })).toEqual([])
+    expect(codes({ ...complete, odometerAfter: 0 })).toEqual([])
     expect(codes({ ...complete, odometerAfter: 1000 })).toEqual(['odometer'])
     expect(codes({ ...complete, odometerBefore: 0, odometerAfter: 50 })).toEqual([])
   })

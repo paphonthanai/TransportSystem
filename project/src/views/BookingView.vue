@@ -610,7 +610,7 @@
             <div>
               <label class="block text-xs font-semibold text-muted mb-1">
                 เลขไมล์สิ้นสุด (กม.)
-                <span class="text-[10px] font-normal text-muted">(เมื่อรถกลับถึง ใช้คำนวณระยะทาง/อัตราสิ้นเปลืองน้ำมัน)</span>
+                <span class="text-[10px] font-normal text-muted">(ไม่บังคับ — เมื่อรถกลับถึง ใช้คำนวณระยะทาง/อัตราสิ้นเปลืองน้ำมัน)</span>
               </label>
               <input v-model.number="completeOdometerAfter" type="number" placeholder="0" class="input-field w-full" />
             </div>

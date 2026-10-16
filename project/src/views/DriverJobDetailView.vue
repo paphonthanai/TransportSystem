@@ -265,9 +265,9 @@
             </button>
           </div>
           <div class="p-5 space-y-4">
-            <div class="text-sm text-muted">ส่งสินค้าครบทุกรายการแล้ว กรอกเลขไมล์สิ้นสุดแล้วกดยืนยันเพื่อจบงาน</div>
+            <div class="text-sm text-muted">ส่งสินค้าครบทุกรายการแล้ว กรอกเลขไมล์สิ้นสุด (ถ้ามี) แล้วกดยืนยันเพื่อจบงาน</div>
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">เลขไมล์สิ้นสุด (กม.)</label>
+              <label class="block text-xs font-semibold text-muted mb-1">เลขไมล์สิ้นสุด (กม.) <span class="text-[10px] font-normal text-muted">(ไม่บังคับ)</span></label>
               <input v-model.number="finishOdometerAfter" type="number" placeholder="0" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
             </div>
             <!-- เช็คซ้ำอีกชั้นก่อนจบงาน — ตามปกติทุกรายการควรมี POD ครบอยู่แล้วเพราะ deliverJobItem บังคับแนบรูปไว้ตั้งแต่

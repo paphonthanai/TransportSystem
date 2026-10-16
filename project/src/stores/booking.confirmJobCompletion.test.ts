@@ -49,7 +49,7 @@ describe('confirmJobCompletion', () => {
 
     const blocked = bookingStore.confirmJobCompletion(booking.id)
     expect(blocked.ok).toBe(false)
-    expect(blocked.issues.map((i) => i.code)).toEqual(['odometer', 'fuelLiters'])
+    expect(blocked.issues.map((i) => i.code)).toEqual(['fuelLiters'])
     expect(booking.completionConfirmedAt).toBeUndefined()
 
     booking.odometerAfter = 1200

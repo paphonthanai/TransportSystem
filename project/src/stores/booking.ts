@@ -7,6 +7,9 @@ import { useInventoryStore } from '@/stores/inventory'
 import { useBillingRuleStore } from '@/stores/billingRule'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { useVehiclesStore } from '@/stores/vehicles'
+import { useDriverPaymentsStore } from '@/stores/driverPayments'
+import { useDriverPayrollDocumentsStore } from '@/stores/driverPayrollDocuments'
+import { isBookingPaidToDriver } from '@/utils/driverPaid'
 import { bookingRepository } from '@/repositories/bookingRepository'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import type { Booking, BookingCategory, BookingStatus, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
@@ -131,6 +134,20 @@ export const useBookingStore = defineStore('booking', () => {
     return Math.min(Math.max(requested ?? standard, 0), maxFuelLitersFor(standard))
   }
 
+  /**
+   * งานที่จ่ายรายได้ให้คนขับไปแล้ว (เอกสารรายได้คนขับจ่ายแล้ว หรือรอบเดือนของคนขับถูกติ๊กจ่ายแล้ว — ดู utils/driverPaid.ts)
+   * ต้องคงเรทน้ำมัน ณ ตอนนั้นไว้ ไม่ถูกคำนวณใหม่ตามราคาน้ำมันที่เปลี่ยนภายหลัง — เช็คก่อนแตะ store อื่นเพื่อไม่ให้งานที่ยังไม่จบเสียเวลา
+   */
+  function isPaidToDriver(booking: Booking): boolean {
+    if (booking.status !== 'DELIVERED') return false
+    const payrollDocs = useDriverPayrollDocumentsStore()
+    const payments = useDriverPaymentsStore()
+    return isBookingPaidToDriver(booking, {
+      payrollDocStatus: (docId) => payrollDocs.documents.find((d) => d.id === docId)?.paymentStatus,
+      monthlyStatus: (driver, period) => payments.statusFor(driver, period),
+    })
+  }
+
   /** ท่อนหมายเหตุอัตโนมัติเรื่องเรทน้ำมัน (ขึ้นต้นด้วยคำนี้เสมอ) — ลบ/เติมใหม่ได้โดยไม่แตะหมายเหตุที่ผู้ใช้พิมพ์เอง */
   const FUEL_RATE_NOTE_PREFIX = 'เรทน้ำมัน: '
 
@@ -147,6 +164,7 @@ export const useBookingStore = defineStore('booking', () => {
    */
   function applyFuelRate(booking: Booking) {
     if (booking.fuelRateManual) return
+    if (isPaidToDriver(booking)) return
     const vehicle = booking.plate ? useVehiclesStore().findByFullPlate(booking.plate) : undefined
     const { rate, reason, priceDate } = fuelRateStore.fuelRateFor(vehicle?.department, fuelPriceDateOf(booking))
     booking.fuelRate = rate
@@ -165,16 +183,22 @@ export const useBookingStore = defineStore('booking', () => {
    * คำนวณเรทน้ำมันของงานที่มีทะเบียนใหม่จาก "ประวัติราคาน้ำมันประจำวัน" ตามวันที่ของแต่ละงาน (เรียกหลังบันทึกราคาในหน้าตั้งค่าน้ำมัน)
    * ผลลัพธ์ของแต่ละงานขึ้นกับวันที่ของงานเอง การแก้ราคาของวันหนึ่งจึงไม่กระทบงานของวันอื่น (ต่างจากเดิมที่ทุกงานถูกทับด้วยเรทเดียว)
    * รวมงานที่ส่งของเสร็จสิ้นแล้ว เพราะต้องการให้ข้อมูลย้อนหลังถูกต้องตามราคาของวันนั้น — ยกเว้นงานที่กรอกเรทเอง ไม่มีทะเบียน
-   * (ไม่รู้ประเภทรถ) ข้ามไป เอกสารรายได้/เงินเดือนที่ออกไปแล้ว (snapshot) ไม่ถูกคำนวณใหม่
+   * (ไม่รู้ประเภทรถ) และ "งานที่จ่ายรายได้ให้คนขับแล้ว" (คงเรท ณ ตอนนั้น — นับใน paid) ข้ามไป
+   * เอกสารรายได้/เงินเดือนที่ออกไปแล้ว (snapshot) ไม่ถูกคำนวณใหม่
    */
   function repriceFuelRates() {
     let updated = 0
     let noPrice = 0
     let manual = 0
+    let paid = 0
     for (const b of bookings.value) {
       if (!b.plate) continue
       if (b.fuelRateManual) {
         manual++
+        continue
+      }
+      if (isPaidToDriver(b)) {
+        paid++
         continue
       }
       const before = b.fuelRate
@@ -183,7 +207,7 @@ export const useBookingStore = defineStore('booking', () => {
       if (b.fuelRate !== before || b.fuelRatePriceDate !== beforeDate) updated++
       if (!(b.fuelRate > 0) && (b.fuelLiters || 0) > 0) noPrice++
     }
-    return { updated, noPrice, manual }
+    return { updated, noPrice, manual, paid }
   }
 
   const bookings = ref<Booking[]>([])

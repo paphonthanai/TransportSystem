@@ -21,12 +21,24 @@ const ready = {
 }
 
 describe('completeJob — ข้อมูลไม่ครบจบงานไม่ได้', () => {
-  it('ไม่มีเลขไมล์สิ้นสุด = ไม่จบงาน และไม่แตะข้อมูลงาน', () => {
+  it('ไม่มีเลขไมล์สิ้นสุดก็จบงานได้ (เลขไมล์ไม่บังคับ)', () => {
+    const store = useBookingStore()
+    const b = makeBooking({ ...ready, items: [makeJobItem()] })
+    store.bookings.push(b)
+
+    const result = store.completeJob(b.id, [], undefined)
+
+    expect(result.ok).toBe(true)
+    expect(b.status).toBe('DELIVERED')
+    expect(b.odometerAfter).toBeUndefined()
+  })
+
+  it('เลขไมล์สิ้นสุดที่กรอกแต่ไม่มากกว่าเลขไมล์ก่อนออก = ไม่จบงาน และไม่แตะข้อมูลงาน', () => {
     const store = useBookingStore()
     const b = makeBooking({ ...ready })
     store.bookings.push(b)
 
-    const result = store.completeJob(b.id, [], undefined)
+    const result = store.completeJob(b.id, [], 900)
 
     expect(result.ok).toBe(false)
     expect(result.issues.map((i) => i.code)).toEqual(['odometer'])

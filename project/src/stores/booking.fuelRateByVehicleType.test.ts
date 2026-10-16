@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useBookingStore } from './booking'
 import { useFuelRateStore } from './fuelRates'
 import { useVehiclesStore } from './vehicles'
+import { useDriverPaymentsStore } from './driverPayments'
+import { useDriverPayrollDocumentsStore } from './driverPayrollDocuments'
 import { makeBooking, makeJobItem } from '../../tests/fixtures/booking'
 import type { Vehicle } from '@/types'
 
@@ -111,13 +113,49 @@ describe('เรทน้ำมันตามราคาประจำวั�
     expect(early.fuelRate).toBe(0) // ก่อนมีราคาแรก = ยังไม่มีเรท (คิดเงินไม่ได้จนกว่าจะมีราคา)
     expect(manual.fuelRate).toBe(50)
     expect(noPlate.fuelRate).toBe(36.83)
-    expect(summary).toEqual({ updated: 3, noPrice: 1, manual: 1 })
+    expect(summary).toEqual({ updated: 3, noPrice: 1, manual: 1, paid: 0 })
 
     // แก้ราคาของวันที่ 3 ต.ค. แล้วคำนวณใหม่ — งานเดือน ก.ย. ต้องไม่ขยับ
     fuel.settings.priceHistory = [history[0], { date: '2026-10-03', prices: { รถร่วม: 38 } }]
     bookingStore.repriceFuelRates()
     expect(sep.fuelRate).toBe(36.83)
     expect(oct.fuelRate).toBe(38)
+  })
+
+  it('งานที่จ่ายคนขับแล้ว (เอกสารรายได้จ่ายแล้ว / รอบเดือนติ๊กจ่ายแล้ว) คงเรท ณ ตอนนั้น — เปลี่ยนราคาแล้วเปลี่ยนเฉพาะงานที่ยังไม่จ่าย', () => {
+    const bookingStore = useBookingStore()
+    const fuel = useFuelRateStore()
+    const vehicles = useVehiclesStore()
+    const docs = useDriverPayrollDocumentsStore()
+    const payments = useDriverPaymentsStore()
+    vehicles.vehicles.push(vehicle('70-1111', 'รถร่วม'))
+    const base = { status: 'DELIVERED' as const, fuelRate: 30, fuelLiters: 40, plate: '70-1111 สระบุรี', createdAt: day('2026-10-05'), shipDate: day('2026-10-05') }
+    const paidByDoc = makeBooking({ ...base, driverPayrollDocId: 'doc-paid' })
+    const paidByMonth = makeBooking({ ...base, driverName: 'สมชาย ใจดี', driverFirstName: 'สมชาย', driverLastName: 'ใจดี' })
+    const unpaidDoc = makeBooking({ ...base, driverPayrollDocId: 'doc-unpaid' })
+    const unpaid = makeBooking({ ...base, driverName: 'สมหญิง รักดี', driverFirstName: 'สมหญิง', driverLastName: 'รักดี' })
+    bookingStore.bookings.push(paidByDoc, paidByMonth, unpaidDoc, unpaid)
+    docs.documents.push(
+      { id: 'doc-paid', paymentStatus: 'PAID' } as never,
+      { id: 'doc-unpaid', paymentStatus: 'UNPAID' } as never
+    )
+    payments.payments.push({ id: 'p1', driverName: 'สมชาย ใจดี', periodLabel: '2569-10', status: 'PAID', updatedAt: new Date() })
+
+    fuel.settings.priceHistory = history
+    const summary = bookingStore.repriceFuelRates()
+
+    expect(paidByDoc.fuelRate).toBe(30)
+    expect(paidByMonth.fuelRate).toBe(30)
+    expect(unpaidDoc.fuelRate).toBe(37.52)
+    expect(unpaid.fuelRate).toBe(37.52)
+    expect(summary).toMatchObject({ updated: 2, paid: 2 })
+
+    // ราคาเปลี่ยนอีกรอบ — งานที่จ่ายแล้วยังคงที่
+    fuel.settings.priceHistory = [history[0], { date: '2026-10-03', prices: { รถร่วม: 40 } }]
+    bookingStore.repriceFuelRates()
+    expect(paidByDoc.fuelRate).toBe(30)
+    expect(paidByMonth.fuelRate).toBe(30)
+    expect(unpaid.fuelRate).toBe(40)
   })
 
   it('แก้เรทเองในหน้าแก้ไขงาน = ล็อกเรท (fuelRateManual) กรอก 0 = ปล่อยให้ระบบหาราคาตามวันใหม่', () => {
