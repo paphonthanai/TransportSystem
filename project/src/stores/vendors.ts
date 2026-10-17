@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { vendorRepository, sanitizeVendor } from '@/repositories/vendorRepository'
 
@@ -27,7 +28,7 @@ export const useVendorStore = defineStore('vendors', () => {
     }
   }
 
-  fetchVendors()
+  trackLoading(fetchVendors())
 
   async function createVendor(data: Omit<VendorRecord, 'id'>) {
     const clean = sanitizeVendor(data)

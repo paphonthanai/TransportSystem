@@ -517,8 +517,11 @@ router.beforeEach(async (to, from, next) => {
   }
 })
 
-router.afterEach(() => {
-  useLoadingStore().routeLoading = false
+router.afterEach((_to, _from, failure) => {
+  const loading = useLoadingStore()
+  loading.routeLoading = false
+  // เปลี่ยนหน้าสำเร็จ — งานโหลดข้อมูลที่เริ่มหลังจากนี้ (ตอนหน้าใหม่ถูกสร้าง) เป็นของหน้าใหม่ (ดู PageGate)
+  if (!failure) loading.nextPage()
 })
 
 router.onError((error, to) => {

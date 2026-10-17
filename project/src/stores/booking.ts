@@ -291,14 +291,14 @@ export const useBookingStore = defineStore('booking', () => {
       return
     }
     const loadingStore = useLoadingStore()
-    loadingStore.begin() // แถบ "กำลังโหลด" ด้านบนจอ (ดู components/shared/RouteProgressBar.vue)
+    const loadingToken = loadingStore.begin() // แถบ "กำลังโหลด" ด้านบนจอ (ดู components/shared/RouteProgressBar.vue)
     try {
       const remote = await bookingRepository.getAll(driverId)
       if (seq === fetchSeq) applyRemoteBookings(remote)
     } catch (err: any) {
       if (seq === fetchSeq) bookingsError.value = err?.message || 'โหลดข้อมูลงานขนส่งจาก Firestore ไม่สำเร็จ'
     } finally {
-      loadingStore.end()
+      loadingStore.end(loadingToken)
       if (seq === fetchSeq) bookingsLoading.value = false
     }
     if (seq !== fetchSeq) return

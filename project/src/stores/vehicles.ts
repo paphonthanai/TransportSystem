@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import type { Vehicle, BookingCategory } from '@/types'
 import { vehicleRepository, sanitizeVehicle } from '@/repositories/vehicleRepository'
@@ -23,7 +24,7 @@ export const useVehiclesStore = defineStore('vehicles', () => {
     }
   }
 
-  fetchVehicles()
+  trackLoading(fetchVehicles())
 
   /** ทะเบียนเต็ม (ทะเบียน+จังหวัด) เช่น "70-8821 สระบุรี" — ใช้แสดงผล/จับคู่ตอนกรอกทะเบียนในหน้าสร้างงาน/จัดรถ */
   const fullPlate = (v: Vehicle) => `${v.plate} ${v.plateProvince}`.trim()

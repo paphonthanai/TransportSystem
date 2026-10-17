@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { contactRepository, sanitizeContact } from '@/repositories/contactRepository'
 
@@ -38,7 +39,7 @@ export const useContactStore = defineStore('contacts', () => {
     }
   }
 
-  fetchContacts()
+  trackLoading(fetchContacts())
 
   const contactsForCustomer = (customerId: string) => contacts.value.filter((c) => c.customerId === customerId)
   const primaryContactFor = (customerId: string) =>

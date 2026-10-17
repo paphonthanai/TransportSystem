@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
@@ -33,7 +34,7 @@ export const useWHTCertificateStore = defineStore('whtCertificate', () => {
     )
   }
 
-  fetchCertificates()
+  trackLoading(fetchCertificates())
 
   function nextNumber() {
     const numbering = documentSettingsStore.settings.numbering.wht

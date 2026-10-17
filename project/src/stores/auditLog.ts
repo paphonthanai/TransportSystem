@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { auditLogRepository } from '@/repositories/auditLogRepository'
 
@@ -50,7 +51,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
     }
   }
 
-  fetchEntries()
+  trackLoading(fetchEntries())
 
   /** บันทึก audit entry ใหม่ถาวร — เขียนขึ้น Firestore จริงแล้วค่อย unshift เข้า entries ทันที (ไม่รอ refetch)
    *  เพื่อให้ checkDocumentNumberReuseEligibility ในเซสชันเดียวกันเห็นผลทันทีโดยไม่ต้องโหลดหน้าใหม่ — ถ้าเขียนไม่สำเร็จ

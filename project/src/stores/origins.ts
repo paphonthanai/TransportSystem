@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref, computed } from 'vue'
 import { originRepository } from '@/repositories/originRepository'
 import type { PickupOrigin } from '@/types'
@@ -20,7 +21,7 @@ export const useOriginsStore = defineStore('origins', () => {
     }
   }
 
-  fetchOrigins()
+  trackLoading(fetchOrigins())
 
   const originNames = computed(() => origins.value.map((o) => o.name))
 

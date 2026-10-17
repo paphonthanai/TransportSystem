@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { useBookingStore } from './booking'
 import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
@@ -51,7 +52,7 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
       }
     )
   }
-  fetchAll()
+  trackLoading(fetchAll())
 
   const genId = () => `drpr${Date.now()}${Math.random().toString(36).slice(2, 6)}`
   const toBEPeriodLabel = (monthValue: string) => {

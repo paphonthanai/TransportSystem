@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { customerRepository, sanitizeCustomer } from '@/repositories/customerRepository'
 
@@ -53,7 +54,7 @@ export const useCustomerStore = defineStore('customers', () => {
     }
   }
 
-  fetchCustomers()
+  trackLoading(fetchCustomers())
 
   const emptyCustomer = (name: string): CustomerRecord => ({
     code: '',

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { userRepository } from '@/repositories/userRepository'
 
@@ -44,7 +45,7 @@ export const useUserStore = defineStore('users', () => {
     }
   }
 
-  fetchUsers()
+  trackLoading(fetchUsers())
 
   /** อัปเดตหลังจากสร้างบัญชี Firebase Auth สำเร็จแล้วเท่านั้น (ดู authStore.createStaffAccount) ไม่ได้สร้างบัญชี Auth เอง */
   function addLocalCopy(profile: UserProfile) {

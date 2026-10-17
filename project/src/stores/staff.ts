@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { staffRepository, sanitizeStaff } from '@/repositories/staffRepository'
 
@@ -53,7 +54,7 @@ export const useStaffStore = defineStore('staff', () => {
     }
   }
 
-  fetchStaff()
+  trackLoading(fetchStaff())
 
   const fullName = (staff: StaffRecord) => `${staff.prefix}${staff.firstName} ${staff.lastName}`.trim()
 

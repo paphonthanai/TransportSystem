@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { vehicleExpenseRepository } from '@/repositories/vehicleExpenseRepository'
 import type { VehicleExpense } from '@/types'
@@ -25,7 +26,7 @@ export const useVehicleExpensesStore = defineStore('vehicleExpenses', () => {
     }
   }
 
-  fetchAll()
+  trackLoading(fetchAll())
 
   const expensesForVehicle = (vehicleId: string) => expenses.value.filter((e) => e.vehicleId === vehicleId)
 

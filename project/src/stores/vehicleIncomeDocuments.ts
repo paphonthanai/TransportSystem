@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { useBookingStore } from './booking'
 import { useVehiclesStore } from './vehicles'
@@ -50,7 +51,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
       }
     )
   }
-  fetchAll()
+  trackLoading(fetchAll())
 
   const genId = () => `vhic${Date.now()}${Math.random().toString(36).slice(2, 6)}`
   function generateDocNumber(seq: number, date: Date) {

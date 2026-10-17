@@ -103,7 +103,10 @@
       <!-- Content Area -->
       <main class="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
         <PersistenceErrorBanner />
-        <RouterView />
+        <!-- แต่ละหน้าแสดง loading จนข้อมูลที่หน้านั้นใช้โหลดเสร็จ แล้วค่อยแสดงเนื้อหา (ดู PageGate / trackLoading) -->
+        <PageGate>
+          <RouterView />
+        </PageGate>
       </main>
     </div>
 
@@ -127,6 +130,7 @@ import { useContactStore } from '@/stores/contacts'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
 import OnboardingChecklist from '@/components/OnboardingChecklist.vue'
 import PersistenceErrorBanner from '@/components/PersistenceErrorBanner.vue'
+import PageGate from '@/components/shared/PageGate.vue'
 
 const router = useRouter()
 const currentRoute = useRoute()

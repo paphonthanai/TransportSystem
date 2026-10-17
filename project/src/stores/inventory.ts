@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { productRepository } from '@/repositories/productRepository'
 import { stockMovementRepository } from '@/repositories/stockMovementRepository'
@@ -48,7 +49,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     }
   }
 
-  fetchAll()
+  trackLoading(fetchAll())
 
   function addProduct(data: Omit<Product, 'id'>) {
     const tempId = `prod${Date.now()}`

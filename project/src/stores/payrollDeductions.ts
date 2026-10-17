@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { payrollDeductionRepository } from '@/repositories/payrollDeductionRepository'
 import type { PayrollDeduction } from '@/types'
@@ -20,7 +21,7 @@ export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => 
     }
   }
 
-  fetchDeductions()
+  trackLoading(fetchDeductions())
 
   async function addDeduction(data: Omit<PayrollDeduction, 'id' | 'createdAt'>) {
     const payload = { ...data, createdAt: new Date() }

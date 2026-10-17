@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { driverPaymentRepository } from '@/repositories/driverPaymentRepository'
 import type { DriverPaymentRecord, DriverPaymentStatusValue } from '@/types'
@@ -24,7 +25,7 @@ export const useDriverPaymentsStore = defineStore('driverPayments', () => {
     }
   }
 
-  fetchAll()
+  trackLoading(fetchAll())
 
   /** ไม่มีระเบียน = ถือว่ายังไม่จ่าย (ค่าเริ่มต้น) ไม่ต้องสร้างระเบียนล่วงหน้าให้ทุกคนขับ/ทุกรอบ */
   const statusFor = (driverName: string, periodLabel: string): DriverPaymentStatusValue =>

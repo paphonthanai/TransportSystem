@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { staffSalaryRepository } from '@/repositories/staffSalaryRepository'
 
@@ -62,7 +63,7 @@ export const useStaffSalaryStore = defineStore('staffSalaries', () => {
     }
   }
 
-  fetchAll()
+  trackLoading(fetchAll())
 
   const computeNet = (baseSalary: number, additions: SalaryLineItem[], deductions: SalaryLineItem[]) =>
     baseSalary + additions.reduce((sum, a) => sum + a.amount, 0) - deductions.reduce((sum, d) => sum + d.amount, 0)

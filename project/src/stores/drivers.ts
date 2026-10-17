@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { driverRepository, sanitizeDriver } from '@/repositories/driverRepository'
 import { driverAuthRepository } from '@/repositories/driverAuthRepository'
@@ -69,7 +70,7 @@ export const useDriversStore = defineStore('drivers', () => {
     }
   }
 
-  fetchDrivers()
+  trackLoading(fetchDrivers())
 
   const fullName = (driver: DriverRecord) => `${driver.prefix}${driver.firstName} ${driver.lastName}`.trim()
 

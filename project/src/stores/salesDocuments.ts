@@ -1,4 +1,5 @@
 ﻿import { defineStore } from 'pinia'
+import { trackLoading } from '@/stores/loading'
 import { ref, watch } from 'vue'
 import { useDocumentSettingsStore, type PriceDisplay } from './documentSettings'
 import { useBookingStore } from './booking'
@@ -475,7 +476,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     })
   }
 
-  fetchAll()
+  trackLoading(fetchAll())
 
   const itemsForDocument = (documentId: string) => items.value.filter((i) => i.documentId === documentId).sort((a, b) => a.sortOrder - b.sortOrder)
 
