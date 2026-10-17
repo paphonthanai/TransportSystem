@@ -269,29 +269,57 @@ export const useBookingStore = defineStore('booking', () => {
 
   /** ไม่ auto-reseed ข้อมูลตัวอย่าง (mock) เข้า Firestore อีกต่อไป — ถ้า collection ว่าง แปลว่าว่างจริง (ล้าง mock
    *  data ทิ้งโดยตั้งใจ) ไม่ใช่ "ยังไม่เคย migrate" ต้องให้ผู้ใช้ลงงานขนส่งจริงเองผ่านหน้าสร้างงาน */
+  let unsubscribeBookings: (() => void) | null = null
+  /** นับรอบการโหลด — เรียก fetchBookings ซ้อนกัน (เช่น ล็อกอินเสร็จระหว่างโหลดรอบแรก หรือกด "ลองใหม่") ผลของรอบเก่าต้องไม่ทับรอบใหม่ */
+  let fetchSeq = 0
   async function fetchBookings() {
+    const seq = ++fetchSeq
+    unsubscribeBookings?.()
+    unsubscribeBookings = null
     bookingsLoading.value = true
     bookingsError.value = null
     // DRIVER ต้อง query แบบจำกัดด้วย driverId ของตัวเองเท่านั้น ให้ตรงกับ Firestore Rules ที่จำกัดสิทธิ์อ่านของ DRIVER
     // ไว้แค่ booking.driverId == ตัวเอง (ดู firestore.rules) — role อื่นยัง query ทั้ง collection เหมือนเดิมทุกประการ
-    const driverId = authStore.currentUser?.role === 'DRIVER' ? authStore.currentUser?.driverId : undefined
-    try {
-      applyRemoteBookings(await bookingRepository.getAll(driverId))
-    } catch (err: any) {
-      bookingsError.value = err?.message || 'โหลดข้อมูลงานขนส่งจาก Firestore ไม่สำเร็จ'
-    } finally {
+    const me = authStore.currentUser
+    const isDriver = me?.role === 'DRIVER'
+    const driverId = isDriver ? me?.driverId : undefined
+    if (isDriver && !driverId) {
+      // บัญชีคนขับที่ไม่ผูกกับทะเบียนคนขับ query ตามสิทธิ์ไม่ได้ (Rules จะปฏิเสธทั้งก้อน) — บอกสาเหตุแทนที่จะโชว์ "ไม่มีงาน" เฉยๆ
+      bookingsError.value = 'บัญชีนี้ยังไม่ผูกกับคนขับในสมุดรายชื่อ จึงดึงงานไม่ได้ — แจ้งผู้ดูแลระบบให้ผูกบัญชีกับคนขับ'
       bookingsLoading.value = false
+      return
     }
-    bookingRepository.subscribe(
-      applyRemoteBookings,
+    try {
+      const remote = await bookingRepository.getAll(driverId)
+      if (seq === fetchSeq) applyRemoteBookings(remote)
+    } catch (err: any) {
+      if (seq === fetchSeq) bookingsError.value = err?.message || 'โหลดข้อมูลงานขนส่งจาก Firestore ไม่สำเร็จ'
+    } finally {
+      if (seq === fetchSeq) bookingsLoading.value = false
+    }
+    if (seq !== fetchSeq) return
+    unsubscribeBookings = bookingRepository.subscribe(
+      (remote) => {
+        if (seq !== fetchSeq) return
+        bookingsError.value = null
+        applyRemoteBookings(remote)
+      },
       (err) => {
-        bookingsError.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ'
+        if (seq === fetchSeq) bookingsError.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ'
       },
       driverId
     )
   }
 
   fetchBookings()
+
+  // ล็อกอิน/สลับบัญชีหลังจาก store ถูกสร้างแล้ว (เช่น store ถูกสร้างตอนยังไม่ล็อกอิน query จึงไม่ตรงสิทธิ์) — โหลดใหม่ตามสิทธิ์ของบัญชีปัจจุบัน
+  watch(
+    () => [authStore.currentUser?.id, authStore.currentUser?.role, authStore.currentUser?.driverId].join('|'),
+    (now, before) => {
+      if (now !== before && authStore.currentUser) fetchBookings()
+    }
+  )
 
   /** บันทึกประวัติการทำรายการ ใช้ผู้ใช้ที่ล็อกอินอยู่เป็นผู้ทำรายการ — refs ไม่บังคับ ใช้กรองดูประวัติเฉพาะงาน/รายการวางบิล/เอกสารนั้นๆ ได้ */
   function addLog(action: string, refs?: { bookingId?: string; batchId?: string; docId?: string }) {
@@ -1329,6 +1357,7 @@ export const useBookingStore = defineStore('booking', () => {
     bookings,
     bookingsLoading,
     bookingsError,
+    reloadBookings: fetchBookings,
     documents,
     batches,
     logs,

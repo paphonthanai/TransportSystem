@@ -76,7 +76,15 @@
       <div>
         <div class="text-xs font-bold text-muted uppercase tracking-wide mb-2">งานที่ได้รับมอบหมาย</div>
 
-        <div v-if="activeJobs.length === 0" class="text-center py-8 text-muted text-sm">
+        <!-- โหลดงานไม่สำเร็จ/กำลังโหลด — ต้องบอกให้ชัด ไม่ให้คนขับเข้าใจผิดว่า "ไม่มีงาน" (มือถือ/เครือข่ายบางแห่งโหลดไม่ขึ้นเงียบๆ) -->
+        <div v-if="bookingStore.bookingsError" class="mb-3 bg-red-50 border border-red-200 rounded-xl px-3.5 py-3 text-sm text-red-700">
+          <div class="font-semibold mb-1">โหลดงานไม่สำเร็จ</div>
+          <div class="text-xs break-words">{{ bookingStore.bookingsError }}</div>
+          <button @click="bookingStore.reloadBookings()" class="mt-2 h-9 px-3 rounded-lg bg-red-600 text-white text-sm font-semibold">ลองใหม่</button>
+        </div>
+        <div v-else-if="bookingStore.bookingsLoading && activeJobs.length === 0" class="text-center py-8 text-muted text-sm">กำลังโหลดงาน...</div>
+
+        <div v-else-if="activeJobs.length === 0" class="text-center py-8 text-muted text-sm">
           <span class="material-symbols-rounded text-3xl block mb-2">inbox</span>
           ไม่มีงานที่ได้รับมอบหมายในขณะนี้
         </div>

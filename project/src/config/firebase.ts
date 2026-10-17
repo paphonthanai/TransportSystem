@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
+import { connectFirestoreEmulator, initializeFirestore } from 'firebase/firestore'
 import { connectStorageEmulator, getStorage } from 'firebase/storage'
 
 // Replace with your Firebase config
@@ -18,7 +18,9 @@ const app = initializeApp(firebaseConfig)
 
 // Initialize services
 export const auth = getAuth(app)
-export const db = getFirestore(app)
+// experimentalAutoDetectLongPolling: เครือข่ายมือถือ/Safari (iOS) บางแห่งบล็อกการเชื่อมต่อแบบ streaming (WebChannel) ทำให้ Firestore
+// ไม่ส่งข้อมูลมาเลยทั้งที่ไม่มี error (แอปคนขับเห็น "ไม่มีงาน") — ให้ SDK ตรวจเจอแล้วสลับไปใช้ long polling เองอัตโนมัติ
+export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true })
 export const storage = getStorage(app)
 
 /** ใช้ตรวจว่าตอนนี้ควรต่อ Emulator หรือไม่ — ที่อื่น (เช่น secondary app สำหรับสร้างบัญชีพนักงานใน stores/auth.ts)
