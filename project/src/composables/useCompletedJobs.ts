@@ -10,6 +10,15 @@ import type { Booking, BookingCategory } from '@/types'
  *  billingStatus เดิม — ตัวกรองนี้จึงเลือกกรองได้ทีละ "ด้าน" เท่านั้น (เช่น เฉพาะยังไม่วางบิล หรือเฉพาะออกใบแจ้งหนี้แล้ว) */
 export type CompletedJobsDocClaimFilter = '' | 'BILLING_PENDING' | 'BILLING_DONE' | 'INVOICE_PENDING' | 'INVOICE_DONE' | 'RECEIPT_PENDING' | 'RECEIPT_DONE'
 
+/** ตัวกรองราคา: NOT_SET = ยังไม่ระบุราคา (ราคาที่แสดงในตารางเป็น 0 — ดู priceDisplay.ts), SET = ระบุราคาแล้ว */
+export type CompletedJobsPriceFilter = '' | 'NOT_SET' | 'SET'
+
+/** ราคาที่ตารางงานเสร็จสิ้นแสดง (ราคาตกลง ไม่มีใช้ค่าเที่ยว) — ใช้ตัวเดียวกันทั้งตอนแสดงและตอนกรอง */
+export const completedJobPriceOf = (b: { agreedPrice?: number; tripFee?: number }) => b.agreedPrice || b.tripFee || 0
+
+/** ตัวกรองการเงิน: UNCOMPUTABLE = คิดรายได้บริษัทไม่ได้ (ข้อมูลไม่ครบ — ดู computeBookingMoney) ลิงก์มาจาก Dashboard "ต้องดำเนินการ" */
+export type CompletedJobsMoneyFilter = '' | 'UNCOMPUTABLE'
+
 export interface CompletedJobsFilters {
   /** ไม่ระบุ = รวมทุกกองรถ */
   fleet?: BookingCategory
@@ -19,6 +28,8 @@ export interface CompletedJobsFilters {
   customer: string
   driverName: string
   docClaim: CompletedJobsDocClaimFilter
+  price: CompletedJobsPriceFilter
+  money: CompletedJobsMoneyFilter
   site: string
   district: string
 }
@@ -31,6 +42,8 @@ export const defaultCompletedJobsFilters = (fleet?: BookingCategory): CompletedJ
   customer: '',
   driverName: '',
   docClaim: '',
+  price: '',
+  money: '',
   site: '',
   district: '',
 })
@@ -84,6 +97,8 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
             return true
         }
       })
+      .filter((b) => (f.price === 'NOT_SET' ? !(completedJobPriceOf(b) > 0) : f.price === 'SET' ? completedJobPriceOf(b) > 0 : true))
+      .filter((b) => f.money !== 'UNCOMPUTABLE' || moneyForBooking(b).companyIncome === null)
       .filter((b) => !f.site || b.items.some((i) => i.siteName.toLowerCase().includes(f.site.trim().toLowerCase())))
       .filter((b) => !f.district || b.items.some((i) => i.district.toLowerCase().includes(f.district.trim().toLowerCase())))
       .filter((b) => {
@@ -163,7 +178,7 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
       ทะเบียนรถ: b.plate || '',
       คนขับ: b.driverName || '',
       วันที่ส่งของสำเร็จ: dateLabel(b.completedAt),
-      ราคา: b.agreedPrice || b.tripFee || 0,
+      ราคา: completedJobPriceOf(b),
       เบี้ยเลี้ยง: money.allowance,
       ค่าน้ำมัน: money.fuelCost,
       'รายได้คงเหลือ (รายได้บริษัท)': money.companyIncome ?? '',

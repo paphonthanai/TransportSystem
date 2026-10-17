@@ -11,6 +11,16 @@
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
+      <select v-model="filters.price" class="input-field h-10 w-auto" title="กรองตามราคา">
+        <option value="">ราคา: ทั้งหมด</option>
+        <option value="NOT_SET">ยังไม่ระบุราคา</option>
+        <option value="SET">ระบุราคาแล้ว</option>
+      </select>
+      <select v-model="filters.money" class="input-field h-10 w-auto" title="กรองตามการคิดเงิน">
+        <option value="">การเงิน: ทั้งหมด</option>
+        <option value="UNCOMPUTABLE">คิดเงินไม่ได้ (ข้อมูลไม่ครบ)</option>
+      </select>
+      <button v-if="filters.price || filters.money" type="button" @click="clearFilters" class="btn-sm !h-10 !px-3">ล้างตัวกรอง</button>
       <button @click="exportToExcel" :disabled="completedBookings.length === 0" class="btn-sm !h-10 !px-3 !border-green-200 !bg-green-50 !text-green-700 disabled:opacity-50">
         <span class="material-symbols-rounded text-base">download</span>
         นำออก Excel ({{ completedBookings.length }})
@@ -61,7 +71,9 @@
                   <div class="text-xs text-muted"><BookingDriverFixCell :booking="booking" /></div>
                 </td>
                 <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.completedAt) }}</td>
-                <td class="px-4 py-3 text-right text-text font-semibold">{{ formatBaht(booking.agreedPrice || booking.tripFee) }}</td>
+                <td class="px-4 py-3 text-right font-semibold" :class="completedJobPriceOf(booking) > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
+                  {{ priceCellText(completedJobPriceOf(booking), formatBaht) }}
+                </td>
                 <td class="px-4 py-3">
                   <div class="flex flex-wrap gap-1">
                     <span v-for="badge in documentClaimBadges(booking)" :key="badge.label" :class="['text-xs font-semibold px-2 py-1 rounded-full', badge.class]">
@@ -97,11 +109,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { BookingCategory } from '@/types'
 import { documentClaimBadges } from '@/utils/bookingStatus'
-import { useCompletedJobs, useCompletedJobsFilters } from '@/composables/useCompletedJobs'
+import { useCompletedJobs, useCompletedJobsFilters, completedJobPriceOf } from '@/composables/useCompletedJobs'
+import { priceCellText } from '@/utils/priceDisplay'
 import { useCustomerStore } from '@/stores/customers'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
@@ -115,7 +128,23 @@ const customerStore = useCustomerStore()
 const isCements = computed(() => props.fleet === 'cements')
 const filters = useCompletedJobsFilters(props.fleet)
 
+// ลิงก์ที่ตั้งตัวกรองมาให้ผ่าน query (?price=NOT_SET / ?money=UNCOMPUTABLE)
+const route = useRoute()
+watch(
+  () => route.query,
+  (q) => {
+    if (q.price === 'NOT_SET' || q.price === 'SET') filters.value.price = q.price
+    if (q.money === 'UNCOMPUTABLE') filters.value.money = 'UNCOMPUTABLE'
+  },
+  { immediate: true }
+)
+
 const { completedBookings, productLabel, destinationLabel, weightQtyLabel, documentsForBooking, buildExportRow, formatBaht, formatShortDate } = useCompletedJobs(filters)
+
+const clearFilters = () => {
+  filters.value.price = ''
+  filters.value.money = ''
+}
 
 /** นำออกทุกงานที่ผ่านตัวค้นหาอยู่ตอนนี้ — คอลัมน์ตรงกับหน้า "งานเสร็จสิ้นทั้งหมด" (buildExportRow ตัวเดียวกัน รวมเบี้ยเลี้ยง/ค่าน้ำมัน/รายได้บริษัท) */
 const exportToExcel = () => {

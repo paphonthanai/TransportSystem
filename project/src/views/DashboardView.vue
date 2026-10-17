@@ -75,15 +75,15 @@
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="rounded-xl bg-blue-500/10 px-4 py-3">
+        <div class="rounded-xl bg-blue-500/10 px-4 py-3 border-l-4 border-bg-blue-500 border border-border">
           <div class="text-xs text-muted">ยอดขายรวม</div>
           <div class="text-xl font-bold text-blue-600 tabular-nums">{{ formatBaht(summaryMoney.totals.sales) }}</div>
         </div>
-        <div class="rounded-xl bg-red-500/10 px-4 py-3">
+        <div class="rounded-xl bg-red-500/10 px-4 py-3 border-l-4 border-bg-red-500 border border-border">
           <div class="text-xs text-muted">รายจ่าย (ค่าแรง + ค่าน้ำมัน)</div>
           <div class="text-xl font-bold text-red-600 tabular-nums">{{ formatBaht(summaryMoney.totals.expense) }}</div>
         </div>
-        <div class="rounded-xl bg-green-500/10 px-4 py-3">
+        <div class="rounded-xl bg-green-500/10 px-4 py-3 border-l-4 border-bg-green-500 border border-border">
           <div class="text-xs text-muted">รายได้บริษัท</div>
           <div class="text-xl font-bold text-green-600 tabular-nums">{{ formatBaht(summaryMoney.totals.companyIncome) }}</div>
         </div>
@@ -552,22 +552,49 @@ const attentionItems = computed(() => {
     })
   }
 
-  // 2) งานไม่มีคนขับ/ทะเบียน (บอกเลขที่งานเมื่อมีไม่มาก)
+  // 2) งานไม่มีคนขับ / ไม่มีทะเบียน — แยกคนละเรื่อง ลิงก์ไปกลุ่มนั้นของหน้าตรวจข้อมูลคนขับ (กรองให้แล้ว)
+  const docList = (jobs: typeof bs) => {
+    const ids = [...new Set(jobs.map((b) => b.docNo))]
+    return ids.length <= 3 ? ` (${ids.join(', ')})` : ''
+  }
   const noDriverJobs = bs.filter((b) => !b.driverName)
   const noPlateJobs = bs.filter((b) => !b.plate)
-  if (noDriverJobs.length || noPlateJobs.length) {
-    const ids = [...new Set([...noDriverJobs, ...noPlateJobs].map((b) => b.docNo))]
+  if (noDriverJobs.length) {
     items.push({
-      key: 'driver-plate',
+      key: 'no-driver',
       icon: 'badge',
       tone: 'bg-red-500/10 text-red-600',
-      title: 'งานที่ไม่มีคนขับ/ทะเบียน',
-      detail: `ไม่มีชื่อคนขับ ${noDriverJobs.length} งาน · ไม่มีทะเบียน ${noPlateJobs.length} งาน${ids.length <= 3 ? ' (' + ids.join(', ') + ')' : ''}`,
-      to: '/settings/driver-data',
+      title: 'งานที่ไม่มีชื่อคนขับ',
+      detail: `${noDriverJobs.length} งาน${docList(noDriverJobs)} — กดเพื่อดูเฉพาะงานกลุ่มนี้และอัปเดตคนขับ`,
+      to: '/settings/driver-data?group=noDriver',
+    })
+  }
+  if (noPlateJobs.length) {
+    items.push({
+      key: 'no-plate',
+      icon: 'local_shipping',
+      tone: 'bg-red-500/10 text-red-600',
+      title: 'งานที่ไม่มีทะเบียนรถ',
+      detail: `${noPlateJobs.length} งาน${docList(noPlateJobs)} — กดเพื่อดูเฉพาะงานกลุ่มนี้และอัปเดตทะเบียน`,
+      to: '/settings/driver-data?group=noPlate',
     })
   }
 
-  // 3) ข้อมูลคนขับในงานไม่ตรงทะเบียนคนขับ / ไม่มีชื่อ-นามสกุลแยก / หมายเหตุชื่อเล่นค้าง
+  // 2.1) งานที่ยังไม่จบและยังไม่ระบุราคา (ค่าเที่ยว 0 — จบงานไม่ได้) แยกตามกองรถ ลิงก์ไปหน้า Booking ของกองนั้นที่กรองราคาให้แล้ว
+  for (const fleet of ['cements', 'ceramics'] as const) {
+    const n = bs.filter((b) => b.category === fleet && b.status !== 'DELIVERED' && !((b.tripFee || 0) > 0)).length
+    if (!n) continue
+    items.push({
+      key: 'no-price-' + fleet,
+      icon: 'payments',
+      tone: 'bg-amber-500/10 text-amber-600',
+      title: `งานที่ยังไม่ระบุราคา · ${fleet === 'cements' ? 'Cements' : 'Ceramics'}`,
+      detail: `${n} งานที่ยังไม่จบ — ต้องใส่ค่าเที่ยวก่อนจบงานได้ กดเพื่อดูเฉพาะงานที่ยังไม่ระบุราคา`,
+      to: `/booking/${fleet}?price=none`,
+    })
+  }
+
+  // 3) ข้อมูลคนขับในงานไม่ตรงทะเบียนคนขับ / ไม่มีชื่อ-นามสกุลแยก / หมายเหตุชื่อเล่นค้าง — แยกเป็น 3 เรื่อง ลิงก์ไปกลุ่มของตัวเอง
   let mismatch = 0
   let noSnapshot = 0
   let staleNote = 0
@@ -580,18 +607,20 @@ const attentionItems = computed(() => {
     }
     if ((b.note || '').split(' | ').some((part) => part.startsWith('ชื่อเล่นคนขับ'))) staleNote++
   }
-  if (mismatch || noSnapshot || staleNote) {
-    const parts: string[] = []
-    if (mismatch) parts.push(`ชื่อไม่ตรงทะเบียนคนขับ ${mismatch} งาน`)
-    if (noSnapshot) parts.push(`ยังไม่มีชื่อ/นามสกุลแยก ${noSnapshot} งาน`)
-    if (staleNote) parts.push(`หมายเหตุชื่อเล่นไม่ตรงค้าง ${staleNote} งาน`)
+  const driverDataItems = [
+    { key: 'mismatch', n: mismatch, title: 'ชื่อคนขับในงานไม่ตรงทะเบียนคนขับ', hint: 'สะกดผิด/นามสกุลซ้ำ — ซิงก์จากทะเบียนคนขับ' },
+    { key: 'noSnapshot', n: noSnapshot, title: 'งานที่ยังไม่มีชื่อ/นามสกุลแยก', hint: 'งานนำเข้าเก่า — ซิงก์เพื่อเติมให้ (ไม่เร่งด่วน)' },
+    { key: 'staleNote', n: staleNote, title: 'หมายเหตุ "ชื่อเล่นไม่ตรง" ที่ค้างอยู่', hint: 'จัดคนขับแล้วแต่หมายเหตุยังค้าง — ซิงก์เพื่อลบ' },
+  ]
+  for (const d of driverDataItems) {
+    if (!d.n) continue
     items.push({
-      key: 'driver-data',
+      key: 'driver-data-' + d.key,
       icon: 'person_search',
       tone: 'bg-orange-500/10 text-orange-600',
-      title: 'ข้อมูลคนขับในงานต้องตรวจ/ซิงก์',
-      detail: parts.join(' · '),
-      to: '/settings/driver-data',
+      title: d.title,
+      detail: `${d.n} งาน — ${d.hint}`,
+      to: `/settings/driver-data?group=${d.key}`,
     })
   }
 
@@ -626,19 +655,21 @@ const attentionItems = computed(() => {
       tone: 'bg-orange-500/10 text-orange-600',
       title: `งานที่ยังคิดเงินไม่ได้ ${billedMoney.value.uncomputableCount} งาน`,
       detail: `${breakdown} — ไม่ถูกนับในยอดขาย/รายจ่าย/รายได้`,
-      to: '/completed-jobs',
+      to: '/completed-jobs?money=UNCOMPUTABLE',
     })
   }
 
-  // 6) รอตรวจ POD
-  if (podReviewCount.value > 0) {
+  // 6) รอตรวจ POD — แยกตามกองรถ ลิงก์ไปหน้า Booking ของกองนั้นที่กรองเฉพาะงานรอตรวจ POD ให้แล้ว
+  for (const fleet of ['cements', 'ceramics'] as const) {
+    const n = bs.filter((b) => b.category === fleet && b.podReviewStatus === 'PENDING_REVIEW').length
+    if (!n) continue
     items.push({
-      key: 'pod',
+      key: 'pod-' + fleet,
       icon: 'fact_check',
       tone: 'bg-indigo-500/10 text-indigo-600',
-      title: 'งานรอตรวจ POD',
-      detail: `${podReviewCount.value} งาน — ตรวจรูปส่งของแล้วยืนยันการจบงาน`,
-      to: '/booking/cements',
+      title: `งานรอตรวจ POD · ${fleet === 'cements' ? 'Cements' : 'Ceramics'}`,
+      detail: `${n} งาน — ตรวจรูปส่งของแล้วยืนยันการจบงาน`,
+      to: `/booking/${fleet}?issue=pod`,
     })
   }
 

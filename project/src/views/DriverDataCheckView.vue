@@ -8,7 +8,24 @@
       </div>
     </div>
 
-    <section v-for="group in groups" :key="group.key" class="card-lg">
+    <!-- เลือกดูทีละกลุ่ม (ลิงก์จาก Dashboard "ต้องดำเนินการ" ตั้งกลุ่มมาให้ผ่าน ?group=) -->
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="btn-sm" :class="activeGroup === '' ? '!bg-primary !text-white !border-primary' : ''" @click="activeGroup = ''">
+        ทั้งหมด
+      </button>
+      <button
+        v-for="g in groups"
+        :key="g.key"
+        type="button"
+        class="btn-sm"
+        :class="activeGroup === g.key ? '!bg-primary !text-white !border-primary' : ''"
+        @click="activeGroup = g.key"
+      >
+        {{ g.chip }} ({{ g.rows.length }})
+      </button>
+    </div>
+
+    <section v-for="group in visibleGroups" :key="group.key" class="card-lg">
       <div class="flex items-center justify-between gap-3 flex-wrap mb-1">
         <div class="font-bold text-text">
           {{ group.title }}
@@ -50,7 +67,7 @@
                 <div class="text-xs text-muted">{{ row.booking.plate || 'ไม่มีทะเบียน' }}</div>
               </td>
               <td class="px-3 py-2">
-                <template v-if="group.key === 'noDriver'"><BookingDriverFixCell :booking="row.booking" /></template>
+                <template v-if="group.key === 'noDriver' || group.key === 'noPlate'"><BookingDriverFixCell :booking="row.booking" /></template>
                 <template v-else>
                   <div class="text-text">{{ row.booking.driverName }}</div>
                   <div v-if="group.key === 'staleNote'" class="text-[11px] text-amber-700">{{ row.note }}</div>
@@ -86,7 +103,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import type { Booking } from '@/types'
 import { useBookingStore } from '@/stores/booking'
 import { useDriversStore } from '@/stores/drivers'
@@ -113,7 +131,9 @@ interface Row {
   note?: string
 }
 interface Group {
-  key: 'noDriver' | 'noSnapshot' | 'mismatch' | 'staleNote'
+  key: 'noDriver' | 'noPlate' | 'noSnapshot' | 'mismatch' | 'staleNote'
+  /** ชื่อสั้นบนปุ่มเลือกกลุ่ม */
+  chip: string
   title: string
   hint: string
   canSync: boolean
@@ -133,10 +153,12 @@ const driverOf = (b: Booking): DriverRec | undefined => (b.driverId ? driversSto
 
 const groups = computed<Group[]>(() => {
   const noDriver: Row[] = []
+  const noPlate: Row[] = []
   const noSnapshot: Row[] = []
   const mismatch: Row[] = []
   const staleNote: Row[] = []
   for (const b of bookingStore.bookings) {
+    if (!b.plate) noPlate.push({ booking: b })
     if (!b.driverName) {
       noDriver.push({ booking: b, note: driverNoteOf(b) })
       continue
@@ -151,13 +173,23 @@ const groups = computed<Group[]>(() => {
   return [
     {
       key: 'noDriver',
+      chip: 'ไม่มีชื่อคนขับ',
       title: 'งานที่ไม่มีชื่อคนขับ',
       hint: 'ใช้ปุ่ม "อัปเดต" (คนขับประจำรถ) หรือเลือกคนขับเอง — ไม่เปลี่ยนสถานะ/ทะเบียนของงาน',
       canSync: false,
       rows: noDriver,
     },
     {
+      key: 'noPlate',
+      chip: 'ไม่มีทะเบียน',
+      title: 'งานที่ไม่มีทะเบียนรถ',
+      hint: 'ถ้ามีชื่อคนขับ ใช้ปุ่ม "อัปเดตทะเบียน" (รถประจำของคนขับ) — หรือเข้าไปแก้ไขงานเพื่อเลือกทะเบียนเอง ไม่เปลี่ยนสถานะของงาน',
+      canSync: false,
+      rows: noPlate,
+    },
+    {
       key: 'mismatch',
+      chip: 'ชื่อไม่ตรงทะเบียนคนขับ',
       title: 'ชื่อคนขับในงานไม่ตรงกับทะเบียนคนขับ',
       hint: 'เช่น สะกดผิด หรือนามสกุลซ้ำ — ซิงก์เพื่อใช้ชื่อ-นามสกุลตามทะเบียนคนขับ',
       canSync: true,
@@ -165,6 +197,7 @@ const groups = computed<Group[]>(() => {
     },
     {
       key: 'noSnapshot',
+      chip: 'ไม่มีชื่อ/นามสกุลแยก',
       title: 'งานนำเข้าเก่าที่ยังไม่มีชื่อ/นามสกุลแยก (snapshot)',
       hint: 'เงินเดือนคนขับใช้ชื่อ/นามสกุลแยกนี้ — ซิงก์เพื่อเติมให้ตรงกับทะเบียนคนขับ',
       canSync: true,
@@ -172,6 +205,7 @@ const groups = computed<Group[]>(() => {
     },
     {
       key: 'staleNote',
+      chip: 'หมายเหตุชื่อเล่นค้าง',
       title: 'หมายเหตุ "ชื่อเล่นไม่ตรง" ที่ค้างอยู่',
       hint: 'ข้อความถูกแปะตอนนำเข้า ทั้งที่ตอนนี้จัดคนขับแล้ว — ซิงก์เพื่อลบหมายเหตุที่ค้าง (หรือเข้าไปแก้ไขงานเอง)',
       canSync: true,
@@ -179,6 +213,18 @@ const groups = computed<Group[]>(() => {
     },
   ]
 })
+
+/** กลุ่มที่กำลังดู ('' = ทั้งหมด) — ตั้งจาก ?group= ของลิงก์ (ดู Dashboard "ต้องดำเนินการ") */
+const route = useRoute()
+const activeGroup = ref<'' | Group['key']>('')
+watch(
+  () => route.query.group,
+  (g) => {
+    activeGroup.value = ['noDriver', 'noPlate', 'noSnapshot', 'mismatch', 'staleNote'].includes(String(g)) ? (g as Group['key']) : ''
+  },
+  { immediate: true }
+)
+const visibleGroups = computed(() => (activeGroup.value ? groups.value.filter((g) => g.key === activeGroup.value) : groups.value))
 
 const applyRow = (row: Row) => {
   const d = row.driver

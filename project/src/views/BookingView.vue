@@ -51,7 +51,7 @@
       <!-- ตัวกรองราคา (ค่าเที่ยวของงาน) — ใช้กับทั้งตาราง "กำลังดำเนินการ" และ "กำลังขนส่ง" -->
       <select v-model="priceFilter" class="input-field h-10 w-auto" title="กรองตามราคา (ค่าเที่ยว)">
         <option value="all">ราคา: ทั้งหมด</option>
-        <option value="none">ไม่มีราคา (จบงานไม่ได้)</option>
+        <option value="none">ยังไม่ระบุราคา (จบงานไม่ได้)</option>
         <option value="has">มีราคาแล้ว</option>
       </select>
       <div class="flex items-center gap-1.5 text-sm text-muted">
@@ -60,6 +60,10 @@
         <input v-model.number="priceMax" type="number" min="0" placeholder="ถึง" class="input-field h-10 w-24" />
       </div>
       <button v-if="priceFilterActive" type="button" @click="clearPriceFilter" class="btn-sm">ล้างตัวกรองราคา</button>
+      <button v-if="issueFilter === 'pod'" type="button" @click="clearIssueFilter" class="btn-sm !text-indigo-700 !bg-indigo-50 !border-indigo-200" title="แสดงทุกงานอีกครั้ง">
+        กรอง: งานรอตรวจ POD
+        <span class="material-symbols-rounded text-base">close</span>
+      </button>
     </div>
 
     <!-- การ์ดงานที่เลือก — กดแถวในตารางเพื่อดู ชื่อ-นามสกุลคนขับ/ทะเบียน/ชื่องาน และเรทน้ำมันของงานนั้น (ตั้ง/แก้เรทก่อนจ่ายงานได้ที่นี่) -->
@@ -209,7 +213,7 @@
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
               <td class="px-3 py-3 text-right whitespace-nowrap">
                 <span v-if="booking.tripFee > 0" class="text-text">{{ formatBaht(booking.tripFee) }}</span>
-                <span v-else class="text-xs font-semibold text-amber-700">ไม่มีราคา</span>
+                <span v-else class="text-xs font-semibold text-amber-700">ยังไม่ระบุราคา</span>
               </td>
               <td class="px-3 py-3">
                 <div class="flex flex-wrap items-center gap-1">
@@ -328,7 +332,7 @@
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
               <td class="px-3 py-3 text-right whitespace-nowrap">
                 <span v-if="booking.tripFee > 0" class="text-text">{{ formatBaht(booking.tripFee) }}</span>
-                <span v-else class="text-xs font-semibold text-amber-700">ไม่มีราคา</span>
+                <span v-else class="text-xs font-semibold text-amber-700">ยังไม่ระบุราคา</span>
               </td>
               <td class="px-3 py-3">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
@@ -954,7 +958,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
@@ -994,6 +998,7 @@ import { bookingCompletionIssues, describeCompletionIssues, STATIC_COMPLETION_CO
 const props = defineProps<{ fleet: BookingCategory }>()
 
 const router = useRouter()
+const route = useRoute()
 const bookingStore = useBookingStore()
 const driversStore = useDriversStore()
 const vehiclesStore = useVehiclesStore()
@@ -1060,6 +1065,20 @@ const searchQuery = ref('')
 const priceFilter = ref<'all' | 'none' | 'has'>('all')
 const priceMin = ref<number | ''>('')
 const priceMax = ref<number | ''>('')
+/** ตัวกรองจาก Dashboard "ต้องดำเนินการ": 'pod' = เฉพาะงานรอตรวจ POD (ซ่อนตาราง "กำลังดำเนินการ") */
+const issueFilter = ref<'' | 'pod'>('')
+const clearIssueFilter = () => {
+  issueFilter.value = ''
+}
+// รับตัวกรองจาก query ของลิงก์ (?price=none → ยังไม่ระบุราคา, ?issue=pod → รอตรวจ POD) — ตั้งใหม่ทุกครั้งที่ query เปลี่ยน
+watch(
+  () => route.query,
+  (q) => {
+    if (q.price === 'none') priceFilter.value = 'none'
+    issueFilter.value = q.issue === 'pod' ? 'pod' : ''
+  },
+  { immediate: true }
+)
 const priceFilterActive = computed(() => priceFilter.value !== 'all' || priceMin.value !== '' || priceMax.value !== '')
 const clearPriceFilter = () => {
   priceFilter.value = 'all'
@@ -1247,6 +1266,7 @@ const inProgressBookings = computed(() => {
         b.status !== 'ACCEPTED' &&
         b.status !== 'IN_TRANSIT' &&
         b.status !== 'DELIVERING' &&
+        issueFilter.value !== 'pod' &&
         (!q || matchesSearch(b, q)) &&
         matchesPrice(b)
     )
@@ -1270,6 +1290,7 @@ const inTransitBookings = computed(() => {
         // ทันทีเหมือนเดิม — ให้ตรงกับ isBookingConfirmedForBilling ใน utils/bookingStatus.ts พอดี
         ((b.status === 'ACCEPTED' || b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') ||
           (b.status === 'DELIVERED' && !!b.podReviewStatus && !b.completionConfirmedAt)) &&
+        (issueFilter.value !== 'pod' || b.podReviewStatus === 'PENDING_REVIEW') &&
         (!q || matchesSearch(b, q)) &&
         matchesPrice(b)
     )

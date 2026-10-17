@@ -29,6 +29,15 @@
           <option value="">ทุกสถานะเอกสาร</option>
           <option v-for="opt in docClaimOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
         </select>
+        <select v-model="filters.price" class="input-field w-44" title="กรองตามราคา">
+          <option value="">ราคา: ทั้งหมด</option>
+          <option value="NOT_SET">ยังไม่ระบุราคา</option>
+          <option value="SET">ระบุราคาแล้ว</option>
+        </select>
+        <select v-model="filters.money" class="input-field w-48" title="กรองตามการคิดเงิน">
+          <option value="">การเงิน: ทั้งหมด</option>
+          <option value="UNCOMPUTABLE">คิดเงินไม่ได้ (ข้อมูลไม่ครบ)</option>
+        </select>
         <input v-model="filters.site" type="text" placeholder="ค้นหาหน้างาน..." class="input-field w-40" />
         <select v-model="filters.district" class="input-field w-40">
           <option value="">ทุกเขตอำเภอ</option>
@@ -127,8 +136,8 @@
                   <div class="text-xs text-muted"><BookingDriverFixCell :booking="booking" /></div>
                 </td>
                 <td class="px-4 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.completedAt) }}</td>
-                <td class="px-4 py-3 text-right font-semibold" :class="(booking.agreedPrice || booking.tripFee) > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
-                  {{ priceCellText(booking.agreedPrice || booking.tripFee, formatBaht) }}
+                <td class="px-4 py-3 text-right font-semibold" :class="completedJobPriceOf(booking) > 0 ? 'text-text' : 'text-amber-600 font-normal text-xs'">
+                  {{ priceCellText(completedJobPriceOf(booking), formatBaht) }}
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex flex-wrap gap-1">
@@ -217,10 +226,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
-import { useCompletedJobs, useCompletedJobsFilters, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
+import { useCompletedJobs, useCompletedJobsFilters, completedJobPriceOf, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
 import { priceCellText } from '@/utils/priceDisplay'
@@ -239,6 +248,17 @@ const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.role === 'ADMIN')
 
 const filters = useCompletedJobsFilters()
+
+// ลิงก์จาก Dashboard "ต้องดำเนินการ" ตั้งตัวกรองมาให้ผ่าน query (?price=NOT_SET / ?money=UNCOMPUTABLE)
+const route = useRoute()
+watch(
+  () => route.query,
+  (q) => {
+    if (q.price === 'NOT_SET' || q.price === 'SET') filters.value.price = q.price
+    if (q.money === 'UNCOMPUTABLE') filters.value.money = 'UNCOMPUTABLE'
+  },
+  { immediate: true }
+)
 /** สถานะเอกสารทั้ง 3 ประเภทเป็นอิสระต่อกัน (ดู documentClaimBadges) — ตัวกรองนี้จึงเลือกได้ทีละ "ด้าน" (วางบิล/ใบแจ้งหนี้/ใบเสร็จ x ดำเนินการแล้ว/ยัง) ไม่ใช่ enum เดียวแบบเดิม */
 const docClaimOptions: { value: CompletedJobsDocClaimFilter; label: string }[] = [
   { value: 'BILLING_PENDING', label: 'ยังไม่วางบิล' },
@@ -273,6 +293,8 @@ const hasActiveDateOrPicks = computed(
       filters.value.customer ||
       filters.value.driverName ||
       filters.value.docClaim ||
+      filters.value.price ||
+      filters.value.money ||
       filters.value.fleet ||
       filters.value.site ||
       filters.value.district
@@ -280,7 +302,7 @@ const hasActiveDateOrPicks = computed(
 )
 
 const clearFilters = () => {
-  filters.value = { fleet: undefined, search: filters.value.search, dateFrom: '', dateTo: '', customer: '', driverName: '', docClaim: '', site: '', district: '' }
+  filters.value = { fleet: undefined, search: filters.value.search, dateFrom: '', dateTo: '', customer: '', driverName: '', docClaim: '', price: '', money: '', site: '', district: '' }
 }
 
 /** งานที่ออฟฟิศจบเอง (podReviewStatus undefined) แต่ยังไม่มีรายการไหนแนบ POD เลยสักรูป — ให้แสดงปุ่มแนบ POD แทนขีด "-" */
