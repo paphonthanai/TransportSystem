@@ -48,6 +48,18 @@
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
+      <!-- ตัวกรองราคา (ค่าเที่ยวของงาน) — ใช้กับทั้งตาราง "กำลังดำเนินการ" และ "กำลังขนส่ง" -->
+      <select v-model="priceFilter" class="input-field h-10 w-auto" title="กรองตามราคา (ค่าเที่ยว)">
+        <option value="all">ราคา: ทั้งหมด</option>
+        <option value="none">ไม่มีราคา (จบงานไม่ได้)</option>
+        <option value="has">มีราคาแล้ว</option>
+      </select>
+      <div class="flex items-center gap-1.5 text-sm text-muted">
+        <input v-model.number="priceMin" type="number" min="0" placeholder="ราคาตั้งแต่" class="input-field h-10 w-28" />
+        <span>–</span>
+        <input v-model.number="priceMax" type="number" min="0" placeholder="ถึง" class="input-field h-10 w-24" />
+      </div>
+      <button v-if="priceFilterActive" type="button" @click="clearPriceFilter" class="btn-sm">ล้างตัวกรองราคา</button>
     </div>
 
     <!-- การ์ดงานที่เลือก — กดแถวในตารางเพื่อดู ชื่อ-นามสกุลคนขับ/ทะเบียน/ชื่องาน และเรทน้ำมันของงานนั้น (ตั้ง/แก้เรทก่อนจ่ายงานได้ที่นี่) -->
@@ -136,6 +148,7 @@
               <th class="text-left px-3 py-3 font-semibold text-muted">เวลา</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานที่ส่ง</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
+              <th class="text-right px-3 py-3 font-semibold text-muted">ค่าเที่ยว</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานะขนส่ง</th>
               <th class="px-3 py-3"></th>
               <th class="text-left px-3 py-3 font-semibold text-muted">การจัดการ</th>
@@ -194,6 +207,10 @@
                 </div>
               </td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
+              <td class="px-3 py-3 text-right whitespace-nowrap">
+                <span v-if="booking.tripFee > 0" class="text-text">{{ formatBaht(booking.tripFee) }}</span>
+                <span v-else class="text-xs font-semibold text-amber-700">ไม่มีราคา</span>
+              </td>
               <td class="px-3 py-3">
                 <div class="flex flex-wrap items-center gap-1">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
@@ -230,7 +247,7 @@
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
-              <td :colspan="canSelectDelete ? 13 : 12" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td :colspan="canSelectDelete ? 14 : 13" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
             </tr>
           </tbody>
         </table>
@@ -257,6 +274,7 @@
               <th class="text-left px-3 py-3 font-semibold text-muted">เวลา</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานที่ส่ง</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
+              <th class="text-right px-3 py-3 font-semibold text-muted">ค่าเที่ยว</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานะขนส่ง</th>
               <th class="px-3 py-3"></th>
               <th class="text-left px-3 py-3 font-semibold text-muted">การจัดการ</th>
@@ -308,6 +326,10 @@
                 </div>
               </td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ districtProvinceLabel(booking) }}</td>
+              <td class="px-3 py-3 text-right whitespace-nowrap">
+                <span v-if="booking.tripFee > 0" class="text-text">{{ formatBaht(booking.tripFee) }}</span>
+                <span v-else class="text-xs font-semibold text-amber-700">ไม่มีราคา</span>
+              </td>
               <td class="px-3 py-3">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
               </td>
@@ -343,7 +365,7 @@
               </td>
             </tr>
             <tr v-if="inTransitBookings.length === 0">
-              <td colspan="12" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา</td>
+              <td colspan="13" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
             </tr>
           </tbody>
         </table>
@@ -1034,6 +1056,25 @@ const matchCustomerForImportRow = (raw: string) => {
 
 const searchQuery = ref('')
 
+// ตัวกรองราคา = ค่าเที่ยวของงาน (booking.tripFee — ตัวเดียวกับที่ใช้ตัดสินว่าจบงานได้ไหม) ไม่ใช่เรทน้ำมัน
+const priceFilter = ref<'all' | 'none' | 'has'>('all')
+const priceMin = ref<number | ''>('')
+const priceMax = ref<number | ''>('')
+const priceFilterActive = computed(() => priceFilter.value !== 'all' || priceMin.value !== '' || priceMax.value !== '')
+const clearPriceFilter = () => {
+  priceFilter.value = 'all'
+  priceMin.value = ''
+  priceMax.value = ''
+}
+const matchesPrice = (b: Booking) => {
+  const fee = b.tripFee || 0
+  if (priceFilter.value === 'none' && fee > 0) return false
+  if (priceFilter.value === 'has' && !(fee > 0)) return false
+  if (typeof priceMin.value === 'number' && fee < priceMin.value) return false
+  if (typeof priceMax.value === 'number' && fee > priceMax.value) return false
+  return true
+}
+
 // --- ตั้งค่าน้ำมัน (ป๊อปอัพราคาประจำวัน) ---
 const fuelPriceDialogOpen = ref(false)
 const fuelVehicleTypes = ['รถบริษัท', 'รถหุ้นส่วน', 'รถร่วม', 'รถอู่เสริม'] as const
@@ -1206,7 +1247,8 @@ const inProgressBookings = computed(() => {
         b.status !== 'ACCEPTED' &&
         b.status !== 'IN_TRANSIT' &&
         b.status !== 'DELIVERING' &&
-        (!q || matchesSearch(b, q))
+        (!q || matchesSearch(b, q)) &&
+        matchesPrice(b)
     )
     .sort((a, b) => {
       const rankDiff = statusRank[a.status] - statusRank[b.status]
@@ -1228,7 +1270,8 @@ const inTransitBookings = computed(() => {
         // ทันทีเหมือนเดิม — ให้ตรงกับ isBookingConfirmedForBilling ใน utils/bookingStatus.ts พอดี
         ((b.status === 'ACCEPTED' || b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') ||
           (b.status === 'DELIVERED' && !!b.podReviewStatus && !b.completionConfirmedAt)) &&
-        (!q || matchesSearch(b, q))
+        (!q || matchesSearch(b, q)) &&
+        matchesPrice(b)
     )
     .sort((a, b) => new Date(b.transitStartedAt || 0).getTime() - new Date(a.transitStartedAt || 0).getTime())
 })

@@ -101,7 +101,10 @@
                 <span class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">มีบัญชี</span>
               </template>
               <template v-else-if="row.driver && isAdmin">
-                <span v-if="driverLoginReady(row.driver)" class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">ตั้งค่าแล้ว</span>
+                <div v-if="driverLoginReady(row.driver)" class="flex items-center gap-1.5">
+                  <span class="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700" title="ตั้งรหัสเข้าแอปไว้แล้ว แต่ไม่มีโปรไฟล์ผู้ใช้ผูกอยู่ — คนขับล็อกอินไม่ได้/ไม่เห็นงาน">ไม่มีโปรไฟล์</span>
+                  <button class="btn-sm" @click="drivers?.repairAccount(row.driver)">ซ่อมบัญชี</button>
+                </div>
                 <div v-else class="flex items-center gap-1.5">
                   <span class="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600">ยังไม่มีบัญชี</span>
                   <button class="btn-sm" @click="drivers?.openSetupDialog(row.driver)">ตั้งค่า</button>

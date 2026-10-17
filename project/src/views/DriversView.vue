@@ -52,7 +52,11 @@
               </span>
             </td>
             <td v-if="isAdmin" class="px-4 py-3">
-              <span v-if="driverLoginStatus[driver.code]" class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">ตั้งค่าแล้ว</span>
+              <div v-if="driverLoginStatus[driver.code] && !hasExistingAccount(driver)" class="flex items-center gap-1.5">
+                <span class="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700" title="ตั้งรหัสเข้าแอปไว้แล้ว แต่ไม่มีโปรไฟล์ผู้ใช้ผูกอยู่ — คนขับล็อกอินไม่ได้/ไม่เห็นงาน">ไม่มีโปรไฟล์</span>
+                <button @click="repairAccount(driver)" class="btn-sm" :disabled="repairingId === driver.id">ซ่อมบัญชี</button>
+              </div>
+              <span v-else-if="driverLoginStatus[driver.code]" class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">ตั้งค่าแล้ว</span>
               <span v-else-if="hasExistingAccount(driver)" class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700" title="มีบัญชี Firebase Auth เดิมอยู่แล้ว (Login ด้วย Email/Password เดิม) ยัง Migrate อัตโนมัติไม่ได้">
                 มีบัญชี Login เดิม
               </span>
@@ -439,6 +443,41 @@ const confirmSetup = async () => {
   }
 }
 
+/**
+ * ซ่อมบัญชีคนขับที่ "ตั้งค่าแล้ว" แต่ไม่มีโปรไฟล์ผู้ใช้ผูกอยู่ (ดู authStore.repairDriverAccount) — ไม่เปลี่ยน PIN ของคนขับ
+ * ทำทีละคนตามที่แอดมินกด ไม่ซ่อมอัตโนมัติ
+ */
+const repairingId = ref<string | null>(null)
+const repairAccount = async (driver: DriverRecord) => {
+  if (!driver.id || repairingId.value) return
+  if (!confirm(`ซ่อมบัญชี ${fullName(driver)} (${driver.code})
+
+สร้างโปรไฟล์ผู้ใช้ผูกกับคนขับคนนี้ใหม่ โดยใช้รหัสเข้าแอปเดิม (ไม่เปลี่ยน PIN) ยืนยัน?`)) return
+  repairingId.value = driver.id
+  try {
+    const cred = await driversStore.getDriverLoginCredentials(driver.code)
+    if (!cred?.authPassword) throw new Error('ไม่พบข้อมูลรหัสเข้าแอปของคนขับคนนี้ — ใช้ปุ่ม "ตั้งค่า" แทน')
+    const email = await driversStore.resolveLoginEmail(driver.code)
+    const { uid } = await authStore.repairDriverAccount(email, cred.authPassword, fullName(driver), driver.id)
+    userStore.addLocalCopy({
+      id: uid,
+      email,
+      name: fullName(driver),
+      role: 'DRIVER',
+      active: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      driverId: driver.id,
+    })
+    if (!driver.authEmail) await driversStore.updateDriver(driver.id, { ...driver, authEmail: email })
+    alert(`ซ่อมบัญชี ${fullName(driver)} เรียบร้อย — คนขับล็อกอินด้วยรหัส ${driver.code} + PIN เดิมได้ตามปกติ`)
+  } catch (err: any) {
+    alert(err?.message || 'ซ่อมบัญชีไม่สำเร็จ')
+  } finally {
+    repairingId.value = null
+  }
+}
+
 /** รถที่ประจำคนขับคนนี้อยู่ (ถ้ามี) แสดงในตารางรายชื่อ */
 const assignedVehicleLabel = (driver: DriverRecord) => {
   const vehicle = vehiclesStore.vehicleForDriver(driver.code)
@@ -566,7 +605,7 @@ const remove = async (driver: DriverRecord) => {
   await driversStore.deleteDriver(driver.id)
 }
 
-defineExpose({ openDialog, openSetupDialog, remove, driverLoginStatus, hasExistingAccount })
+defineExpose({ openDialog, openSetupDialog, remove, repairAccount, driverLoginStatus, hasExistingAccount })
 </script>
 
 <style scoped>

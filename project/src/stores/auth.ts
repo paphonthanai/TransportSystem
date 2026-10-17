@@ -129,6 +129,57 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * ซ่อมบัญชีคนขับที่ตั้งรหัสเข้าแอปไว้แล้ว (มี driverLoginCredentials) แต่ไม่มีโปรไฟล์ /users ผูกอยู่ — เช่นโปรไฟล์ถูกลบ (ลบได้แค่โปรไฟล์
+   * บัญชี Firebase Auth ยังอยู่) หรือการตั้งค่าเดิมค้างครึ่งทาง คนขับกลุ่มนี้ login แล้วขึ้น "ไม่พบข้อมูลผู้ใช้งาน" และอ่านงานไม่ได้
+   *
+   * ใช้ Auth Bootstrap Secret (authPassword) ที่ระบบเก็บไว้คู่กับรหัสคนขับ — ไม่แตะ/ไม่เปลี่ยน PIN ที่คนขับใช้ล็อกอิน:
+   *  1) ยังไม่มีบัญชี Auth = สร้างใหม่ด้วย secret เดิม  2) มีบัญชี Auth แล้ว = ล็อกอินด้วย secret เดิมเพื่อได้ uid
+   *  (secret ไม่ตรง = ซ่อมไม่ได้ ต้องลบบัญชีนั้นใน Firebase Console ก่อน)  แล้วสร้าง/ผูกโปรไฟล์ role DRIVER + driverId
+   * ใช้ Firebase App ตัวที่สองชั่วคราวเหมือน createStaffAccount เพื่อไม่ให้แอดมินที่ล็อกอินอยู่หลุด session — ADMIN เท่านั้น (Rules บังคับ)
+   */
+  async function repairDriverAccount(email: string, authPassword: string, name: string, driverId: string): Promise<{ uid: string; created: boolean }> {
+    const secondaryApp = initializeApp(firebaseConfig, `secondary-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    const secondaryAuth = getAuth(secondaryApp)
+    if (useEmulator) {
+      const { connectAuthEmulator } = await import('firebase/auth')
+      connectAuthEmulator(secondaryAuth, 'http://127.0.0.1:9099', { disableWarnings: true })
+    }
+    try {
+      let uid: string
+      try {
+        uid = (await createUserWithEmailAndPassword(secondaryAuth, email.trim(), authPassword)).user.uid
+      } catch (err: any) {
+        if (err?.code !== 'auth/email-already-in-use') throw err
+        try {
+          uid = (await signInWithEmailAndPassword(secondaryAuth, email.trim(), authPassword)).user.uid
+        } catch (signInErr: any) {
+          const code = signInErr?.code as string | undefined
+          if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
+            throw new Error(
+              `มีบัญชี ${email} ใน Firebase Auth อยู่แล้ว แต่รหัสภายในที่ระบบเก็บไว้ไม่ตรงกับบัญชีนั้น — ซ่อมอัตโนมัติไม่ได้ ให้ลบบัญชีนี้ใน Firebase Console → Authentication แล้วกด "ตั้งค่า" ใหม่`
+            )
+          }
+          throw signInErr
+        }
+      }
+      const now = new Date().toISOString()
+      const existing = await userRepository.get(uid)
+      if (existing) {
+        if (existing.role !== 'DRIVER') throw new Error(`บัญชีนี้เป็นโปรไฟล์ role ${existing.role} อยู่แล้ว ไม่ใช่คนขับ — ไม่ซ่อมทับให้`)
+        if (existing.driverId && existing.driverId !== driverId) throw new Error('บัญชีนี้ผูกกับคนขับอีกคนอยู่แล้ว — ไม่ซ่อมทับให้')
+        await userRepository.update(uid, { driverId, active: true, updatedAt: now })
+        await signOut(secondaryAuth)
+        return { uid, created: false }
+      }
+      await userRepository.create(uid, { email: email.trim(), name, role: 'DRIVER', active: true, createdAt: now, updatedAt: now, driverId })
+      await signOut(secondaryAuth)
+      return { uid, created: true }
+    } finally {
+      await deleteApp(secondaryApp)
+    }
+  }
+
   /** ตั้งรหัสผ่านใหม่ให้ผู้ใช้อื่นโดยตรงจาก client ทำไม่ได้ (ต้องมี Admin SDK) — ทำได้แค่ส่งอีเมลลิงก์ตั้งรหัสผ่านใหม่
    *  ไปให้ผู้ใช้กดเอง ต้องเป็นอีเมลที่รับได้จริงจึงจะใช้งานได้ */
   async function sendPasswordReset(email: string) {
@@ -176,6 +227,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     createStaffAccount,
+    repairDriverAccount,
     sendPasswordReset,
     updateOwnCredentials,
   }
