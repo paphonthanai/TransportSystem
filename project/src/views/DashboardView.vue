@@ -75,17 +75,18 @@
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="rounded-xl bg-blue-500/10 px-4 py-3 border-l-4 border-bg-blue-500 border border-border">
-          <div class="text-xs text-muted">ยอดขายรวม</div>
-          <div class="text-xl font-bold text-blue-600 tabular-nums">{{ formatBaht(summaryMoney.totals.sales) }}</div>
+        <!-- กรอบเดียวกับการ์ด "รอรับชำระ/ใบแจ้งหนี้เดือนนี้" ด้านล่าง (แถบสีซ้าย + พื้นขาว) -->
+        <div class="border-l-4 border-blue-500 bg-surface border border-border rounded-xl px-4 py-3">
+          <div class="text-[11px] text-muted">ยอดขายรวม</div>
+          <div class="text-lg font-bold text-text tabular-nums">{{ formatBaht(summaryMoney.totals.sales) }}</div>
         </div>
-        <div class="rounded-xl bg-red-500/10 px-4 py-3 border-l-4 border-bg-red-500 border border-border">
-          <div class="text-xs text-muted">รายจ่าย (ค่าแรง + ค่าน้ำมัน)</div>
-          <div class="text-xl font-bold text-red-600 tabular-nums">{{ formatBaht(summaryMoney.totals.expense) }}</div>
+        <div class="border-l-4 border-red-500 bg-surface border border-border rounded-xl px-4 py-3">
+          <div class="text-[11px] text-muted">รายจ่าย (ค่าแรง + ค่าน้ำมัน)</div>
+          <div class="text-lg font-bold text-text tabular-nums">{{ formatBaht(summaryMoney.totals.expense) }}</div>
         </div>
-        <div class="rounded-xl bg-green-500/10 px-4 py-3 border-l-4 border-bg-green-500 border border-border">
-          <div class="text-xs text-muted">รายได้บริษัท</div>
-          <div class="text-xl font-bold text-green-600 tabular-nums">{{ formatBaht(summaryMoney.totals.companyIncome) }}</div>
+        <div class="border-l-4 border-green-500 bg-surface border border-border rounded-xl px-4 py-3">
+          <div class="text-[11px] text-muted">รายได้บริษัท</div>
+          <div class="text-lg font-bold text-text tabular-nums">{{ formatBaht(summaryMoney.totals.companyIncome) }}</div>
         </div>
       </div>
       <div v-if="summaryMoney.uncomputableCount > 0" class="mt-3 text-xs text-amber-700 flex items-center gap-1.5">
