@@ -30,7 +30,7 @@
         :key="card.key"
         :to="card.to"
         class="ops-card group"
-        :style="{ borderLeftWidth: '4px', borderLeftColor: card.bar }"
+        :style="{ borderLeftWidth: '4px', borderLeftColor: card.bar, backgroundColor: card.bg }"
       >
         <div class="flex items-center justify-between">
           <span class="text-xs font-semibold text-muted">{{ card.label }}</span>
@@ -82,16 +82,16 @@
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <!-- กรอบเดียวกับการ์ด "รอรับชำระ/ใบแจ้งหนี้เดือนนี้" ด้านล่าง (แถบสีซ้าย + พื้นขาว) -->
-        <div class="border-l-4 border-blue-500 bg-surface border border-border rounded-xl px-4 py-3">
+        <!-- กรอบเดียวกับการ์ด "รอรับชำระ/ใบแจ้งหนี้เดือนนี้" ด้านล่าง (แถบสีซ้าย) แต่คงพื้นหลังสีอ่อนตามสีของการ์ดไว้ -->
+        <div class="border-l-4 border-blue-500 bg-blue-500/10 border border-border rounded-xl px-4 py-3">
           <div class="text-[11px] text-muted">ยอดขายรวม</div>
           <div class="text-lg font-bold text-blue-600 tabular-nums">{{ formatBaht(summaryMoney.totals.sales) }}</div>
         </div>
-        <div class="border-l-4 border-red-500 bg-surface border border-border rounded-xl px-4 py-3">
+        <div class="border-l-4 border-red-500 bg-red-500/10 border border-border rounded-xl px-4 py-3">
           <div class="text-[11px] text-muted">รายจ่าย (ค่าแรง + ค่าน้ำมัน)</div>
           <div class="text-lg font-bold text-red-600 tabular-nums">{{ formatBaht(summaryMoney.totals.expense) }}</div>
         </div>
-        <div class="border-l-4 border-green-500 bg-surface border border-border rounded-xl px-4 py-3">
+        <div class="border-l-4 border-green-500 bg-green-500/10 border border-border rounded-xl px-4 py-3">
           <div class="text-[11px] text-muted">รายได้บริษัท</div>
           <div class="text-lg font-bold text-green-600 tabular-nums">{{ formatBaht(summaryMoney.totals.companyIncome) }}</div>
         </div>
@@ -155,15 +155,15 @@
 
     <!-- สถานะลูกหนี้ -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <div class="border-l-4 border-primary bg-surface border border-border rounded-xl px-4 py-3">
+      <div class="border-l-4 border-primary bg-blue-500/10 border border-border rounded-xl px-4 py-3">
         <div class="text-[11px] text-muted">รอรับชำระ</div>
         <div class="text-lg font-bold text-text tabular-nums">{{ formatBaht(totalPendingReceivable) }}</div>
       </div>
-      <div class="border-l-4 border-amber-500 bg-surface border border-border rounded-xl px-4 py-3">
+      <div class="border-l-4 border-red-500 bg-red-500/10 border border-border rounded-xl px-4 py-3">
         <div class="text-[11px] text-muted">ค้างชำระเกินกำหนด</div>
         <div class="text-lg font-bold text-text tabular-nums">{{ formatBaht(totalOverdue) }}</div>
       </div>
-      <div class="border-l-4 border-indigo-500 bg-surface border border-border rounded-xl px-4 py-3">
+      <div class="border-l-4 border-indigo-500 bg-indigo-500/10 border border-border rounded-xl px-4 py-3">
         <div class="text-[11px] text-muted">ใบแจ้งหนี้เดือนนี้</div>
         <div class="text-lg font-bold text-text tabular-nums">{{ invoicesThisMonth }} ใบ</div>
       </div>
@@ -464,10 +464,10 @@ const deliveredThisMonthCount = computed(() => {
 })
 
 const opsCards = computed(() => [
-  { key: 'waiting', label: 'รอจัดรถ', value: waitingDispatchCount.value, hint: 'งานที่ยังไม่ได้จ่ายให้คนขับ', icon: 'pending_actions', tone: 'bg-amber-500/10 text-amber-600', bar: '#f59e0b', num: 'text-amber-600', to: '/booking/cements' },
-  { key: 'transit', label: 'กำลังดำเนินการ/ขนส่ง', value: inTransitCount.value, hint: 'จ่ายงานแล้ว ยังส่งไม่เสร็จ', icon: 'local_shipping', tone: 'bg-blue-500/10 text-blue-600', bar: '#3b82f6', num: 'text-blue-600', to: '/booking/cements' },
-  { key: 'pod', label: 'รอตรวจ POD', value: podReviewCount.value, hint: 'คนขับส่งของแล้ว รอออฟฟิศตรวจ', icon: 'fact_check', tone: 'bg-indigo-500/10 text-indigo-600', bar: '#6366f1', num: 'text-indigo-600', to: '/booking/cements' },
-  { key: 'done', label: 'ส่งเสร็จเดือนนี้', value: deliveredThisMonthCount.value, hint: 'งานที่จบเดือนนี้', icon: 'task_alt', tone: 'bg-green-500/10 text-green-600', bar: '#22c55e', num: 'text-green-600', to: '/completed-jobs' },
+  { key: 'waiting', label: 'รอจัดรถ', value: waitingDispatchCount.value, hint: 'งานที่ยังไม่ได้จ่ายให้คนขับ', icon: 'pending_actions', tone: 'bg-amber-500/10 text-amber-600', bar: '#f59e0b', bg: 'rgba(245,158,11,0.10)', num: 'text-amber-600', to: '/booking/cements' },
+  { key: 'transit', label: 'กำลังดำเนินการ/ขนส่ง', value: inTransitCount.value, hint: 'จ่ายงานแล้ว ยังส่งไม่เสร็จ', icon: 'local_shipping', tone: 'bg-blue-500/10 text-blue-600', bar: '#3b82f6', bg: 'rgba(59,130,246,0.10)', num: 'text-blue-600', to: '/booking/cements' },
+  { key: 'pod', label: 'รอตรวจ POD', value: podReviewCount.value, hint: 'คนขับส่งของแล้ว รอออฟฟิศตรวจ', icon: 'fact_check', tone: 'bg-indigo-500/10 text-indigo-600', bar: '#6366f1', bg: 'rgba(99,102,241,0.10)', num: 'text-indigo-600', to: '/booking/cements' },
+  { key: 'done', label: 'ส่งเสร็จเดือนนี้', value: deliveredThisMonthCount.value, hint: 'งานที่จบเดือนนี้', icon: 'task_alt', tone: 'bg-green-500/10 text-green-600', bar: '#22c55e', bg: 'rgba(34,197,94,0.10)', num: 'text-green-600', to: '/completed-jobs' },
 ])
 
 // ---------- สรุปการเงินแยกตามช่วงเวลา + ตัวกรองกราฟ ----------
