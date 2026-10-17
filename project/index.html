@@ -20,7 +20,17 @@
   <meta name="apple-mobile-web-app-title" content="Driver App" />
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app">
+    <!-- หน้าจอรอก่อนโหลดสคริปต์เสร็จ — Vue จะแทนที่ทั้งก้อนนี้ตอน mount -->
+    <div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#f4f6fb;color:#64748b;font:14px sans-serif">
+      <div class="boot-spinner"></div>
+      <div>กำลังโหลด...</div>
+    </div>
+    <style>
+      .boot-spinner { width: 36px; height: 36px; border: 3px solid rgba(37,99,235,.2); border-top-color: #2563eb; border-radius: 50%; animation: boot-spin .8s linear infinite }
+      @keyframes boot-spin { to { transform: rotate(360deg) } }
+    </style>
+  </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

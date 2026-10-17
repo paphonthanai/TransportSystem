@@ -16,5 +16,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (/node_modules\/(@firebase|firebase)\//.test(id)) return 'firebase'
+          if (/node_modules\/(vue|@vue|vue-router|pinia)\//.test(id)) return 'vue-vendor'
+        },
+      },
+    },
   },
 })

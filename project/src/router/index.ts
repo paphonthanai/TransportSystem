@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useLoadingStore } from '@/stores/loading'
+import { isChunkLoadError, reloadOnceForChunkError } from '@/utils/chunkError'
 import { canAccess } from '@/services/permission'
 import type { UserRole } from '@/stores/users'
 
@@ -492,6 +494,8 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+  // เริ่มสถานะ "กำลังเปลี่ยนหน้า" (แถบด้านบน) — ปิดใน afterEach/onError (ซึ่งถูกเรียกแม้นำทางไม่สำเร็จ/ถูกยกเลิก)
+  useLoadingStore().routeLoading = true
 
   // Firebase Auth คืนสถานะ login แบบ async (onAuthStateChanged) — รอให้ resolve ก่อนตัดสินใจ กันไม่ให้คนที่
   // ล็อกอินค้างอยู่จริงถูกเด้งไปหน้า Login เพราะเช็คเร็วเกินไปตอนโหลดหน้าครั้งแรก/กด reload
@@ -511,6 +515,16 @@ router.beforeEach(async (to, from, next) => {
   } else {
     next()
   }
+})
+
+router.afterEach(() => {
+  useLoadingStore().routeLoading = false
+})
+
+router.onError((error, to) => {
+  useLoadingStore().routeLoading = false
+  // ไฟล์ของหน้านั้นหายเพราะ deploy เวอร์ชันใหม่ระหว่างที่เปิดแอปค้างไว้ — โหลดใหม่ 1 ครั้งเพื่อได้เวอร์ชันล่าสุด
+  if (isChunkLoadError(error)) reloadOnceForChunkError(to.fullPath)
 })
 
 export default router

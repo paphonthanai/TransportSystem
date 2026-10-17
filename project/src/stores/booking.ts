@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useLoadingStore } from '@/stores/loading'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useInventoryStore } from '@/stores/inventory'
@@ -289,12 +290,15 @@ export const useBookingStore = defineStore('booking', () => {
       bookingsLoading.value = false
       return
     }
+    const loadingStore = useLoadingStore()
+    loadingStore.begin() // แถบ "กำลังโหลด" ด้านบนจอ (ดู components/shared/RouteProgressBar.vue)
     try {
       const remote = await bookingRepository.getAll(driverId)
       if (seq === fetchSeq) applyRemoteBookings(remote)
     } catch (err: any) {
       if (seq === fetchSeq) bookingsError.value = err?.message || 'โหลดข้อมูลงานขนส่งจาก Firestore ไม่สำเร็จ'
     } finally {
+      loadingStore.end()
       if (seq === fetchSeq) bookingsLoading.value = false
     }
     if (seq !== fetchSeq) return
