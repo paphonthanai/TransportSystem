@@ -14,7 +14,7 @@
       </button>
     </div>
     <!-- งานไม่มีชื่อคนขับ: แสดงสาเหตุ/หมายเหตุ + ปุ่มอัปเดต (ใช้คนขับประจำรถ) + เลือกคนขับเอง -->
-    <template v-else>
+    <template v-if="!booking.driverName">
       <div class="text-[11px] font-semibold text-amber-700">ไม่มีชื่อคนขับ</div>
       <div v-if="driverNote" class="text-[11px] text-muted leading-snug">{{ driverNote }}</div>
       <div class="flex gap-1 flex-wrap items-center">
