@@ -148,7 +148,8 @@
           <div class="text-xs font-bold text-muted uppercase tracking-wide">เที่ยวล่าสุด</div>
           <div class="text-sm font-bold text-primary">รวม {{ formatBaht(totalRecentIncome) }}</div>
         </div>
-        <div v-if="recentJobs.length === 0" class="text-center py-6 text-muted text-sm">ยังไม่มีประวัติเที่ยวงาน</div>
+        <div v-if="bookingStore.bookingsLoading && recentJobs.length === 0" class="text-center py-6 text-muted text-sm">กำลังโหลด...</div>
+        <div v-else-if="recentJobs.length === 0" class="text-center py-6 text-muted text-sm">ยังไม่มีประวัติเที่ยวงาน</div>
         <div v-for="job in recentJobs" :key="job.id" class="flex items-center justify-between py-3 border-b border-border last:border-0">
           <div class="min-w-0">
             <div class="text-base font-semibold text-text truncate">{{ bookingTitle(job) }}</div>

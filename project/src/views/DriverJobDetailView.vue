@@ -9,7 +9,7 @@
           <button @click="router.push('/driver-app')" class="w-11 h-11 -ml-2 rounded-lg hover:bg-white/10 active:bg-white/20 flex items-center justify-center">
             <span class="material-symbols-rounded text-xl">arrow_back</span>
           </button>
-          <div class="font-bold text-lg flex-1 truncate">{{ job ? bookingTitle(job) : 'ไม่พบงาน' }}</div>
+          <div class="font-bold text-lg flex-1 truncate">{{ job ? bookingTitle(job) : bookingStore.bookingsLoading ? 'กำลังโหลด...' : 'ไม่พบงาน' }}</div>
           <span
             v-if="job"
             class="text-xs font-semibold px-2 py-1 rounded-full bg-white/20 flex-shrink-0"
@@ -23,9 +23,19 @@
 
     <!-- Body -->
     <main class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-      <div v-if="!job" class="text-center py-10 text-muted text-sm">
+      <!-- ข้อมูลงานยังโหลดไม่เสร็จ (เช่น เปิดหน้านี้ด้วยการรีเฟรช) — แสดง loading ก่อน ไม่ขึ้น "ไม่พบงาน" ผิดๆ -->
+      <div v-if="!job && bookingStore.bookingsLoading" class="text-center py-10 text-muted text-sm" role="status" aria-live="polite">
+        <div class="mx-auto mb-3 w-8 h-8 rounded-full border-[3px] border-blue-200 border-t-blue-600 animate-spin"></div>
+        กำลังโหลดข้อมูลงาน...
+      </div>
+      <div v-else-if="!job" class="text-center py-10 text-muted text-sm">
         <span class="material-symbols-rounded text-3xl block mb-2">search_off</span>
         ไม่พบงานนี้ในรายการของคุณ
+        <div v-if="bookingStore.bookingsError" class="mt-3 mx-auto max-w-sm bg-red-50 border border-red-200 rounded-xl px-3.5 py-3 text-red-700">
+          <div class="font-semibold mb-1">โหลดงานไม่สำเร็จ</div>
+          <div class="text-xs break-words">{{ bookingStore.bookingsError }}</div>
+          <button @click="bookingStore.reloadBookings()" class="mt-2 h-9 px-3 rounded-lg bg-red-600 text-white text-sm font-semibold">ลองใหม่</button>
+        </div>
       </div>
 
       <template v-else>
