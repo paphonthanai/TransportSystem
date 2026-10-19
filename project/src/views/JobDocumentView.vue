@@ -20,6 +20,44 @@
     <div v-if="!booking" class="card-lg text-center text-muted py-12">ไม่พบงาน</div>
 
     <template v-else>
+      <!-- ปุ่มดำเนินการ: จบงาน / ยืนยัน POD / ยืนยันการจบงาน — ชุดเดียวกับเมนู "⋮" ของตารางหน้า Booking ทำได้จากหน้านี้เลย -->
+      <div v-if="actionHint" class="card-lg no-print flex items-center justify-between gap-3 flex-wrap">
+        <div class="min-w-0">
+          <div class="text-xs font-bold text-muted uppercase tracking-wide">ดำเนินการ</div>
+          <div class="text-sm text-text">{{ actionHint }}</div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            v-if="canComplete"
+            type="button"
+            :disabled="!!completeBlockedReason"
+            :title="completeBlockedReason ? 'จบงานไม่ได้: ' + completeBlockedReason : 'จบงานโดยออฟฟิศ'"
+            class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+            @click="completeTarget = booking"
+          >
+            <span class="material-symbols-rounded text-base">task_alt</span>
+            จบงาน{{ booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING' ? '' : ' (ข้ามขั้นตอน)' }}
+          </button>
+          <button v-if="canApprovePod" type="button" class="btn-primary" @click="approvePod">
+            <span class="material-symbols-rounded text-base">check_circle</span>
+            ยืนยัน POD
+          </button>
+          <button
+            v-if="canConfirmCompletion"
+            type="button"
+            :disabled="!!confirmBlockedReason"
+            :title="confirmBlockedReason ? 'ข้อมูลยังไม่ครบ: ' + confirmBlockedReason : 'ยืนยันการจบงาน (ขั้นสุดท้ายก่อนวางบิล)'"
+            class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+            @click="confirmCompletion"
+          >
+            <span class="material-symbols-rounded text-base">flag_circle</span>
+            ยืนยันการจบงาน
+          </button>
+        </div>
+        <div v-if="canComplete && completeBlockedReason" class="basis-full text-xs text-amber-700">จบงานไม่ได้: {{ completeBlockedReason }} — แก้ที่ "แก้ไขงาน" ก่อน</div>
+        <div v-else-if="canConfirmCompletion && confirmBlockedReason" class="basis-full text-xs text-amber-700">ข้อมูลยังไม่ครบ: {{ confirmBlockedReason }}</div>
+      </div>
+
       <!-- Driver Tracking Timeline (สำหรับ Office ดูความคืบหน้า — ยังไม่มี GPS ใช้ BookingStatus ขับ Timeline ตรงๆ ไม่มี status ชุดใหม่) -->
       <div class="card-lg no-print">
         <div class="text-xs font-bold text-muted uppercase tracking-wide mb-3">ความคืบหน้างาน (Tracking)</div>
@@ -288,7 +326,13 @@
             <!-- POD ต่อรายการ — แนบ/เปลี่ยนได้เฉพาะรายการที่ส่งของแล้ว (deliveryStatus=DELIVERED) ไม่บังคับต้องมี
                  "ยืนยันแล้ว" = มี podImage แล้วเท่านั้น ไม่มี field สถานะแยก (ดู stores/booking.ts's confirmPodImage) -->
             <div v-if="item.deliveryStatus === 'DELIVERED'" class="pt-1 space-y-1.5">
-              <img v-if="item.podImage" :src="item.podImage" class="w-full max-h-32 object-contain rounded border border-border" />
+              <img
+                v-if="item.podImage"
+                :src="item.podImage"
+                class="w-full max-h-32 object-contain rounded border border-border cursor-zoom-in"
+                title="กดเพื่อขยาย / ดาวน์โหลด"
+                @click="openImage(item.podImage, 'POD - ' + item.siteName)"
+              />
               <div class="flex items-center justify-between gap-2">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', item.podImage ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700']">
                   {{ item.podImage ? 'ยืนยันแล้ว (มี POD)' : 'ยังไม่มี POD' }}
@@ -304,7 +348,13 @@
                 {{ podErrorByItemId[item.id] }}
               </div>
               <!-- รูปใบส่งของ — คนขับถ่ายจากแอป หรือออฟฟิศแนบให้ทีหลังตรงนี้ (ไม่บังคับ) -->
-              <img v-if="item.deliveryNoteImage" :src="item.deliveryNoteImage" class="w-full max-h-32 object-contain rounded border border-border" />
+              <img
+                v-if="item.deliveryNoteImage"
+                :src="item.deliveryNoteImage"
+                class="w-full max-h-32 object-contain rounded border border-border cursor-zoom-in"
+                title="กดเพื่อขยาย / ดาวน์โหลด"
+                @click="openImage(item.deliveryNoteImage, 'ใบส่งของ - ' + item.siteName)"
+              />
               <div class="flex items-center justify-between gap-2">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', item.deliveryNoteImage ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600']">
                   {{ item.deliveryNoteImage ? 'มีรูปใบส่งของ' : 'ยังไม่มีรูปใบส่งของ' }}
@@ -399,7 +449,13 @@
       <!-- รูปตอนขึ้นสินค้า — คนขับถ่ายจากแอป ถ้าไม่ได้ถ่ายออฟฟิศแนบให้ที่นี่ (ไม่บังคับ) -->
       <div v-if="booking.status !== 'WAITING_DISPATCH'" class="card-lg no-print space-y-2">
         <h3 class="font-semibold text-text">รูปตอนขึ้นสินค้า</h3>
-        <img v-if="booking.loadingImage" :src="booking.loadingImage" class="w-full max-h-64 object-contain rounded-lg border border-border" />
+        <img
+          v-if="booking.loadingImage"
+          :src="booking.loadingImage"
+          class="w-full max-h-64 object-contain rounded-lg border border-border cursor-zoom-in"
+          title="กดเพื่อขยาย / ดาวน์โหลด"
+          @click="openImage(booking.loadingImage, 'รูปขึ้นสินค้า')"
+        />
         <label class="btn-sm cursor-pointer inline-flex">
           <span class="material-symbols-rounded text-base">{{ booking.loadingImage ? 'sync' : 'add_a_photo' }}</span>
           {{ photoBusyKey === 'loading' ? 'กำลังอัปโหลด...' : booking.loadingImage ? 'เปลี่ยนรูป' : 'แนบรูปขึ้นสินค้า' }}
@@ -411,7 +467,12 @@
       <!-- POD -->
       <div v-if="booking.podImage" class="card-lg no-print">
         <h3 class="font-semibold text-text mb-3">รูปหลักฐานการส่งมอบสินค้า (POD)</h3>
-        <img :src="booking.podImage" class="w-full max-h-64 object-contain rounded-lg border border-border" />
+        <img
+          :src="booking.podImage"
+          class="w-full max-h-64 object-contain rounded-lg border border-border cursor-zoom-in"
+          title="กดเพื่อขยาย / ดาวน์โหลด"
+          @click="openImage(booking.podImage, 'รูปหลักฐานการส่งมอบ (POD)')"
+        />
       </div>
 
       <!-- หมายเหตุ -->
@@ -426,6 +487,10 @@
         <EntityTimeline :booking-id="booking.id" />
       </div>
     </template>
+
+    <!-- ดูรูปเต็มจอ (ขยาย/ดาวน์โหลด) และไดอะล็อกจบงาน -->
+    <ImageLightbox :image="lightbox" @close="lightbox = null" />
+    <BookingCompleteDialog :booking="completeTarget" @close="completeTarget = null" />
   </div>
 </template>
 
@@ -443,6 +508,9 @@ import { computeRowDiscountBaht, computeRowAmount, computeRowVat } from '@/utils
 import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
 import { priceCellText, PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
+import ImageLightbox from '@/components/shared/ImageLightbox.vue'
+import BookingCompleteDialog from '@/components/booking/BookingCompleteDialog.vue'
+import { bookingCompletionIssues, describeCompletionIssues, STATIC_COMPLETION_CODES } from '@/utils/bookingCompletion'
 import type { Booking, BookingStatus, JobItem } from '@/types'
 
 const route = useRoute()
@@ -456,6 +524,53 @@ const fuelRateStore = useFuelRateStore()
 const isAdmin = computed(() => authStore.role === 'ADMIN')
 
 const booking = computed(() => bookingStore.bookings.find((b) => b.id === route.params.bookingId))
+
+// ---- รูป: กดขยาย/ดาวน์โหลด ----
+const lightbox = ref<{ src: string; title: string; filename?: string } | null>(null)
+const openImage = (src: string, title: string) => {
+  const docNo = booking.value?.docNo || ''
+  lightbox.value = { src, title: docNo ? `${docNo} · ${title}` : title, filename: `${docNo || 'งาน'} ${title}` }
+}
+
+// ---- ปุ่มดำเนินการ: จบงาน / ยืนยัน POD / ยืนยันการจบงาน (กติกาเดียวกับเมนู "⋮" ของตารางหน้า Booking) ----
+const completeTarget = ref<Booking | null>(null)
+const standardFuel = computed(() => (booking.value ? fuelRateStore.standardFuelLiters(booking.value.items, booking.value.pricingMode) || undefined : undefined))
+/** สิ่งที่ยังขาดที่ต้องไปแก้ที่หน้าแก้ไขงาน (ทะเบียน/คนขับ/ค่าเที่ยว) — เลขไมล์/ลิตรน้ำมันกรอกในไดอะล็อกจบงานเอง */
+const completeBlockedReason = computed(() =>
+  booking.value
+    ? describeCompletionIssues(bookingCompletionIssues(booking.value, { standardFuelLiters: standardFuel.value }).filter((i) => STATIC_COMPLETION_CODES.includes(i.code)))
+    : ''
+)
+const confirmBlockedReason = computed(() => (booking.value ? describeCompletionIssues(bookingCompletionIssues(booking.value, { standardFuelLiters: standardFuel.value })) : ''))
+const canComplete = computed(() => !!booking.value && booking.value.status !== 'DELIVERED' && booking.value.items.length > 0)
+const canApprovePod = computed(() => booking.value?.podReviewStatus === 'PENDING_REVIEW')
+const canConfirmCompletion = computed(
+  () => !!booking.value && booking.value.status === 'DELIVERED' && booking.value.podReviewStatus === 'APPROVED' && !booking.value.completionConfirmedAt
+)
+const actionHint = computed(() => {
+  const b = booking.value
+  if (!b) return ''
+  if (canApprovePod.value) return 'คนขับส่งของแล้ว — ตรวจรูป POD ด้านล่าง (กดรูปเพื่อขยาย) แล้วกด "ยืนยัน POD"'
+  if (canConfirmCompletion.value) return 'POD ตรวจแล้ว — กด "ยืนยันการจบงาน" เพื่อปิดงานและนำไปวางบิลได้'
+  if (canComplete.value) return 'งานยังไม่จบ — กด "จบงาน" เพื่อปิดงานโดยออฟฟิศ'
+  if (b.status === 'DELIVERED') return 'งานนี้จบแล้ว'
+  return ''
+})
+
+const approvePod = () => {
+  const b = booking.value
+  if (!b) return
+  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${b.docNo} ตรงกับข้อมูลในระบบ?`)) return
+  bookingStore.reviewPod(b.id, 'APPROVED')
+}
+
+const confirmCompletion = () => {
+  const b = booking.value
+  if (!b) return
+  if (!confirm(`ยืนยันการจบงาน ${b.docNo}? หลังยืนยันจะสามารถนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
+  const result = bookingStore.confirmJobCompletion(b.id)
+  if (!result.ok && result.issues.length) alert(`จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}`)
+}
 /** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง — แก้ไขราคาต้องทำผ่านหน้าแก้ไขงานเท่านั้น ไม่ใช่หน้านี้ */
 const isMulti = computed(() => (booking.value?.pricingMode ?? 'SINGLE_DESTINATION') === 'MULTI_DESTINATION')
 const customer = computed(() => customerStore.lookupCustomer(booking.value?.customer || ''))
