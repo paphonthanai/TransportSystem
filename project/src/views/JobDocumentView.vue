@@ -20,44 +20,6 @@
     <div v-if="!booking" class="card-lg text-center text-muted py-12">ไม่พบงาน</div>
 
     <template v-else>
-      <!-- ปุ่มดำเนินการ: จบงาน / ยืนยัน POD / ยืนยันการจบงาน — ชุดเดียวกับเมนู "⋮" ของตารางหน้า Booking ทำได้จากหน้านี้เลย -->
-      <div v-if="actionHint" class="card-lg no-print flex items-center justify-between gap-3 flex-wrap">
-        <div class="min-w-0">
-          <div class="text-xs font-bold text-muted uppercase tracking-wide">ดำเนินการ</div>
-          <div class="text-sm text-text">{{ actionHint }}</div>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            v-if="canComplete"
-            type="button"
-            :disabled="!!completeBlockedReason"
-            :title="completeBlockedReason ? 'จบงานไม่ได้: ' + completeBlockedReason : 'จบงานโดยออฟฟิศ'"
-            class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
-            @click="completeTarget = booking"
-          >
-            <span class="material-symbols-rounded text-base">task_alt</span>
-            จบงาน{{ booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING' ? '' : ' (ข้ามขั้นตอน)' }}
-          </button>
-          <button v-if="canApprovePod" type="button" class="btn-primary" @click="approvePod">
-            <span class="material-symbols-rounded text-base">check_circle</span>
-            ยืนยัน POD
-          </button>
-          <button
-            v-if="canConfirmCompletion"
-            type="button"
-            :disabled="!!confirmBlockedReason"
-            :title="confirmBlockedReason ? 'ข้อมูลยังไม่ครบ: ' + confirmBlockedReason : 'ยืนยันการจบงาน (ขั้นสุดท้ายก่อนวางบิล)'"
-            class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
-            @click="confirmCompletion"
-          >
-            <span class="material-symbols-rounded text-base">flag_circle</span>
-            ยืนยันการจบงาน
-          </button>
-        </div>
-        <div v-if="canComplete && completeBlockedReason" class="basis-full text-xs text-amber-700">จบงานไม่ได้: {{ completeBlockedReason }} — แก้ที่ "แก้ไขงาน" ก่อน</div>
-        <div v-else-if="canConfirmCompletion && confirmBlockedReason" class="basis-full text-xs text-amber-700">ข้อมูลยังไม่ครบ: {{ confirmBlockedReason }}</div>
-      </div>
-
       <!-- Driver Tracking Timeline (สำหรับ Office ดูความคืบหน้า — ยังไม่มี GPS ใช้ BookingStatus ขับ Timeline ตรงๆ ไม่มี status ชุดใหม่) -->
       <div class="card-lg no-print">
         <div class="text-xs font-bold text-muted uppercase tracking-wide mb-3">ความคืบหน้างาน (Tracking)</div>
@@ -464,15 +426,57 @@
         <div v-if="officePhotoError" class="text-xs text-red-600">{{ officePhotoError }}</div>
       </div>
 
-      <!-- POD -->
-      <div v-if="booking.podImage" class="card-lg no-print">
-        <h3 class="font-semibold text-text mb-3">รูปหลักฐานการส่งมอบสินค้า (POD)</h3>
-        <img
-          :src="booking.podImage"
-          class="w-full max-h-64 object-contain rounded-lg border border-border cursor-zoom-in"
-          title="กดเพื่อขยาย / ดาวน์โหลด"
-          @click="openImage(booking.podImage, 'รูปหลักฐานการส่งมอบ (POD)')"
-        />
+      <!-- POD: รูปหลักฐานการส่งมอบทั้งหมด + ปุ่มดำเนินการ (จบงาน / ยืนยัน POD / ยืนยันการจบงาน) ไว้การ์ดเดียวกัน
+           กติกาเดียวกับเมนู "⋮" ของตารางหน้า Booking — แนบ/เปลี่ยนรูป POD รายจุดส่งยังทำที่การ์ดรายการสินค้าด้านบน -->
+      <div v-if="podPhotos.length || actionHint" class="card-lg no-print space-y-3">
+        <h3 class="font-semibold text-text">รูปหลักฐานการส่งมอบสินค้า (POD)</h3>
+        <div v-if="podPhotos.length" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <figure v-for="photo in podPhotos" :key="photo.src" class="space-y-1">
+            <img
+              :src="photo.src"
+              :alt="photo.label"
+              class="w-full h-32 object-contain rounded-lg border border-border bg-white cursor-zoom-in"
+              title="กดเพื่อขยาย / ดาวน์โหลด"
+              @click="openImage(photo.src, photo.label)"
+            />
+            <figcaption class="text-xs text-muted truncate" :title="photo.label">{{ photo.label }}</figcaption>
+          </figure>
+        </div>
+        <div v-else class="text-sm text-muted">ยังไม่มีรูป POD</div>
+
+        <div v-if="actionHint" class="border-t border-border pt-3 flex items-center justify-between gap-3 flex-wrap">
+          <div class="min-w-0 text-sm text-text">{{ actionHint }}</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              v-if="canComplete"
+              type="button"
+              :disabled="!!completeBlockedReason"
+              :title="completeBlockedReason ? 'จบงานไม่ได้: ' + completeBlockedReason : 'จบงานโดยออฟฟิศ'"
+              class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              @click="completeTarget = booking"
+            >
+              <span class="material-symbols-rounded text-base">task_alt</span>
+              จบงาน{{ booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING' ? '' : ' (ข้ามขั้นตอน)' }}
+            </button>
+            <button v-if="canApprovePod" type="button" class="btn-primary" @click="approvePod">
+              <span class="material-symbols-rounded text-base">check_circle</span>
+              ยืนยัน POD
+            </button>
+            <button
+              v-if="canConfirmCompletion"
+              type="button"
+              :disabled="!!confirmBlockedReason"
+              :title="confirmBlockedReason ? 'ข้อมูลยังไม่ครบ: ' + confirmBlockedReason : 'ยืนยันการจบงาน (ขั้นสุดท้ายก่อนวางบิล)'"
+              class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              @click="confirmCompletion"
+            >
+              <span class="material-symbols-rounded text-base">flag_circle</span>
+              ยืนยันการจบงาน
+            </button>
+          </div>
+          <div v-if="canComplete && completeBlockedReason" class="basis-full text-xs text-amber-700">จบงานไม่ได้: {{ completeBlockedReason }} — แก้ที่ "แก้ไขงาน" ก่อน</div>
+          <div v-else-if="canConfirmCompletion && confirmBlockedReason" class="basis-full text-xs text-amber-700">ข้อมูลยังไม่ครบ: {{ confirmBlockedReason }}</div>
+        </div>
       </div>
 
       <!-- หมายเหตุ -->
@@ -547,6 +551,20 @@ const canApprovePod = computed(() => booking.value?.podReviewStatus === 'PENDING
 const canConfirmCompletion = computed(
   () => !!booking.value && booking.value.status === 'DELIVERED' && booking.value.podReviewStatus === 'APPROVED' && !booking.value.completionConfirmedAt
 )
+/** รูป POD ทั้งหมดของงาน (รูปรวมระดับงาน + รูปรายจุดส่ง) ไม่ซ้ำกัน — ใช้โชว์ในการ์ด POD */
+const podPhotos = computed(() => {
+  const b = booking.value
+  if (!b) return []
+  const photos: { src: string; label: string }[] = []
+  if (b.podImage) photos.push({ src: b.podImage, label: 'POD (รวมทั้งงาน)' })
+  b.items.forEach((item, idx) => {
+    if (item.podImage && !photos.some((p) => p.src === item.podImage)) {
+      photos.push({ src: item.podImage, label: b.items.length > 1 ? `POD จุดที่ ${idx + 1} - ${item.siteName}` : `POD - ${item.siteName}` })
+    }
+  })
+  return photos
+})
+
 const actionHint = computed(() => {
   const b = booking.value
   if (!b) return ''
