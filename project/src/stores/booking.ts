@@ -437,6 +437,16 @@ export const useBookingStore = defineStore('booking', () => {
    * แก้ไขราคา (ค่าเที่ยว/ราคาที่ตกลง)
    * อนุญาตอิสระตอน WAITING_DISPATCH เท่านั้น หลังจากนั้นต้องเป็น admin (เช็คสิทธิ์ที่ชั้น UI ก่อนเรียกฟังก์ชันนี้)
    */
+  /** ตั้ง/แก้ "เที่ยวที่" ของงาน (ใช้ตอนตรวจ/จัดเที่ยวก่อนจัดรถ) — undefined/0 = ล้างค่า กลับไปใช้ลำดับเวลาจ่ายงานเดิม */
+  function setTripSequence(id: string, seq: number | undefined) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return
+    const next = seq && seq >= 1 ? Math.floor(seq) : undefined
+    if (booking.tripSequence === next) return
+    booking.tripSequence = next
+    addLog(`ตั้งเที่ยวที่ ${booking.docNo}: ${next ?? 'ไม่ระบุ'}`, { bookingId: booking.id })
+  }
+
   function updateBookingPrice(id: string, data: { tripFee?: number; agreedPrice?: number }) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
@@ -741,11 +751,13 @@ export const useBookingStore = defineStore('booking', () => {
       driverFirstName?: string
       driverLastName?: string
       odometerBefore?: number
+      tripSequence?: number
     }
   ) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
     booking.plate = plate
+    if (extra?.tripSequence !== undefined) booking.tripSequence = extra.tripSequence
     if (extra?.driverName) {
       booking.driverName = extra.driverName
       // อัปเดต driverId/driverFirstName/driverLastName คู่กันเสมอเมื่อเปลี่ยนชื่อคนขับ (แม้จะเป็น undefined เพราะจับคู่ไม่ได้)
@@ -1385,6 +1397,7 @@ export const useBookingStore = defineStore('booking', () => {
     switchPricingMode,
     addJobItem,
     dispatchBooking,
+    setTripSequence,
     applyFuelRate,
     repriceFuelRates,
     acceptDispatch,

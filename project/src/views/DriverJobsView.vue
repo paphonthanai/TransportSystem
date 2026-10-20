@@ -102,6 +102,7 @@
             <span class="material-symbols-rounded text-muted text-xl flex-shrink-0">chevron_right</span>
           </div>
           <div class="flex items-center gap-1.5 flex-wrap mb-1.5">
+            <span v-if="job.tripSequence !== undefined" class="text-xs font-bold px-2 py-1 rounded-full bg-teal-100 text-teal-700">เที่ยวที่ {{ job.tripSequence }}</span>
             <span
               :class="[
                 'text-xs font-semibold px-2 py-1 rounded-full',
@@ -123,7 +124,7 @@
                เข้าหน้ารายละเอียดงานเหมือนกดที่การ์ดเฉยๆ (เป็นปุ่ม CTA เด่นชัดเจนกว่าแค่แตะทั้งใบ) หน้ารายละเอียดงานขั้น
                ACCEPTED จะโชว์น้ำมัน+สินค้า/จำนวน แล้วบังคับถ่ายรูปขึ้นสินค้าก่อนไปขั้นต่อไป (ดู DriverJobDetailView.vue)
                — "แสดงรายละเอียด" เปิด card ดูข้อมูลแบบไม่นำทางออกจากหน้ารายการ -->
-          <div v-if="job.id === latestAcceptedJob?.id" class="flex gap-2 mt-3 pt-3 border-t border-border" @click.stop>
+          <div v-if="job.id === latestAcceptedJob?.id || (DRIVER_CAN_PICK_TRIP && job.status === 'ACCEPTED')" class="flex gap-2 mt-3 pt-3 border-t border-border" @click.stop>
             <button
               @click="router.push(`/driver-app/job/${job.id}`)"
               class="flex-1 h-10 rounded-lg bg-teal-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-teal-700"
@@ -396,15 +397,35 @@ const logout = async () => {
 
 const ACTIVE_STATUSES = ['ASSIGNED', 'ACCEPTED', 'FUEL_RECEIVED', 'LOADING', 'LOADED', 'IN_TRANSIT', 'DELIVERING'] as const
 
+/** เรียงการ์ดตาม "เที่ยวที่" (tripSequence) — งานที่มีเลขเที่ยวขึ้นก่อนเรียงตามเลข งานที่ไม่มีเลขคงลำดับเดิมทุกประการ (sort เสถียร) */
+const byTripSequence = (a: Booking, b: Booking) => {
+  const sa = a.tripSequence
+  const sb = b.tripSequence
+  if (sa !== undefined && sb !== undefined) return sa - sb
+  if (sa !== undefined) return -1
+  if (sb !== undefined) return 1
+  return 0
+}
+
 const activeJobs = computed(() =>
-  bookingStore.bookings.filter((b) => matchesSelectedDriver(b) && (ACTIVE_STATUSES as readonly string[]).includes(b.status))
+  bookingStore.bookings
+    .filter((b) => matchesSelectedDriver(b) && (ACTIVE_STATUSES as readonly string[]).includes(b.status))
+    .sort(byTripSequence)
 )
+
+/** ระดับ 4 (ซ่อนไว้ก่อน): true = คนขับเลือกเที่ยวเองได้ (ปุ่มยืนยันขึ้นที่ทุกงาน ACCEPTED) — ยังไม่มี UI เปิดใช้ ตอนนี้ปิดเสมอ */
+const DRIVER_CAN_PICK_TRIP = false
 
 /** งาน ACCEPTED ล่าสุด (เรียงตามเวลาจัดรถล่าสุด) — การ์ดของงานนี้ใบเดียวเท่านั้นที่โชว์ปุ่ม "ยืนยัน"/"แสดงรายละเอียด"
  *  (ตามที่ตกลง ไม่ใช่ทุกงาน ACCEPTED) ไม่ persist สถานะใดๆ ไว้เลย แค่คำนวณจากข้อมูลงานสดๆ ทุกครั้ง */
 const latestAcceptedJob = computed(() => {
   const accepted = activeJobs.value.filter((b) => b.status === 'ACCEPTED')
   if (!accepted.length) return null
+  // มีเลขเที่ยว → เที่ยวต่ำสุดได้ปุ่มยืนยันก่อน (จ่ายเที่ยว 2 ก่อนเที่ยว 1 ก็ไม่สลับ) — ไม่มีเลขเลย ใช้พฤติกรรมเดิม: จัดรถล่าสุด
+  const numbered = accepted.filter((b) => b.tripSequence !== undefined)
+  if (numbered.length) {
+    return [...numbered].sort((a, b) => a.tripSequence! - b.tripSequence! || new Date(a.dispatchedAt || a.createdAt).getTime() - new Date(b.dispatchedAt || b.createdAt).getTime())[0]
+  }
   return [...accepted].sort((a, b) => new Date(b.dispatchedAt || b.createdAt).getTime() - new Date(a.dispatchedAt || a.createdAt).getTime())[0]
 })
 

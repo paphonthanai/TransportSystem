@@ -174,7 +174,20 @@
                   @change="(e) => (selectedInProgress[booking.id] = (e.target as HTMLInputElement).checked)"
                 />
               </td>
-              <td class="px-3 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
+              <td class="px-3 py-3 text-text">
+                <!-- ระดับ 2: งานรอจัดรถที่มีคนขับแล้ว เลือกเที่ยวที่ในตารางได้เลย ก่อนกดจัดรถ (จ่ายเที่ยว 1/2 ลำดับไหนก็ได้) -->
+                <select
+                  v-if="booking.status === 'WAITING_DISPATCH' && booking.driverName"
+                  :value="driverTripNumberForBooking(booking)"
+                  @click.stop
+                  @change="(e) => bookingStore.setTripSequence(booking.id, Number((e.target as HTMLSelectElement).value))"
+                  class="input-field !py-0.5 !px-1 !text-xs w-14"
+                  title="เที่ยวที่ของคนขับในวันนี้"
+                >
+                  <option v-for="n in tripNumberChoices(booking)" :key="n" :value="n">{{ n }}</option>
+                </select>
+                <template v-else>{{ driverTripNumberForBooking(booking) }}</template>
+              </td>
               <td class="px-3 py-3 text-text"><BookingDriverFixCell :booking="booking" /></td>
               <td class="px-3 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
               <td class="px-3 py-3 text-center">
@@ -293,7 +306,20 @@
               @click="onRowClick(booking, $event)"
               class="border-b border-border hover:bg-surface-2 transition-colors cursor-pointer"
             >
-              <td class="px-3 py-3 text-text">{{ driverTripNumberForBooking(booking) }}</td>
+              <td class="px-3 py-3 text-text">
+                <!-- ระดับ 2: งานรอจัดรถที่มีคนขับแล้ว เลือกเที่ยวที่ในตารางได้เลย ก่อนกดจัดรถ (จ่ายเที่ยว 1/2 ลำดับไหนก็ได้) -->
+                <select
+                  v-if="booking.status === 'WAITING_DISPATCH' && booking.driverName"
+                  :value="driverTripNumberForBooking(booking)"
+                  @click.stop
+                  @change="(e) => bookingStore.setTripSequence(booking.id, Number((e.target as HTMLSelectElement).value))"
+                  class="input-field !py-0.5 !px-1 !text-xs w-14"
+                  title="เที่ยวที่ของคนขับในวันนี้"
+                >
+                  <option v-for="n in tripNumberChoices(booking)" :key="n" :value="n">{{ n }}</option>
+                </select>
+                <template v-else>{{ driverTripNumberForBooking(booking) }}</template>
+              </td>
               <td class="px-3 py-3 text-text"><BookingDriverFixCell :booking="booking" /></td>
               <td class="px-3 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
               <td class="px-3 py-3 text-center">
@@ -486,6 +512,15 @@
                 <span class="text-[10px] font-normal text-muted">(ดึงจากเลขไมล์สิ้นสุดเที่ยวก่อนของรถคันนี้ให้อัตโนมัติ)</span>
               </label>
               <input v-model.number="dispatchForm.odometerBefore" type="number" placeholder="0" class="input-field w-full" />
+            </div>
+
+            <!-- ระดับ 3: เสมียนเลือกเที่ยวที่ตอนจัดรถ — จ่ายเที่ยว 1/เที่ยว 2 ลำดับไหนก็ได้ แอปคนขับโชว์ปุ่มยืนยันที่เที่ยวต่ำสุดก่อน -->
+            <div>
+              <label class="block text-xs font-semibold text-muted mb-1">
+                เที่ยวที่
+                <span class="text-[10px] font-normal text-muted">(เที่ยวของคนขับคนนี้ในวันเดียวกัน — คนขับจะเห็นปุ่มยืนยันที่เที่ยวแรกก่อน)</span>
+              </label>
+              <input v-model.number="dispatchForm.tripSequence" type="number" min="1" step="1" class="input-field w-24" />
             </div>
 
             <div class="text-xs font-semibold text-muted pt-2 border-t border-border">
@@ -686,6 +721,7 @@
               <div class="bg-surface-2 rounded-lg p-3 text-sm flex items-center gap-4 flex-wrap">
                 <span class="font-semibold text-text">อ่านได้ {{ importableRows.length }} แถว</span>
                 <span class="text-green-600">จะสร้าง {{ importableRows.length }} งาน</span>
+                <span v-if="Object.keys(importTripWarnings).length" class="text-amber-600">ตรวจเลขเที่ยว: {{ Object.entries(importTripWarnings).map(([k, v]) => `${k} ${v.join('/')}`).join(' · ') }}</span>
                 <span v-if="importWarningRowCount" class="text-amber-600">{{ importWarningRowCount }} แถวมีข้อมูลไม่ครบ — จะสร้างงานให้ก่อนแล้วแปะหมายเหตุไว้ให้กรอกเพิ่ม</span>
               </div>
 
@@ -694,11 +730,13 @@
                   <thead class="bg-surface-2 sticky top-0">
                     <tr>
                       <th class="text-left px-2 py-1.5">แถว</th>
+                      <th class="text-left px-2 py-1.5">เที่ยวที่</th>
                       <th class="text-left px-2 py-1.5">พขร.</th>
                       <th class="text-left px-2 py-1.5">คอนเฟิร์ม</th>
                       <th class="text-left px-2 py-1.5">ลูกค้า</th>
                       <th class="text-left px-2 py-1.5">สถานที่ส่ง</th>
                       <th class="text-left px-2 py-1.5">ชนิดปูน</th>
+                      <th class="text-left px-2 py-1.5">ลิงก์ GPS</th>
                       <th class="text-right px-2 py-1.5">ตัน</th>
                       <th class="text-left px-2 py-1.5">หมายเหตุ</th>
                     </tr>
@@ -706,11 +744,28 @@
                   <tbody>
                     <tr v-for="row in importableRows" :key="row.rowNumber" class="border-t border-border" :class="row.warnings.length ? 'bg-amber-50' : ''">
                       <td class="px-2 py-1.5">{{ row.rowNumber }}</td>
+                      <td class="px-2 py-1.5">
+                        <input
+                          v-model.number="row.tripSequence"
+                          type="number"
+                          min="1"
+                          step="1"
+                          class="input-field !py-0.5 !px-1 !text-xs w-14"
+                          :class="importTripWarningFor(row) ? '!border-amber-500' : ''"
+                          :title="importTripWarningFor(row) || 'เที่ยวที่ของคนขับในวันนี้'"
+                        />
+                      </td>
                       <td class="px-2 py-1.5">{{ row.driverName || '-' }}</td>
                       <td class="px-2 py-1.5">{{ row.plate || '-' }}</td>
                       <td class="px-2 py-1.5">{{ row.customer || '-' }}</td>
                       <td class="px-2 py-1.5">{{ row.siteName || '-' }}</td>
                       <td class="px-2 py-1.5">{{ row.product || '-' }}</td>
+                      <td class="px-2 py-1.5 max-w-[140px] truncate">
+                        <a v-if="row.mapUrl" :href="/^https?:\/\//.test(row.mapUrl) ? row.mapUrl : undefined" target="_blank" rel="noopener" class="text-primary underline" :title="row.mapUrl">
+                          {{ row.latitude !== undefined ? `${row.latitude}, ${row.longitude}` : 'มีลิงก์' }}
+                        </a>
+                        <span v-else class="text-muted">-</span>
+                      </td>
                       <td class="px-2 py-1.5 text-right">{{ row.qty }}</td>
                       <td class="px-2 py-1.5">
                         <span v-if="row.warnings.length" class="text-amber-700">{{ row.warnings.join(', ') }}</span>
@@ -895,8 +950,11 @@ import {
   matchCustomerForImport,
   parseShipDateFromTitle,
   flagPriceOutliers,
+  assignImportTripSequences,
+  applySheetHyperlinks,
   type ImportRowResult,
 } from '@/utils/importRowParser'
+import { compareByTrip, resolveTripNumber, nextTripSequence, validateTripSequences } from '@/utils/tripSequence'
 import * as XLSX from 'xlsx'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 import { useImportDraftStore } from '@/stores/importDraft'
@@ -1080,13 +1138,26 @@ const bookingDayKey = (b: Booking) => new Date(b.shipDate || b.createdAt)
 const driverBookingsForDay = (driverName: string, refDate: Date) =>
   bookingStore.bookings
     .filter((b) => b.driverName === driverName && isSameCalendarDay(bookingDayKey(b), refDate))
-    .sort((a, b) => new Date(a.dispatchedAt || a.createdAt).getTime() - new Date(b.dispatchedAt || b.createdAt).getTime())
+    .sort(compareByTrip)
 
 const driverTripNumberForBooking = (booking: Booking) => {
-  if (!booking.driverName) return 1
+  if (!booking.driverName) return booking.tripSequence ?? 1
   const list = driverBookingsForDay(booking.driverName, bookingDayKey(booking))
-  const idx = list.findIndex((b) => b.id === booking.id)
-  return idx === -1 ? 1 : idx + 1
+  return resolveTripNumber(booking, list)
+}
+
+/** ตัวเลือก "เที่ยวที่" ของงานนี้: 1..(จำนวนงานของคนขับวันนั้น + 1) และเลขปัจจุบัน */
+const tripNumberChoices = (booking: Booking) => {
+  const count = booking.driverName ? driverBookingsForDay(booking.driverName, bookingDayKey(booking)).length : 1
+  const max = Math.max(count + 1, driverTripNumberForBooking(booking), 2)
+  return Array.from({ length: max }, (_, i) => i + 1)
+}
+
+/** ค่าตั้งต้นช่อง "เที่ยวที่" ตอนจัดรถ: เลขที่ระบุไว้แล้ว (import/จัดเที่ยว) ไม่งั้นเที่ยวถัดไปของคนขับวันนั้น */
+const defaultTripForDispatch = (booking: Booking) => {
+  if (booking.tripSequence !== undefined) return booking.tripSequence
+  if (!booking.driverName) return 1
+  return nextTripSequence(driverBookingsForDay(booking.driverName, bookingDayKey(booking)).filter((b) => b.id !== booking.id))
 }
 
 /** งาน (ทั้งหมด ไม่ใช่แค่ล่าสุด) ที่ "คนขับคนนี้" กำลังวิ่งอยู่ (ยังไม่ DELIVERED) ไม่รวมตัว Booking ที่กำลังจัดรถอยู่นี้
@@ -1281,6 +1352,7 @@ const dispatchForm = ref({
   plate: '',
   driverName: '',
   odometerBefore: 0,
+  tripSequence: 1,
 })
 
 /** งานที่ถูกจัดรถไปแล้ว (ไม่ใช่ครั้งแรก) — เปิด dialog นี้ซ้ำได้ทุกสถานะก่อนส่งของสำเร็จเพื่อ "เปลี่ยนรถ/คนขับ" */
@@ -1411,6 +1483,7 @@ const openDispatchDialog = (booking: Booking) => {
     plate: booking.plate || '',
     driverName: booking.driverName || '',
     odometerBefore: booking.odometerBefore || 0,
+    tripSequence: defaultTripForDispatch(booking),
   }
   if (!dispatchForm.value.odometerBefore && dispatchForm.value.plate) {
     const prevOdometer = latestOdometerForPlate(dispatchForm.value.plate, booking.id)
@@ -1471,6 +1544,7 @@ const confirmDispatch = () => {
     driverFirstName: selectedDriver?.firstName,
     driverLastName: selectedDriver?.lastName,
     odometerBefore: dispatchForm.value.odometerBefore,
+    tripSequence: dispatchForm.value.tripSequence >= 1 ? dispatchForm.value.tripSequence : undefined,
   })
   // ปรับคนขับประจำของรถให้ตรงกับที่เลือกจ่ายงานจริง เพื่อให้ทุกหน้าที่ใช้รถเห็นคนขับล่าสุด
   if (selectedDriver) {
@@ -1823,6 +1897,8 @@ const handleImportFile = async (e: Event) => {
   importShipDate.value = hasTitleRow ? parseShipDateFromTitle((allRows[0] || []).join(' ')) : undefined
   const headerRowIndex = hasTitleRow ? 1 : 0
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', range: headerRowIndex })
+  // ลิงก์ GPS ที่เป็น hyperlink ฝังในเซลล์ (แสดงเป็นข้อความป้าย) ดึง URL จริงมาแทน
+  applySheetHyperlinks(sheet as Record<string, any>, headerRowIndex, (allRows[headerRowIndex] || []).map((h) => String(h ?? '')), raw)
   importRows.value = raw.map((r, idx) =>
     parseImportRow(r, idx + headerRowIndex + 2, {
       matchDriver: matchDriverForImportRow,
@@ -1833,6 +1909,7 @@ const handleImportFile = async (e: Event) => {
   // เทียบราคาต่อหน่วยของแต่ละแถวกับราคามัธยฐานของสินค้าเดียวกันในไฟล์นี้ กันกรณีกรอกราคารวมมาแทนราคาต่อหน่วย
   // (ดู flagPriceOutliers) ต้องรอให้ parse ครบทุกแถวก่อนถึงจะเทียบได้ จึงทำหลัง map เสร็จ ไม่ใช่ต่อแถวใน parseImportRow
   flagPriceOutliers(importRows.value)
+  assignImportTripSequences(importRows.value)
   input.value = ''
 }
 
@@ -1852,10 +1929,16 @@ onMounted(() => {
     })
   )
   flagPriceOutliers(importRows.value)
+  assignImportTripSequences(importRows.value)
   importModalOpen.value = true
 })
 
 const importableRows = computed(() => importRows.value.filter((r) => !r.isEmpty))
+/** ระดับ 2: เตือนเลขเที่ยวซ้ำ/ข้ามเลขต่อคนขับ(หรือทะเบียน) ก่อนยืนยันสร้างงาน — เตือนเฉยๆ ไม่บล็อก */
+const importTripWarnings = computed(() =>
+  validateTripSequences(importableRows.value.map((r) => ({ key: r.driverName || r.plate, tripSequence: r.tripSequence })))
+)
+const importTripWarningFor = (row: ImportRowResult) => importTripWarnings.value[row.driverName || row.plate]?.join(' · ')
 const importWarningRowCount = computed(() => importableRows.value.filter((r) => r.warnings.length > 0).length)
 
 /** สร้าง Booking จริงทีละแถว — เลขที่เอกสาร/ใบปล่อยรถยังออกอัตโนมัติตามปกติเสมอ (ไม่ใช้เลขจาก Excel ตรงๆ กันชนกับ
@@ -1923,6 +2006,7 @@ const confirmImport = () => {
       driverId: row.driverId,
       driverFirstName: row.driverFirstName,
       driverLastName: row.driverLastName,
+      tripSequence: row.tripSequence,
       // เดิมเซ็ตแค่ loadingDate จากวันที่หัวไฟล์ ไม่เคยเซ็ต shipDate เลย ทำให้หน้าเลือกวางบิล/ใบวางบิล/
       // ใบกำกับภาษีของงาน import ทุกงานขึ้น "วันที่ส่งงาน" เป็น "-" และช่วงวันที่ในคำอธิบายรายการว่างไปด้วย —
       // ต้องเซ็ตทั้งคู่เหมือนหน้าสร้าง/แก้ไขงานด้วยมือ (BookingCreateView.vue/BookingEditView.vue)

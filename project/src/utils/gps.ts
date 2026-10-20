@@ -5,7 +5,13 @@
  */
 export function parseGpsInput(raw: string): { latitude?: number; longitude?: number } {
   if (!raw) return {}
-  const patterns = [/@(-?\d+\.\d+),(-?\d+\.\d+)/, /[?&](?:q|ll)=(-?\d+\.\d+),(-?\d+\.\d+)/]
+  const patterns = [
+    /@(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /[?&](?:q|ll|query|destination|daddr|center)=(-?\d+\.\d+)(?:,|%2C)(-?\d+\.\d+)/i,
+    /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
+    /\/place\/(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /^\s*geo:(-?\d+\.\d+),(-?\d+\.\d+)/i,
+  ]
   for (const p of patterns) {
     const m = raw.match(p)
     if (m) return { latitude: parseFloat(m[1]), longitude: parseFloat(m[2]) }

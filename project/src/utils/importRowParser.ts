@@ -34,6 +34,7 @@ export const IMPORT_HEADERS = {
   fuel: 'น้ำมัน',
   jobType: 'ประเภทงาน',
   mapLink: 'พิกัด/ลิงก์ Google Maps หน้างาน',
+  tripNo: 'เที่ยวที่',
   note: 'หมายเหตุ',
 } as const
 
@@ -74,6 +75,90 @@ export function parseFuelCell(raw: unknown): FuelCell {
   return { liters: total, explicitZero: total === 0, remark: remarks.join(' ') || undefined }
 }
 
+/** เทียบหัวคอลัมน์แบบหลวม: ตัดวรรณยุกต์/ไม้ไต่คู้/การันต์/ช่องว่าง ไม่สนตัวพิมพ์ และ "ลิงค์"≈"ลิงก์" — ลูกค้าพิมพ์หัวคอลัมน์เองหลายแบบ
+ *  (เช่น "พิกัด/ลิ้งก์ Google maps หน้างาน" ต่างจากชื่อที่ระบบรู้จักแค่ไม้โท/ตัวพิมพ์) */
+export const normalizeHeader = (s: unknown) =>
+  String(s ?? '')
+    .normalize('NFC')
+    .replace(/[็-์]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/ลิงค/g, 'ลิงก')
+    .toLowerCase()
+
+const MAP_LINK_KEYWORDS = ['gps', 'googlemap', 'ลิงก', 'แผนที่', 'พิกัด', 'location']
+const TRIP_NO_HEADERS = ['เที่ยวที่', 'เที่ยว', 'ลำดับเที่ยว', 'trip', 'tripno'].map(normalizeHeader)
+
+/** หาชื่อคอลัมน์จริงในไฟล์ของคอลัมน์ลิงก์ GPS / เที่ยวที่ — ชื่อตรงเป๊ะมาก่อน แล้วค่อยเทียบแบบหลวม (ไม่ชนกับหัวคอลัมน์ที่ระบบรู้จักอื่น) */
+export function resolveImportColumns(headers: string[]): { mapLink?: string; tripNo?: string } {
+  const known = new Set(Object.values(IMPORT_HEADERS).map(normalizeHeader))
+  const out: { mapLink?: string; tripNo?: string } = {}
+  const exactMap = headers.find((h) => h === IMPORT_HEADERS.mapLink)
+  const exactTrip = headers.find((h) => h === IMPORT_HEADERS.tripNo)
+  out.mapLink = exactMap ?? headers.find((h) => {
+    const n = normalizeHeader(h)
+    return n && (n === normalizeHeader(IMPORT_HEADERS.mapLink) || (!known.has(n) && MAP_LINK_KEYWORDS.some((k) => n.includes(k))))
+  })
+  out.tripNo = exactTrip ?? headers.find((h) => TRIP_NO_HEADERS.includes(normalizeHeader(h)))
+  return out
+}
+
+/** แถวดิบ → ใส่ค่าในคีย์หัวคอลัมน์มาตรฐาน (IMPORT_HEADERS.mapLink/tripNo) ถ้าไฟล์ใช้ชื่ออื่น — ไม่แตะแถวที่ใช้ชื่อมาตรฐานอยู่แล้ว */
+export function withColumnAliases(raw: Record<string, unknown>): Record<string, unknown> {
+  const cols = resolveImportColumns(Object.keys(raw))
+  const out = { ...raw }
+  if (cols.mapLink && cols.mapLink !== IMPORT_HEADERS.mapLink && !str0(out[IMPORT_HEADERS.mapLink])) out[IMPORT_HEADERS.mapLink] = raw[cols.mapLink]
+  if (cols.tripNo && cols.tripNo !== IMPORT_HEADERS.tripNo && !str0(out[IMPORT_HEADERS.tripNo])) out[IMPORT_HEADERS.tripNo] = raw[cols.tripNo]
+  return out
+}
+const str0 = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())
+
+/** อ่านเลขเที่ยวจากเซลล์ "เที่ยวที่" — "1", 2, "เที่ยว 2", "เที่ยวที่2", "T1" → ตัวเลขตัวแรก (ต้อง ≥ 1) ไม่มี/อ่านไม่ได้ = undefined */
+export function parseTripNumber(raw: unknown): number | undefined {
+  const m = str0(raw).match(/\d+/)
+  if (!m) return undefined
+  const n = parseInt(m[0], 10)
+  return n >= 1 ? n : undefined
+}
+
+/** ไฟล์ไม่มีคอลัมน์ "เที่ยวที่"/เซลล์ว่าง → ตั้งเลขเที่ยวจากลำดับแถวของ พขร./ทะเบียนเดียวกัน (ต่อจากเลขสูงสุดที่ระบุแล้วในกลุ่ม) */
+export function assignImportTripSequences<T extends { driverName: string; plate: string; tripSequence?: number; isEmpty: boolean }>(rows: T[]): T[] {
+  const maxByKey = new Map<string, number>()
+  const keyOf = (r: T) => r.driverName || r.plate
+  rows.forEach((r) => {
+    const k = keyOf(r)
+    if (!k || r.isEmpty || r.tripSequence === undefined) return
+    maxByKey.set(k, Math.max(maxByKey.get(k) || 0, r.tripSequence))
+  })
+  const counter = new Map<string, number>()
+  rows.forEach((r) => {
+    const k = keyOf(r)
+    if (!k || r.isEmpty || r.tripSequence !== undefined) return
+    const next = Math.max(counter.get(k) ?? 0, maxByKey.get(k) ?? 0) + 1
+    counter.set(k, next)
+    r.tripSequence = next
+  })
+  return rows
+}
+
+/** ไฟล์ Excel ที่ลิงก์ GPS เป็น hyperlink (ข้อความป้าย + URL ฝังในเซลล์) sheet_to_json ได้แค่ข้อความ → ดึง URL จริงจาก cell.l.Target
+ *  แล้วใส่แทนค่าในคอลัมน์ลิงก์ (ใช้ชื่อคอลัมน์ที่ resolveImportColumns หาได้) — headerRowIndex = แถว (0-based) ของหัวคอลัมน์ในชีท */
+export function applySheetHyperlinks(sheet: Record<string, any>, headerRowIndex: number, headers: string[], rows: Record<string, unknown>[]): void {
+  const mapCol = resolveImportColumns(headers).mapLink
+  if (!mapCol) return
+  const c = headers.indexOf(mapCol)
+  if (c < 0) return
+  const colName = (n: number) => {
+    let s = ''
+    for (let x = n + 1; x > 0; x = Math.floor((x - 1) / 26)) s = String.fromCharCode(65 + ((x - 1) % 26)) + s
+    return s
+  }
+  rows.forEach((row, i) => {
+    const cell = sheet[`${colName(c)}${headerRowIndex + 2 + i}`]
+    const target = cell?.l?.Target
+    if (target && typeof target === 'string' && !/^https?:\/\//.test(str0(row[mapCol]))) row[mapCol] = target
+  })
+}
+
 export interface ImportRowResult {
   rowNumber: number
   isEmpty: boolean
@@ -97,6 +182,8 @@ export interface ImportRowResult {
   mapUrl?: string
   latitude?: number
   longitude?: number
+  /** เที่ยวที่ของคนขับ/รถนี้ในวันเดียวกัน (จากคอลัมน์ "เที่ยวที่" หรือเรียงตามแถวซ้ำคนขับ ดู assignImportTripSequences) */
+  tripSequence?: number
   product: string
   /** แยกจาก product ด้วยเครื่องหมาย "+" (เช่น "23 + 52" → ["23","52"]) — กรณีแถวเดียวมีหลายชนิดสินค้าปนกัน
    *  ตัวแรกใช้เป็นสินค้าหลักของ Item เดิม ตัวที่เหลือไปเป็น extraProducts (ดู confirmImport) */
@@ -224,7 +311,8 @@ export interface ParseImportRowDeps {
  *  ข้อมูลส่วนไหนขาด/จับคู่ไม่ได้ (คนขับไม่พบในทะเบียน, น้ำมัน/ปลายทางไม่มีเรท, สถานะไม่ตรง ฯลฯ) จะถูกสะสมไว้ใน warnings
  *  แล้วต่อท้ายเข้า note ของ Booking ให้ออฟฟิศไปตรวจ/กรอกเพิ่มทีหลัง แถวที่ไม่มีข้อมูลอะไรเลย (isEmpty) จะถูกข้ามตอนสร้างจริง
  *  เพราะถือเป็นแถวว่างท้ายชีท ไม่ใช่ข้อมูลที่ตั้งใจกรอก */
-export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, deps: ParseImportRowDeps): ImportRowResult {
+export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: number, deps: ParseImportRowDeps): ImportRowResult {
+  const raw = withColumnAliases(rawInput)
   const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())
   const num = (v: unknown) => {
     const n = typeof v === 'number' ? v : Number(str(v))
@@ -246,6 +334,7 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
   // ข้อความเตือนเบาๆ ใต้ช่องถ้า parse พิกัดไม่ได้ ไม่ใช่ warning ที่ไปต่อท้าย note ของ Booking)
   const mapLinkRaw = str(raw[IMPORT_HEADERS.mapLink])
   const mapGps = parseGpsInput(mapLinkRaw)
+  const tripSequence = parseTripNumber(raw[IMPORT_HEADERS.tripNo])
   const product = str(raw[IMPORT_HEADERS.product])
   // "23 + 52" หรือ "52 + 13 + 23" หมายถึงหลายชนิดสินค้าปนมาในเที่ยวเดียว ไม่ใช่ชื่อสินค้าชื่อเดียวที่มีเครื่องหมาย +
   // อยู่ในชื่อ — แยกออกเป็นรายการเดี่ยวๆ ไปแสดงแบบคอลัมน์ (ดู productColumns + JobItem.extraProducts) ยืนยันจากไฟล์จริง
@@ -374,6 +463,7 @@ export function parseImportRow(raw: Record<string, unknown>, rowNumber: number, 
     mapUrl: mapLinkRaw || undefined,
     latitude: mapGps.latitude,
     longitude: mapGps.longitude,
+    tripSequence,
     product,
     productCodes,
     productQtyPairs,

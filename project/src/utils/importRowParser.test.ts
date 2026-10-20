@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchCustomerForImport, matchDriverForImport, parseImportRow, parseFuelCell, IMPORT_HEADERS, type ParseImportRowDeps } from './importRowParser'
+import { assignImportTripSequences, applySheetHyperlinks, matchCustomerForImport, matchDriverForImport, parseImportRow, parseFuelCell, IMPORT_HEADERS, type ParseImportRowDeps } from './importRowParser'
 
 /** ลูกค้าในไฟล์ Excel มักกรอกแบบย่อ (เช่น "Sccc") ต้องจับคู่กับ "รหัสผู้ติดต่อ" ก่อนเสมอ ถ้าไม่เจอค่อยลองชื่อเต็ม
  *  เจอแล้วต้องได้ record คืนมา (ผู้เรียกจะเอา .name ไปใช้เป็นชื่อเต็มบน booking.customer เสมอ) */
@@ -250,5 +250,49 @@ describe('parseImportRow — ทะเบียน ↔ คนขับ ผูก
       mk(() => ({ id: 'd4', fullName: 'ปัญญา เอี่ยมสะอาด', plate: '72-2337 สระบุรี' }))
     )
     expect(row.plate).toBe('72-0000')
+  })
+})
+
+/** หัวคอลัมน์จริงจากไฟล์ลูกค้า: "พิกัด/ลิ้งก์ Google maps หน้างาน" (ลิ้งก์ มีไม้โท, maps ตัวเล็ก) เคยไม่ถูกอ่านเลยเพราะเทียบชื่อตรงเป๊ะ */
+describe('parseImportRow — หัวคอลัมน์ลิงก์ GPS/เที่ยวที่ ที่ชื่อต่างจากระบบ', () => {
+  const deps: ParseImportRowDeps = { matchDriver: () => undefined, findFuelRate: () => undefined, matchCustomer: () => undefined }
+  const base: Record<string, unknown> = { [IMPORT_HEADERS.siteName]: 'ไซต์', [IMPORT_HEADERS.districtProvince]: 'เมือง/นครสวรรค์' }
+
+  it('หัวคอลัมน์จริง "พิกัด/ลิ้งก์ Google maps หน้างาน" + ลิงก์สั้น → เก็บเป็น mapUrl', () => {
+    const row = parseImportRow({ ...base, 'พิกัด/ลิ้งก์ Google maps หน้างาน': 'https://maps.app.goo.gl/TeiWqRmaq9Tciyw98' }, 1, deps)
+    expect(row.mapUrl).toBe('https://maps.app.goo.gl/TeiWqRmaq9Tciyw98')
+    expect(row.latitude).toBeUndefined()
+  })
+  it.each(['GPS', 'ลิ้งก์ GPS', 'ลิงค์แผนที่', 'Google Map', 'พิกัด'])('หัวคอลัมน์ "%s" ถูกอ่านเป็นลิงก์ GPS', (h) => {
+    expect(parseImportRow({ ...base, [h]: 'https://maps.google.com/?q=13.7,100.5' }, 1, deps).latitude).toBe(13.7)
+  })
+  it('หัวคอลัมน์อื่นที่ระบบรู้จักไม่ถูกดึงไปเป็นลิงก์ (เช่น สถานที่ส่งสินค้า)', () => {
+    expect(parseImportRow({ ...base }, 1, deps).mapUrl).toBeUndefined()
+  })
+  it('อ่านเลขเที่ยวจากคอลัมน์ "เที่ยวที่" หลายรูปแบบ', () => {
+    expect(parseImportRow({ ...base, 'เที่ยวที่': 2 }, 1, deps).tripSequence).toBe(2)
+    expect(parseImportRow({ ...base, เที่ยว: 'เที่ยว 3' }, 1, deps).tripSequence).toBe(3)
+    expect(parseImportRow({ ...base, 'เที่ยวที่': '' }, 1, deps).tripSequence).toBeUndefined()
+  })
+})
+
+describe('assignImportTripSequences', () => {
+  const r = (driverName: string, tripSequence?: number) => ({ driverName, plate: '', tripSequence, isEmpty: false })
+  it('แถวซ้ำคนขับเดียวกัน เรียงเป็นเที่ยว 1,2 ตามแถว; คนขับอื่นเริ่ม 1 ใหม่', () => {
+    const rows = assignImportTripSequences([r('ก'), r('ข'), r('ก'), r('ก')])
+    expect(rows.map((x) => x.tripSequence)).toEqual([1, 1, 2, 3])
+  })
+  it('เลขที่ระบุเองในไฟล์ไม่ถูกทับ และแถวที่ไม่ระบุต่อจากเลขสูงสุด', () => {
+    const rows = assignImportTripSequences([r('ก', 2), r('ก')])
+    expect(rows.map((x) => x.tripSequence)).toEqual([2, 3])
+  })
+})
+
+describe('applySheetHyperlinks', () => {
+  it('ดึง URL จริงจาก hyperlink ของเซลล์ที่แสดงเป็นข้อความป้าย', () => {
+    const sheet = { B3: { v: 'ดูแผนที่', l: { Target: 'https://maps.app.goo.gl/abc' } } } as Record<string, any>
+    const rows: Record<string, unknown>[] = [{ 'ลิ้งก์ GPS': 'ดูแผนที่' }]
+    applySheetHyperlinks(sheet, 1, ['พขร.', 'ลิ้งก์ GPS'], rows)
+    expect(rows[0]['ลิ้งก์ GPS']).toBe('https://maps.app.goo.gl/abc')
   })
 })

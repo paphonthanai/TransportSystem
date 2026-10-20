@@ -200,6 +200,7 @@ interface SheetColumn {
 }
 
 const baseColumns: SheetColumn[] = [
+  { key: IMPORT_HEADERS.tripNo, label: 'เที่ยวที่', narrow: true },
   { key: IMPORT_HEADERS.driverName, label: 'พขร. (ชื่อเล่น)' },
   { key: IMPORT_HEADERS.plate, label: 'ทะเบียนรถ (คอนเฟิร์ม)' },
   { key: IMPORT_HEADERS.docRef, label: 'เลขที่เอกสาร' },
@@ -399,10 +400,9 @@ const titleRow = () => {
 
 const exportExcel = () => {
   if (!filledRows.value.length) return
-  const header = [IMPORT_HEADER_MARKER, 'เที่ยวที่', ...baseColumns.map((c) => c.key), ...customColumns.value]
+  const header = [IMPORT_HEADER_MARKER, ...baseColumns.map((c) => c.key), ...customColumns.value]
   const body = filledRows.value.map((row, i) => [
     i + 1,
-    '',
     ...baseColumns.map((c) => String(row.values[c.key] ?? '').trim()),
     ...customColumns.value.map((name) => String(row.values[`custom:${name}`] ?? '').trim()),
   ])
