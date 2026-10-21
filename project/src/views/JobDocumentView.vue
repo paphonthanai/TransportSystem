@@ -388,6 +388,21 @@
           <div v-if="booking.finalAllowance !== undefined" class="bg-primary text-white rounded-lg p-3 sm:col-span-2">
             <div class="text-xs opacity-90 mb-1">เบี้ยเลี้ยงสุทธิ</div>
             <div class="font-bold">{{ formatBaht(booking.finalAllowance) }}</div>
+            <div v-for="adj in booking.debtAdjustments || []" :key="adj.id" class="text-[11px] opacity-90 mt-0.5">
+              {{ adj.label || 'เพิ่ม/ลดหนี้' }}: {{ adj.amount > 0 ? '-' : '+' }}{{ formatBaht(Math.abs(adj.amount)) }}
+            </div>
+          </div>
+          <div v-if="booking.status === 'DELIVERED'" class="sm:col-span-2 flex flex-wrap items-center gap-2">
+            <button
+              @click="driverIncomeTarget = booking"
+              :disabled="!!driverIncomeBlockedReason"
+              :title="driverIncomeBlockedReason || 'แก้เบี้ยเลี้ยง/เพิ่ม-ลดหนี้ของงานที่จบแล้ว'"
+              class="btn-sm text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span class="material-symbols-rounded text-base">payments</span>
+              แก้ไขรายได้คนขับ
+            </button>
+            <span v-if="driverIncomeBlockedReason" class="text-xs text-muted">{{ driverIncomeBlockedReason }}</span>
           </div>
         </div>
 
@@ -495,6 +510,7 @@
     <!-- ดูรูปเต็มจอ (ขยาย/ดาวน์โหลด) และไดอะล็อกจบงาน -->
     <ImageLightbox :image="lightbox" @close="lightbox = null" />
     <BookingCompleteDialog :booking="completeTarget" @close="completeTarget = null" />
+    <DriverIncomeEditDialog :booking="driverIncomeTarget" @close="driverIncomeTarget = null" />
   </div>
 </template>
 
@@ -514,6 +530,7 @@ import { priceCellText, PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import ImageLightbox from '@/components/shared/ImageLightbox.vue'
 import BookingCompleteDialog from '@/components/booking/BookingCompleteDialog.vue'
+import DriverIncomeEditDialog from '@/components/booking/DriverIncomeEditDialog.vue'
 import { bookingCompletionIssues, describeCompletionIssues, STATIC_COMPLETION_CODES } from '@/utils/bookingCompletion'
 import type { Booking, BookingStatus, JobItem } from '@/types'
 
@@ -538,6 +555,8 @@ const openImage = (src: string, title: string) => {
 
 // ---- ปุ่มดำเนินการ: จบงาน / ยืนยัน POD / ยืนยันการจบงาน (กติกาเดียวกับเมนู "⋮" ของตารางหน้า Booking) ----
 const completeTarget = ref<Booking | null>(null)
+const driverIncomeTarget = ref<Booking | null>(null)
+const driverIncomeBlockedReason = computed(() => (booking.value ? bookingStore.driverIncomeEditBlockedReason(booking.value) : ''))
 const standardFuel = computed(() => (booking.value ? fuelRateStore.standardFuelLiters(booking.value.items, booking.value.pricingMode) || undefined : undefined))
 /** สิ่งที่ยังขาดที่ต้องไปแก้ที่หน้าแก้ไขงาน (ทะเบียน/คนขับ/ค่าเที่ยว) — เลขไมล์/ลิตรน้ำมันกรอกในไดอะล็อกจบงานเอง */
 const completeBlockedReason = computed(() =>

@@ -1054,6 +1054,36 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
+   * เหตุผลที่แก้รายได้คนขับ (เบี้ยเลี้ยง/เพิ่ม-ลดหนี้) ของงานที่จบแล้วไม่ได้ — ว่าง = แก้ได้ ล็อกเมื่อจ่ายเงินคนขับไปแล้ว หรืองานถูกดึง
+   * เข้าเอกสารรายได้คนขับแล้ว (เอกสารเก็บยอด snapshot ไว้ แก้ที่งานจะไม่ตรงกับเอกสาร — ต้องลบงานออกจากเอกสารก่อน)
+   */
+  function driverIncomeEditBlockedReason(booking: Booking): string {
+    if (booking.status !== 'DELIVERED') return 'แก้รายได้คนขับได้เฉพาะงานที่จบแล้ว (งานที่ยังไม่จบใช้ "แก้ไขงาน")'
+    if (isPaidToDriver(booking)) return 'จ่ายรายได้ให้คนขับไปแล้ว แก้ไม่ได้'
+    if (booking.driverPayrollDocId) return 'งานนี้อยู่ในเอกสารรายได้คนขับแล้ว ต้องนำงานออกจากเอกสารก่อนจึงจะแก้ได้'
+    return ''
+  }
+
+  /**
+   * แก้รายได้คนขับของงานที่จบแล้ว (เช่นคนขับกดจบงานเองจากแอป จึงไม่ได้ผ่านไดอะล็อกจบงานที่ใส่เพิ่ม/ลดหนี้) — คำนวณ
+   * เบี้ยเลี้ยงสุทธิสูตรเดียวกับ completeJob: allowance - ผลรวมเพิ่ม/ลดหนี้ (บวก = หัก, ลบ = คืน) ไม่แตะสถานะ/POD/ข้อมูลอื่น
+   */
+  function updateDriverIncome(id: string, allowance: number, debtAdjustments: DebtAdjustment[]): { ok: boolean; message?: string } {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return { ok: false, message: 'ไม่พบงาน' }
+    const blocked = driverIncomeEditBlockedReason(booking)
+    if (blocked) return { ok: false, message: blocked }
+    if (!Number.isFinite(allowance) || allowance < 0) return { ok: false, message: 'เบี้ยเลี้ยงต้องเป็นตัวเลขไม่ติดลบ' }
+    const before = booking.finalAllowance ?? booking.allowance ?? 0
+    const netAdjustment = debtAdjustments.reduce((sum, d) => sum + (d.amount || 0), 0)
+    booking.allowance = Math.round(allowance * 100) / 100
+    booking.debtAdjustments = debtAdjustments
+    booking.finalAllowance = Math.round((booking.allowance - netAdjustment) * 100) / 100
+    addLog(`แก้รายได้คนขับ ${booking.docNo}: ${before} → ${booking.finalAllowance} บาท`, { bookingId: booking.id })
+    return { ok: true }
+  }
+
+  /**
    * คนขับกดส่งของสำเร็จทีละรายการ (JobItem) — บันทึกชื่อผู้รับของรายการนั้นโดยเฉพาะ บังคับต้องมีรูปสินค้าตอนลง (podImage)
    * เสมอ (ตามที่ตกลง — คนขับต้องถ่ายรูปจริงก่อนยืนยันส่งของได้ ไม่ใช่แค่กดปุ่มเฉยๆ เหมือนขั้น "ยืนยันรับสินค้าขึ้นรถคันนี้"
    * ที่ถูกตัดออกไปแล้ว) ไม่มี podImage มาด้วยถือเป็นการเรียกผิดเงื่อนไข ไม่ทำอะไรเลย (ฝั่ง UI ต้อง disable ปุ่มไว้ก่อนอยู่แล้ว
@@ -1408,6 +1438,8 @@ export const useBookingStore = defineStore('booking', () => {
     pickupJobItem,
     startTransit,
     completeJob,
+    driverIncomeEditBlockedReason,
+    updateDriverIncome,
     deliverJobItem,
     confirmPodImage,
     setDeliveryNoteImage,
