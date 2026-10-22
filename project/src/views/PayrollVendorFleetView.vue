@@ -1,8 +1,11 @@
 <template>
   <div class="space-y-6">
     <div class="flex items-center gap-3 flex-wrap">
-      <h2 class="text-lg font-bold text-text">รถร่วม / รถหุ้นส่วน</h2>
-      <div class="text-xs text-muted">
+      <h2 class="text-lg font-bold text-text">{{ isCompanyFleet ? 'รถบริษัท' : 'รถร่วม / รถหุ้นส่วน' }}</h2>
+      <div v-if="isCompanyFleet" class="text-xs text-muted">
+        ข้อมูลของรถบริษัท (รายได้/ค่าน้ำมัน/ค่าแรงคนขับ Sync จาก Booking, ค่าใช้จ่ายประจำรถกรอกเอง) — ค่าแรงคนขับ = เบี้ยเลี้ยงหลังเพิ่ม/ลดหนี้ของงานที่จบแล้ว
+      </div>
+      <div v-else class="text-xs text-muted">
         ข้อมูลของ "รถ" เท่านั้น (รายได้/ค่าน้ำมัน Sync จาก Booking, ค่าใช้จ่ายประจำรถกรอกเอง) — รายได้คนขับดูที่หน้า
         <RouterLink to="/payroll/drivers" class="text-primary hover:underline">พนักงานขับรถ</RouterLink> แทน
       </div>
@@ -31,7 +34,7 @@
         <div class="font-semibold text-green-600">{{ formatBaht(grandTotals.income) }}</div>
       </div>
       <div>
-        <div class="text-xs text-muted">ค่าใช้จ่ายรวม (น้ำมันรอบนี้ + ค่าใช้จ่ายประจำรถสะสม)</div>
+        <div class="text-xs text-muted">ค่าใช้จ่ายรวม (น้ำมันรอบนี้{{ isCompanyFleet ? ' + ค่าแรงคนขับรอบนี้' : '' }} + ค่าใช้จ่ายประจำรถสะสม)</div>
         <div class="font-semibold text-red-500">-{{ formatBaht(grandTotals.expense) }}</div>
       </div>
       <div>
@@ -49,6 +52,7 @@
             <th class="px-4 py-3 font-semibold text-right">จำนวนงาน</th>
             <th class="px-4 py-3 font-semibold text-right">รายได้จากงาน</th>
             <th class="px-4 py-3 font-semibold text-right">ค่าน้ำมันที่ใช้</th>
+            <th v-if="isCompanyFleet" class="px-4 py-3 font-semibold text-right">ค่าแรงคนขับ</th>
             <th class="px-4 py-3 font-semibold text-right">ค่าใช้จ่ายประจำรถ</th>
             <th class="px-4 py-3 font-semibold text-right">ยอดสุทธิ</th>
             <th class="px-4 py-3 font-semibold"></th>
@@ -61,6 +65,7 @@
             <td class="px-4 py-3 text-right text-text">{{ row.trips }}</td>
             <td class="px-4 py-3 text-right text-green-600">{{ formatBaht(row.income) }}</td>
             <td class="px-4 py-3 text-right text-red-500">-{{ formatBaht(row.fuelCost) }}</td>
+            <td v-if="isCompanyFleet" class="px-4 py-3 text-right text-red-500">-{{ formatBaht(row.driverWage) }}</td>
             <td class="px-4 py-3 text-right text-red-500">-{{ formatBaht(row.vehicleExpense) }}</td>
             <td class="px-4 py-3 text-right font-bold text-text">{{ formatBaht(row.net) }}</td>
             <td class="px-4 py-3 text-right">
@@ -68,7 +73,7 @@
             </td>
           </tr>
           <tr v-if="vehicleRows.length === 0">
-            <td colspan="8" class="px-4 py-8 text-center text-muted">ยังไม่มีรถร่วมในหมวดที่เลือก</td>
+            <td :colspan="isCompanyFleet ? 9 : 8" class="px-4 py-8 text-center text-muted">{{ isCompanyFleet ? 'ยังไม่มีรถบริษัท' : 'ยังไม่มีรถร่วมในหมวดที่เลือก' }}</td>
           </tr>
         </tbody>
       </table>
@@ -82,7 +87,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
 import { useVehicleExpensesStore } from '@/stores/vehicleExpenses'
 import { exportRowsToExcel } from '@/utils/exportExcel'
-import { fuelCostOf } from '@/utils/bookingMoney'
+import { fuelCostOf, roundMoney } from '@/utils/bookingMoney'
 import type { Booking, Vehicle, VehicleType } from '@/types'
 import { vehicleGroupOf, type VehicleGroup } from '@/utils/vehicleType'
 
@@ -100,13 +105,19 @@ const categoryOptions: { value: CategoryFilter; label: string }[] = [
   { value: 'ร่วมนอก', label: 'หมวดร่วมนอก' },
   { value: 'รถร่วม', label: '- รถร่วม' },
   { value: 'รถอู่เสริม', label: '- รถอู่เสริม' },
+  { value: 'รถบริษัท', label: 'รถบริษัท' },
 ]
 
 const category = ref<CategoryFilter>('ALL')
+/** แท็บ "รถบริษัท" — ดูเฉพาะรถบริษัท และหักค่าแรงคนขับ (เบี้ยเลี้ยงหลังเพิ่ม/ลดหนี้) ออกจากยอดสุทธิของรถด้วย
+ *  (รถร่วม/รถหุ้นส่วนไม่หัก เพราะค่าแรงคนขับเป็นเรื่องระหว่างคนขับกับเจ้าของรถ ดูที่หน้า "พนักงานขับรถ" แทน) */
+const isCompanyFleet = computed(() => category.value === 'รถบริษัท')
 
-/** ตัวกรองเป็นได้ทั้งหมวดใหญ่ (ร่วมใน/ร่วมนอก) หรือหมวดย่อย — หน้านี้ไม่รวมรถบริษัทเสมอ */
+/** ตัวกรองเป็นได้ทั้งหมวดใหญ่ (ร่วมใน/ร่วมนอก) หรือหมวดย่อย — "ทั้งหมด" ไม่รวมรถบริษัท (รถบริษัทดูที่แท็บของตัวเอง) */
 const departmentFilter = (department: VehicleType | undefined) => {
-  if (!department || department === 'รถบริษัท') return false
+  if (!department) return false
+  if (category.value === 'รถบริษัท') return department === 'รถบริษัท'
+  if (department === 'รถบริษัท') return false
   if (category.value === 'ALL') return true
   if (category.value === 'ร่วมใน' || category.value === 'ร่วมนอก') return vehicleGroupOf(department) === category.value
   return department === category.value
@@ -148,14 +159,16 @@ const vehicleRows = computed(() =>
     const fuelTotal = bookings.reduce((sum, b) => sum + fuelCost(b), 0)
     /** ค่าใช้จ่ายประจำรถเป็นยอดสะสมทั้งหมด ไม่กรองตามรอบเดือน เหมือน VendorFleetVehicleDetailView.vue (ประกันต่อปี ฯลฯ กรองตามรอบจะทำให้ยอดหายไปผิดๆ) */
     const vehicleExpense = vehicleExpensesStore.expensesForVehicle(vehicle.id).reduce((sum, e) => sum + e.amount, 0)
-    const net = income - fuelTotal - vehicleExpense
-    return { vehicle, trips, income, fuelCost: fuelTotal, vehicleExpense, net }
+    /** ค่าแรงคนขับ = เบี้ยเลี้ยงหลังกระทบยอดเพิ่ม/ลดหนี้ (สูตรเดียวกับ computeBookingMoney/เงินเดือนคนขับ) — หักเฉพาะรถบริษัท */
+    const driverWage = isCompanyFleet.value ? bookings.reduce((sum, b) => sum + roundMoney(b.finalAllowance ?? b.allowance ?? 0), 0) : 0
+    const net = income - fuelTotal - driverWage - vehicleExpense
+    return { vehicle, trips, income, fuelCost: fuelTotal, driverWage, vehicleExpense, net }
   })
 )
 
 const grandTotals = computed(() =>
   vehicleRows.value.reduce(
-    (acc, r) => ({ income: acc.income + r.income, expense: acc.expense + r.fuelCost + r.vehicleExpense, net: acc.net + r.net }),
+    (acc, r) => ({ income: acc.income + r.income, expense: acc.expense + r.fuelCost + r.driverWage + r.vehicleExpense, net: acc.net + r.net }),
     { income: 0, expense: 0, net: 0 }
   )
 )
@@ -164,13 +177,14 @@ const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH',
 
 const exportSummary = () => {
   exportRowsToExcel(
-    `รถร่วม-สรุป-${period.value}`,
+    `${isCompanyFleet.value ? 'รถบริษัท' : 'รถร่วม'}-สรุป-${period.value}`,
     vehicleRows.value.map((r) => ({
       ทะเบียนรถ: vehiclesStore.fullPlate(r.vehicle),
       ประเภท: r.vehicle.department,
       จำนวนงาน: r.trips,
       รายได้จากงาน: r.income,
       ค่าน้ำมันที่ใช้: r.fuelCost,
+      ...(isCompanyFleet.value ? { ค่าแรงคนขับ: r.driverWage } : {}),
       ค่าใช้จ่ายประจำรถ: r.vehicleExpense,
       ยอดสุทธิ: r.net,
     }))

@@ -509,7 +509,7 @@
 
     <!-- ดูรูปเต็มจอ (ขยาย/ดาวน์โหลด) และไดอะล็อกจบงาน -->
     <ImageLightbox :image="lightbox" @close="lightbox = null" />
-    <BookingCompleteDialog :booking="completeTarget" @close="completeTarget = null" />
+    <BookingCompleteDialog :booking="completeTarget" @close="completeTarget = null" @done="backToBooking" />
     <DriverIncomeEditDialog :booking="driverIncomeTarget" @close="driverIncomeTarget = null" />
   </div>
 </template>
@@ -599,6 +599,14 @@ const approvePod = () => {
   if (!b) return
   if (!confirm(`ยืนยันว่ารูป POD ของงาน ${b.docNo} ตรงกับข้อมูลในระบบ?`)) return
   bookingStore.reviewPod(b.id, 'APPROVED')
+  backToBooking(b.id)
+}
+
+/** จบงาน/ยืนยัน POD/ยืนยันการจบงานสำเร็จแล้ว → กลับไปหน้า Booking ของ fleet งานนี้ พร้อมไฮไลต์แถวงานที่เพิ่งเปลี่ยนสถานะ */
+const backToBooking = (bookingId: string) => {
+  const b = bookingStore.bookings.find((x) => x.id === bookingId)
+  if (!b) return
+  router.push({ path: `/booking/${b.category}`, query: { highlight: b.id } })
 }
 
 const confirmCompletion = () => {
@@ -607,6 +615,7 @@ const confirmCompletion = () => {
   if (!confirm(`ยืนยันการจบงาน ${b.docNo}? หลังยืนยันจะสามารถนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
   const result = bookingStore.confirmJobCompletion(b.id)
   if (!result.ok && result.issues.length) alert(`จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}`)
+  if (result.ok) backToBooking(b.id)
 }
 /** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง — แก้ไขราคาต้องทำผ่านหน้าแก้ไขงานเท่านั้น ไม่ใช่หน้านี้ */
 const isMulti = computed(() => (booking.value?.pricingMode ?? 'SINGLE_DESTINATION') === 'MULTI_DESTINATION')

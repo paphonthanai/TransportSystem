@@ -15,6 +15,10 @@
         <option value="">ทุกคน</option>
         <option v-for="d in driverOptions" :key="d" :value="d">{{ d }}</option>
       </select>
+      <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface border border-border flex-1 min-w-[200px] max-w-sm">
+        <span class="material-symbols-rounded text-muted text-lg">search</span>
+        <input v-model="search" type="text" placeholder="ค้นหา ชื่อคนขับ หน้างาน เลขชิพเม้นท์..." class="border-0 outline-0 bg-transparent text-sm text-text w-full" />
+      </div>
       <button @click="mode === 'summary' ? exportSummary() : exportDetail()" class="btn-secondary ml-auto">
         <span class="material-symbols-rounded text-base">download</span>
         นำออกเป็น Excel
@@ -37,7 +41,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in summaryRows" :key="row.driver" class="border-t border-border hover:bg-surface-2 transition-colors">
+          <tr v-for="row in filteredSummaryRows" :key="row.driver" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 font-semibold text-text cursor-pointer" @click="selectDriverDetail(row.driver)">{{ row.driver }}</td>
             <td class="px-4 py-3 text-right text-text cursor-pointer" @click="selectDriverDetail(row.driver)">{{ row.trips }}</td>
             <td class="px-4 py-3 text-right text-text cursor-pointer" @click="selectDriverDetail(row.driver)">{{ formatBaht(row.baseAllowance) }}</td>
@@ -70,8 +74,8 @@
               <span v-else class="text-xs text-muted" title="ไม่พบทะเบียนคนขับนี้ในสมุดรายชื่อ">-</span>
             </td>
           </tr>
-          <tr v-if="summaryRows.length === 0">
-            <td colspan="9" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่จบแล้วในรอบนี้</td>
+          <tr v-if="filteredSummaryRows.length === 0">
+            <td colspan="9" class="px-4 py-8 text-center text-muted">{{ search && summaryRows.length ? 'ไม่พบคนขับที่ตรงกับคำค้นหา' : 'ยังไม่มีงานที่จบแล้วในรอบนี้' }}</td>
           </tr>
         </tbody>
       </table>
@@ -89,15 +93,15 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, idx) in detailRows" :key="idx" class="border-t border-border hover:bg-surface-2 transition-colors">
+          <tr v-for="(row, idx) in filteredDetailRows" :key="idx" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 text-muted">{{ formatDate(row.shipDate) }}</td>
             <td class="px-4 py-3 text-text">{{ row.shipmentNo }}</td>
             <td class="px-4 py-3 text-text">{{ row.siteName }}</td>
             <td class="px-4 py-3 text-text">{{ row.driverName }}</td>
             <td class="px-4 py-3 text-right font-semibold text-text">{{ formatBaht(row.driverIncome) }}</td>
           </tr>
-          <tr v-if="detailRows.length === 0">
-            <td colspan="5" class="px-4 py-8 text-center text-muted">ยังไม่มีเที่ยวงานในรอบนี้</td>
+          <tr v-if="filteredDetailRows.length === 0">
+            <td colspan="5" class="px-4 py-8 text-center text-muted">{{ search && detailRows.length ? 'ไม่พบเที่ยวงานที่ตรงกับคำค้นหา' : 'ยังไม่มีเที่ยวงานในรอบนี้' }}</td>
           </tr>
         </tbody>
       </table>
@@ -109,6 +113,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDriverPayroll } from '@/composables/useDriverPayroll'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
@@ -120,6 +125,15 @@ const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, d
   useDriverPayroll(() => true, 'พขร')
 
 const router = useRouter()
+
+/** ค้นหาในตาราง (ไม่สนตัวพิมพ์เล็ก-ใหญ่) — กรองเฉพาะที่แสดง ไม่กระทบยอด/ไฟล์ Excel ที่นำออก */
+const search = ref('')
+const matches = (...fields: (string | undefined)[]) => {
+  const q = search.value.trim().toLowerCase()
+  return !q || fields.some((f) => (f || '').toLowerCase().includes(q))
+}
+const filteredSummaryRows = computed(() => summaryRows.value.filter((r) => matches(r.driver)))
+const filteredDetailRows = computed(() => detailRows.value.filter((r) => matches(r.driverName, r.siteName, r.shipmentNo)))
 
 const selectDriverDetail = (driver: string) => {
   selectedDriver.value = driver

@@ -163,7 +163,8 @@
               v-for="booking in inProgressBookings"
               :key="booking.id"
               :style="customerRowStyle(booking)"
-              :class="{ 'ring-2 ring-primary ring-inset': selectedBookingId === booking.id }"
+              :id="`booking-row-${booking.id}`"
+              :class="{ 'ring-2 ring-primary ring-inset': selectedBookingId === booking.id, 'ring-2 ring-green-500 ring-inset': highlightBookingId === booking.id }"
               @click="onRowClick(booking, $event)"
               class="border-b border-border hover:bg-surface-2 transition-colors cursor-pointer"
             >
@@ -234,7 +235,7 @@
                 </div>
               </td>
               <td class="px-3 py-3">
-                <button v-if="booking.note" @click="noteTarget = booking" class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center" title="ดูหมายเหตุ">
+                <button v-if="pruneResolvedNote(booking)" @click="noteTarget = booking" class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center" title="ดูหมายเหตุ">
                   !
                 </button>
               </td>
@@ -282,6 +283,9 @@
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
+              <th class="text-left px-3 py-3 font-semibold text-muted">สถานะขนส่ง</th>
+              <th class="px-3 py-3"></th>
+              <th class="text-left px-3 py-3 font-semibold text-muted">การจัดการ</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">เที่ยวที่</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">พขร.</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
@@ -292,9 +296,6 @@
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานที่ส่ง</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
               <th class="text-right px-3 py-3 font-semibold text-muted">ค่าเที่ยว</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">สถานะขนส่ง</th>
-              <th class="px-3 py-3"></th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
@@ -302,10 +303,44 @@
               v-for="booking in inTransitBookings"
               :key="booking.id"
               :style="customerRowStyle(booking)"
-              :class="{ 'ring-2 ring-primary ring-inset': selectedBookingId === booking.id }"
+              :id="`booking-row-${booking.id}`"
+              :class="{ 'ring-2 ring-primary ring-inset': selectedBookingId === booking.id, 'ring-2 ring-green-500 ring-inset': highlightBookingId === booking.id }"
               @click="onRowClick(booking, $event)"
               class="border-b border-border hover:bg-surface-2 transition-colors cursor-pointer"
             >
+              <td class="px-3 py-3">
+                <span :class="['text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
+              </td>
+              <td class="px-3 py-3">
+                <button v-if="pruneResolvedNote(booking)" @click="noteTarget = booking" class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center" title="ดูหมายเหตุ">
+                  !
+                </button>
+              </td>
+              <td class="px-3 py-3">
+                <div class="flex items-center gap-2">
+                  <!-- ตารางนี้ตอนนี้โชว์งาน DELIVERED ที่รอตรวจสอบ POD ค้างไว้ด้วย (ดู inTransitBookings) — "เปลี่ยนรถ/คนขับ"
+                       ไม่มีความหมายกับงานที่ส่งของเสร็จแล้ว ซ่อนไว้กันกดเผลอไปจ่ายงานซ้ำ/เปลี่ยนคนขับงานที่จบไปแล้ว -->
+                  <button v-if="booking.status !== 'DELIVERED'" @click="openDispatchDialog(booking)" class="btn-sm text-amber-700">
+                    <span class="material-symbols-rounded text-base">sync_alt</span>
+                    เปลี่ยนรถ / คนขับ
+                  </button>
+                  <BookingActionMenu
+                    :booking="booking"
+                    :can-hard-delete="bookingStore.canDeleteBooking(booking).ok"
+                    :complete-blocked-reason="completeBlockedReason(booking)"
+                    :confirm-blocked-reason="confirmBlockedReason(booking)"
+                    @view="router.push(`/job/${booking.id}`)"
+                    @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
+                    @start-transit="bookingStore.startTransit(booking.id)"
+                    @complete="openCompleteDialog(booking)"
+                    @delete="deleteBooking(booking)"
+                    @cancel="onCancelDispatch(booking)"
+                    @approve-pod="approvePod(booking)"
+                    @edit-pod="router.push(`/job/${booking.id}`)"
+                    @confirm-completion="onConfirmJobCompletion(booking)"
+                  />
+                </div>
+              </td>
               <td class="px-3 py-3 text-text">
                 <!-- ระดับ 2: งานรอจัดรถที่มีคนขับแล้ว เลือกเที่ยวที่ในตารางได้เลย ก่อนกดจัดรถ (จ่ายเที่ยว 1/2 ลำดับไหนก็ได้) -->
                 <select
@@ -359,39 +394,6 @@
               <td class="px-3 py-3 text-right whitespace-nowrap">
                 <span v-if="booking.tripFee > 0" class="text-text">{{ formatBaht(booking.tripFee) }}</span>
                 <span v-else class="text-xs font-semibold text-amber-700">ยังไม่ระบุราคา</span>
-              </td>
-              <td class="px-3 py-3">
-                <span :class="['text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
-              </td>
-              <td class="px-3 py-3">
-                <button v-if="booking.note" @click="noteTarget = booking" class="w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center" title="ดูหมายเหตุ">
-                  !
-                </button>
-              </td>
-              <td class="px-3 py-3">
-                <div class="flex items-center gap-2">
-                  <!-- ตารางนี้ตอนนี้โชว์งาน DELIVERED ที่รอตรวจสอบ POD ค้างไว้ด้วย (ดู inTransitBookings) — "เปลี่ยนรถ/คนขับ"
-                       ไม่มีความหมายกับงานที่ส่งของเสร็จแล้ว ซ่อนไว้กันกดเผลอไปจ่ายงานซ้ำ/เปลี่ยนคนขับงานที่จบไปแล้ว -->
-                  <button v-if="booking.status !== 'DELIVERED'" @click="openDispatchDialog(booking)" class="btn-sm text-amber-700">
-                    <span class="material-symbols-rounded text-base">sync_alt</span>
-                    เปลี่ยนรถ / คนขับ
-                  </button>
-                  <BookingActionMenu
-                    :booking="booking"
-                    :can-hard-delete="bookingStore.canDeleteBooking(booking).ok"
-                    :complete-blocked-reason="completeBlockedReason(booking)"
-                    :confirm-blocked-reason="confirmBlockedReason(booking)"
-                    @view="router.push(`/job/${booking.id}`)"
-                    @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
-                    @start-transit="bookingStore.startTransit(booking.id)"
-                    @complete="openCompleteDialog(booking)"
-                    @delete="deleteBooking(booking)"
-                    @cancel="onCancelDispatch(booking)"
-                    @approve-pod="approvePod(booking)"
-                    @edit-pod="router.push(`/job/${booking.id}`)"
-                    @confirm-completion="onConfirmJobCompletion(booking)"
-                  />
-                </div>
               </td>
             </tr>
             <tr v-if="inTransitBookings.length === 0">
@@ -667,7 +669,7 @@
               <span class="material-symbols-rounded">close</span>
             </button>
           </div>
-          <div class="px-6 py-5 text-sm text-text whitespace-pre-wrap">{{ noteTarget.note }}</div>
+          <div class="px-6 py-5 text-sm text-text whitespace-pre-wrap">{{ pruneResolvedNote(noteTarget) }}</div>
         </div>
       </div>
     </Teleport>
@@ -937,6 +939,7 @@ import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import type { Booking, BookingCategory, BookingJobType, BookingStatus, JobItem, Vehicle } from '@/types'
 import { bookingTitle } from '@/utils/bookingTitle'
+import { pruneResolvedNote } from '@/utils/bookingNote'
 import { bookingStatusLabel, bookingStatusClass, billingStatusLabel, billingStatusClass } from '@/utils/bookingStatus'
 import { parseGpsInput } from '@/utils/gps'
 import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
@@ -1037,6 +1040,7 @@ const priceMin = ref<number | ''>('')
 const priceMax = ref<number | ''>('')
 /** ตัวกรองจาก Dashboard "ต้องดำเนินการ": 'pod' = เฉพาะงานรอตรวจ POD (ซ่อนตาราง "กำลังดำเนินการ") */
 const issueFilter = ref<'' | 'pod'>('')
+const highlightBookingId = ref<string | null>(null)
 const clearIssueFilter = () => {
   issueFilter.value = ''
 }
@@ -1046,6 +1050,12 @@ watch(
   (q) => {
     if (q.price === 'none') priceFilter.value = 'none'
     issueFilter.value = q.issue === 'pod' ? 'pod' : ''
+    // ?highlight=<id> — กลับมาจากหน้ารายละเอียดงานหลังจบงาน/ยืนยัน POD: ไฮไลต์แถวนั้นแล้วเลื่อนไปให้เห็น
+    highlightBookingId.value = typeof q.highlight === 'string' ? q.highlight : null
+    if (highlightBookingId.value) {
+      const id = highlightBookingId.value
+      nextTick(() => document.getElementById(`booking-row-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
+    }
   },
   { immediate: true }
 )
