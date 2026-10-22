@@ -202,6 +202,9 @@ export interface ImportRowResult {
   jobType?: BookingJobType
   note: string
   warnings: string[]
+  /** ข้อควรตรวจก่อนนำเข้า (พิกัด/ลิงก์ GPS, เลขเที่ยวอ่านไม่ได้) — แสดงในพรีวิวให้ตรวจก่อนยืนยัน ไม่ถูกแปะลง note ของงาน และไม่บล็อกการสร้างงาน
+   *  (ต่างจาก warnings ที่ข้อมูลขาด/จับคู่ไม่ได้ซึ่งแปะลง note) */
+  checks: string[]
 }
 
 /** คอลัมน์แรกสุดของชีทงานจริงเสมอ (ทั้งไฟล์ที่มี Row หัวเรื่อง+วันที่ และไฟล์ที่ไม่มี) ใช้เช็คว่า Row แรกของไฟล์ที่
@@ -305,6 +308,41 @@ export interface ParseImportRowDeps {
   /** คืนลูกค้าที่จับคู่ได้ (จากรหัสผู้ติดต่อ/ชื่อย่อ หรือชื่อเต็ม) แค่ name (ชื่อเต็ม) พอ — ตัวหา match จริงคือ
    *  matchCustomerForImport ด้านบน ผู้เรียกเป็นคนต่อกับ customerStore เพราะโมดูลนี้ไม่ผูกกับ Pinia store ตรงๆ */
   matchCustomer: (raw: string) => { name: string } | undefined
+}
+
+/** โดเมนของลิงก์แผนที่ที่รู้จัก (Google Maps/ลิงก์สั้น, Waze, Apple Maps) */
+const KNOWN_MAP_HOSTS = /(^|\.)(google\.[a-z.]+|goo\.gl|g\.page|waze\.com|maps\.apple\.com)$/i
+
+/**
+ * ตรวจช่อง "พิกัด/ลิงก์ Google Maps" ก่อนนำเข้า — คืนข้อความเตือน (ว่าง = ปกติ/ไม่ได้กรอก) ไม่บล็อกการนำเข้า:
+ *  - มีหลายลิงก์ในช่องเดียว · ลิงก์ที่ไม่ใช่แผนที่ · ข้อความที่ไม่ใช่ลิงก์/ตัวเลขพิกัด (ปุ่มนำทางจะค้นหาจากข้อความ ซึ่งอาจไม่ตรงหน้างาน)
+ *  - พิกัดอยู่นอกประเทศไทย (มักสลับละติจูด/ลองจิจูดหรือพิมพ์ผิด)
+ */
+export function checkMapLink(raw: string): string[] {
+  const text = raw.trim()
+  if (!text) return []
+  const out: string[] = []
+  const urls = text.match(/https?:\/\/[^\s,;]+/gi) || []
+  const gps = parseGpsInput(text)
+  if (urls.length > 1) out.push('ช่องพิกัด/ลิงก์มีมากกว่า 1 ลิงก์ — ปุ่มนำทางของคนขับจะเปิดทั้งข้อความนี้ ควรเหลือลิงก์เดียวต่อแถว')
+  if (urls.length >= 1) {
+    let host = ''
+    try {
+      host = new URL(urls[0] as string).hostname
+    } catch {
+      out.push('ลิงก์พิกัดรูปแบบไม่ถูกต้อง — ตรวจว่าวางลิงก์ครบ')
+      return out
+    }
+    if (!KNOWN_MAP_HOSTS.test(host)) out.push(`ลิงก์พิกัดไม่ใช่ลิงก์แผนที่ที่รู้จัก (${host}) — ตรวจว่าเปิดแล้วถึงหน้างานจริง`)
+  } else if (gps.latitude === undefined) {
+    out.push('ช่องพิกัด/ลิงก์ไม่ใช่ลิงก์หรือตัวเลขพิกัด — ปุ่มนำทางของคนขับจะค้นหาจากข้อความนี้ ซึ่งอาจไม่ตรงหน้างาน')
+  }
+  if (gps.latitude !== undefined && gps.longitude !== undefined) {
+    if (gps.latitude < 5 || gps.latitude > 21 || gps.longitude < 97 || gps.longitude > 106) {
+      out.push(`พิกัด (${gps.latitude}, ${gps.longitude}) อยู่นอกประเทศไทย — ตรวจว่าสลับละติจูด/ลองจิจูด หรือพิมพ์ผิดหรือไม่`)
+    }
+  }
+  return out
 }
 
 /** แปลงแถว Excel ดิบเป็นข้อมูลที่ใช้สร้าง Booking ได้ทันที — ไม่มี error ที่บล็อกการสร้างงานอีกต่อไป (ตามที่ตกลง)
@@ -439,6 +477,10 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
   if (jobTypeRaw && !jobType) warnings.push(`ประเภทงานจาก Excel "${jobTypeRaw}" ไม่ตรงกับระบบเป๊ะ (มี "ลงมือ"/"พาเลทโรงงาน"/"พาเลทฟรี") — เว้นว่างไว้ก่อน ตรวจสอบเองภายหลัง`)
 
   const fuelRemark = fuelCell.remark ? `น้ำมัน: ${fuelCell.remark}` : ''
+  // ข้อควรตรวจก่อนนำเข้า (ไม่แปะลง note) — พิกัด/ลิงก์ GPS และเลขเที่ยวที่อ่านไม่ได้ (เลขเที่ยวชนกับงานเดิมของวันตรวจในพรีวิว)
+  const checks: string[] = [...checkMapLink(mapLinkRaw)]
+  const tripCell = str(raw[IMPORT_HEADERS.tripNo])
+  if (tripCell && tripSequence === undefined) checks.push(`เลขเที่ยว "${tripCell}" อ่านไม่ได้ (ต้องเป็นตัวเลข 1 ขึ้นไป) — ระบบจะเรียงเลขเที่ยวให้ตามลำดับแถวของคนขับ แก้เลขในพรีวิวได้`)
   const note = [timeExtraText, noteRaw, fuelRemark, ...warnings].filter(Boolean).join(' | ')
 
   return {
@@ -476,6 +518,7 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
     jobType,
     note,
     warnings,
+    checks,
   }
 }
 

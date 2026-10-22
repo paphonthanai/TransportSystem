@@ -106,21 +106,21 @@
               <td class="px-2 py-1 align-top">
                 <template v-if="parsed[rIdx] && !parsed[rIdx].isEmpty">
                   <div class="text-xs space-y-0.5">
-                    <div v-if="parsed[rIdx].warnings.length === 0" class="text-green-700 font-semibold flex items-center gap-1">
+                    <div v-if="issuesOf(rIdx).length === 0" class="text-green-700 font-semibold flex items-center gap-1">
                       <span class="material-symbols-rounded text-sm">check_circle</span>
                       ข้อมูลครบ
                     </div>
-                    <div v-else class="text-amber-700 font-semibold flex items-center gap-1" :title="parsed[rIdx].warnings.join('\n')">
+                    <div v-else class="text-amber-700 font-semibold flex items-center gap-1" :title="issuesOf(rIdx).join('\n')">
                       <span class="material-symbols-rounded text-sm">warning</span>
-                      {{ parsed[rIdx].warnings.length }} คำเตือน
+                      {{ issuesOf(rIdx).length }} คำเตือน
                     </div>
                     <div class="text-muted">
                       คนขับ: <span :class="parsed[rIdx].driverName ? 'text-text' : 'text-red-600'">{{ parsed[rIdx].driverName || 'ยังจับคู่ไม่ได้' }}</span>
                       · น้ำมัน {{ parsed[rIdx].fuelLiters }} ล.
                     </div>
-                    <ul v-if="parsed[rIdx].warnings.length" class="text-[11px] text-amber-800 list-disc pl-4 max-w-[260px]">
-                      <li v-for="(w, wIdx) in parsed[rIdx].warnings.slice(0, 3)" :key="wIdx">{{ w }}</li>
-                      <li v-if="parsed[rIdx].warnings.length > 3">…และอีก {{ parsed[rIdx].warnings.length - 3 }} รายการ</li>
+                    <ul v-if="issuesOf(rIdx).length" class="text-[11px] text-amber-800 list-disc pl-4 max-w-[260px]">
+                      <li v-for="(w, wIdx) in issuesOf(rIdx).slice(0, 3)" :key="wIdx">{{ w }}</li>
+                      <li v-if="issuesOf(rIdx).length > 3">…และอีก {{ issuesOf(rIdx).length - 3 }} รายการ</li>
                     </ul>
                   </div>
                 </template>
@@ -365,12 +365,18 @@ const parsed = computed<ImportRowResult[]>(() => {
   return results
 })
 
+/** คำเตือนทั้งหมดของแถว = ข้อมูลไม่ครบ/จับคู่ไม่ได้ (warnings) + ข้อควรตรวจก่อนนำเข้า เช่น พิกัด/ลิงก์ GPS (checks) */
+const issuesOf = (idx: number) => {
+  const p = parsed.value[idx]
+  return p ? [...p.warnings, ...p.checks] : []
+}
+
 const filledRows = computed(() => rows.value.filter((_, i) => parsed.value[i] && !parsed.value[i].isEmpty))
 
 const rowTone = (idx: number) => {
   const p = parsed.value[idx]
   if (!p || p.isEmpty) return ''
-  return p.warnings.length ? 'bg-amber-50/50' : ''
+  return p.warnings.length || p.checks.length ? 'bg-amber-50/50' : ''
 }
 
 // ---------- ตัวช่วยกรอก ----------

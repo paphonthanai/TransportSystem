@@ -176,14 +176,16 @@
                 />
               </td>
               <td class="px-3 py-3 text-text">
-                <!-- ระดับ 2: งานรอจัดรถที่มีคนขับแล้ว เลือกเที่ยวที่ในตารางได้เลย ก่อนกดจัดรถ (จ่ายเที่ยว 1/2 ลำดับไหนก็ได้) -->
+                <!-- ระดับ 2: งานที่มีคนขับและยังไม่ส่งเสร็จ (รวมงานที่จ่ายไปแล้ว/งานเก่าที่ยังไม่มีเลขเที่ยว) เสมียนเลือกเที่ยวที่ในตารางได้เลย
+                     — จ่ายเที่ยว 1/2 ลำดับไหนก็ได้ แอปคนขับเรียงตามเลขนี้ ซ้ำกับงานอื่นของคนขับวันเดียวกัน = ขอบแดง -->
                 <select
-                  v-if="booking.status === 'WAITING_DISPATCH' && booking.driverName"
+                  v-if="booking.status !== 'DELIVERED' && booking.driverName"
                   :value="driverTripNumberForBooking(booking)"
                   @click.stop
                   @change="(e) => bookingStore.setTripSequence(booking.id, Number((e.target as HTMLSelectElement).value))"
                   class="input-field !py-0.5 !px-1 !text-xs w-14"
-                  title="เที่ยวที่ของคนขับในวันนี้"
+                  :class="tripSequenceClash(booking) ? '!border-red-400 !text-red-700' : ''"
+                  :title="tripSequenceClash(booking) ? 'เลขเที่ยวซ้ำกับงานอื่นของคนขับคนนี้ในวันเดียวกัน' : 'เที่ยวที่ของคนขับในวันนี้ (เลือกเองได้ รวมงานที่จ่ายไปแล้ว — แอปคนขับเรียงตามเลขนี้)'"
                 >
                   <option v-for="n in tripNumberChoices(booking)" :key="n" :value="n">{{ n }}</option>
                 </select>
@@ -342,14 +344,16 @@
                 </div>
               </td>
               <td class="px-3 py-3 text-text">
-                <!-- ระดับ 2: งานรอจัดรถที่มีคนขับแล้ว เลือกเที่ยวที่ในตารางได้เลย ก่อนกดจัดรถ (จ่ายเที่ยว 1/2 ลำดับไหนก็ได้) -->
+                <!-- ระดับ 2: งานที่มีคนขับและยังไม่ส่งเสร็จ (รวมงานที่จ่ายไปแล้ว/งานเก่าที่ยังไม่มีเลขเที่ยว) เสมียนเลือกเที่ยวที่ในตารางได้เลย
+                     — จ่ายเที่ยว 1/2 ลำดับไหนก็ได้ แอปคนขับเรียงตามเลขนี้ ซ้ำกับงานอื่นของคนขับวันเดียวกัน = ขอบแดง -->
                 <select
-                  v-if="booking.status === 'WAITING_DISPATCH' && booking.driverName"
+                  v-if="booking.status !== 'DELIVERED' && booking.driverName"
                   :value="driverTripNumberForBooking(booking)"
                   @click.stop
                   @change="(e) => bookingStore.setTripSequence(booking.id, Number((e.target as HTMLSelectElement).value))"
                   class="input-field !py-0.5 !px-1 !text-xs w-14"
-                  title="เที่ยวที่ของคนขับในวันนี้"
+                  :class="tripSequenceClash(booking) ? '!border-red-400 !text-red-700' : ''"
+                  :title="tripSequenceClash(booking) ? 'เลขเที่ยวซ้ำกับงานอื่นของคนขับคนนี้ในวันเดียวกัน' : 'เที่ยวที่ของคนขับในวันนี้ (เลือกเองได้ รวมงานที่จ่ายไปแล้ว — แอปคนขับเรียงตามเลขนี้)'"
                 >
                   <option v-for="n in tripNumberChoices(booking)" :key="n" :value="n">{{ n }}</option>
                 </select>
@@ -725,6 +729,7 @@
                 <span class="text-green-600">จะสร้าง {{ importableRows.length }} งาน</span>
                 <span v-if="Object.keys(importTripWarnings).length" class="text-amber-600">ตรวจเลขเที่ยว: {{ Object.entries(importTripWarnings).map(([k, v]) => `${k} ${v.join('/')}`).join(' · ') }}</span>
                 <span v-if="importWarningRowCount" class="text-amber-600">{{ importWarningRowCount }} แถวมีข้อมูลไม่ครบ — จะสร้างงานให้ก่อนแล้วแปะหมายเหตุไว้ให้กรอกเพิ่ม</span>
+                <span v-if="importCheckRowCount" class="text-indigo-700">{{ importCheckRowCount }} แถวมีข้อควรตรวจ (พิกัด/ลิงก์ GPS, เลขเที่ยว) — ดูคอลัมน์ "ตรวจก่อนนำเข้า"</span>
               </div>
 
               <div class="overflow-x-auto border border-border rounded-lg max-h-72">
@@ -741,10 +746,11 @@
                       <th class="text-left px-2 py-1.5">ลิงก์ GPS</th>
                       <th class="text-right px-2 py-1.5">ตัน</th>
                       <th class="text-left px-2 py-1.5">หมายเหตุ</th>
+                      <th class="text-left px-2 py-1.5">ตรวจก่อนนำเข้า</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="row in importableRows" :key="row.rowNumber" class="border-t border-border" :class="row.warnings.length ? 'bg-amber-50' : ''">
+                    <tr v-for="row in importableRows" :key="row.rowNumber" class="border-t border-border" :class="row.warnings.length || importChecksFor(row).length ? 'bg-amber-50' : ''">
                       <td class="px-2 py-1.5">{{ row.rowNumber }}</td>
                       <td class="px-2 py-1.5">
                         <input
@@ -772,6 +778,12 @@
                       <td class="px-2 py-1.5">
                         <span v-if="row.warnings.length" class="text-amber-700">{{ row.warnings.join(', ') }}</span>
                         <span v-else class="text-green-600">ครบถ้วน</span>
+                      </td>
+                      <td class="px-2 py-1.5">
+                        <ul v-if="importChecksFor(row).length" class="text-indigo-700 list-disc pl-4 space-y-0.5 min-w-[220px]">
+                          <li v-for="(c, i) in importChecksFor(row)" :key="i">{{ c }}</li>
+                        </ul>
+                        <span v-else class="text-green-600">ปกติ</span>
                       </td>
                     </tr>
                   </tbody>
@@ -1162,6 +1174,12 @@ const tripNumberChoices = (booking: Booking) => {
   const max = Math.max(count + 1, driverTripNumberForBooking(booking), 2)
   return Array.from({ length: max }, (_, i) => i + 1)
 }
+
+/** เลขเที่ยวที่ตั้งไว้ซ้ำกับงานอื่นของคนขับคนเดียวกันในวันเดียวกัน (ทำให้แอปคนขับเรียงไม่ชัด) */
+const tripSequenceClash = (booking: Booking) =>
+  booking.tripSequence !== undefined &&
+  !!booking.driverName &&
+  driverBookingsForDay(booking.driverName, bookingDayKey(booking)).some((b) => b.id !== booking.id && b.tripSequence === booking.tripSequence)
 
 /** ค่าตั้งต้นช่อง "เที่ยวที่" ตอนจัดรถ: เลขที่ระบุไว้แล้ว (import/จัดเที่ยว) ไม่งั้นเที่ยวถัดไปของคนขับวันนั้น */
 const defaultTripForDispatch = (booking: Booking) => {
@@ -1952,6 +1970,15 @@ const importTripWarnings = computed(() =>
 )
 const importTripWarningFor = (row: ImportRowResult) => importTripWarnings.value[row.driverName || row.plate]?.join(' · ')
 const importWarningRowCount = computed(() => importableRows.value.filter((r) => r.warnings.length > 0).length)
+/** เลขเที่ยวชนกับงานเดิมของคนขับคนเดียวกันในวันที่นำเข้า (แก้เลขในพรีวิวแล้วคำนวณใหม่ทันที) */
+const importTripClashFor = (row: ImportRowResult) => {
+  if (!row.driverName || row.tripSequence === undefined) return undefined
+  const clash = driverBookingsForDay(row.driverName, importShipDate.value ?? new Date()).find((b) => b.tripSequence === row.tripSequence)
+  return clash ? `เที่ยวที่ ${row.tripSequence} ของ ${row.driverName} ซ้ำกับงาน ${clash.docNo} ที่มีอยู่แล้วในวันนั้น — แก้เลขเที่ยวในพรีวิว` : undefined
+}
+/** ข้อควรตรวจก่อนนำเข้าของแถว: พิกัด/ลิงก์ GPS, เลขเที่ยวอ่านไม่ได้ (row.checks) + เลขเที่ยวชนงานเดิมของวัน — ไม่ถูกแปะลง note ของงาน */
+const importChecksFor = (row: ImportRowResult) => [...row.checks, importTripClashFor(row)].filter((c): c is string => !!c)
+const importCheckRowCount = computed(() => importableRows.value.filter((r) => importChecksFor(r).length > 0).length)
 
 /** สร้าง Booking จริงทีละแถว — เลขที่เอกสาร/ใบปล่อยรถยังออกอัตโนมัติตามปกติเสมอ (ไม่ใช้เลขจาก Excel ตรงๆ กันชนกับ
  *  เลขที่ระบบเคยออกไปแล้ว) ส่วนเลขที่เอกสารจาก Excel เก็บไว้ที่ booking.reference เพื่ออ้างอิงย้อนหลังเท่านั้น
@@ -1961,6 +1988,16 @@ const importWarningRowCount = computed(() => importableRows.value.filter((r) => 
  *  "จบงานแล้ว" ทั้งที่ยังไม่ได้จัดรถเลย) */
 const confirmImport = () => {
   if (!importableRows.value.length) return
+  // ตรวจก่อนนำเข้า: มีแถวที่พิกัด/เลขเที่ยวน่าสงสัย — ให้ยืนยันอีกครั้งว่าจะสร้างต่อหรือกลับไปแก้
+  const checkRows = importableRows.value.filter((r) => importChecksFor(r).length > 0)
+  if (checkRows.length) {
+    const sample = checkRows
+      .slice(0, 5)
+      .map((r) => `แถว ${r.rowNumber}: ${importChecksFor(r)[0]}`)
+      .join('\n')
+    const more = checkRows.length > 5 ? `\n…และอีก ${checkRows.length - 5} แถว` : ''
+    if (!confirm(`มี ${checkRows.length} แถวที่ควรตรวจก่อนนำเข้า (พิกัด/ลิงก์ GPS หรือเลขเที่ยว):\n${sample}${more}\n\nสร้างงานต่อเลยไหม? (กด ยกเลิก เพื่อกลับไปแก้)`)) return
+  }
   importableRows.value.forEach((row) => {
     // "23 + 52" ฯลฯ = หลายชนิดสินค้าในเที่ยวเดียว — ตัวแรกเป็นสินค้าหลักของ Item เดิม ตัวที่เหลือไปเป็น extraProducts
     // (แสดงแบบคอลัมน์แยกกัน ดู productColumns) ใช้จำนวนตันแยกตามชนิดจริงจาก productQtyPairs (ไม่ใช่ยอดรวมซ้ำทุกชนิด)

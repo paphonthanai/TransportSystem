@@ -438,7 +438,7 @@ export const useBookingStore = defineStore('booking', () => {
    * แก้ไขราคา (ค่าเที่ยว/ราคาที่ตกลง)
    * อนุญาตอิสระตอน WAITING_DISPATCH เท่านั้น หลังจากนั้นต้องเป็น admin (เช็คสิทธิ์ที่ชั้น UI ก่อนเรียกฟังก์ชันนี้)
    */
-  /** ตั้ง/แก้ "เที่ยวที่" ของงาน (ใช้ตอนตรวจ/จัดเที่ยวก่อนจัดรถ) — undefined/0 = ล้างค่า กลับไปใช้ลำดับเวลาจ่ายงานเดิม */
+  /** ตั้ง/แก้ "เที่ยวที่" ของงาน (ตอนตรวจ/จัดเที่ยวก่อนจัดรถ และเสมียนเลือกให้งานที่จ่ายไปแล้ว/งานเก่าได้จากตารางงาน) — undefined/0 = ล้างค่า กลับไปใช้ลำดับเวลาจ่ายงานเดิม */
   function setTripSequence(id: string, seq: number | undefined) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
