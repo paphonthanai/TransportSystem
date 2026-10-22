@@ -15,6 +15,13 @@ describe('extractPhones', () => {
     expect(extractPhones('ช่างจอม 086 334 7315 / 086-3347315')).toEqual(['0863347315'])
   })
 
+  it('จัดกลุ่มตัวเลขแบบอื่น (088-8367-888) ก็จับได้ และสองเบอร์ที่ติดกันเกินสิบหลักแยกกลับให้', () => {
+    expect(extractPhones('คุณป๊อบ 088-8367-888, 062-9806933')).toEqual(['0888367888', '0629806933'])
+    expect(extractPhones('0845358614 0954218165')).toEqual(['0845358614', '0954218165'])
+    expect(extractPhones('084 535 8614 095 421 8165')).toEqual(['0845358614', '0954218165'])
+    expect(extractPhones('08453586140954218165')).toEqual(['0845358614', '0954218165'])
+  })
+
   it('ไม่มีเบอร์/ข้อความอื่น = ว่าง', () => {
     expect(extractPhones('')).toEqual([])
     expect(extractPhones(undefined)).toEqual([])
