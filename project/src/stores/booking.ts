@@ -11,6 +11,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import { useDriverPayrollDocumentsStore } from '@/stores/driverPayrollDocuments'
 import { isBookingPaidToDriver } from '@/utils/driverPaid'
+import { pruneResolvedNote } from '@/utils/bookingNote'
 import { bookingRepository } from '@/repositories/bookingRepository'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import type { Booking, BookingCategory, BookingStatus, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
@@ -452,6 +453,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (!booking) return
     if (data.tripFee !== undefined) booking.tripFee = data.tripFee
     if (data.agreedPrice !== undefined) booking.agreedPrice = data.agreedPrice
+    booking.note = pruneResolvedNote(booking)
     addLog(`แก้ไขราคา ${booking.docNo}: ค่าเที่ยว ${booking.tripFee} บาท, ราคาที่ตกลง ${booking.agreedPrice} บาท`, { bookingId: booking.id })
   }
 
@@ -480,6 +482,7 @@ export const useBookingStore = defineStore('booking', () => {
       booking.items[0].qty = patch.itemQty
       applied.push('จำนวนตัน')
     }
+    if (applied.length) booking.note = pruneResolvedNote(booking)
     if (applied.length) addLog(`ซ่อมข้อมูลจากไฟล์ Excel ต้นฉบับที่ ${booking.docNo}: ${applied.join(', ')}`, { bookingId: booking.id })
     return applied
   }
@@ -594,6 +597,8 @@ export const useBookingStore = defineStore('booking', () => {
         if (booking.plate) applyFuelRate(booking)
       }
     }
+    // กรอกเบี้ยเลี้ยง/ราคา/จำนวนตัน/อำเภอ-จังหวัดครบแล้ว = ท่อน "ต้องกรอกเพิ่ม: …" จากตอน import หายเอง (ปุ่ม "!" หายตาม)
+    booking.note = pruneResolvedNote(booking)
     addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`, { bookingId: booking.id })
   }
 
@@ -1079,6 +1084,7 @@ export const useBookingStore = defineStore('booking', () => {
     booking.allowance = Math.round(allowance * 100) / 100
     booking.debtAdjustments = debtAdjustments
     booking.finalAllowance = Math.round((booking.allowance - netAdjustment) * 100) / 100
+    booking.note = pruneResolvedNote(booking)
     addLog(`แก้รายได้คนขับ ${booking.docNo}: ${before} → ${booking.finalAllowance} บาท`, { bookingId: booking.id })
     return { ok: true }
   }

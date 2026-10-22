@@ -6,6 +6,10 @@
         <span class="material-symbols-rounded">add</span>
         เพิ่มรถ
       </button>
+      <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface border border-border flex-1 min-w-[200px] max-w-sm ml-auto">
+        <span class="material-symbols-rounded text-muted text-lg">search</span>
+        <input v-model="search" type="text" placeholder="ค้นหา ทะเบียน เบอร์รถ ยี่ห้อ คนขับ..." class="border-0 outline-0 bg-transparent text-sm text-text w-full" />
+      </div>
     </div>
 
     <div class="card-lg overflow-x-auto">
@@ -30,7 +34,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(vehicle, index) in vehicles" :key="vehicle.id" class="border-t border-border hover:bg-surface-2 transition-colors">
+          <tr v-for="(vehicle, index) in filteredVehicles" :key="vehicle.id" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 text-muted">{{ index + 1 }}</td>
             <td class="px-4 py-3 font-semibold text-text">{{ vehicle.plate }}</td>
             <td class="px-4 py-3 text-muted">{{ vehicle.plateProvince }}</td>
@@ -55,6 +59,9 @@
               <button v-if="authStore.role === 'ADMIN'" @click="router.push(`/payroll/vendor-fleet/${vehicle.id}`)" class="btn-sm">รายละเอียด</button>
               <button @click="openDialog(vehicle)" class="btn-sm ml-1.5">แก้ไข</button>
             </td>
+          </tr>
+          <tr v-if="filteredVehicles.length === 0">
+            <td colspan="15" class="px-4 py-8 text-center text-muted">{{ search ? 'ไม่พบรถที่ตรงกับคำค้นหา' : 'ยังไม่มีรถ' }}</td>
           </tr>
         </tbody>
       </table>
@@ -189,6 +196,16 @@ const isLegacyDepartment = isUnresolvedVehicleType
  *  ค่าตอน setup อาจยังว่างอยู่ ถ้า snapshot เป็น const ธรรมดา ตารางจะไม่อัปเดตตอนโหลดเสร็จ (ใช้ได้เฉยๆ ตอนเป็น
  *  localStorage แบบเดิมเพราะข้อมูลพร้อมตั้งแต่ก่อน component mount แล้ว ไม่มีช่วง async ให้พลาด) */
 const vehicles = computed(() => vehiclesStore.vehicles)
+const search = ref('')
+/** ค้นหาจากทะเบียน/จังหวัด/เบอร์รถ/ทะเบียนหาง/ยี่ห้อ/ลักษณะรถ/เลขตัวถัง/เลขเครื่อง/ประเภทรถ/คนขับประจำ (ไม่สนตัวพิมพ์เล็ก-ใหญ่) */
+const filteredVehicles = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return vehicles.value
+  return vehicles.value.filter((v) =>
+    [v.plate, v.plateProvince, v.vehicleNo, v.trailerPlate, v.brand, v.bodyType, v.chassisNo, v.engineNo, v.department, assignedDriverLabel(v)]
+      .some((field) => String(field ?? '').toLowerCase().includes(q))
+  )
+})
 
 /** คนขับประจำรถคันนี้ (ถ้ามี) แสดงในตารางรายการรถ */
 const assignedDriverLabel = (vehicle: Vehicle) => {
