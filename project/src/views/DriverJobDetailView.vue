@@ -1,4 +1,6 @@
 <template>
+  <!-- loading เต็มจอจนข้อมูลงานโหลดเสร็จ แล้วค่อยแสดงหน้า (ดู PageGate / trackLoading) -->
+  <PageGate>
   <!-- Full-bleed mobile shell เหมือน DriverJobsView.vue — header/main เต็มความกว้างจอ ไม่ใช่การ์ดลอย
        ปุ่ม action หลักของแต่ละ step ย้ายไปอยู่แถบล่างสุดแบบ sticky (thumb-reach ดีสุดสำหรับใช้มือเดียว) -->
   <div class="driver-app-scale min-h-screen bg-surface-2 flex flex-col">
@@ -301,9 +303,11 @@
       </div>
     </Teleport>
   </div>
+  </PageGate>
 </template>
 
 <script setup lang="ts">
+import PageGate from '@/components/shared/PageGate.vue'
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'

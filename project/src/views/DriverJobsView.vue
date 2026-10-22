@@ -1,4 +1,6 @@
 <template>
+  <!-- loading เต็มจอจนข้อมูลงานโหลดเสร็จ แล้วค่อยแสดงหน้า (ดู PageGate / trackLoading) -->
+  <PageGate>
   <!-- Full-bleed mobile shell — ไม่มีการ์ดลอยกลางจอแบบเดิม (max-w-sm+rounded+shadow) ใช้พื้นที่จอเต็มเหมือนแอปมือถือจริง
        เผื่อพื้นที่ safe-area บน/ล่างไว้ตั้งแต่ตอนนี้ (env(safe-area-inset-*)) แม้ยังไม่ได้ติดตั้ง PWA manifest จริง
        เพื่อให้พร้อมต่อยอดเป็น PWA/bottom navigation ได้ทันทีในอนาคตโดยไม่ต้องรื้อ layout ซ้ำ -->
@@ -329,9 +331,11 @@
       </div>
     </Teleport>
   </div>
+  </PageGate>
 </template>
 
 <script setup lang="ts">
+import PageGate from '@/components/shared/PageGate.vue'
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
