@@ -50,16 +50,16 @@
           <span class="material-symbols-rounded text-base">undo</span>
           ยกเลิกจ่ายงาน
         </button>
-        <!-- งานที่คนขับกด "ดำเนินการเสร็จสิ้น" ผ่านแอปแล้ว รอออฟฟิศ "ตรวจสอบ POD" ก่อน (ดู reviewPod ใน stores/booking.ts)
-             — ตรวจแค่ว่ารูป POD ตรงกับข้อมูลในระบบไหม ไม่ใช่การปิดงาน จึงมีแค่ 2 ทาง: ยืนยันว่าตรง หรือไปแก้ไข (แนบรูปที่
-             ถูกต้องแทนที่ที่หน้ารายละเอียดงาน — ดู confirmPodImage) "ยกเลิก" คือแค่ปิดเมนูนี้เฉยๆ ไม่ต้องมีปุ่มแยก -->
+        <!-- งานที่คนขับกด "ดำเนินการเสร็จสิ้น" ผ่านแอปแล้ว รอออฟฟิศ "ตรวจสอบ POD" ก่อน — ยืนยัน POD = ยืนยันการจบงานด้วยใน
+             คลิกเดียว (ดู approvePodAndConfirmCompletion ใน stores/booking.ts) หรือไปแก้ไข (แนบรูปที่ถูกต้องแทนที่ที่หน้า
+             รายละเอียดงาน — ดู confirmPodImage) "ยกเลิก" คือแค่ปิดเมนูนี้เฉยๆ ไม่ต้องมีปุ่มแยก -->
         <button
           v-if="booking.podReviewStatus === 'PENDING_REVIEW'"
           @click="fire('approve-pod')"
           class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-green-700"
         >
           <span class="material-symbols-rounded text-base">check_circle</span>
-          ยืนยัน POD
+          ยืนยัน POD และจบงาน
         </button>
         <button
           v-if="booking.podReviewStatus === 'PENDING_REVIEW'"

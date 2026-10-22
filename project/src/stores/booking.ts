@@ -1212,6 +1212,26 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
+   * "ยืนยัน POD" = ยืนยันการจบงานในคลิกเดียว — งานที่ส่งของเสร็จแล้ว (DELIVERED) ตรวจข้อมูลก่อน ไม่ครบ = ไม่แตะอะไรเลย
+   * (POD ยังรอตรวจอยู่ ไปแก้ข้อมูลแล้วกดใหม่) ครบ = อนุมัติ POD + ยืนยันการจบงานพร้อมกัน; งานที่ยังไม่ DELIVERED อนุมัติ POD
+   * อย่างเดียว (completed=false) แล้วไปยืนยันการจบงานทีหลังเมื่องานจบ
+   */
+  function approvePodAndConfirmCompletion(id: string): { ok: boolean; completed: boolean; issues: CompletionIssue[] } {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking || booking.podReviewStatus !== 'PENDING_REVIEW') return { ok: false, completed: false, issues: [] }
+    if (booking.status === 'DELIVERED') {
+      const issues = bookingCompletionIssues(booking, {
+        standardFuelLiters: fuelRateStore.standardFuelLiters(booking.items, booking.pricingMode) || undefined,
+      })
+      if (issues.length) return { ok: false, completed: false, issues }
+    }
+    reviewPod(id, 'APPROVED')
+    if (booking.status !== 'DELIVERED') return { ok: true, completed: false, issues: [] }
+    const result = confirmJobCompletion(id)
+    return { ok: result.ok, completed: result.ok, issues: result.issues }
+  }
+
+  /**
    * ซ่อมข้อมูลเก่า: ตัดวันที่/เวลาที่ปนอยู่ท้ายชื่อหน้างาน (siteName) ออก — เกิดจากข้อมูลทดสอบ Regression ยุคแรกๆ ที่พิมพ์
    * วันที่/เวลากำกับต่อท้ายชื่อไว้ตรงๆ เช่น "Site A (14/08 08:00)" หรือ "Site D (20/08)" ทำให้เอกสารที่พิมพ์ชื่อหน้างาน
    * (ใบสั่งสินค้า/ใบวางบิล/ใบแจ้งหนี้) มีวันที่ปนอยู่ในข้อความรายการทั้งที่ Requirement ปัจจุบันไม่ต้องการให้มี
@@ -1455,6 +1475,7 @@ export const useBookingStore = defineStore('booking', () => {
     stripDateSuffixFromSiteNames,
     reviewPod,
     confirmJobCompletion,
+    approvePodAndConfirmCompletion,
     bookingsInBatch,
     addBookingsToBatch,
     updateBatch,

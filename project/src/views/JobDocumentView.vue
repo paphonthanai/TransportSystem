@@ -475,7 +475,7 @@
             </button>
             <button v-if="canApprovePod" type="button" class="btn-primary" @click="approvePod">
               <span class="material-symbols-rounded text-base">check_circle</span>
-              ยืนยัน POD
+              ยืนยัน POD และจบงาน
             </button>
             <button
               v-if="canConfirmCompletion"
@@ -587,7 +587,7 @@ const podPhotos = computed(() => {
 const actionHint = computed(() => {
   const b = booking.value
   if (!b) return ''
-  if (canApprovePod.value) return 'คนขับส่งของแล้ว — ตรวจรูป POD ด้านล่าง (กดรูปเพื่อขยาย) แล้วกด "ยืนยัน POD"'
+  if (canApprovePod.value) return 'คนขับส่งของแล้ว — ตรวจรูป POD ด้านล่าง (กดรูปเพื่อขยาย) แล้วกด "ยืนยัน POD และจบงาน"'
   if (canConfirmCompletion.value) return 'POD ตรวจแล้ว — กด "ยืนยันการจบงาน" เพื่อปิดงานและนำไปวางบิลได้'
   if (canComplete.value) return 'งานยังไม่จบ — กด "จบงาน" เพื่อปิดงานโดยออฟฟิศ'
   if (b.status === 'DELIVERED') return 'งานนี้จบแล้ว'
@@ -597,8 +597,13 @@ const actionHint = computed(() => {
 const approvePod = () => {
   const b = booking.value
   if (!b) return
-  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${b.docNo} ตรงกับข้อมูลในระบบ?`)) return
-  bookingStore.reviewPod(b.id, 'APPROVED')
+  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${b.docNo} ตรงกับข้อมูลในระบบ และจบงาน? หลังยืนยันจะนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
+  // ยืนยัน POD = ยืนยันการจบงานด้วยในคลิกเดียว — ข้อมูลไม่ครบ = ไม่แตะอะไร อยู่หน้านี้ต่อให้ไปแก้ก่อน
+  const result = bookingStore.approvePodAndConfirmCompletion(b.id)
+  if (!result.ok) {
+    if (result.issues.length) alert(`ยืนยัน POD/จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}`)
+    return
+  }
   backToBooking(b.id)
 }
 

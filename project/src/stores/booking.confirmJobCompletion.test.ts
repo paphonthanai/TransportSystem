@@ -93,3 +93,40 @@ describe('confirmJobCompletion', () => {
     expect(() => bookingStore.confirmJobCompletion('does-not-exist')).not.toThrow()
   })
 })
+
+describe('approvePodAndConfirmCompletion (ยืนยัน POD = ยืนยันการจบงาน)', () => {
+  it('งานที่ส่งของเสร็จแล้ว ข้อมูลครบ = อนุมัติ POD และยืนยันการจบงานพร้อมกัน', () => {
+    const bookingStore = useBookingStore()
+    const booking = makeBooking({ status: 'DELIVERED', podReviewStatus: 'PENDING_REVIEW', ...completeData })
+    bookingStore.bookings.push(booking)
+
+    const result = bookingStore.approvePodAndConfirmCompletion(booking.id)
+
+    expect(result).toMatchObject({ ok: true, completed: true })
+    expect(booking.podReviewStatus).toBe('APPROVED')
+    expect(booking.completionConfirmedAt).toBeInstanceOf(Date)
+  })
+
+  it('ข้อมูลไม่ครบ = ไม่แตะอะไรเลย POD ยังรอตรวจ', () => {
+    const bookingStore = useBookingStore()
+    const booking = makeBooking({ status: 'DELIVERED', podReviewStatus: 'PENDING_REVIEW', ...completeData, fuelLiters: 0, fuelRate: 0 })
+    bookingStore.bookings.push(booking)
+
+    const result = bookingStore.approvePodAndConfirmCompletion(booking.id)
+
+    expect(result.ok).toBe(false)
+    expect(result.issues.length).toBeGreaterThan(0)
+    expect(booking.podReviewStatus).toBe('PENDING_REVIEW')
+    expect(booking.completionConfirmedAt).toBeUndefined()
+  })
+
+  it('งานยังไม่ DELIVERED = อนุมัติ POD อย่างเดียว ยังไม่ยืนยันการจบงาน', () => {
+    const bookingStore = useBookingStore()
+    const booking = makeBooking({ status: 'DELIVERING', podReviewStatus: 'PENDING_REVIEW', ...completeData })
+    bookingStore.bookings.push(booking)
+
+    expect(bookingStore.approvePodAndConfirmCompletion(booking.id)).toMatchObject({ ok: true, completed: false })
+    expect(booking.podReviewStatus).toBe('APPROVED')
+    expect(booking.completionConfirmedAt).toBeUndefined()
+  })
+})

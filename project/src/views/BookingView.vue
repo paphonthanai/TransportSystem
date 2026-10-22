@@ -1683,9 +1683,11 @@ const onCancelDispatch = (booking: Booking) => {
  *  CompletedJobsView.vue) ให้ออฟฟิศตรวจได้จากจุดที่กำลังดูตารางขนส่งอยู่แล้ว ไม่ต้องสลับหน้า — ไม่มีปุ่ม "ตีกลับ" แยก
  *  เพราะเจตนาของขั้นนี้คือตรวจสอบแล้วแก้ไขให้ถูกต้องตรงนั้น (แนบรูปใหม่แทนที่ที่หน้ารายละเอียดงาน) ไม่ใช่ส่งกลับไปให้
  *  คนขับทำใหม่ */
+/** ยืนยัน POD = ยืนยันการจบงานด้วยในคลิกเดียว (ดู bookingStore.approvePodAndConfirmCompletion) */
 const approvePod = (booking: Booking) => {
-  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${booking.docNo} ตรงกับข้อมูลในระบบ?`)) return
-  bookingStore.reviewPod(booking.id, 'APPROVED')
+  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${booking.docNo} ตรงกับข้อมูลในระบบ และจบงาน? หลังยืนยันจะนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
+  const result = bookingStore.approvePodAndConfirmCompletion(booking.id)
+  if (!result.ok && result.issues.length) alert(`ยืนยัน POD/จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}`)
 }
 
 /** เสมียนกดยืนยันการจบงาน — ขั้นตอนสุดท้ายจริงก่อนนำไปวางบิล แยกจากการตรวจสอบ POD ด้านบนโดยเจตนา (ดู
