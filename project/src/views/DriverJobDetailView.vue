@@ -107,16 +107,29 @@
               <div v-if="nextDelivery(job)!.jobType" class="text-sm text-text"><span class="text-muted">ประเภทงาน:</span> {{ nextDelivery(job)!.jobType }}</div>
               <!-- ผู้ติดต่อหน้างานที่ออฟฟิศกรอกไว้ล่วงหน้า (siteContactName) — เดิมมีแค่เบอร์โทร/ปุ่มนำทาง ไม่มีชื่อให้คนขับดู/รู้จักเลย -->
               <div v-if="nextDelivery(job)!.siteContactName" class="text-sm text-text"><span class="text-muted">ผู้ติดต่อ:</span> {{ nextDelivery(job)!.siteContactName }}</div>
-              <div class="flex gap-3 pt-1">
+              <!-- เบอร์โทรหน้างาน: ปุ่มโทรครบทุกเบอร์ที่ออฟฟิศกรอก (ดึงจากข้อความผู้ติดต่อด้วย — มีได้หลายเบอร์ในช่องเดียว) -->
+              <div v-if="sitePhones(nextDelivery(job)!).length > 1" class="grid grid-cols-2 gap-2 pt-1">
                 <a
-                  :href="nextDelivery(job)!.sitePhone ? `tel:${nextDelivery(job)!.sitePhone}` : undefined"
+                  v-for="phone in sitePhones(nextDelivery(job)!)"
+                  :key="phone"
+                  :href="`tel:${phone}`"
+                  class="h-12 rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5 bg-primary text-white active:bg-blue-800"
+                >
+                  <span class="material-symbols-rounded text-base">call</span>
+                  {{ formatPhone(phone) }}
+                </a>
+              </div>
+              <div class="flex gap-3" :class="sitePhones(nextDelivery(job)!).length > 1 ? '' : 'pt-1'">
+                <a
+                  v-if="sitePhones(nextDelivery(job)!).length <= 1"
+                  :href="sitePhones(nextDelivery(job)!)[0] ? `tel:${sitePhones(nextDelivery(job)!)[0]}` : undefined"
                   :class="[
                     'flex-1 h-12 rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5',
-                    nextDelivery(job)!.sitePhone ? 'bg-primary text-white active:bg-blue-800' : 'bg-surface-2 text-muted cursor-not-allowed pointer-events-none',
+                    sitePhones(nextDelivery(job)!)[0] ? 'bg-primary text-white active:bg-blue-800' : 'bg-surface-2 text-muted cursor-not-allowed pointer-events-none',
                   ]"
                 >
                   <span class="material-symbols-rounded text-base">call</span>
-                  {{ nextDelivery(job)!.sitePhone || 'ไม่มีเบอร์โทร' }}
+                  {{ sitePhones(nextDelivery(job)!)[0] ? formatPhone(sitePhones(nextDelivery(job)!)[0]) : 'ไม่มีเบอร์โทร' }}
                 </a>
                 <a
                   :href="navigateUrl(nextDelivery(job)!) || undefined"
@@ -317,6 +330,7 @@ import type { Booking, JobItem } from '@/types'
 import { bookingStatusLabel } from '@/utils/bookingStatus'
 import { isDriverVisibleBooking, nextPickup as nextPickupItems, nextDelivery as nextDeliveryItems } from '@/utils/driverJobs'
 import { deliveryProgress, pickupProgress } from '@/utils/deliveryProgress'
+import { phonesOfSite, formatPhone } from '@/utils/phone'
 import { bookingTitle } from '@/utils/bookingTitle'
 import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
 import PhotoPicker from '@/components/driver/PhotoPicker.vue'
@@ -387,6 +401,9 @@ const destinationLabel = (b: Booking) => {
   const first = b.items[0].siteName
   return b.items.length > 1 ? `${first} +${b.items.length - 1} ที่อื่น` : first
 }
+
+/** เบอร์โทรของจุดส่ง (ทุกเบอร์ ไม่ซ้ำ) — ดู utils/phone.ts */
+const sitePhones = (item: JobItem) => phonesOfSite(item)
 
 /** ลิงก์นำทาง: ใช้ลิงก์/พิกัดที่ผู้ใช้กรอกไว้ก่อน ถ้าไม่มีแต่มีพิกัดตัวเลขที่ parse ได้ ให้สร้างลิงก์ค้นหาจากพิกัดนั้นแทน */
 const navigateUrl = (item: JobItem) => {

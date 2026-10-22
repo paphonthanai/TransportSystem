@@ -1,6 +1,7 @@
 import type { BookingJobType } from '@/types'
 import { normalizePlateCode } from '@/utils/importReconciliation'
 import { parseGpsInput } from '@/utils/gps'
+import { extractPhones } from '@/utils/phone'
 
 // --- นำเข้า Booking จากไฟล์ Excel งานจริง (Requirement: "Import Excel เพื่อสร้างงาน" ตามคอลัมน์ที่หน้างานใช้อยู่จริง) ---
 // 1 แถว Excel = 1 Booking เสมอ (ไม่มีคอลัมน์กลุ่มงานแล้วเหมือนเทมเพลตเดิม) — เจตนาของฟีเจอร์นี้เปลี่ยนจาก "สร้างงานใหม่
@@ -291,8 +292,9 @@ export const extractTimeAndText = (raw: string): { time: string; text: string } 
  *  เก็บเบอร์แรกที่เจอไว้ที่ sitePhone (ไว้ใช้กดโทรได้ตรงๆ) ส่วน contactName เก็บข้อความเต็มทั้งหมด (ขึ้นบรรทัดใหม่แทนด้วย ", ")
  *  ไว้เผื่อมีมากกว่า 1 ชื่อ/เบอร์ในช่องเดียว — ไม่ทิ้งข้อมูลไหนไป แค่แยกเบอร์แรกออกมาเป็นฟิลด์ที่ใช้งานง่ายเพิ่ม */
 export const splitContactPhone = (raw: string): { contactName: string; phone: string } => {
-  const phoneMatch = raw.match(/0[\d\-\s]{7,}\d/)
-  const phone = phoneMatch ? phoneMatch[0].replace(/[\s-]+/g, '') : ''
+  // เบอร์แรกที่เจอ (ดู utils/phone.ts) — เดิมใช้ regex ที่ให้ "ขึ้นบรรทัดใหม่" เป็นส่วนของเบอร์ ทำให้สองเบอร์ที่คั่นด้วยบรรทัดใหม่
+  // (084-535-8614⏎095-4218165) ถูกต่อกันเป็นเลขเดียว 20 หลักที่โทรไม่ได้
+  const phone = extractPhones(raw)[0] ?? ''
   const contactName = raw.replace(/[\r\n]+/g, ', ').trim()
   return { contactName, phone }
 }
