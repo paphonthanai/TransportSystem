@@ -496,8 +496,21 @@
 
       <!-- หมายเหตุ -->
       <div class="card-lg no-print">
-        <h3 class="font-semibold text-text mb-3">หมายเหตุ</h3>
-        <div class="text-sm text-text">{{ booking.note || '-' }}</div>
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <h3 class="font-semibold text-text">หมายเหตุ</h3>
+          <button v-if="!noteEditing" type="button" class="btn-sm" @click="startNoteEdit">
+            <span class="material-symbols-rounded text-base">edit</span>
+            แก้ไข
+          </button>
+        </div>
+        <template v-if="noteEditing">
+          <textarea v-model="noteDraft" rows="3" class="input-field w-full" placeholder="ลบข้อความทั้งหมดแล้วกดบันทึก = ล้างหมายเหตุ"></textarea>
+          <div class="flex justify-end gap-2 mt-2">
+            <button type="button" class="btn-sm" @click="noteEditing = false">ยกเลิก</button>
+            <button type="button" class="btn-primary" @click="saveNote">บันทึก</button>
+          </div>
+        </template>
+        <div v-else class="text-sm text-text whitespace-pre-wrap">{{ booking.note || '-' }}</div>
       </div>
 
       <!-- ประวัติ -->
@@ -746,6 +759,19 @@ const printDoc = () => window.print()
 
 // --- Price edit ---
 const isEditing = ref(false)
+
+// ---- แก้หมายเหตุในหน้านี้ได้เลย (ลบจนว่างแล้วบันทึก = ล้างหมายเหตุ ปุ่ม "!" ในตาราง Booking หายตาม) ----
+const noteEditing = ref(false)
+const noteDraft = ref('')
+const startNoteEdit = () => {
+  noteDraft.value = booking.value?.note || ''
+  noteEditing.value = true
+}
+const saveNote = () => {
+  if (!booking.value) return
+  bookingStore.updateBookingNote(booking.value.id, noteDraft.value)
+  noteEditing.value = false
+}
 const priceForm = ref({ tripFee: 0 })
 
 /** ราคาแก้ไขได้อิสระตอน WAITING_DISPATCH เท่านั้น หลังจากนั้นต้องเป็น admin */

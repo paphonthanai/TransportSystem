@@ -602,6 +602,16 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`แก้ไขข้อมูลงาน ${booking.docNo} (แก้ไขแบบเต็ม)`, { bookingId: booking.id })
   }
 
+  /** แก้หมายเหตุของงานอย่างเดียว (จากหน้ารายละเอียดงาน) ได้ทุกสถานะ — ข้อความว่าง = ล้างหมายเหตุทิ้ง */
+  function updateBookingNote(id: string, note: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return
+    const next = note.trim() || undefined
+    if (next === booking.note) return
+    booking.note = next
+    addLog(`แก้ไขหมายเหตุงาน ${booking.docNo}${next ? '' : ' (ล้างหมายเหตุ)'}`, { bookingId: booking.id })
+  }
+
   /**
    * เปลี่ยนโหมดคิดราคาของงาน (SINGLE_DESTINATION <-> MULTI_DESTINATION)
    * resolvedItems/resolvedTripFee ต้องผ่านการตรวจสอบ/ยืนยันจากผู้ใช้ที่ชั้น UI มาแล้วเสมอ (ฟังก์ชันนี้แค่เขียนค่าที่ resolve แล้ว ไม่คำนวณหรือ validate ซ้ำ)
@@ -1475,6 +1485,7 @@ export const useBookingStore = defineStore('booking', () => {
     stripDateSuffixFromSiteNames,
     reviewPod,
     confirmJobCompletion,
+    updateBookingNote,
     approvePodAndConfirmCompletion,
     bookingsInBatch,
     addBookingsToBatch,

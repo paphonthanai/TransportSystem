@@ -21,3 +21,16 @@ describe('updateBookingFull — ลบข้อความจนว่าง', 
     expect(booking.po).toBeUndefined()
   })
 })
+
+describe('updateBookingNote', () => {
+  it('แก้/ล้างหมายเหตุจากหน้ารายละเอียดงาน', () => {
+    const bookingStore = useBookingStore()
+    const booking = makeBooking({ status: 'DELIVERED', note: 'ย้ำตราประทับ | เช้า' })
+    bookingStore.bookings.push(booking)
+
+    bookingStore.updateBookingNote(booking.id, ' เช้า ')
+    expect(booking.note).toBe('เช้า')
+    bookingStore.updateBookingNote(booking.id, '   ')
+    expect(booking.note).toBeUndefined()
+  })
+})
