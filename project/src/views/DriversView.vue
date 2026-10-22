@@ -344,6 +344,7 @@ import { useUserStore } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import { internalDriverEmail, generateAuthBootstrapSecret } from '@/utils/driverAuth'
 import type { DriverLoginCredentials } from '@/repositories/driverLoginCredentialsRepository'
+import { nextRunningCode } from '@/utils/runningCode'
 
 defineProps<{ embedded?: boolean }>()
 
@@ -493,7 +494,7 @@ const incomeTypeOptions: { value: IncomeType; label: string }[] = [
 ]
 
 const emptyForm = (): DriverRecord => ({
-  code: String(driversStore.drivers.length + 1).padStart(4, '0'),
+  code: nextRunningCode(driversStore.drivers.map((d) => d.code)),
   prefix: 'นาย',
   firstName: '',
   lastName: '',
@@ -565,7 +566,12 @@ const onPhotoSelected = (event: Event) => {
 
 const save = async () => {
   if (!form.value.firstName) return
-  const code = form.value.code
+  const code = form.value.code.trim()
+  form.value.code = code
+  // รหัสคนขับเป็น key ของบัญชีเข้าแอป (driverLoginCredentials/{code}) — ซ้ำกับคนอื่นไม่ได้ ไม่งั้นบัญชีของสองคนปนกัน
+  if (!code) return alert('กรุณากรอกรหัสคนขับ')
+  const duplicate = driversStore.drivers.find((d) => d.code === code && d.id !== editingId.value)
+  if (duplicate) return alert(`รหัส ${code} ซ้ำกับ ${fullName(duplicate)} — ใช้รหัสอื่น (รหัสถัดไปที่ว่าง: ${nextRunningCode(driversStore.drivers.map((d) => d.code))})`)
   const { id, ...data } = form.value
   if (editingId.value) {
     await driversStore.updateDriver(editingId.value, data)
