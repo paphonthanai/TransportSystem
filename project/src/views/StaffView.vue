@@ -227,6 +227,7 @@ import { ref } from 'vue'
 
 defineProps<{ embedded?: boolean }>()
 import { useStaffStore, type StaffRecord } from '@/stores/staff'
+import { nextRunningCode } from '@/utils/runningCode'
 
 const staffStore = useStaffStore()
 const fullName = staffStore.fullName
@@ -234,7 +235,7 @@ const fullName = staffStore.fullName
 const prefixOptions = ['นาย', 'นาง', 'นางสาว']
 
 const emptyForm = (): StaffRecord => ({
-  code: String(staffStore.staffList.length + 1).padStart(4, '0'),
+  code: nextRunningCode(staffStore.staffList.map((s) => s.code)),
   prefix: 'นาย',
   firstName: '',
   lastName: '',
