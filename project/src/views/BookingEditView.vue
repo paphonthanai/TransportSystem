@@ -603,17 +603,19 @@ const confirmEditBooking = () => {
   bookingStore.updateBookingFull(target.value.id, {
     items: editLineItems.value,
     customer: f.customer.trim() || undefined,
-    po: f.po || undefined,
+    // ช่องข้อความส่งเป็น string เสมอ (รวมค่าว่าง) — เดิมส่ง `|| undefined` ทำให้ลบข้อความจนว่างแล้วบันทึก store มองว่า
+    // "ไม่ได้แก้" ข้อความเดิมจึงไม่หาย (store แปลงค่าว่างเป็น undefined เองอยู่แล้ว ดู updateBookingFull)
+    po: f.po ?? '',
     shipDate: f.shipDate ? new Date(f.shipDate) : undefined,
     loadingDate: f.loadingDate ? new Date(f.loadingDate) : undefined,
     loadingTime: combineLoadingTime(f.loadingTime, f.loadingTimeEnd),
     returnDate: f.returnDate ? new Date(f.returnDate) : undefined,
-    shipmentNo: f.shipmentNo || undefined,
-    route: f.route || undefined,
-    origin: f.origin || undefined,
-    reference: f.reference || undefined,
-    description: f.description || undefined,
-    note: f.note || undefined,
+    shipmentNo: f.shipmentNo ?? '',
+    route: f.route ?? '',
+    origin: f.origin ?? '',
+    reference: f.reference ?? '',
+    description: f.description ?? '',
+    note: f.note ?? '',
     tripFee: resolvedTripFee,
     // "ราคาที่ตกลง" ไม่ใช่ field ที่แสดง/แก้แยกให้ผู้ใช้เห็นอีกต่อไป — ให้เท่ากับค่าเที่ยวเสมอ
     agreedPrice: resolvedTripFee,
