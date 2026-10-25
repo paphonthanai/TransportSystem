@@ -161,6 +161,8 @@ export function applySheetHyperlinks(sheet: Record<string, any>, headerRowIndex:
 }
 
 export interface ImportRowResult {
+  /** ชื่อเล่นคนขับตามที่เขียนใน Excel (ดิบ) — ใช้แสดงผลการ map "ชื่อเล่น → ชื่อจริง" ในพรีวิว (driverName = ชื่อจริงที่จับคู่ได้ ว่าง = ยังไม่ได้ map) */
+  driverNickname: string
   rowNumber: number
   isEmpty: boolean
   driverName: string
@@ -246,11 +248,10 @@ export function matchDriverForImport<D extends { code: string; nickname: string 
     const v = normalizePlateCode(vehiclePlate)
     return v === plateNorm || (!!plateHeadNorm && v === plateHeadNorm)
   }
-  if (candidates.length === 1) {
-    if (!plateNorm) return candidates[0]
-    const vehicle = vehicleForDriver(candidates[0].code)
-    return vehicle && samePlate(vehicle.plate) ? candidates[0] : undefined
-  }
+  // ชื่อเล่นตรงกับคนขับ "คนเดียว" = ใช้คนนั้นเลย ไม่ว่าทะเบียนในแถวจะเป็นรถประจำของเขาหรือไม่ (คนขับขับรถคันอื่นแทนได้ — ออฟฟิศเขียนชื่อเล่น
+  // คือบอกว่าใครขับ) ถ้าทะเบียนต่างจากรถประจำ parseImportRow แปะคำเตือนให้ตรวจ — เดิมไม่จับคู่แล้วเว้นคนขับว่าง + หมายเหตุ "ไม่ตรงกับที่ผูกไว้" ค้างในงาน
+  if (candidates.length === 1) return candidates[0]
+  // ชื่อเล่นซ้ำหลายคน → ต้องใช้ทะเบียนตัดสิน ไม่เจอคู่ที่ตรงก็ไม่เดา
   if (!plateNorm) return undefined
   return candidates.find((d) => {
     const vehicle = vehicleForDriver(d.code)
@@ -347,6 +348,29 @@ export function checkMapLink(raw: string): string[] {
   return out
 }
 
+/** ข้อความเตือน/หมายเหตุเรื่องคนขับที่เกิดจากการจับคู่ชื่อเล่น (ลบออกเมื่อผู้ใช้เลือกคนขับในพรีวิวเอง) */
+const isDriverMatchMessage = (m: string) => m.startsWith('ชื่อเล่นคนขับ') || m.startsWith('ตรวจคนขับ')
+
+/**
+ * ผู้ใช้เลือกคนขับให้แถวในพรีวิวเอง (กรณีชื่อเล่นจับคู่ไม่ได้/จับคู่ผิด) — ตั้งชื่อ/รหัส/ชื่อ-นามสกุลแยกของคนขับ, ใช้ทะเบียนรถประจำถ้าแถวไม่ได้ระบุทะเบียน
+ * (มีคนขับต้องรู้ทะเบียน) และลบคำเตือน/หมายเหตุเรื่องการจับคู่ชื่อเล่นที่ไม่เป็นจริงแล้วออก
+ */
+export function mapImportRowToDriver(
+  row: ImportRowResult,
+  driver: { id?: string; firstName: string; lastName: string; plate?: string }
+): void {
+  row.driverName = `${driver.firstName} ${driver.lastName}`.trim()
+  row.driverId = driver.id
+  row.driverFirstName = driver.firstName
+  row.driverLastName = driver.lastName
+  if (!row.plate && driver.plate) row.plate = driver.plate
+  row.warnings = row.warnings.filter((w) => !isDriverMatchMessage(w))
+  row.note = row.note
+    .split(' | ')
+    .filter((part) => part && !isDriverMatchMessage(part))
+    .join(' | ')
+}
+
 /** แปลงแถว Excel ดิบเป็นข้อมูลที่ใช้สร้าง Booking ได้ทันที — ไม่มี error ที่บล็อกการสร้างงานอีกต่อไป (ตามที่ตกลง)
  *  ข้อมูลส่วนไหนขาด/จับคู่ไม่ได้ (คนขับไม่พบในทะเบียน, น้ำมัน/ปลายทางไม่มีเรท, สถานะไม่ตรง ฯลฯ) จะถูกสะสมไว้ใน warnings
  *  แล้วต่อท้ายเข้า note ของ Booking ให้ออฟฟิศไปตรวจ/กรอกเพิ่มทีหลัง แถวที่ไม่มีข้อมูลอะไรเลย (isEmpty) จะถูกข้ามตอนสร้างจริง
@@ -432,6 +456,9 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
     warnings.push(
       `ตรวจคนขับ: ${driverName ? `ชื่อเล่น "${driverName}" ไม่ตรงกับรายชื่อคนขับ` : 'ไม่ได้ระบุคนขับ'} — ใช้คนขับประจำรถทะเบียน ${plate} (${matchedDriver.fullName}) กรุณาตรวจสอบว่าถูกต้อง`
     )
+  } else if (matchedDriver && plate && matchedDriver.plate && normalizePlateCode(plate.trim().split(/\s+/)[0] || '') !== normalizePlateCode(matchedDriver.plate.trim().split(/\s+/)[0] || '')) {
+    // จับคู่ด้วยชื่อเล่น แต่แถวนี้ใช้รถคนละคันกับรถประจำของคนขับ (ขับแทน/สลับรถ) — ใช้คนขับตามชื่อเล่น เตือนให้ตรวจ
+    warnings.push(`ตรวจทะเบียน: ${matchedDriver.fullName} ปกติขับรถ ${matchedDriver.plate} แต่แถวนี้ใช้ทะเบียน ${plate} — ใช้คนขับตามชื่อเล่น กรุณาตรวจสอบว่าถูกต้อง`)
   } else if (matchedDriver && !plate && matchedDriver.plate) {
     // มีคนขับต้องรู้ทะเบียน: คนขับผูกกับรถประจำอยู่แล้ว → ใช้ทะเบียนรถประจำคนขับ
     warnings.push(`ตรวจทะเบียน: ไม่ได้ระบุทะเบียน — ใช้ทะเบียนรถประจำของ ${matchedDriver.fullName} (${matchedDriver.plate}) กรุณาตรวจสอบว่าถูกต้อง`)
@@ -488,6 +515,7 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
   return {
     rowNumber,
     isEmpty,
+    driverNickname: driverName,
     // ถ้าจับคู่ชื่อเล่น+ทะเบียนรถไม่ได้ ให้เว้นชื่อคนขับว่างไว้เลย (ไม่ใช้ชื่อเล่นดิบจากไฟล์ตรงๆ เพราะ driverName ของ
     // Booking ใช้คำนวณเงินเดือนจริง ต้องเป็นชื่อ-นามสกุลที่ยืนยันแล้วเท่านั้น) — ชื่อเล่นดิบยังอยู่ใน warnings/note ด้านบน
     driverName: matchedDriver ? matchedDriver.fullName : '',

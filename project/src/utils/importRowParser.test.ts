@@ -47,8 +47,18 @@ describe('matchDriverForImport', () => {
     expect(matchDriverForImport('หนึ่ง', '708821', drivers, vehicleForDriver)?.code).toBe('D001')
   })
 
-  it('ชื่อเล่นตรงแต่ทะเบียนไม่ตรงกับที่ผูกในระบบ คืน undefined ไม่เดา', () => {
-    expect(matchDriverForImport('หนึ่ง', '72-3819', drivers, vehicleForDriver)).toBeUndefined()
+  it('ชื่อเล่นตรงกับคนขับคนเดียว แต่ทะเบียนเป็นรถคันอื่น (ขับแทน) = ยังจับคู่คนนั้น (parseImportRow เตือนให้ตรวจทะเบียน)', () => {
+    expect(matchDriverForImport('หนึ่ง', '72-3819', drivers, vehicleForDriver)?.code).toBe('D001')
+  })
+
+  it('ชื่อเล่นซ้ำหลายคน ต้องใช้ทะเบียนตัดสิน ไม่มีคนไหนทะเบียนตรง = ไม่เดา', () => {
+    const dup = [
+      { code: 'D001', nickname: 'ติ๊ก' },
+      { code: 'D002', nickname: 'ติ๊ก' },
+    ]
+    expect(matchDriverForImport('ติ๊ก', '72-3819', dup, vehicleForDriver)?.code).toBe('D002')
+    expect(matchDriverForImport('ติ๊ก', '99-9999', dup, vehicleForDriver)).toBeUndefined()
+    expect(matchDriverForImport('ติ๊ก', '', dup, vehicleForDriver)).toBeUndefined()
   })
 
   it('ชื่อเล่นไม่ตรงเลยคืน undefined', () => {
@@ -59,15 +69,15 @@ describe('matchDriverForImport', () => {
     const list = [{ code: 'D004', nickname: 'แจ็ค' }]
     const plateOf = (code: string) => (code === 'D004' ? { plate: '72-2337' } : undefined)
     expect(matchDriverForImport('แจ๊ค', '72-2337', list, plateOf)?.code).toBe('D004')
-    // ทะเบียนไม่ตรงกับรถที่ประจำคนขับคนนั้น = ไม่เดา
-    expect(matchDriverForImport('แจ๊ค', '70-0000', list, plateOf)).toBeUndefined()
+    // ชื่อเล่นตรงกับคนเดียว ทะเบียนเป็นรถคันอื่น = ยังเชื่อชื่อเล่น (ขับแทน)
+    expect(matchDriverForImport('แจ๊ค', '70-0000', list, plateOf)?.code).toBe('D004')
   })
 
   it('ทะเบียนในไฟล์ต่อท้ายด้วยชื่อจังหวัด ("72-3825 สระบุรี") ยังจับคู่กับทะเบียนรถในระบบ (เลขล้วน) ได้', () => {
     const list = [{ code: 'D012', nickname: 'หนุ่ม' }]
     const plateOf = (code: string) => (code === 'D012' ? { plate: '72-3825' } : undefined)
     expect(matchDriverForImport('หนุ่ม', '72-3825 สระบุรี', list, plateOf)?.code).toBe('D012')
-    expect(matchDriverForImport('หนุ่ม', '72-3826 สระบุรี', list, plateOf)).toBeUndefined()
+    expect(matchDriverForImport('หนุ่ม', '72-3826 สระบุรี', list, plateOf)?.code).toBe('D012')
   })
 
   it('จับคู่ตรงตัวก่อนเสมอ แม้จะมีคนที่ชื่อเล่นใกล้เคียงอยู่ด้วย', () => {

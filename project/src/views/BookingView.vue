@@ -763,7 +763,25 @@
                           :title="importTripWarningFor(row) || 'เที่ยวที่ของคนขับในวันนี้'"
                         />
                       </td>
-                      <td class="px-2 py-1.5">{{ row.driverName || '-' }}</td>
+                      <td class="px-2 py-1.5 min-w-[190px]">
+                        <!-- ผลการ map: ชื่อเล่นใน Excel → ชื่อจริงที่จับคู่ได้ — จับคู่ไม่ได้ให้เลือกคนขับเองตรงนี้ได้เลย -->
+                        <template v-if="row.driverName">
+                          <div class="font-semibold text-text">{{ row.driverName }}</div>
+                          <div v-if="row.driverNickname" class="text-[11px] text-green-700">Excel: "{{ row.driverNickname }}" → จับคู่แล้ว</div>
+                        </template>
+                        <template v-else>
+                          <div v-if="row.driverNickname" class="text-[11px] font-semibold text-red-600">Excel: "{{ row.driverNickname }}" → ยังไม่ได้จับคู่</div>
+                          <div v-else class="text-[11px] text-muted">ไม่ได้ระบุคนขับ</div>
+                          <select
+                            class="mt-1 h-7 w-full rounded-md border border-border bg-surface px-1 text-xs"
+                            :class="row.driverNickname ? 'border-red-300' : ''"
+                            @change="(e) => onImportPickDriver(row, (e.target as HTMLSelectElement).value)"
+                          >
+                            <option value="">เลือกคนขับ...</option>
+                            <option v-for="d in importDriverChoices" :key="d.id" :value="d.id">{{ d.label }}</option>
+                          </select>
+                        </template>
+                      </td>
                       <td class="px-2 py-1.5">{{ row.plate || '-' }}</td>
                       <td class="px-2 py-1.5">{{ row.customer || '-' }}</td>
                       <td class="px-2 py-1.5">{{ row.siteName || '-' }}</td>
@@ -965,6 +983,7 @@ import {
   matchCustomerForImport,
   parseShipDateFromTitle,
   flagPriceOutliers,
+  mapImportRowToDriver,
   assignImportTripSequences,
   applySheetHyperlinks,
   type ImportRowResult,
@@ -1980,7 +1999,29 @@ const importTripClashFor = (row: ImportRowResult) => {
   return clash ? `เที่ยวที่ ${row.tripSequence} ของ ${row.driverName} ซ้ำกับงาน ${clash.docNo} ที่มีอยู่แล้วในวันนั้น — แก้เลขเที่ยวในพรีวิว` : undefined
 }
 /** ข้อควรตรวจก่อนนำเข้าของแถว: พิกัด/ลิงก์ GPS, เลขเที่ยวอ่านไม่ได้ (row.checks) + เลขเที่ยวชนงานเดิมของวัน — ไม่ถูกแปะลง note ของงาน */
-const importChecksFor = (row: ImportRowResult) => [...row.checks, importTripClashFor(row)].filter((c): c is string => !!c)
+/** ชื่อเล่นใน Excel ที่ยังไม่ได้ map เป็นคนขับ (ผู้ใช้ยังไม่ได้เลือก) — ต้องตรวจก่อนสร้างงาน */
+const importUnmappedDriverFor = (row: ImportRowResult) =>
+  row.driverNickname && !row.driverName ? `ชื่อเล่น "${row.driverNickname}" ยังไม่ได้ map เป็นคนขับ — เลือกคนขับในคอลัมน์ พขร. ก่อน ไม่งั้นงานจะไม่มีคนขับ` : undefined
+const importChecksFor = (row: ImportRowResult) =>
+  [importUnmappedDriverFor(row), ...row.checks, importTripClashFor(row)].filter((c): c is string => !!c)
+
+/** คนขับที่เลือกได้ในพรีวิวนำเข้า (ที่ยังทำงานอยู่): ชื่อ นามสกุล (ชื่อเล่น) */
+const importDriverChoices = computed(() =>
+  driversStore.drivers
+    .filter((d) => d.employmentStatus === 'active')
+    .map((d) => ({ id: d.id as string, label: `${d.firstName} ${d.lastName}${d.nickname ? ` (${d.nickname})` : ''}`.trim() }))
+)
+const onImportPickDriver = (row: ImportRowResult, driverId: string) => {
+  const driver = driversStore.drivers.find((d) => d.id === driverId)
+  if (!driver) return
+  const vehicle = vehiclesStore.vehicleForDriver(driver.code)
+  mapImportRowToDriver(row, {
+    id: driver.id,
+    firstName: driver.firstName,
+    lastName: driver.lastName,
+    plate: vehicle ? vehiclesStore.fullPlate(vehicle) : undefined,
+  })
+}
 const importCheckRowCount = computed(() => importableRows.value.filter((r) => importChecksFor(r).length > 0).length)
 
 /** สร้าง Booking จริงทีละแถว — เลขที่เอกสาร/ใบปล่อยรถยังออกอัตโนมัติตามปกติเสมอ (ไม่ใช้เลขจาก Excel ตรงๆ กันชนกับ

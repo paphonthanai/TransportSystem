@@ -176,6 +176,9 @@
             </button>
           </div>
           <div class="p-5 space-y-3">
+            <div class="rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 px-3 py-2 text-base font-bold">
+              เที่ยวที่ {{ bookingStore.tripNumberOf(jobDetailsTarget) }}
+            </div>
             <div class="grid grid-cols-2 gap-3 text-sm">
               <div class="bg-surface-2 rounded-lg p-3">
                 <div class="text-xs text-muted mb-0.5">ลูกค้า</div>

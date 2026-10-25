@@ -12,6 +12,7 @@
             <span class="material-symbols-rounded text-xl">arrow_back</span>
           </button>
           <div class="font-bold text-lg flex-1 truncate">{{ job ? bookingTitle(job) : bookingStore.bookingsLoading ? 'กำลังโหลด...' : 'ไม่พบงาน' }}</div>
+          <span v-if="job" class="text-xs font-bold px-2 py-1 rounded-full bg-white text-primary flex-shrink-0">เที่ยวที่ {{ bookingStore.tripNumberOf(job) }}</span>
           <span
             v-if="job"
             class="text-xs font-semibold px-2 py-1 rounded-full bg-white/20 flex-shrink-0"

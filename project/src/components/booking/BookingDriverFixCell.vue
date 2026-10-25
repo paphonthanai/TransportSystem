@@ -1,6 +1,9 @@
 <template>
   <div class="space-y-1 min-w-[150px]">
-    <div v-if="booking.driverName" class="text-text">{{ booking.driverName }}</div>
+    <div v-if="booking.driverName" class="text-text">
+      {{ booking.driverName }}
+      <span v-if="driverNickname" class="text-xs font-semibold text-indigo-700">({{ driverNickname }})</span>
+    </div>
     <!-- มีคนขับต้องรู้ทะเบียน: งานที่มีคนขับแต่ไม่มีทะเบียน เสนอทะเบียนรถประจำของคนขับคนนี้ -->
     <div v-if="booking.driverName && !booking.plate" class="space-y-1">
       <div class="text-[11px] font-semibold text-amber-700">ไม่มีทะเบียนรถ</div>
@@ -47,6 +50,7 @@ import type { Booking } from '@/types'
 import { useBookingStore } from '@/stores/booking'
 import { useDriversStore } from '@/stores/drivers'
 import { useVehiclesStore } from '@/stores/vehicles'
+import { looseNickname } from '@/utils/importRowParser'
 
 /**
  * ช่อง "คนขับ" ของตารางงาน — มีชื่อ = แสดงชื่อ, ไม่มีชื่อ = แสดงหมายเหตุที่เกี่ยวกับคนขับ + ปุ่มอัปเดต/แก้ไข
@@ -66,8 +70,20 @@ const vehicle = computed(() => {
   return vehiclesStore.findByPlateLoose(plate)
 })
 
-/** คนขับประจำรถของทะเบียนที่งานใช้ (ถ้ามี) */
+/** ชื่อเล่นที่ Excel ระบุไว้ตอนนำเข้า (หมายเหตุ 'ชื่อเล่นคนขับ "X" …') ที่จับคู่ไม่ได้ในตอนนั้น */
+const noteNickname = computed(() => /ชื่อเล่นคนขับ "([^"]+)"/.exec(props.booking.note || '')?.[1])
+
+/** คนขับที่ชื่อเล่นตรงกับในหมายเหตุ (เฉพาะกรณีมีคนเดียว) — เสนอก่อนคนขับประจำรถ เพราะออฟฟิศเขียนชื่อเล่นคือบอกว่าใครขับ */
+const byNoteNickname = computed(() => {
+  const nick = looseNickname(noteNickname.value)
+  if (!nick) return undefined
+  const matches = driversStore.drivers.filter((d) => looseNickname(d.nickname) === nick)
+  return matches.length === 1 ? matches[0] : undefined
+})
+
+/** คนขับที่เสนอให้ "อัปเดต": ตามชื่อเล่นในหมายเหตุก่อน ไม่มีค่อยใช้คนขับประจำรถของทะเบียนที่งานใช้ */
 const suggested = computed(() => {
+  if (byNoteNickname.value) return byNoteNickname.value
   const code = vehicle.value?.driverCode
   return code ? driversStore.drivers.find((d) => d.code === code) : undefined
 })
@@ -85,6 +101,15 @@ const driverNote = computed(() =>
     .filter((part) => part.startsWith('ชื่อเล่นคนขับ'))
     .join(' | ')
 )
+
+/** ชื่อเล่นของคนขับในงานนี้ (หาจากรหัสคนขับก่อน ไม่มีค่อยเทียบชื่อ-นามสกุล) */
+const driverNickname = computed(() => {
+  const b = props.booking
+  const driver =
+    (b.driverId ? driversStore.drivers.find((d) => d.id === b.driverId) : undefined) ??
+    driversStore.drivers.find((d) => fullName(d) === (b.driverName || '').trim())
+  return (driver?.nickname || '').trim()
+})
 
 const activeDrivers = computed(() => driversStore.drivers.filter((d) => d.employmentStatus === 'active'))
 

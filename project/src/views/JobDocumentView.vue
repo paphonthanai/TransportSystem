@@ -7,6 +7,14 @@
       </button>
       <div v-if="booking" class="flex items-center gap-2">
         <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">{{ bookingStatusLabel[booking.status] }}</span>
+        <!-- เที่ยวที่ของคนขับในวันนั้น (ที่เลือกตอนจัดรถ/จาก Excel/ตารางงาน; งานเก่าที่ไม่ได้ตั้งไว้นับตามลำดับเวลาจ่ายงาน) -->
+        <span
+          v-if="booking.driverName"
+          class="text-xs font-bold px-2 py-1 rounded-full bg-indigo-100 text-indigo-700"
+          :title="booking.tripSequence !== undefined ? 'เที่ยวที่ตั้งไว้' : 'นับตามลำดับเวลาจ่ายงาน (ยังไม่ได้ตั้งเลขเที่ยว)'"
+        >
+          เที่ยวที่ {{ bookingStore.tripNumberOf(booking) }}{{ booking.tripSequence === undefined ? ' (อัตโนมัติ)' : '' }}
+        </span>
         <span v-for="badge in documentClaimBadges(booking)" :key="badge.label" :class="['text-xs font-semibold px-2 py-1 rounded-full', badge.class]">
           {{ badge.label }}
         </span>
