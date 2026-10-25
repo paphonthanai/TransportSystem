@@ -574,10 +574,10 @@ const standardFuel = computed(() => (booking.value ? fuelRateStore.standardFuelL
 /** สิ่งที่ยังขาดที่ต้องไปแก้ที่หน้าแก้ไขงาน (ทะเบียน/คนขับ/ค่าเที่ยว) — เลขไมล์/ลิตรน้ำมันกรอกในไดอะล็อกจบงานเอง */
 const completeBlockedReason = computed(() =>
   booking.value
-    ? describeCompletionIssues(bookingCompletionIssues(booking.value, { standardFuelLiters: standardFuel.value }).filter((i) => STATIC_COMPLETION_CODES.includes(i.code)))
+    ? describeCompletionIssues(bookingCompletionIssues(booking.value, { standardFuelLiters: standardFuel.value, tripNumber: bookingStore.tripNumberOf(booking.value) }).filter((i) => STATIC_COMPLETION_CODES.includes(i.code)))
     : ''
 )
-const confirmBlockedReason = computed(() => (booking.value ? describeCompletionIssues(bookingCompletionIssues(booking.value, { standardFuelLiters: standardFuel.value })) : ''))
+const confirmBlockedReason = computed(() => (booking.value ? describeCompletionIssues(bookingCompletionIssues(booking.value, { standardFuelLiters: standardFuel.value, tripNumber: bookingStore.tripNumberOf(booking.value) })) : ''))
 const canComplete = computed(() => !!booking.value && booking.value.status !== 'DELIVERED' && booking.value.items.length > 0)
 const canApprovePod = computed(() => booking.value?.podReviewStatus === 'PENDING_REVIEW')
 const canConfirmCompletion = computed(

@@ -130,3 +130,39 @@ describe('approvePodAndConfirmCompletion (ยืนยัน POD = ยืนย�
     expect(booking.completionConfirmedAt).toBeUndefined()
   })
 })
+
+describe('เที่ยวที่ 2 ขึ้นไป ค่าเที่ยว 0 และเบี้ยเลี้ยง 0 ทั้งคู่ จบ/ยืนยันได้', () => {
+  const unpriced = { ...completeData, tripFee: 0, allowance: 0 }
+
+  it('เที่ยวที่ 2 (ตั้งเลขเที่ยวไว้): ยืนยัน POD = ยืนยันการจบงานผ่าน', () => {
+    const bookingStore = useBookingStore()
+    const booking = makeBooking({ status: 'DELIVERED', podReviewStatus: 'PENDING_REVIEW', ...unpriced, tripSequence: 2 })
+    bookingStore.bookings.push(booking)
+
+    expect(bookingStore.approvePodAndConfirmCompletion(booking.id)).toMatchObject({ ok: true, completed: true })
+    expect(booking.completionConfirmedAt).toBeInstanceOf(Date)
+  })
+
+  it('เที่ยวแรก (ตั้งเลข 1) ค่าเที่ยว 0 เบี้ยเลี้ยง 0 = ยังยืนยันไม่ได้ ไม่แตะอะไร', () => {
+    const bookingStore = useBookingStore()
+    const booking = makeBooking({ status: 'DELIVERED', podReviewStatus: 'PENDING_REVIEW', ...unpriced, tripSequence: 1 })
+    bookingStore.bookings.push(booking)
+
+    const result = bookingStore.approvePodAndConfirmCompletion(booking.id)
+    expect(result.ok).toBe(false)
+    expect(result.issues.map((i) => i.code)).toContain('tripFee')
+    expect(booking.podReviewStatus).toBe('PENDING_REVIEW')
+  })
+
+  it('งานเก่าไม่มีเลขเที่ยว: นับตามลำดับเวลาจ่ายงานของคนขับวันเดียวกัน — งานที่สองผ่าน งานแรกไม่ผ่าน', () => {
+    const bookingStore = useBookingStore()
+    const first = makeBooking({ status: 'DELIVERED', podReviewStatus: 'APPROVED', ...unpriced, dispatchedAt: new Date('2026-10-20T08:00:00Z') })
+    const second = makeBooking({ status: 'DELIVERED', podReviewStatus: 'APPROVED', ...unpriced, dispatchedAt: new Date('2026-10-20T09:00:00Z') })
+    bookingStore.bookings.push(first, second)
+
+    expect(bookingStore.tripNumberOf(first)).toBe(1)
+    expect(bookingStore.tripNumberOf(second)).toBe(2)
+    expect(bookingStore.confirmJobCompletion(first.id).ok).toBe(false)
+    expect(bookingStore.confirmJobCompletion(second.id).ok).toBe(true)
+  })
+})

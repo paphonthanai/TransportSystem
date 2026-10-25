@@ -11,6 +11,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import { useDriverPayrollDocumentsStore } from '@/stores/driverPayrollDocuments'
 import { isBookingPaidToDriver } from '@/utils/driverPaid'
+import { resolveTripNumber } from '@/utils/tripSequence'
 import { pruneResolvedNote } from '@/utils/bookingNote'
 import { bookingRepository } from '@/repositories/bookingRepository'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
@@ -1023,6 +1024,21 @@ export const useBookingStore = defineStore('booking', () => {
    * จบงานฝั่งออฟฟิศ (มีเพิ่ม/ลดหนี้ แต่ไม่บังคับ POD) — ปิดงานทั้งหมดทีเดียว รวมถึงรายการที่ยังไม่ได้กดส่งของทีละรายการ
    * ไม่ตัดสต๊อกซ้ำที่นี่ เพราะสต๊อกถูกตัดไปแล้วตอนรับสินค้าแต่ละรายการ (ดู pickupJobItem)
    */
+  /**
+   * เที่ยวที่ของงานนี้ของคนขับในวันเดียวกัน — ใช้ tripSequence ที่ตั้งไว้ก่อน ไม่มี (งานเก่า) นับตามลำดับเวลาจ่ายงานเดิม
+   * ใช้ตัดสินข้อยกเว้นจบงานที่ค่าเที่ยว/เบี้ยเลี้ยง 0 ของเที่ยวที่ 2 ขึ้นไป (ดู isUnpricedLaterTrip ใน utils/bookingCompletion.ts)
+   */
+  function tripNumberOf(booking: Booking): number {
+    const day = (b: Booking) => {
+      const d = new Date(b.shipDate || b.createdAt)
+      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    }
+    const group = booking.driverName
+      ? bookings.value.filter((b) => b.driverName === booking.driverName && day(b) === day(booking))
+      : [booking]
+    return resolveTripNumber(booking, group.some((b) => b.id === booking.id) ? group : [...group, booking])
+  }
+
   function completeJob(
     id: string,
     debtAdjustments: DebtAdjustment[],
@@ -1038,6 +1054,7 @@ export const useBookingStore = defineStore('booking', () => {
       fuelLiters: fuel?.notRefilled ? 0 : fuel?.liters,
       fuelNotRefilled: fuel ? !!fuel.notRefilled : undefined,
       standardFuelLiters: fuelRateStore.standardFuelLiters(booking.items, booking.pricingMode) || undefined,
+      tripNumber: tripNumberOf(booking),
     })
     if (issues.length) return { ok: false, issues }
     if (fuel) {
@@ -1213,6 +1230,7 @@ export const useBookingStore = defineStore('booking', () => {
     // ข้อมูลไม่ครบ = ยืนยันจบงานไม่ได้ (งานที่คนขับจบผ่านแอปก็ต้องครบก่อนนำไปวางบิลเช่นกัน)
     const issues = bookingCompletionIssues(booking, {
       standardFuelLiters: fuelRateStore.standardFuelLiters(booking.items, booking.pricingMode) || undefined,
+      tripNumber: tripNumberOf(booking),
     })
     if (issues.length) return { ok: false, issues }
     booking.completionConfirmedAt = new Date()
@@ -1232,6 +1250,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (booking.status === 'DELIVERED') {
       const issues = bookingCompletionIssues(booking, {
         standardFuelLiters: fuelRateStore.standardFuelLiters(booking.items, booking.pricingMode) || undefined,
+      tripNumber: tripNumberOf(booking),
       })
       if (issues.length) return { ok: false, completed: false, issues }
     }
@@ -1464,6 +1483,7 @@ export const useBookingStore = defineStore('booking', () => {
     addJobItem,
     dispatchBooking,
     setTripSequence,
+    tripNumberOf,
     applyFuelRate,
     repriceFuelRates,
     acceptDispatch,

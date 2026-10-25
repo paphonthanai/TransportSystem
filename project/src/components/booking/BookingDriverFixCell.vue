@@ -34,7 +34,7 @@
           title="เลือกคนขับเอง"
         >
           <option value="">แก้ไข: เลือกคนขับ...</option>
-          <option v-for="d in activeDrivers" :key="d.code" :value="d.id">{{ fullName(d) }}</option>
+          <option v-for="d in activeDrivers" :key="d.code" :value="d.id">{{ fullName(d) }}{{ d.nickname ? ` (${d.nickname})` : '' }}</option>
         </select>
       </div>
     </template>

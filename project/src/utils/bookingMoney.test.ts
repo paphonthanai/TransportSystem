@@ -141,3 +141,51 @@ describe('summarizeBilledMoney', () => {
     expect(s.monthly.expense[11]).toBe(3000)
   })
 })
+
+describe('computeBookingMoney — เที่ยวที่ 2 ขึ้นไป ค่าเที่ยว 0 และเบี้ยเลี้ยง 0 (หักค่าน้ำมันได้)', () => {
+  const later = { ...base, tripFee: 0, allowance: 0 } // น้ำมัน 50 ล. × 40 = 2,000
+
+  it('รถบริษัท: ยอดขาย 0 แต่นับค่าน้ำมันเป็นรายจ่าย → รายได้บริษัท = −ค่าน้ำมัน (หักค่าน้ำมัน)', () => {
+    const m = computeBookingMoney(later, 'รถบริษัท', 2)
+    expect(m.sales).toBe(0)
+    expect(m.fuelCost).toBe(2000)
+    expect(m.expense).toBe(2000)
+    expect(m.companyIncome).toBe(-2000)
+    expect(m.incomeNote).toBeUndefined()
+  })
+
+  it('รถร่วม/หุ้นส่วน/อู่เสริม: รายได้บริษัทคิดจากสัดส่วนของยอดขาย 0 = 0 (ไม่ขึ้นเป็นงานคิดเงินไม่ได้)', () => {
+    expect(computeBookingMoney(later, 'รถร่วม', 3).companyIncome).toBe(0)
+    expect(computeBookingMoney(later, 'รถหุ้นส่วน', 2).companyIncome).toBe(0)
+  })
+
+  it('เที่ยวแรก/ไม่รู้เลขเที่ยว ยังคิดไม่ได้เหมือนเดิม; มีเบี้ยเลี้ยงแต่ค่าเที่ยว 0 ก็ยังคิดไม่ได้', () => {
+    expect(computeBookingMoney(later, 'รถบริษัท', 1).companyIncome).toBeNull()
+    expect(computeBookingMoney(later, 'รถบริษัท').companyIncome).toBeNull()
+    expect(computeBookingMoney({ ...later, allowance: 750 }, 'รถบริษัท', 2).companyIncome).toBeNull()
+  })
+
+  it('รับเลขเที่ยวเป็นฟังก์ชันได้ และเรียกเฉพาะเมื่อจำเป็น (งานที่มีราคาปกติไม่เรียกเลย)', () => {
+    let calls = 0
+    const source = () => {
+      calls++
+      return 2
+    }
+    expect(computeBookingMoney(later, 'รถบริษัท', source).companyIncome).toBe(-2000)
+    expect(calls).toBe(1)
+    computeBookingMoney(base, 'รถบริษัท', source)
+    expect(calls).toBe(1)
+  })
+
+  it('สรุปยอด: เที่ยวหลังที่ 0/0 ถูกนับ (ค่าน้ำมันเป็นรายจ่าย ไม่เป็นงานคิดไม่ได้)', () => {
+    const t = new Date('2026-10-20T08:00:00Z')
+    const priced = { ...base, status: 'DELIVERED' as const, completedAt: t }
+    const laterTrip = { ...later, status: 'DELIVERED' as const, completedAt: t, tripSequence: 2 }
+    const result = summarizeBilledMoney([priced, laterTrip], () => 'รถบริษัท' as VehicleType, new Date('2026-10-22T00:00:00Z'), (b) => b.tripSequence ?? 1)
+    expect(result.uncomputableCount).toBe(0)
+    expect(result.totals.sales).toBe(10000)
+    expect(result.totals.expense).toBe(3000 + 2000)
+    // 6,900 (เที่ยวแรก) + (−2,000) = 4,900
+    expect(result.totals.companyIncome).toBe(4900)
+  })
+})

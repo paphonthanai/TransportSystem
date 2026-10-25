@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bookingCompletionIssues, maxFuelLitersFor, STATIC_COMPLETION_CODES } from './bookingCompletion'
+import { bookingCompletionIssues, isUnpricedLaterTrip, maxFuelLitersFor, STATIC_COMPLETION_CODES } from './bookingCompletion'
 
 const complete = {
   plate: '70-1111 สระบุรี',
@@ -22,6 +22,22 @@ describe('bookingCompletionIssues', () => {
     const c = codes({ ...complete, plate: undefined, driverName: undefined, tripFee: 0 })
     expect(c).toEqual(['plate', 'driver', 'tripFee'])
     c.forEach((code) => expect(STATIC_COMPLETION_CODES).toContain(code))
+  })
+
+  it('เที่ยวที่ 2 ขึ้นไป ค่าเที่ยว 0 และเบี้ยเลี้ยง 0 ทั้งคู่ = จบ/ยืนยันได้; เที่ยวแรกหรือไม่รู้เลขเที่ยว = ยังต้องมีค่าเที่ยว', () => {
+    const unpriced = { ...complete, tripFee: 0, allowance: 0 }
+    expect(codes(unpriced, { tripNumber: 2 })).toEqual([])
+    expect(codes(unpriced, { tripNumber: 3 })).toEqual([])
+    expect(codes({ ...unpriced, tripSequence: 2 })).toEqual([]) // ไม่ส่ง tripNumber = ใช้ tripSequence ของงาน
+    expect(codes(unpriced, { tripNumber: 1 })).toEqual(['tripFee'])
+    expect(codes(unpriced)).toEqual(['tripFee'])
+  })
+
+  it('ข้อยกเว้นเที่ยวหลังใช้เฉพาะเมื่อ 0 ทั้งคู่ — ค่าเที่ยว 0 แต่มีเบี้ยเลี้ยง ยังจบไม่ได้; ทะเบียน/คนขับยังต้องมีเสมอ', () => {
+    expect(codes({ ...complete, tripFee: 0, allowance: 750 }, { tripNumber: 2 })).toEqual(['tripFee'])
+    expect(codes({ ...complete, tripFee: 0, allowance: 0, plate: undefined, driverName: undefined }, { tripNumber: 2 })).toEqual(['plate', 'driver'])
+    expect(isUnpricedLaterTrip({ tripFee: 0, allowance: 0 }, 2)).toBe(true)
+    expect(isUnpricedLaterTrip({ tripFee: 3500, allowance: 0 }, 2)).toBe(false)
   })
 
   it('คนขับระบุด้วย driverId อย่างเดียวก็ถือว่ามีคนขับ', () => {

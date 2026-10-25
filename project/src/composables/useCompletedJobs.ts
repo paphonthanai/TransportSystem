@@ -158,7 +158,7 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
 
   /** เงินของงานนี้ (ยอดขาย/เบี้ยเลี้ยง/ค่าน้ำมัน/รายจ่าย/รายได้บริษัท) — ประเภทรถหาจากทะเบียนรถ ดู utils/bookingMoney.ts */
   const moneyForBooking = (booking: Booking) =>
-    computeBookingMoney(booking, booking.plate ? vehiclesStore.findByFullPlate(booking.plate)?.department : undefined)
+    computeBookingMoney(booking, booking.plate ? vehiclesStore.findByFullPlate(booking.plate)?.department : undefined, () => bookingStore.tripNumberOf(booking))
 
   /** แถว Excel ของงานเสร็จสิ้น 1 งาน — ใช้ร่วมกันทั้งหน้า "งานเสร็จสิ้นทั้งหมด" และ "งานเสร็จสิ้น" รายกองรถ ให้คอลัมน์ตรงกันเสมอ
    *  ลูกค้าใช้ชื่อเต็ม (ไม่ใช่ชื่อย่อ) รายได้คงเหลือ (รายได้บริษัท) เว้นว่างถ้าคิดไม่ได้ พร้อมหมายเหตุสาเหตุ (ห้ามนำไปคำนวณ) */

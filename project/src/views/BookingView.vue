@@ -1198,9 +1198,12 @@ const activeBookingsForDriver = (name: string) =>
 /** ป้าย dropdown คนขับ — เดิมโชว์ "กำลังวิ่งเที่ยวที่ N (docNo)" เปลี่ยนเป็นจำนวนเที่ยว+ปลายทางของเที่ยวล่าสุดแทน
  *  ให้ตรงรูปแบบเดียวกับ vehicleOptionLabel เป๊ะ (Requirement ใหม่) */
 const driverOptionLabel = (name: string) => {
+  // แสดงชื่อเล่นต่อท้ายชื่อ (ออฟฟิศเรียกคนขับด้วยชื่อเล่น) — ช่องค้นหาพิมพ์ชื่อเล่นก็เจอ
+  const nickname = (findDriverByName(name)?.nickname || '').trim()
+  const label = nickname ? `${name} (${nickname})` : name
   const active = activeBookingsForDriver(name)
-  if (!active.length) return `${name} — ว่าง`
-  return `${name} — ${active.length} เที่ยว — ${destinationLabel(active[0])}`
+  if (!active.length) return `${label} — ว่าง`
+  return `${label} — ${active.length} เที่ยว — ${destinationLabel(active[0])}`
 }
 
 /** สีพื้นหลังของแต่ละ <option> คนขับตามจำนวนเที่ยวที่มีอยู่ — เกณฑ์เดียวกับ vehicleOptionColor เป๊ะ
@@ -1685,11 +1688,11 @@ const standardFuelOf = (booking: Booking) => fuelRateStore.standardFuelLiters(bo
 /** ปัญหาที่ขวางการจบงานของแถวนี้ที่ต้องไปแก้ที่หน้าแก้ไขงาน/จัดรถ (ทะเบียน/คนขับ/ค่าเที่ยว) — ปุ่ม "จบงาน" ถูกปิดพร้อมบอกเหตุผล
  *  (เลขไมล์/ลิตรน้ำมันกรอกได้ในไดอะล็อกจบงานเอง จึงไม่นับตรงนี้) */
 const completeBlockedReason = (booking: Booking) =>
-  describeCompletionIssues(bookingCompletionIssues(booking, { standardFuelLiters: standardFuelOf(booking) }).filter((i) => STATIC_COMPLETION_CODES.includes(i.code)))
+  describeCompletionIssues(bookingCompletionIssues(booking, { standardFuelLiters: standardFuelOf(booking), tripNumber: bookingStore.tripNumberOf(booking) }).filter((i) => STATIC_COMPLETION_CODES.includes(i.code)))
 
 /** ปุ่ม "ยืนยันการจบงาน" (หลังตรวจ POD) — ข้อมูลไม่ครบ = กดไม่ได้ พร้อมบอกว่าขาดอะไร */
 const confirmBlockedReason = (booking: Booking) =>
-  describeCompletionIssues(bookingCompletionIssues(booking, { standardFuelLiters: standardFuelOf(booking) }))
+  describeCompletionIssues(bookingCompletionIssues(booking, { standardFuelLiters: standardFuelOf(booking), tripNumber: bookingStore.tripNumberOf(booking) }))
 
 const onCancelDispatch = (booking: Booking) => {
   if (!confirm(`ยกเลิกการจ่ายงาน ${booking.docNo} และคืนกลับไปที่ตารางจองงาน?`)) return

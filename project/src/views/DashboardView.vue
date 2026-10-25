@@ -405,6 +405,7 @@ import { useFuelRateStore } from '@/stores/fuelRates'
 import { summarizeBilledMoney, computeBookingMoney } from '@/utils/bookingMoney'
 import { useDriversStore } from '@/stores/drivers'
 import { bangkokDay } from '@/utils/fuelPrice'
+import type { Booking } from '@/types'
 import { rangeFor, inRange, startOfDay, endOfDay, type DateRange } from '@/utils/dateRanges'
 
 const salesDocumentsStore = useSalesDocumentsStore()
@@ -430,7 +431,7 @@ const matchesFleet = (bookingIds: string[], filter: string) => filter === 'all' 
 
 /** ยอดขายรวม/รายจ่าย/รายได้บริษัท — คิดจากงานที่ส่งของเสร็จสิ้น (DELIVERED) ตามประเภทรถของทะเบียนรถ
  *  คิดสดทุกครั้งจากข้อมูลปัจจุบัน แก้ทะเบียน/ประเภทรถแล้วตัวเลขเปลี่ยนตามเอง */
-const billedMoney = computed(() => summarizeBilledMoney(bookingStore.bookings, (plate) => vehiclesStore.findByFullPlate(plate)?.department))
+const billedMoney = computed(() => summarizeBilledMoney(bookingStore.bookings, (plate) => vehiclesStore.findByFullPlate(plate)?.department, new Date(), (b) => bookingStore.tripNumberOf(b as Booking)))
 const totalPendingReceivable = computed(() => taxInvoices.value.filter((d) => d.status === 'SENT').reduce((sum, d) => sum + d.amount, 0))
 const totalOverdue = computed(() => {
   const today = new Date()
@@ -504,7 +505,8 @@ const summaryMoney = computed(() =>
   summarizeBilledMoney(
     bookingStore.bookings.filter((b) => (summaryUnit.value === 'all' || b.category === summaryUnit.value) && inRange(b, summaryDateRange.value)),
     vehicleTypeOf,
-    new Date()
+    new Date(),
+    (b) => bookingStore.tripNumberOf(b as Booking)
   )
 )
 
@@ -513,7 +515,7 @@ const chartBookings = computed(() => {
   const range = resolveRange(dateRangeFilter.value, customFrom.value, customTo.value, new Date())
   return bookingStore.bookings.filter((b) => (unitFilter.value === 'all' || b.category === unitFilter.value) && inRange(b, range))
 })
-const chartMoney = computed(() => summarizeBilledMoney(chartBookings.value, vehicleTypeOf, new Date()))
+const chartMoney = computed(() => summarizeBilledMoney(chartBookings.value, vehicleTypeOf, new Date(), (b) => bookingStore.tripNumberOf(b as Booking)))
 
 // ---------- ราคาน้ำมันวันนี้ ----------
 const FUEL_TYPES = ['รถบริษัท', 'รถหุ้นส่วน', 'รถร่วม', 'รถอู่เสริม'] as const
@@ -650,7 +652,7 @@ const attentionItems = computed(() => {
     const reasons = new Map<string, number>()
     for (const b of bs) {
       if (b.status !== 'DELIVERED') continue
-      const m = computeBookingMoney(b, b.plate ? vehicleTypeOf(b.plate) : undefined)
+      const m = computeBookingMoney(b, b.plate ? vehicleTypeOf(b.plate) : undefined, () => bookingStore.tripNumberOf(b))
       if (m.companyIncome === null) {
         const label = shortReason(m.incomeNote || '')
         reasons.set(label, (reasons.get(label) || 0) + 1)

@@ -137,6 +137,7 @@ const issues = computed(() => {
     fuelLiters: fuelNotRefilled.value ? 0 : Number(fuelLiters.value) || 0,
     fuelNotRefilled: fuelNotRefilled.value,
     standardFuelLiters: standardFuel.value,
+    tripNumber: bookingStore.tripNumberOf(booking),
   })
 })
 

@@ -377,10 +377,12 @@ const activeBookingForDriver = (name: string) =>
     .filter((b) => b.driverName === name && ACTIVE_STATUSES.includes(b.status))
     .sort((a, b) => new Date(b.dispatchedAt || b.createdAt).getTime() - new Date(a.dispatchedAt || a.createdAt).getTime())[0]
 const driverOptionLabel = (name: string) => {
+  const nickname = (findDriverByName(name)?.nickname || '').trim()
+  const label = nickname ? `${name} (${nickname})` : name
   const activeBooking = activeBookingForDriver(name)
-  if (!activeBooking) return `${name} — ว่าง`
+  if (!activeBooking) return `${label} — ว่าง`
   const tripNo = driverTripNumberForBooking(activeBooking)
-  return `${name} — กำลังวิ่งเที่ยวที่ ${tripNo} (${activeBooking.docNo})`
+  return `${label} — กำลังวิ่งเที่ยวที่ ${tripNo} (${activeBooking.docNo})`
 }
 
 /**

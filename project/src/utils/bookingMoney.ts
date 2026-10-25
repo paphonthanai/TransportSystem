@@ -1,5 +1,6 @@
 import type { Booking, VehicleType } from '@/types'
 import { bookingBillingRow, computeRowAmount } from '@/utils/documentTotals'
+import { isUnpricedLaterTrip } from '@/utils/bookingCompletion'
 
 export const roundMoney = (x: number) => Math.round(x * 100) / 100
 
@@ -35,19 +36,24 @@ type MoneyInput = Pick<
   Booking,
   'tripFee' | 'extraCharges' | 'discountMode' | 'discountPercent' | 'discountAmount' | 'vatRate' | 'allowance' | 'finalAllowance' | 'fuelLiters' | 'fuelRate'
 > &
-  Partial<Pick<Booking, 'plate'>>
+  Partial<Pick<Booking, 'plate' | 'tripSequence'>>
+
+/** เลขเที่ยวของงาน (ตัวเลข หรือฟังก์ชันที่คำนวณเมื่อจำเป็น — เรียกเฉพาะงานที่ค่าเที่ยว 0 และเบี้ยเลี้ยง 0 จึงไม่เปลืองกับงานปกติ) */
+export type TripNumberSource = number | (() => number)
 
 /**
  * คิดเงินของ 1 งาน — ยอดขาย/รายจ่ายคิดได้เสมอ (ไม่ขึ้นกับประเภทรถ) ส่วน "รายได้บริษัท" ขึ้นกับประเภทรถ:
  *  - รถบริษัท: ราคาเต็ม − 1% − (ค่าน้ำมัน + ค่าแรง)
  *  - รถหุ้นส่วน/รถอู่เสริม: (ราคาเต็ม − 1%) × 8%   รถร่วม: (ราคาเต็ม − 1%) × 10%
  *  - ค่าเที่ยวเป็น 0 → คิดไม่ได้ ห้ามคำนวณรายจ่าย (เบี้ยเลี้ยง/น้ำมัน) ของงานนั้นด้วย; ส่วนเบี้ยเลี้ยง 0 หรือลิตรน้ำมัน 0 เป็นค่าที่ถูกต้อง
+ *    ข้อยกเว้น: เที่ยวที่ 2 ขึ้นไปที่ค่าเที่ยว 0 และเบี้ยเลี้ยง 0 ทั้งคู่ (ราคา/เบี้ยเลี้ยงคิดที่เที่ยวแรกของวัน) คิดได้ — ยอดขาย 0 แต่ค่าน้ำมันเป็นรายจ่าย
+ *    จึงนำไปหักค่าน้ำมันได้ (รถบริษัท: รายได้ = 0 − ค่าน้ำมัน เป็นค่าติดลบ; รถหุ้นส่วน/อู่เสริม/รถร่วม คิดจากสัดส่วนของยอดขาย 0 จึงเป็น 0)
  *    คิดเงินได้ปกติ (ลิตร 0 = ไม่ได้เติม ค่าน้ำมัน 0 ไม่ต้องมีเรท) แต่ถ้ามีลิตรแล้วไม่มีเรทน้ำมัน → คิดค่าน้ำมันไม่ได้
  *  - ไม่มีทะเบียน/หารถไม่เจอ/ประเภทยังเป็น "รถร่วมใน/รถร่วมนอก" แบบเก่า → คิดไม่ได้ (null + หมายเหตุ) ห้ามนำงานนั้นไปคำนวณทั้ง
  *    รายได้และรายจ่าย จนกว่าจะแก้ข้อมูลให้ถูกต้อง (ทุกประเภทรถ)
  * vehicleType = ประเภทรถที่ผู้เรียกหาจากทะเบียนรถแล้ว (undefined = หาไม่เจอ)
  */
-export function computeBookingMoney(b: MoneyInput, vehicleType: VehicleType | undefined): BookingMoney {
+export function computeBookingMoney(b: MoneyInput, vehicleType: VehicleType | undefined, tripNumber?: TripNumberSource): BookingMoney {
   const sales = roundMoney(computeRowAmount(bookingBillingRow(b)))
   const allowance = roundMoney(b.finalAllowance ?? b.allowance ?? 0)
   const fuelCost = fuelCostOf(b)
@@ -56,7 +62,10 @@ export function computeBookingMoney(b: MoneyInput, vehicleType: VehicleType | un
   const unreadableFuel = !!(b as { fuelUnreadable?: boolean }).fuelUnreadable
   const afterWithholding = sales * (1 - WITHHOLDING_RATE)
 
-  if (sales <= 0) return { ...base, companyIncome: null, incomeNote: 'ยังไม่ได้ใส่ราคา/ค่าเที่ยว (ยอดขาย 0) จึงคิดเงินไม่ได้' }
+  // เที่ยวหลังที่ 0/0 ทั้งคู่ผ่านได้ (ไม่ต้องมียอดขาย) — ไม่รู้เลขเที่ยว/เที่ยวแรก ยังต้องมีราคาเหมือนเดิม
+  const unpricedLaterTrip =
+    sales <= 0 && isUnpricedLaterTrip(b, typeof tripNumber === 'function' ? tripNumber() : tripNumber)
+  if (sales <= 0 && !unpricedLaterTrip) return { ...base, companyIncome: null, incomeNote: 'ยังไม่ได้ใส่ราคา/ค่าเที่ยว (ยอดขาย 0) จึงคิดเงินไม่ได้' }
   if (unreadableFuel) return { ...base, companyIncome: null, incomeNote: 'อ่านค่าน้ำมันจาก Excel ไม่ได้ จึงยังไม่นำไปคิดเงิน — แก้ลิตรน้ำมันให้ถูกต้องก่อน' }
   // เบี้ยเลี้ยง 0 / ลิตรน้ำมัน 0 ไม่ใช่เหตุให้คิดไม่ได้ (คิดเป็น 0 ได้) — เรทต้องมีเฉพาะตอนมีลิตรเท่านั้น
   if ((b.fuelLiters || 0) > 0 && !((b.fuelRate || 0) > 0)) return { ...base, companyIncome: null, incomeNote: 'ยังไม่มีเรทน้ำมัน (0) จึงคิดเงินไม่ได้' }
@@ -88,7 +97,8 @@ export interface BilledMoneySummary {
 export function summarizeBilledMoney(
   bookings: Array<MoneyInput & Pick<Booking, 'status' | 'completedAt'>>,
   vehicleTypeOf: (plate: string) => VehicleType | undefined,
-  now: Date = new Date()
+  now: Date = new Date(),
+  tripNumberOf?: (b: MoneyInput & Pick<Booking, 'status' | 'completedAt'>) => number
 ): BilledMoneySummary {
   const monthly = { sales: Array(12).fill(0) as number[], expense: Array(12).fill(0) as number[], income: Array(12).fill(0) as number[] }
   const totals = { sales: 0, expense: 0, companyIncome: 0 }
@@ -96,7 +106,7 @@ export function summarizeBilledMoney(
 
   for (const b of bookings) {
     if (b.status !== 'DELIVERED') continue
-    const m = computeBookingMoney(b, b.plate ? vehicleTypeOf(b.plate) : undefined)
+    const m = computeBookingMoney(b, b.plate ? vehicleTypeOf(b.plate) : undefined, tripNumberOf ? () => tripNumberOf(b) : undefined)
     if (m.companyIncome === null) {
       uncomputableCount++
       continue
