@@ -40,6 +40,18 @@
       </div>
       <div v-if="bookingCategories.length > 1" class="text-[11px] text-muted">ลูกค้ารายนี้มีงานมากกว่าหนึ่งประเภท ต้องวางบิลแยกทีละประเภท (Feed) เสมอ</div>
 
+      <!-- ค้นหางานในตาราง: เลขชิพเม้น · เลขที่ PO ลูกค้า · หน้างาน · ทะเบียน · คนขับ ฯลฯ (ดู utils/bookingSearch.ts)
+           กรองแค่ที่แสดง งานที่ติ๊กไว้แล้วยังถูกเลือกอยู่แม้ค้นคำอื่น -->
+      <div v-if="bookingCategory" class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface border border-border max-w-md">
+        <span class="material-symbols-rounded text-muted">search</span>
+        <input
+          v-model="searchText"
+          type="text"
+          placeholder="ค้นหาเลขชิพเม้น, เลขที่ PO ลูกค้า, หน้างาน, ทะเบียน, คนขับ..."
+          class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
+        />
+      </div>
+
       <div v-if="bookingCategory" class="border border-border rounded-lg overflow-x-auto bg-surface">
         <table class="w-full text-sm min-w-[1200px]">
           <thead class="bg-surface-2 text-xs text-muted">
@@ -84,6 +96,9 @@
               <td class="px-3 py-2 text-right text-text">{{ formatBaht(bookingTotal(b)) }}</td>
               <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(bookingTotal(b)) }}</td>
             </tr>
+            <tr v-if="eligibleBookings.length > 0 && sortedEligibleBookings.length === 0">
+              <td colspan="11" class="px-3 py-6 text-center text-muted">ไม่พบงานที่ตรงกับ "{{ searchText }}"</td>
+            </tr>
             <tr v-if="eligibleBookings.length === 0">
               <td colspan="11" class="px-3 py-6 text-center text-muted">ลูกค้ารายนี้ไม่มีงานประเภทนี้ที่รอวางบิล</td>
             </tr>
@@ -106,6 +121,7 @@ import { useBookingStore } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBillingRuleStore } from '@/stores/billingRule'
 import { categoryFeedLabel, isBookingConfirmedForBilling, billingDateOf, billingMonthKey, billingMonthLabel } from '@/utils/bookingStatus'
+import { matchesBookingSearch } from '@/utils/bookingSearch'
 import type { Booking, BookingCategory } from '@/types'
 
 const router = useRouter()
@@ -133,6 +149,7 @@ const bookingCategory = ref<BookingCategory | ''>('')
 const pickerSelectedIds = ref<Set<string>>(new Set())
 
 /** กรองตามเดือนที่ส่งของสำเร็จ (รองรับลูกค้าที่วางบิลรายเดือน) — ว่าง = ทุกเดือน เปลี่ยนเดือน/ลูกค้าแล้วล้างงานที่เลือกไว้นอกเดือนนั้นทิ้ง */
+const searchText = ref('')
 const monthFilter = ref('')
 const monthOptions = computed(() =>
   [...new Set(bookingStore.bookings.filter((b) => b.customer === customerName.value && isBookingBillable(b)).map(billingMonthKey))].sort().reverse()
@@ -140,6 +157,7 @@ const monthOptions = computed(() =>
 const inMonth = (b: Booking) => !monthFilter.value || billingMonthKey(b) === monthFilter.value
 watch(customerName, () => {
   monthFilter.value = ''
+  searchText.value = ''
 })
 watch(monthFilter, () => {
   const visible = new Set(eligibleBookings.value.map((b) => b.id))
@@ -172,7 +190,7 @@ const toggleSort = (key: SortKey) => {
 }
 const sortIcon = (key: SortKey) => (sortKey.value !== key ? 'unfold_more' : sortDir.value === 'asc' ? 'arrow_upward' : 'arrow_downward')
 const sortedEligibleBookings = computed(() => {
-  const list = [...eligibleBookings.value]
+  const list = eligibleBookings.value.filter((b) => matchesBookingSearch(b, searchText.value))
   const dir = sortDir.value === 'asc' ? 1 : -1
   if (sortKey.value === 'po') list.sort((a, b) => (a.reference || '').localeCompare(b.reference || '') * dir)
   else if (sortKey.value === 'shipDate') list.sort((a, b) => ((billingDateOf(a)?.getTime() ?? 0) - (billingDateOf(b)?.getTime() ?? 0)) * dir)

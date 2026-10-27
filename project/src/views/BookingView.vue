@@ -39,12 +39,12 @@
 
     <!-- Search -->
     <div class="flex gap-3 flex-wrap items-center">
-      <div class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface border border-border flex-1 max-w-sm">
+      <div class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface border border-border flex-1 max-w-md">
         <span class="material-symbols-rounded text-muted">search</span>
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="ค้นหาเลขที่เอกสาร, PO, ลูกค้า, ชื่อหน้างาน, ทะเบียนรถ..."
+          placeholder="ค้นหาเลขที่งาน, PO, ชิพเม้น, ลูกค้า, หน้างาน, ทะเบียน, คนขับ, เบอร์โทร..."
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
@@ -960,6 +960,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
+import { matchesBookingSearch } from '@/utils/bookingSearch'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
@@ -1283,12 +1284,11 @@ const statusRank: Record<BookingStatus, number> = {
 // --- แยกตาราง: งานที่กำลังดำเนินการ (ยังไม่ออกเดินทาง) กับงานที่กำลังขนส่ง/ส่งของ ---
 const fleetBookings = computed(() => bookingStore.bookings.filter((b) => b.category === props.fleet))
 
-const matchesSearch = (b: Booking, q: string) =>
-  b.docNo.toLowerCase().includes(q) ||
-  (b.po || '').toLowerCase().includes(q) ||
-  b.customer.toLowerCase().includes(q) ||
-  b.items.some((i) => i.siteName.toLowerCase().includes(q)) ||
-  (b.plate || '').toLowerCase().includes(q)
+/** ค้นหาร่วมกับหน้าเลือกงานออกเอกสาร (ดู utils/bookingSearch.ts) + ชื่อเล่นคนขับจากทะเบียนคนขับ */
+const matchesSearch = (b: Booking, q: string) => {
+  const driver = b.driverId ? driversStore.drivers.find((d) => d.id === b.driverId) : undefined
+  return matchesBookingSearch(b, q, [driver?.nickname, driver?.code])
+}
 
 const inProgressBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
