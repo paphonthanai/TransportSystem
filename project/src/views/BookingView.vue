@@ -1985,6 +1985,20 @@ onMounted(() => {
   importModalOpen.value = true
 })
 
+/** ?dispatch=<id> — มาจากปุ่ม "แก้" ทะเบียน/คนขับ ในหน้ารายละเอียดงาน: เปิดหน้าต่างจัดรถ/เปลี่ยนคนขับ-รถ ของงานนั้นให้เลย
+ *  (รอข้อมูลงานโหลดเสร็จก่อน) แล้วลบ query ออก กันเปิดซ้ำตอนรีเฟรช — งานที่ส่งของเสร็จแล้วเปลี่ยนรถ/คนขับไม่ได้ ข้ามไป */
+watch(
+  [() => route.query.dispatch, () => bookingStore.bookings.length],
+  ([id]) => {
+    if (typeof id !== 'string') return
+    const target = bookingStore.bookings.find((b) => b.id === id)
+    if (!target) return
+    router.replace({ query: { ...route.query, dispatch: undefined } })
+    if (target.status !== 'DELIVERED') openDispatchDialog(target)
+  },
+  { immediate: true }
+)
+
 const importableRows = computed(() => importRows.value.filter((r) => !r.isEmpty))
 /** ระดับ 2: เตือนเลขเที่ยวซ้ำ/ข้ามเลขต่อคนขับ(หรือทะเบียน) ก่อนยืนยันสร้างงาน — เตือนเฉยๆ ไม่บล็อก */
 const importTripWarnings = computed(() =>

@@ -210,7 +210,21 @@
           </div>
           <div>
             <div class="text-muted text-xs">เลขที่ PO ลูกค้า</div>
-            <div class="font-semibold text-text">{{ booking.reference || '-' }}</div>
+            <template v-if="refEditing === 'reference'">
+              <input v-model="refDraft" class="input-field h-8 px-2 text-sm w-full max-w-[14rem]" @keyup.enter="saveRef" />
+              <span class="flex gap-1 mt-1">
+                <button @click="saveRef" class="btn-primary h-8 px-3 text-xs">บันทึก</button>
+                <button @click="refEditing = null" class="btn-secondary h-8 px-3 text-xs">ยกเลิก</button>
+              </span>
+              <span v-if="refError" class="block text-xs text-red-600 mt-1">{{ refError }}</span>
+            </template>
+            <div v-else class="font-semibold text-text flex items-center gap-2 flex-wrap">
+              {{ booking.reference || '-' }}
+              <button v-if="!refBlockedReason" @click="startEditRef('reference')" class="inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="แก้เลขที่ PO ลูกค้า">
+              <span class="material-symbols-rounded text-sm">edit</span>
+              แก้
+            </button>
+            </div>
           </div>
           <div>
             <div class="text-muted text-xs">เลขที่ใบปล่อยรถ</div>
@@ -229,7 +243,24 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div><span class="text-muted">ต้นทาง:</span> {{ booking.origin || '-' }}</div>
           <div><span class="text-muted">เส้นทาง:</span> {{ booking.route || '-' }}</div>
-          <div><span class="text-muted">เลขชิพเม้น:</span> {{ booking.shipmentNo || '-' }}</div>
+          <div>
+            <span class="text-muted">เลขชิพเม้น:</span>
+            <template v-if="refEditing === 'shipmentNo'">
+              <input v-model="refDraft" class="input-field h-8 px-2 text-sm w-full max-w-[14rem]" @keyup.enter="saveRef" />
+              <span class="flex gap-1 mt-1">
+                <button @click="saveRef" class="btn-primary h-8 px-3 text-xs">บันทึก</button>
+                <button @click="refEditing = null" class="btn-secondary h-8 px-3 text-xs">ยกเลิก</button>
+              </span>
+              <span v-if="refError" class="block text-xs text-red-600 mt-1">{{ refError }}</span>
+            </template>
+            <span v-else class="inline-flex items-center gap-2 flex-wrap">
+              {{ booking.shipmentNo || '-' }}
+              <button v-if="!refBlockedReason" @click="startEditRef('shipmentNo')" class="inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="แก้เลขชิพเม้น">
+              <span class="material-symbols-rounded text-sm">edit</span>
+              แก้
+            </button>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -237,8 +268,23 @@
       <div class="card-lg no-print">
         <h3 class="font-semibold text-text mb-3">ข้อมูลรถ-คนขับ</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          <div><span class="text-muted">ทะเบียนรถ:</span> {{ booking.plate || '-' }}</div>
-          <div><span class="text-muted">คนขับ:</span> {{ booking.driverName || '-' }}</div>
+          <!-- ทะเบียน/คนขับ: แก้ผ่านหน้าต่าง "จัดรถ / เปลี่ยนคนขับ/รถ" ในหน้า Booking (คำนวณเรทน้ำมัน/เลขไมล์/คนขับในแอปให้ครบ)
+               ได้จนกว่าจะส่งของเสร็จ — หลังจากนั้นผูกกับรายได้คนขับ/รายได้รถแล้วจึงไม่เปิดให้เปลี่ยน -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-muted">ทะเบียนรถ:</span> {{ booking.plate || '-' }}
+            <button v-if="canChangeVehicle" @click="goChangeVehicle" class="inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="เปลี่ยนรถ/คนขับ">
+              <span class="material-symbols-rounded text-sm">edit</span>
+              แก้
+            </button>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-muted">คนขับ:</span> {{ booking.driverName || '-' }}
+            <button v-if="canChangeVehicle" @click="goChangeVehicle" class="inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="เปลี่ยนรถ/คนขับ">
+              <span class="material-symbols-rounded text-sm">edit</span>
+              แก้
+            </button>
+            <span v-if="booking.status === 'DELIVERED' && canEditBookingRole" class="text-xs text-muted">(เปลี่ยนรถ/คนขับได้ก่อนส่งของเสร็จเท่านั้น)</span>
+          </div>
           <div v-if="booking.dispatchedAt"><span class="text-muted">วันที่จ่ายงาน:</span> {{ formatDate(booking.dispatchedAt) }}</div>
           <div v-if="booking.transitStartedAt"><span class="text-muted">วันที่เริ่มขนส่ง:</span> {{ formatDate(booking.transitStartedAt) }}</div>
           <div v-if="booking.completedAt" class="flex items-center gap-2 flex-wrap">
@@ -254,8 +300,9 @@
             </template>
             <template v-else>
               {{ formatDate(booking.completedAt) }}
+              <span v-if="booking.status === 'DELIVERED' && completedDateBlockedReason" class="text-xs text-muted">({{ completedDateBlockedReason }})</span>
               <button
-                v-if="booking.status === 'DELIVERED'"
+                v-else-if="booking.status === 'DELIVERED'"
                 @click="startEditCompletedDate"
                 class="inline-flex items-center gap-0.5 text-xs text-primary hover:underline"
                 title="แก้วันที่ส่งของสำเร็จ"
@@ -370,16 +417,6 @@
       <div class="card-lg no-print space-y-3">
         <div class="flex items-center justify-between">
           <h3 class="font-semibold text-text">ราคา/ค่าใช้จ่าย</h3>
-          <button
-            v-if="!isEditing && !isMulti"
-            @click="startEdit"
-            :disabled="!canEditPrice"
-            :title="canEditPrice ? 'แก้ไขราคา' : 'ราคาถูกล็อกหลังจัดรถแล้ว แก้ไขได้เฉพาะ Admin'"
-            class="btn-sm disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <span class="material-symbols-rounded text-base">edit</span>
-            แก้ไข
-          </button>
         </div>
         <div v-if="isMulti" class="text-[11px] text-muted -mt-2">
           งานนี้แยกค่าเที่ยวตามปลายทาง — แก้ไขราคาแบบแยกปลายทางได้ที่หน้าแก้ไขงาน (ปุ่มแก้ไขงานในรายการงาน)
@@ -387,7 +424,14 @@
         <div v-if="!isEditing" class="grid grid-cols-1 gap-3">
           <div class="bg-surface-2 rounded-lg p-3">
             <div class="text-xs text-muted mb-1">ค่าเที่ยว</div>
-            <div class="font-bold text-text">{{ formatBaht(booking.tripFee) }}</div>
+            <div class="font-bold text-text flex items-center gap-2 flex-wrap">
+              {{ formatBaht(booking.tripFee) }}
+              <button v-if="canEditPrice" @click="startEdit" class="inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="แก้ค่าเที่ยว">
+                <span class="material-symbols-rounded text-sm">edit</span>
+                แก้
+              </button>
+              <span v-else-if="!isMulti && priceBlockedReason" class="text-xs font-normal text-muted">({{ priceBlockedReason }})</span>
+            </div>
           </div>
         </div>
         <div v-else class="grid grid-cols-1 gap-3">
@@ -414,7 +458,16 @@
           </div>
           <div class="bg-surface-2 rounded-lg p-3">
             <div class="text-xs text-muted mb-1">เบี้ยเลี้ยง</div>
-            <div class="font-bold text-text">{{ formatBaht(booking.allowance) }}</div>
+            <div class="font-bold text-text flex items-center gap-2 flex-wrap">
+              {{ formatBaht(booking.allowance) }}
+              <template v-if="booking.status === 'DELIVERED'">
+                <button v-if="!driverIncomeBlockedReason" @click="driverIncomeTarget = booking" class="inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="แก้เบี้ยเลี้ยง/เพิ่ม-ลดหนี้ของงานที่จบแล้ว">
+                <span class="material-symbols-rounded text-sm">edit</span>
+                แก้
+              </button>
+                <span v-else class="text-xs font-normal text-muted">({{ driverIncomeBlockedReason }})</span>
+              </template>
+            </div>
           </div>
           <div v-if="booking.finalAllowance !== undefined" class="bg-primary text-white rounded-lg p-3 sm:col-span-2">
             <div class="text-xs opacity-90 mb-1">เบี้ยเลี้ยงสุทธิ</div>
@@ -422,18 +475,6 @@
             <div v-for="adj in booking.debtAdjustments || []" :key="adj.id" class="text-[11px] opacity-90 mt-0.5">
               {{ adj.label || 'เพิ่ม/ลดหนี้' }}: {{ adj.amount > 0 ? '-' : '+' }}{{ formatBaht(Math.abs(adj.amount)) }}
             </div>
-          </div>
-          <div v-if="booking.status === 'DELIVERED'" class="sm:col-span-2 flex flex-wrap items-center gap-2">
-            <button
-              @click="driverIncomeTarget = booking"
-              :disabled="!!driverIncomeBlockedReason"
-              :title="driverIncomeBlockedReason || 'แก้เบี้ยเลี้ยง/เพิ่ม-ลดหนี้ของงานที่จบแล้ว'"
-              class="btn-sm text-primary disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <span class="material-symbols-rounded text-base">payments</span>
-              แก้ไขรายได้คนขับ
-            </button>
-            <span v-if="driverIncomeBlockedReason" class="text-xs text-muted">{{ driverIncomeBlockedReason }}</span>
           </div>
         </div>
 
@@ -529,10 +570,6 @@
       <div class="card-lg no-print">
         <div class="flex items-center justify-between gap-3 mb-3">
           <h3 class="font-semibold text-text">หมายเหตุ</h3>
-          <button v-if="!noteEditing" type="button" class="btn-sm" @click="startNoteEdit">
-            <span class="material-symbols-rounded text-base">edit</span>
-            แก้ไข
-          </button>
         </div>
         <template v-if="noteEditing">
           <textarea v-model="noteDraft" rows="3" class="input-field w-full" placeholder="ลบข้อความทั้งหมดแล้วกดบันทึก = ล้างหมายเหตุ"></textarea>
@@ -541,7 +578,13 @@
             <button type="button" class="btn-primary" @click="saveNote">บันทึก</button>
           </div>
         </template>
-        <div v-else class="text-sm text-text whitespace-pre-wrap">{{ booking.note || '-' }}</div>
+        <div v-else class="text-sm text-text">
+          <span class="whitespace-pre-wrap">{{ booking.note || '-' }}</span>
+          <button @click="startNoteEdit" class="ml-2 inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="แก้หมายเหตุ">
+                <span class="material-symbols-rounded text-sm">edit</span>
+                แก้
+              </button>
+        </div>
       </div>
 
       <!-- ประวัติ -->
@@ -604,6 +647,41 @@ const completedDateValue = ref('')
 const completedDateError = ref('')
 const todayInputValue = ref(toDateInputValue(new Date()))
 /** เอกสารการเงินที่ผูกกับงานนี้แล้ว — เอกสารเก็บวันที่ไว้ตอนออก แก้ที่งานจะไม่เปลี่ยนตามจึงต้องเตือน (แก้ได้ ไม่บล็อก) */
+// ---- แก้เลขที่ PO ลูกค้า / เลขชิพเม้น ในหน้านี้ (ดู bookingStore.updateBookingRefs) ----
+const canEditBookingRole = computed(() => ['ADMIN', 'DISPATCHER', 'STAFF'].includes(authStore.role || ''))
+const refBlockedReason = computed(() => {
+  if (!booking.value) return 'ไม่พบงาน'
+  if (!canEditBookingRole.value) return 'ไม่มีสิทธิ์แก้ไขงาน'
+  return bookingStore.staffBilledEditBlockedReason(booking.value)
+})
+const refEditing = ref<'reference' | 'shipmentNo' | null>(null)
+const refDraft = ref('')
+const refError = ref('')
+const startEditRef = (field: 'reference' | 'shipmentNo') => {
+  if (!booking.value) return
+  refDraft.value = booking.value[field] || ''
+  refError.value = ''
+  refEditing.value = field
+}
+const saveRef = () => {
+  if (!booking.value || !refEditing.value) return
+  const result = bookingStore.updateBookingRefs(booking.value.id, { [refEditing.value]: refDraft.value })
+  if (!result.ok) {
+    refError.value = result.message || 'บันทึกไม่สำเร็จ'
+    return
+  }
+  refEditing.value = null
+}
+
+// ---- เปลี่ยนรถ/คนขับ: พาไปเปิดหน้าต่างจัดรถในหน้า Booking ของ Fleet นี้ (BookingView อ่าน ?dispatch=<id>) ----
+const canChangeVehicle = computed(() => !!booking.value && booking.value.status !== 'DELIVERED' && canEditBookingRole.value)
+const goChangeVehicle = () => {
+  if (!booking.value) return
+  router.push({ path: `/booking/${booking.value.category}`, query: { dispatch: booking.value.id } })
+}
+
+/** เสมียนแก้วันที่ส่งของสำเร็จไม่ได้เมื่องานถูกนำไปวางบิลแล้ว (ดู staffBilledEditBlockedReason) */
+const completedDateBlockedReason = computed(() => (booking.value ? bookingStore.staffBilledEditBlockedReason(booking.value) : ''))
 const issuedDocsLabel = computed(() => {
   const b = booking.value
   if (!b) return ''
@@ -845,8 +923,9 @@ const saveNote = () => {
 }
 const priceForm = ref({ tripFee: 0 })
 
-/** ราคาแก้ไขได้อิสระตอน WAITING_DISPATCH เท่านั้น หลังจากนั้นต้องเป็น admin */
-const canEditPrice = computed(() => !!booking.value && !isMulti.value && (booking.value.status === 'WAITING_DISPATCH' || isAdmin.value))
+/** ราคาแก้ไขได้อิสระตอน WAITING_DISPATCH หลังจากนั้น ADMIN และเสมียน (จนกว่างานจะถูกนำไปวางบิล) — ดู tripFeeEditBlockedReason */
+const priceBlockedReason = computed(() => (booking.value ? bookingStore.tripFeeEditBlockedReason(booking.value) : ''))
+const canEditPrice = computed(() => !!booking.value && !isMulti.value && !priceBlockedReason.value)
 
 const startEdit = () => {
   if (!booking.value || !canEditPrice.value) return
@@ -858,7 +937,11 @@ const startEdit = () => {
  *  ค่าเดิมที่เคย mismatch กันค้างอยู่ (เช่นจากงาน import เก่า) ไปกวนจุดอื่นที่ยังอ่าน agreedPrice || tripFee อยู่ */
 const savePrice = () => {
   if (!booking.value) return
-  bookingStore.updateBookingPrice(booking.value.id, { tripFee: priceForm.value.tripFee, agreedPrice: priceForm.value.tripFee })
+  const result = bookingStore.updateBookingPrice(booking.value.id, { tripFee: priceForm.value.tripFee, agreedPrice: priceForm.value.tripFee })
+  if (!result.ok) {
+    alert(result.message || 'แก้ไขราคาไม่สำเร็จ')
+    return
+  }
   isEditing.value = false
 }
 

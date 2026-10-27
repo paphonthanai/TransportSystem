@@ -449,13 +449,16 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`ตั้งเที่ยวที่ ${booking.docNo}: ${next ?? 'ไม่ระบุ'}`, { bookingId: booking.id })
   }
 
-  function updateBookingPrice(id: string, data: { tripFee?: number; agreedPrice?: number }) {
+  function updateBookingPrice(id: string, data: { tripFee?: number; agreedPrice?: number }): { ok: boolean; message?: string } {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking) return
+    if (!booking) return { ok: false, message: 'ไม่พบงาน' }
+    const blocked = tripFeeEditBlockedReason(booking)
+    if (blocked) return { ok: false, message: blocked }
     if (data.tripFee !== undefined) booking.tripFee = data.tripFee
     if (data.agreedPrice !== undefined) booking.agreedPrice = data.agreedPrice
     booking.note = pruneResolvedNote(booking)
     addLog(`แก้ไขราคา ${booking.docNo}: ค่าเที่ยว ${booking.tripFee} บาท, ราคาที่ตกลง ${booking.agreedPrice} บาท`, { bookingId: booking.id })
+    return { ok: true }
   }
 
   /**
@@ -661,6 +664,52 @@ export const useBookingStore = defineStore('booking', () => {
    *
    * items=[] ไม่ใช่เงื่อนไขที่ห้าม Hard Delete — ฟังก์ชันนี้ไม่เช็ค booking.items เลย ตามข้อกำหนด
    */
+  /** งานถูกนำไปวางบิลแล้ว = ผูกกับใบวางบิล/ใบกำกับภาษี/ใบเสร็จแล้ว (ชุดเดียวกับที่ใช้ตัดสิทธิ์ลบงานของเสมียน) */
+  function isBookingBilled(booking: Booking): boolean {
+    return !!(booking.billingNoteDocId || booking.taxInvoiceDocId || booking.receiptDocId)
+  }
+
+  /**
+   * กฎแก้ค่าเที่ยว / เบี้ยเลี้ยง / วันที่ส่งของสำเร็จ ของงานที่จัดรถแล้วหรือจบงาน/ยืนยันการจบงานแล้ว: เสมียน (STAFF) แก้ได้
+   * จนกว่างานจะถูกนำไปวางบิล หลังจากนั้นต้องให้ ADMIN แก้ — ว่าง = แก้ได้ (role อื่นคงกติกาเดิมของแต่ละจุด)
+   */
+  function staffBilledEditBlockedReason(booking: Booking): string {
+    if (useAuthStore().role !== 'STAFF') return ''
+    return isBookingBilled(booking) ? 'งานนี้ถูกนำไปวางบิลแล้ว เสมียนแก้ไม่ได้ (ให้ผู้ดูแลระบบแก้)' : ''
+  }
+
+  /**
+   * แก้เลขที่ PO ลูกค้า / เลขชิพเม้น จากหน้ารายละเอียดงาน (ทุกสถานะ) — สิทธิ์เดียวกับหน้าแก้ไขงาน (ADMIN/จัดรถ/เสมียน)
+   * และเสมียนแก้ไม่ได้เมื่องานถูกนำไปวางบิลแล้ว (เอกสารเก็บเลขอ้างอิงไว้ตอนออก) ค่าว่าง = ล้างค่า
+   */
+  function updateBookingRefs(id: string, data: { reference?: string; shipmentNo?: string }): { ok: boolean; message?: string } {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return { ok: false, message: 'ไม่พบงาน' }
+    const role = useAuthStore().role
+    if (role !== 'ADMIN' && role !== 'DISPATCHER' && role !== 'STAFF') return { ok: false, message: 'ไม่มีสิทธิ์แก้ไขงาน' }
+    const blocked = staffBilledEditBlockedReason(booking)
+    if (blocked) return { ok: false, message: blocked }
+    const changes: string[] = []
+    if (data.reference !== undefined) {
+      booking.reference = data.reference.trim() || undefined
+      changes.push(`PO ลูกค้า ${booking.reference || '-'}`)
+    }
+    if (data.shipmentNo !== undefined) {
+      booking.shipmentNo = data.shipmentNo.trim() || undefined
+      changes.push(`ชิพเม้น ${booking.shipmentNo || '-'}`)
+    }
+    addLog(`แก้ไขเลขอ้างอิง ${booking.docNo}: ${changes.join(', ')}`, { bookingId: booking.id })
+    return { ok: true }
+  }
+
+  /** แก้ค่าเที่ยวได้ไหม: ก่อนจัดรถทุก role / หลังจากนั้น ADMIN เสมอ และเสมียนจนกว่างานจะถูกนำไปวางบิล */
+  function tripFeeEditBlockedReason(booking: Booking): string {
+    const role = useAuthStore().role
+    if (booking.status === 'WAITING_DISPATCH' || role === 'ADMIN') return ''
+    if (role === 'STAFF') return staffBilledEditBlockedReason(booking)
+    return 'ราคาถูกล็อกหลังจัดรถแล้ว แก้ไขได้เฉพาะ Admin และเสมียน'
+  }
+
   /**
    * ผู้ใช้ปัจจุบันลบงานนี้ถาวรได้ไหม — ADMIN ลบได้ทุกงาน, เสมียน (STAFF) ลบได้เฉพาะงานที่ "ยังไม่วางบิล" และไม่มีเอกสารขายอ้างอิง
    * นอกจากใบเสนอราคา/ใบสั่งสินค้า (เพราะขั้นตอนวางบิลเสมียนไม่มีสิทธิ์จัดการ) ตรงกับ Firestore Rules (bookings allow delete)
@@ -1047,6 +1096,8 @@ export const useBookingStore = defineStore('booking', () => {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return { ok: false, message: 'ไม่พบงาน' }
     if (booking.status !== 'DELIVERED' || !booking.completedAt) return { ok: false, message: 'แก้ได้เฉพาะงานที่ส่งของเสร็จแล้ว' }
+    const billed = staffBilledEditBlockedReason(booking)
+    if (billed) return { ok: false, message: billed }
     if (Number.isNaN(completedAt.getTime())) return { ok: false, message: 'วันที่ไม่ถูกต้อง' }
     if (completedAt.getTime() > Date.now()) return { ok: false, message: 'ห้ามเลือกวันที่ล่วงหน้า' }
     const before = new Date(booking.completedAt)
@@ -1107,6 +1158,8 @@ export const useBookingStore = defineStore('booking', () => {
    */
   function driverIncomeEditBlockedReason(booking: Booking): string {
     if (booking.status !== 'DELIVERED') return 'แก้รายได้คนขับได้เฉพาะงานที่จบแล้ว (งานที่ยังไม่จบใช้ "แก้ไขงาน")'
+    const billed = staffBilledEditBlockedReason(booking)
+    if (billed) return billed
     if (isPaidToDriver(booking)) return 'จ่ายรายได้ให้คนขับไปแล้ว แก้ไม่ได้'
     if (booking.driverPayrollDocId) return 'งานนี้อยู่ในเอกสารรายได้คนขับแล้ว ต้องนำงานออกจากเอกสารก่อนจึงจะแก้ได้'
     return ''
@@ -1512,6 +1565,9 @@ export const useBookingStore = defineStore('booking', () => {
     completeJob,
     updateCompletedAt,
     driverIncomeEditBlockedReason,
+    staffBilledEditBlockedReason,
+    tripFeeEditBlockedReason,
+    updateBookingRefs,
     updateDriverIncome,
     deliverJobItem,
     confirmPodImage,
