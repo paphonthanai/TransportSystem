@@ -164,8 +164,11 @@
                 </span>
               </span>
             </div>
-            <div v-if="item.siteContactName" class="text-sm text-text"><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName }}</div>
-            <SiteContactActions :item="item" />
+            <!-- จุดที่โชว์อยู่ในการ์ด "ส่งสินค้าจุดที่..." ด้านบนแล้ว ไม่ต้องโชว์ผู้ติดต่อ/ปุ่มโทร/นำทางซ้ำตรงนี้ -->
+            <template v-if="!isShownInDeliveryCard(item)">
+              <div v-if="item.siteContactName" class="text-sm text-text"><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName }}</div>
+              <SiteContactActions :item="item" />
+            </template>
           </div>
         </div>
       </template>
@@ -348,6 +351,10 @@ const actingDriverName = computed(() => {
  *  ที่นี่แค่ wrap ให้ยังเรียกด้วย Booking ทั้งก้อนเหมือนเดิมทุกจุดในเทมเพลต ไม่ต้องแก้ template */
 const nextDelivery = (b: Booking): JobItem | null => nextDeliveryItems(b.items)
 const nextPickup = (b: Booking): JobItem | null => nextPickupItems(b.items)
+
+/** จุดนี้คือจุดที่การ์ด "ส่งสินค้าจุดที่..." (IN_TRANSIT/DELIVERING) แสดงอยู่ด้านบนแล้วหรือไม่ */
+const isShownInDeliveryCard = (item: JobItem) =>
+  !!job.value && (job.value.status === 'IN_TRANSIT' || job.value.status === 'DELIVERING') && nextDelivery(job.value)?.id === item.id
 
 /** true เมื่อ step ปัจจุบันมีปุ่ม action หลักที่ต้องแสดงในแถบล่างสุดแบบ sticky (UI-only, ไม่เปลี่ยนพฤติกรรม
  *  เดิม) — รวมเงื่อนไข "IN_TRANSIT/DELIVERING ที่ส่งครบทุกจุดแล้ว" ไว้ในนี้เพื่อไม่ให้ template ต้องเขียนนิพจน์ยาว */
