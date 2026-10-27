@@ -122,6 +122,17 @@
           </div>
           <div v-else class="text-sm text-muted">{{ destinationLabel(job) }}</div>
 
+          <!-- เบอร์โทรหน้างาน + นำทางของทุกจุดส่ง โชว์ไว้บนการ์ดตลอดทุกสถานะ ไม่ต้องกดเข้าไปดูรายละเอียด
+               (@click.stop กันกดปุ่มแล้วการ์ดพาเข้าหน้ารายละเอียดงานไปด้วย) -->
+          <div class="mt-2 space-y-2" @click.stop>
+            <div v-for="(item, idx) in job.items" :key="item.id" class="space-y-1.5">
+              <div v-if="job.items.length > 1" class="text-xs text-muted truncate">
+                {{ idx + 1 }}. {{ item.siteName }}<span v-if="item.deliveryStatus === 'DELIVERED'" class="text-green-700 font-semibold"> · ส่งแล้ว</span>
+              </div>
+              <SiteContactActions :item="item" />
+            </div>
+          </div>
+
           <!-- ปุ่ม "ยืนยัน"/"แสดงรายละเอียด" เฉพาะงาน ACCEPTED ล่าสุดเท่านั้น (ดู latestAcceptedJob) — "ยืนยัน" นำทาง
                เข้าหน้ารายละเอียดงานเหมือนกดที่การ์ดเฉยๆ (เป็นปุ่ม CTA เด่นชัดเจนกว่าแค่แตะทั้งใบ) หน้ารายละเอียดงานขั้น
                ACCEPTED จะโชว์น้ำมัน+สินค้า/จำนวน แล้วบังคับถ่ายรูปขึ้นสินค้าก่อนไปขั้นต่อไป (ดู DriverJobDetailView.vue)
@@ -338,6 +349,7 @@
 </template>
 
 <script setup lang="ts">
+import SiteContactActions from '@/components/driver/SiteContactActions.vue'
 import PageGate from '@/components/shared/PageGate.vue'
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
