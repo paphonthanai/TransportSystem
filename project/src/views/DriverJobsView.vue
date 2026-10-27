@@ -122,13 +122,14 @@
           </div>
           <div v-else class="text-sm text-muted">{{ destinationLabel(job) }}</div>
 
-          <!-- เบอร์โทรหน้างาน + นำทางของทุกจุดส่ง โชว์ไว้บนการ์ดตลอดทุกสถานะ ไม่ต้องกดเข้าไปดูรายละเอียด
+          <!-- ชื่อผู้ติดต่อ + เบอร์โทรหน้างาน + นำทางของทุกจุดส่ง โชว์ไว้บนการ์ดตลอดทุกสถานะ ไม่ต้องกดเข้าไปดูรายละเอียด
                (@click.stop กันกดปุ่มแล้วการ์ดพาเข้าหน้ารายละเอียดงานไปด้วย) -->
           <div class="mt-2 space-y-2" @click.stop>
             <div v-for="(item, idx) in job.items" :key="item.id" class="space-y-1.5">
               <div v-if="job.items.length > 1" class="text-xs text-muted truncate">
                 {{ idx + 1 }}. {{ item.siteName }}<span v-if="item.deliveryStatus === 'DELIVERED'" class="text-green-700 font-semibold"> · ส่งแล้ว</span>
               </div>
+              <div v-if="item.siteContactName" class="text-sm text-text truncate"><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName }}</div>
               <SiteContactActions :item="item" />
             </div>
           </div>
