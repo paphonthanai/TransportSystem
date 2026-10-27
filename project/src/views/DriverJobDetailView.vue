@@ -164,6 +164,11 @@
                 </span>
               </span>
             </div>
+            <!-- พิกัดหน้างาน (ถ้ามี) กดแล้วเปิดแผนที่ — โชว์ทุกจุดรวมจุดที่อยู่ในการ์ดด้านบนด้วย -->
+            <div v-if="siteCoords(item)" class="text-sm text-text">
+              <span class="text-muted">พิกัด:</span>
+              <a :href="siteCoords(item)!.url" target="_blank" class="text-primary underline break-all">{{ siteCoords(item)!.text }}</a>
+            </div>
             <!-- จุดที่โชว์อยู่ในการ์ด "ส่งสินค้าจุดที่..." ด้านบนแล้ว ไม่ต้องโชว์ผู้ติดต่อ/ปุ่มโทร/นำทางซ้ำตรงนี้ -->
             <template v-if="!isShownInDeliveryCard(item)">
               <div v-if="item.siteContactName" class="text-sm text-text"><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName }}</div>
@@ -304,6 +309,7 @@ import { bookingStatusLabel } from '@/utils/bookingStatus'
 import { isDriverVisibleBooking, nextPickup as nextPickupItems, nextDelivery as nextDeliveryItems } from '@/utils/driverJobs'
 import { deliveryProgress, pickupProgress } from '@/utils/deliveryProgress'
 import { bookingTitle } from '@/utils/bookingTitle'
+import { parseGpsInput } from '@/utils/gps'
 import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
 import PhotoPicker from '@/components/driver/PhotoPicker.vue'
 import SiteContactActions from '@/components/driver/SiteContactActions.vue'
@@ -351,6 +357,19 @@ const actingDriverName = computed(() => {
  *  ที่นี่แค่ wrap ให้ยังเรียกด้วย Booking ทั้งก้อนเหมือนเดิมทุกจุดในเทมเพลต ไม่ต้องแก้ template */
 const nextDelivery = (b: Booking): JobItem | null => nextDeliveryItems(b.items)
 const nextPickup = (b: Booking): JobItem | null => nextPickupItems(b.items)
+
+/** พิกัดของจุดส่งสำหรับแสดงเป็นตัวเลข — ใช้ latitude/longitude ที่บันทึกไว้ก่อน ไม่มีก็ลองอ่านจากลิงก์/ข้อความแผนที่
+ *  อ่านเป็นตัวเลขไม่ได้แต่มีลิงก์ (เช่นลิงก์ย่อ maps.app.goo.gl) = แสดงเป็น "เปิดแผนที่" แทน ไม่มีอะไรเลย = null */
+const siteCoords = (item: JobItem): { text: string; url: string } | null => {
+  const parsed = item.latitude !== undefined && item.longitude !== undefined ? { latitude: item.latitude, longitude: item.longitude } : parseGpsInput(item.mapUrl || '')
+  if (parsed.latitude !== undefined && parsed.longitude !== undefined) {
+    const text = `${parsed.latitude}, ${parsed.longitude}`
+    const url = item.mapUrl && /^https?:\/\//.test(item.mapUrl) ? item.mapUrl : `https://www.google.com/maps/search/?api=1&query=${parsed.latitude},${parsed.longitude}`
+    return { text, url }
+  }
+  if (item.mapUrl && /^https?:\/\//.test(item.mapUrl)) return { text: 'เปิดแผนที่', url: item.mapUrl }
+  return null
+}
 
 /** จุดนี้คือจุดที่การ์ด "ส่งสินค้าจุดที่..." (IN_TRANSIT/DELIVERING) แสดงอยู่ด้านบนแล้วหรือไม่ */
 const isShownInDeliveryCard = (item: JobItem) =>
