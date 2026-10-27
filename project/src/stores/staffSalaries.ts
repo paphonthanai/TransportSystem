@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { staffSalaryRepository } from '@/repositories/staffSalaryRepository'
+import { useAuthStore } from './auth'
+import { useBookingStore } from './booking'
 
 /** รายการเพิ่ม/หักย่อยในรอบเงินเดือนหนึ่งใบ — ใช้โครงสร้างเดียวกับ PayrollDeduction (label+amount) เพื่อให้แสดงรายละเอียดได้ */
 export interface SalaryLineItem {
@@ -103,10 +105,35 @@ export const useStaffSalaryStore = defineStore('staffSalaries', () => {
     return record
   }
 
+  /**
+   * ใบที่จ่ายแล้ว (status PAID) ล็อกยอดเงิน (เงินเดือนฐาน/รายการเพิ่ม/หัก) และเลขที่/วันที่/สถานะเอกสาร — ต้องเปลี่ยนสถานะ
+   * กลับเป็นรอจ่ายก่อนจึงจะแก้ได้ ส่วนหมายเหตุและสถานะจ่ายแก้ได้เสมอ ว่าง = ไม่ล็อก
+   */
+  function paidLockReason(record: Pick<StaffSalaryRecord, 'status'>): string {
+    return record.status === 'PAID' ? 'จ่ายแล้ว — เปลี่ยนสถานะเป็นรอจ่ายก่อนจึงจะแก้ได้' : ''
+  }
+
+  const sameItems = (a: SalaryLineItem[], b: SalaryLineItem[]) =>
+    a.length === b.length && a.every((x, i) => x.label === b[i].label && x.amount === b[i].amount)
+  const dateKey = (d?: Date) => (d ? new Date(d).toISOString().slice(0, 10) : '')
+
+  /** field ที่ล็อกตอนจ่ายแล้ว เปลี่ยนไปจากเดิมไหม (ใช้กันฟอร์มแก้ไขเต็มแบบเดิมเขียนทับยอดของใบที่จ่ายแล้ว) */
+  function lockedFieldsChanged(existing: StaffSalaryRecord, data: SalaryInput) {
+    return (
+      existing.baseSalary !== data.baseSalary ||
+      !sameItems(existing.additions, data.additions) ||
+      !sameItems(existing.deductions, data.deductions) ||
+      (existing.documentNumber || '') !== (data.documentNumber || '') ||
+      dateKey(existing.documentDate) !== dateKey(data.documentDate) ||
+      (existing.documentStatus || 'DRAFT') !== (data.documentStatus || 'DRAFT')
+    )
+  }
+
   async function updateSalary(id: string, data: SalaryInput): Promise<StaffSalaryRecord | null> {
     const existing = records.value.find((r) => r.id === id)
     if (!existing) return null
     if (recordExistsFor(data.staffId, data.period, id)) return null
+    if (paidLockReason(existing) && lockedFieldsChanged(existing, data)) return null
     const netAmount = computeNet(data.baseSalary, data.additions, data.deductions)
     const updatedAt = new Date()
     const payload: Omit<StaffSalaryRecord, 'id'> = { ...data, netAmount, createdAt: existing.createdAt, updatedAt }
@@ -116,10 +143,65 @@ export const useStaffSalaryStore = defineStore('staffSalaries', () => {
     return { ...payload, id }
   }
 
+  type InlinePatch = Partial<Pick<StaffSalaryRecord, 'status' | 'note' | 'documentNumber' | 'documentDate' | 'documentStatus'>>
+
+  /**
+   * แก้ทีละ field จากหน้ารายละเอียด (inline "แก้") — เฉพาะ ADMIN, เลขที่/วันที่/สถานะเอกสารล็อกเมื่อจ่ายแล้ว (paidLockReason)
+   * เลขที่เอกสารห้ามซ้ำ วันที่ห้ามล่วงหน้า ค่าว่าง = ล้างค่า เขียน log ทุกครั้งที่บันทึกสำเร็จ
+   */
+  async function updateSalaryFields(id: string, patch: InlinePatch): Promise<{ ok: boolean; message?: string }> {
+    if (useAuthStore().role !== 'ADMIN') return { ok: false, message: 'แก้ข้อมูลเงินเดือนได้เฉพาะผู้ดูแลระบบ' }
+    const existing = records.value.find((r) => r.id === id)
+    if (!existing) return { ok: false, message: 'ไม่พบข้อมูลเงินเดือน' }
+    const touchesLocked = 'documentNumber' in patch || 'documentDate' in patch || 'documentStatus' in patch
+    const locked = paidLockReason(existing)
+    if (touchesLocked && locked) return { ok: false, message: locked }
+    const clean: InlinePatch = { ...patch }
+    if ('note' in patch) clean.note = patch.note?.trim() || undefined
+    if ('documentNumber' in patch) {
+      clean.documentNumber = patch.documentNumber?.trim() || undefined
+      if (clean.documentNumber && documentNumberExistsFor(clean.documentNumber, id)) return { ok: false, message: `เลขที่เอกสาร ${clean.documentNumber} ซ้ำกับใบอื่น` }
+    }
+    if (patch.documentDate) {
+      if (Number.isNaN(patch.documentDate.getTime())) return { ok: false, message: 'วันที่ไม่ถูกต้อง' }
+      if (patch.documentDate.getTime() > Date.now()) return { ok: false, message: 'ห้ามเลือกวันที่ล่วงหน้า' }
+    }
+    const updatedAt = new Date()
+    try {
+      await staffSalaryRepository.patch(id, { ...clean, updatedAt })
+    } catch (err: any) {
+      return { ok: false, message: `บันทึกไม่สำเร็จ (${err?.message || 'Firestore ปฏิเสธ'})` }
+    }
+    Object.assign(existing, clean, { updatedAt })
+    const labels: Record<keyof InlinePatch, string> = {
+      status: 'สถานะจ่าย',
+      note: 'หมายเหตุ',
+      documentNumber: 'เลขที่เอกสาร',
+      documentDate: 'วันที่ออกเอกสาร',
+      documentStatus: 'สถานะเอกสาร',
+    }
+    const fields = (Object.keys(clean) as (keyof InlinePatch)[]).map((k) => labels[k]).join(', ')
+    useBookingStore().addLog(`แก้ไขเงินเดือน ${existing.period} (${fields})`, { docId: id })
+    return { ok: true }
+  }
+
   async function deleteSalary(id: string) {
     await staffSalaryRepository.delete(id)
     records.value = records.value.filter((r) => r.id !== id)
   }
 
-  return { records, loading, error, fetchAll, computeNet, createSalary, updateSalary, deleteSalary, recordExistsFor, documentNumberExistsFor }
+  return {
+    records,
+    loading,
+    error,
+    fetchAll,
+    computeNet,
+    createSalary,
+    updateSalary,
+    updateSalaryFields,
+    paidLockReason,
+    deleteSalary,
+    recordExistsFor,
+    documentNumberExistsFor,
+  }
 })

@@ -4,6 +4,9 @@ import { ref } from 'vue'
 import { useBookingStore } from './booking'
 import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
 import { usePayrollDeductionsStore } from './payrollDeductions'
+import { useDriversStore } from './drivers'
+import { useAuthStore } from './auth'
+import { driverIdentityIssue } from '@/utils/driverIdentity'
 import { driverPayrollDocumentRepository } from '@/repositories/driverPayrollDocumentRepository'
 
 /**
@@ -24,11 +27,29 @@ export interface DriverPayrollDocument {
   tripIncomeTotal: number
   additionTotal: number
   deductionTotal: number
+  /** Snapshot รายได้อื่นๆ/รายการหักทีละรายการ ณ ตอนสร้าง — เอกสารเก่าก่อนมี field นี้มีแค่ยอดรวม */
+  additionItems?: DriverPayrollLineItem[]
+  deductionItems?: DriverPayrollLineItem[]
   netIncome: number
   paymentStatus: 'UNPAID' | 'PAID'
   paidDate?: Date
   createdAt: Date
 }
+
+export interface DriverPayrollLineItem {
+  type: string
+  label: string
+  amount: number
+}
+
+export type ActionResult = { ok: boolean; message?: string }
+export type CreateDriverPayrollResult = ActionResult & {
+  doc?: DriverPayrollDocument
+  /** งานที่ driverId/ชื่อคนขับขัดกับทะเบียน — ไม่สร้างเอกสารให้ ต้องให้ผู้ใช้ตรวจสอบก่อน */
+  mismatches?: { bookingId: string; docNo: string; issue: string }[]
+}
+
+const roundMoney = (n: number) => Math.round(n * 100) / 100
 
 export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocuments', () => {
   const documents = ref<DriverPayrollDocument[]>([])
@@ -66,35 +87,70 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
     return `PR${yyyy}${mm}${dd}${String(seq).padStart(4, '0')}`
   }
 
-  const persist = (doc: DriverPayrollDocument) => {
+  const save = (doc: DriverPayrollDocument) => {
     const { id, ...rest } = doc
-    driverPayrollDocumentRepository.set(id, rest).catch((err: any) => {
-      error.value = err?.message || 'บันทึกเอกสารรายได้คนขับไป Firestore ไม่สำเร็จ'
-    })
+    return driverPayrollDocumentRepository.set(id, rest)
+  }
+
+  /** แก้ field ของเอกสาร — บันทึก Firestore สำเร็จก่อนค่อยเปลี่ยนในหน้าจอ แล้วเขียน log */
+  async function update(doc: DriverPayrollDocument, patch: Partial<DriverPayrollDocument>, logAction: string): Promise<ActionResult> {
+    try {
+      await save({ ...doc, ...patch })
+    } catch (err: any) {
+      return { ok: false, message: `บันทึกไม่สำเร็จ (${err?.message || 'Firestore ปฏิเสธ'})` }
+    }
+    Object.assign(doc, patch)
+    useBookingStore().addLog(logAction, { docId: doc.id })
+    return { ok: true }
+  }
+
+  /** จัดการเอกสาร (สร้าง/จ่าย/รีเซ็ต/ยกเลิก/ปลดล็อก) ได้เฉพาะ ADMIN และฝ่ายบัญชี — ตรงกับ Firestore Rules ของ collection นี้ */
+  const canManage = () => ['ADMIN', 'ACCOUNTING'].includes(useAuthStore().role ?? '')
+
+  const paidDateIssue = (date: Date) => {
+    if (Number.isNaN(date.getTime())) return 'วันที่ไม่ถูกต้อง'
+    if (date.getTime() > Date.now()) return 'ห้ามเลือกวันที่จ่ายล่วงหน้า'
+    return ''
   }
 
   /**
-   * สร้างเอกสารรายได้คนขับจากงานที่เลือกเอง — ต้องเป็นงานของคนขับคนนี้ทุกงาน (ผูกด้วย driverId ตรงๆ ไม่ match ชื่อ),
-   * ส่งของสำเร็จแล้ว (DELIVERED), และยังไม่เคยถูกดึงไปออกเอกสารรายได้คนขับอื่น (driverPayrollDocId) มิฉะนั้นคืนค่า null
+   * สร้างเอกสารรายได้คนขับจากงานที่เลือกเอง — ต้องเป็นงานของคนขับคนนี้ทุกงาน, ส่งของสำเร็จแล้ว (DELIVERED), และยังไม่เคยถูก
+   * ดึงไปออกเอกสารรายได้คนขับอื่น (driverPayrollDocId) จับคู่ด้วย driverId เป็นหลักและตรวจชื่อประกอบ (driverIdentityIssue)
+   * ถ้าขัดกันไม่สร้างให้ คืนรายการที่ไม่ตรงไปให้ผู้ใช้ตรวจสอบก่อน
    * รายได้จากงาน (tripIncomeTotal) รวมจาก finalAllowance/allowance ของแต่ละงานที่เลือกเป๊ะๆ — รายได้อื่นๆ/รายการหัก
-   * (additionTotal/deductionTotal) Snapshot จากยอดที่มีอยู่ ณ ตอนสร้างเท่านั้น (payrollDeductionsStore) ไม่ขยับตามถ้ามีคน
-   * แก้ไขรายการหักภายหลัง — เอกสารที่ออกไปแล้วถือว่า final
+   * Snapshot ทีละรายการจาก payrollDeductionsStore ด้วยชื่อเต็มตามทะเบียนคนขับ (มีคำนำหน้า — key เดียวกับที่
+   * PayrollDeductionPanel บันทึกไว้ เดิมใช้ชื่อจาก Snapshot ในงานซึ่งไม่มีคำนำหน้า จึงหายอดหักไม่เจอ) ไม่ขยับตามถ้ามีคน
+   * แก้ไขรายการหักภายหลัง — ต้องบันทึกเอกสารลง Firestore สำเร็จก่อน ค่อยผูกงาน (driverPayrollDocId) กันงานค้างป้าย
+   * "ออกเอกสารแล้ว" ทั้งที่ไม่มีเอกสารจริง
    */
-  function createDriverPayrollDocument(driverId: string, bookingIds: string[], period: string): DriverPayrollDocument | null {
-    if (bookingIds.length === 0) return null
+  async function createDriverPayrollDocument(driverId: string, bookingIds: string[], period: string): Promise<CreateDriverPayrollResult> {
+    if (!canManage()) return { ok: false, message: 'สร้างเอกสารรายได้คนขับได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
+    if (bookingIds.length === 0) return { ok: false, message: 'ยังไม่ได้เลือกงาน' }
     const bookingStore = useBookingStore()
+    const driversStore = useDriversStore()
     const deductionsStore = usePayrollDeductionsStore()
+    // รายการหักโหลดไม่สำเร็จ (เช่นสิทธิ์อ่านไม่พอ) ห้ามสร้าง — ไม่งั้นเอกสารจะ Snapshot ยอดหักเป็น 0 แบบเงียบๆ
+    if (deductionsStore.loading || deductionsStore.error) return { ok: false, message: 'ยังโหลดรายการหัก/รายได้อื่นๆ ของคนขับไม่สำเร็จ กรุณารีเฟรชแล้วลองใหม่' }
+    const driver = driversStore.drivers.find((d) => d.id === driverId)
+    if (!driver) return { ok: false, message: 'ไม่พบคนขับในทะเบียน' }
+    const driverName = driversStore.fullName(driver)
     const targetBookings = bookingStore.bookings.filter((b) => bookingIds.includes(b.id))
-    if (targetBookings.length !== bookingIds.length) return null
-    const allEligible = targetBookings.every((b) => b.status === 'DELIVERED' && b.driverId === driverId && !b.driverPayrollDocId)
-    if (!allEligible) return null
+    if (targetBookings.length !== bookingIds.length) return { ok: false, message: 'ไม่พบงานบางรายการ กรุณารีเฟรชหน้านี้แล้วลองใหม่' }
+    const notEligible = targetBookings.filter((b) => b.status !== 'DELIVERED' || b.driverPayrollDocId)
+    if (notEligible.length) return { ok: false, message: `งาน ${notEligible.map((b) => b.docNo).join(', ')} ยังไม่จบหรือออกเอกสารไปแล้ว` }
+    const mismatches = targetBookings
+      .map((b) => ({ bookingId: b.id, docNo: b.docNo, issue: driverIdentityIssue(b, driver, driverName) }))
+      .filter((m) => m.issue)
+    if (mismatches.length) return { ok: false, message: 'ข้อมูลคนขับในงานไม่ตรงกับทะเบียน กรุณาตรวจสอบก่อน', mismatches }
 
-    const driverName = `${targetBookings[0].driverFirstName || ''} ${targetBookings[0].driverLastName || ''}`.trim() || targetBookings[0].driverName || ''
     const periodLabel = toBEPeriodLabel(period)
-    const tripIncomeTotal = Math.round(targetBookings.reduce((sum, b) => sum + (b.finalAllowance ?? b.allowance ?? 0), 0) * 100) / 100
-    const additionTotal = deductionsStore.additionsFor(driverName, periodLabel).reduce((sum, a) => sum + a.amount, 0)
-    const deductionTotal = deductionsStore.deductionsFor(driverName, periodLabel).reduce((sum, d) => sum + d.amount, 0)
-    const netIncome = tripIncomeTotal + additionTotal - deductionTotal
+    const toItem = (d: { type: string; label: string; amount: number }) => ({ type: d.type, label: d.label, amount: d.amount })
+    const additionItems = deductionsStore.additionsFor(driverName, periodLabel).map(toItem)
+    const deductionItems = deductionsStore.deductionsFor(driverName, periodLabel).map(toItem)
+    const tripIncomeTotal = roundMoney(targetBookings.reduce((sum, b) => sum + (b.finalAllowance ?? b.allowance ?? 0), 0))
+    const additionTotal = roundMoney(additionItems.reduce((sum, a) => sum + a.amount, 0))
+    const deductionTotal = roundMoney(deductionItems.reduce((sum, d) => sum + d.amount, 0))
+    const netIncome = roundMoney(tripIncomeTotal + additionTotal - deductionTotal)
 
     const registry = useDocumentNumberRegistryStore()
     const seq = registry.nextSequence('DRIVER_PAYROLL')
@@ -109,43 +165,101 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
       tripIncomeTotal,
       additionTotal,
       deductionTotal,
+      additionItems,
+      deductionItems,
       netIncome,
       paymentStatus: 'UNPAID',
       createdAt: now,
     }
-    documents.value.unshift(doc)
-    persist(doc)
+    try {
+      await save(doc)
+    } catch (err: any) {
+      return { ok: false, message: `บันทึกเอกสารไม่สำเร็จ (${err?.message || 'Firestore ปฏิเสธ'}) — ยังไม่ได้ผูกงานใดๆ` }
+    }
+    if (!documents.value.some((d) => d.id === doc.id)) documents.value.unshift(doc)
     registry.registerNumber(doc.number)
     targetBookings.forEach((b) => {
       b.driverPayrollDocId = doc.id
     })
     bookingStore.addLog('สร้างเอกสาร ' + doc.number, { docId: doc.id })
-    return doc
+    return { ok: true, doc }
   }
 
-  function recordPayment(id: string, paidDate?: Date): DriverPayrollDocument | null {
+  /** บันทึกจ่ายเงินเอกสาร (รอจ่าย → จ่ายแล้ว) — เฉพาะ ADMIN, วันที่จ่ายห้ามล่วงหน้า */
+  async function recordPayment(id: string, paidDate: Date = new Date()): Promise<ActionResult> {
+    if (!canManage()) return { ok: false, message: 'บันทึกจ่ายเงินได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
     const doc = documents.value.find((d) => d.id === id)
-    if (!doc || doc.paymentStatus === 'PAID') return null
-    doc.paymentStatus = 'PAID'
-    doc.paidDate = paidDate || new Date()
-    persist(doc)
-    return doc
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (doc.paymentStatus === 'PAID') return { ok: false, message: 'เอกสารนี้จ่ายแล้ว' }
+    const dateIssue = paidDateIssue(paidDate)
+    if (dateIssue) return { ok: false, message: dateIssue }
+    return update(doc, { paymentStatus: 'PAID', paidDate }, `บันทึกจ่ายเงินเอกสาร ${doc.number} (${paidDate.toLocaleDateString('th-TH')})`)
   }
 
-  /** ยกเลิกเอกสารที่ยังไม่จ่าย — คืนสถานะงานขนส่งที่ผูกอยู่กลับเป็นว่าง (driverPayrollDocId) แล้วลบเอกสารทิ้ง */
-  function cancelDriverPayrollDocument(id: string): boolean {
+  /** แก้วันที่จ่ายของเอกสารที่จ่ายแล้ว — เฉพาะ ADMIN */
+  async function updatePaidDate(id: string, paidDate: Date): Promise<ActionResult> {
+    if (!canManage()) return { ok: false, message: 'แก้วันที่จ่ายได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
     const doc = documents.value.find((d) => d.id === id)
-    if (!doc || doc.paymentStatus !== 'UNPAID') return false
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (doc.paymentStatus !== 'PAID') return { ok: false, message: 'เอกสารนี้ยังไม่จ่าย' }
+    const dateIssue = paidDateIssue(paidDate)
+    if (dateIssue) return { ok: false, message: dateIssue }
+    return update(doc, { paidDate }, `แก้วันที่จ่ายเอกสาร ${doc.number} → ${paidDate.toLocaleDateString('th-TH')}`)
+  }
+
+  /** รีเซ็ตเอกสารที่จ่ายแล้วกลับเป็นรอจ่าย — เฉพาะ ADMIN (UI ต้องให้ยืนยันก่อนเรียก) งานในเอกสารยังผูกอยู่เหมือนเดิม */
+  async function resetPayment(id: string): Promise<ActionResult> {
+    if (!canManage()) return { ok: false, message: 'รีเซ็ตสถานะจ่ายได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
+    const doc = documents.value.find((d) => d.id === id)
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (doc.paymentStatus !== 'PAID') return { ok: false, message: 'เอกสารนี้ยังไม่จ่าย' }
+    return update(doc, { paymentStatus: 'UNPAID', paidDate: undefined }, `รีเซ็ตเอกสาร ${doc.number} จากจ่ายแล้วเป็นรอจ่าย`)
+  }
+
+  /**
+   * ยกเลิกเอกสารที่ยังไม่จ่าย — เฉพาะ ADMIN ลบเอกสารใน Firestore ให้สำเร็จก่อน แล้วค่อยปลดงานที่ผูกอยู่ (driverPayrollDocId)
+   * ให้กลับมาเลือกออกเอกสารใหม่ได้ (ลบไม่สำเร็จ = ไม่ปลดงาน กันงานหลุดจากเอกสารที่ยังอยู่จริง)
+   */
+  async function cancelDriverPayrollDocument(id: string): Promise<ActionResult> {
+    if (!canManage()) return { ok: false, message: 'ยกเลิกเอกสารได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
+    const doc = documents.value.find((d) => d.id === id)
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (doc.paymentStatus !== 'UNPAID') return { ok: false, message: 'เอกสารนี้จ่ายแล้ว ต้องรีเซ็ตเป็นรอจ่ายก่อนจึงจะยกเลิกได้' }
+    try {
+      await driverPayrollDocumentRepository.delete(id)
+    } catch (err: any) {
+      return { ok: false, message: `ลบเอกสารไม่สำเร็จ (${err?.message || 'Firestore ปฏิเสธ'})` }
+    }
     const bookingStore = useBookingStore()
     doc.bookingIds.forEach((bid) => {
       const b = bookingStore.bookings.find((bk) => bk.id === bid)
       if (b && b.driverPayrollDocId === id) b.driverPayrollDocId = undefined
     })
     documents.value = documents.value.filter((d) => d.id !== id)
-    driverPayrollDocumentRepository.delete(id).catch((err: any) => {
-      error.value = err?.message || 'ลบเอกสารรายได้คนขับจาก Firestore ไม่สำเร็จ'
-    })
-    return true
+    bookingStore.addLog(`ยกเลิกเอกสาร ${doc.number} (ปลดงาน ${doc.bookingIds.length} งาน)`, { docId: id })
+    return { ok: true }
+  }
+
+  /**
+   * งานผูก driverPayrollDocId ไว้แต่หาเอกสารไม่เจอ (เช่นเอกสารบันทึกไม่สำเร็จสมัย Rules ยังไม่เปิดให้เขียน) — ต้องโหลด
+   * เอกสารสำเร็จก่อนเท่านั้น ไม่งั้นแยกไม่ออกว่าเอกสารหายจริงหรือแค่ยังโหลดไม่ได้
+   */
+  function isOrphanedBooking(booking: { driverPayrollDocId?: string }): boolean {
+    if (!booking.driverPayrollDocId || loading.value || error.value) return false
+    return !documents.value.some((d) => d.id === booking.driverPayrollDocId)
+  }
+
+  /** ปลดงานที่ค้างป้าย "ออกเอกสารแล้ว" แต่ไม่มีเอกสารจริง — เฉพาะ ADMIN */
+  function releaseOrphanedBooking(bookingId: string): ActionResult {
+    if (!canManage()) return { ok: false, message: 'ปลดล็อกงานได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
+    const bookingStore = useBookingStore()
+    const booking = bookingStore.bookings.find((b) => b.id === bookingId)
+    if (!booking) return { ok: false, message: 'ไม่พบงาน' }
+    if (!isOrphanedBooking(booking)) return { ok: false, message: 'งานนี้มีเอกสารรายได้คนขับอยู่จริง (หรือยังโหลดเอกสารไม่สำเร็จ) ปลดล็อกไม่ได้' }
+    const missingId = booking.driverPayrollDocId
+    booking.driverPayrollDocId = undefined
+    bookingStore.addLog(`ปลดล็อกงาน ${booking.docNo} จากเอกสารรายได้คนขับที่ไม่พบ (${missingId})`, { bookingId: booking.id })
+    return { ok: true }
   }
 
   const documentsForDriver = (driverId: string) =>
@@ -155,9 +269,14 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
     documents,
     loading,
     error,
+    canManage,
     createDriverPayrollDocument,
     recordPayment,
+    updatePaidDate,
+    resetPayment,
     cancelDriverPayrollDocument,
+    isOrphanedBooking,
+    releaseOrphanedBooking,
     documentsForDriver,
   }
 })

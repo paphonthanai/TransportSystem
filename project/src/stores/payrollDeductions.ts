@@ -3,6 +3,7 @@ import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import { payrollDeductionRepository } from '@/repositories/payrollDeductionRepository'
 import type { PayrollDeduction } from '@/types'
+import { normalizeDriverName } from '@/utils/driverIdentity'
 
 export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => {
   const deductions = ref<PayrollDeduction[]>([])
@@ -51,13 +52,19 @@ export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => 
     await payrollDeductionRepository.delete(id)
   }
 
+  /**
+   * จับคู่ชื่อคนขับแบบไม่สนคำนำหน้า/ช่องว่าง (normalizeDriverName) — หน้ารายละเอียดคนขับบันทึกด้วยชื่อเต็มตามทะเบียน (มีคำนำหน้า)
+   * ส่วนหน้าเงินเดือนคนขับ/เช็คจ่ายแล้วใช้ชื่อ Snapshot ในงาน (ไม่มีคำนำหน้า) เดิมเทียบตรงตัวจึงหารายการของอีกฝั่งไม่เจอ
+   */
+  const sameDriver = (a: string, b: string) => normalizeDriverName(a) === normalizeDriverName(b)
+
   /** รายการหักของคนขับ+รอบนี้ — ไม่มี kind (รายการเก่า) หรือ kind === 'DEDUCTION' เท่านั้น ไม่รวมรายได้อื่นๆ */
   const deductionsFor = (driverName: string, periodLabel: string) =>
-    deductions.value.filter((d) => d.driverName === driverName && d.periodLabel === periodLabel && d.kind !== 'ADDITION')
+    deductions.value.filter((d) => sameDriver(d.driverName, driverName) && d.periodLabel === periodLabel && d.kind !== 'ADDITION')
 
   /** รายได้อื่นๆ ของคนขับ+รอบนี้ (kind === 'ADDITION') — เก็บใน collection/store เดียวกับรายการหัก แยกกันด้วย field kind เท่านั้น */
   const additionsFor = (driverName: string, periodLabel: string) =>
-    deductions.value.filter((d) => d.driverName === driverName && d.periodLabel === periodLabel && d.kind === 'ADDITION')
+    deductions.value.filter((d) => sameDriver(d.driverName, driverName) && d.periodLabel === periodLabel && d.kind === 'ADDITION')
 
   return {
     deductions,

@@ -98,13 +98,15 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
     return Array.from(byDriver.entries()).map(([driver, data]) => {
       const additionTotal = deductionsStore.additionsFor(driver, periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
       const deductionTotal = deductionsStore.deductionsFor(driver, periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
-      const paymentStatus = paymentsStore.statusFor(driver, periodLabel.value)
+      const paymentStatus = paymentsStore.statusFor(driver, periodLabel.value, driverIdFor(driver))
       return { driver, ...data, additionTotal, deductionTotal, finalNet: data.netIncome + additionTotal - deductionTotal, paymentStatus }
     })
   })
 
   /** เปลี่ยนสถานะจ่ายรายได้คนขับของรอบที่กำลังดูอยู่ — ไม่แตะ Booking/Operational Status ใดๆ เลย (ดู driverPayments.ts) */
-  const setPaymentStatus = (driver: string, status: DriverPaymentStatusValue) => paymentsStore.setStatus(driver, periodLabel.value, status)
+  const setPaymentStatus = (driver: string, status: DriverPaymentStatusValue) => paymentsStore.setStatus(driver, periodLabel.value, status, driverIdFor(driver))
+  /** ตั้งสถานะจ่ายรายเดือน/แก้รายการหักได้เฉพาะ ADMIN (ฝ่ายบัญชีดูอย่างเดียว ตาม Firestore Rules) */
+  const canEditPayroll = computed(() => paymentsStore.canEdit())
 
   const detailRows = computed(() =>
     bookingsInScope.value
@@ -167,5 +169,6 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
     exportSummary,
     exportDetail,
     setPaymentStatus,
+    canEditPayroll,
   }
 }

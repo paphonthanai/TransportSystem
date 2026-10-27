@@ -54,7 +54,8 @@
             <td class="px-4 py-3">
               <select
                 :value="row.paymentStatus"
-                @change="setPaymentStatus(row.driver, ($event.target as HTMLSelectElement).value as 'UNPAID' | 'PAID')"
+                :disabled="!canEditPayroll"
+                @change="changePaymentStatus(row.driver, ($event.target as HTMLSelectElement).value as 'UNPAID' | 'PAID')"
                 :class="['status-select', row.paymentStatus === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700']"
               >
                 <option value="UNPAID">ยังไม่จ่าย</option>
@@ -107,8 +108,8 @@
       </table>
     </div>
 
-    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" kind="ADDITION" />
-    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" kind="DEDUCTION" />
+    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" kind="ADDITION" :readonly="!canEditPayroll" />
+    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" kind="DEDUCTION" :readonly="!canEditPayroll" />
   </div>
 </template>
 
@@ -121,10 +122,16 @@ import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vu
 /** พนักงานขับรถเป็นเจ้าของข้อมูลรายได้คนขับทั้งหมด ไม่ว่าจะขับรถบริษัทหรือรถร่วม/รถหุ้นส่วน — ไม่กรองตามประเภทรถ
  *  (ต่างจากเดิมที่กรองเฉพาะ 'รถบริษัท' ทำให้รายได้คนขับรถร่วมไปโผล่ปนอยู่ในหน้า "เงินเดือน · รถร่วม" แทน ซึ่งหน้านั้น
  *  ควรมีแต่ข้อมูลของ "รถ" เท่านั้น ดู PayrollVendorFleetView.vue) */
-const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, driverIdFor, formatDate, formatBaht, exportSummary, exportDetail, setPaymentStatus } =
+const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, driverIdFor, formatDate, formatBaht, exportSummary, exportDetail, setPaymentStatus, canEditPayroll } =
   useDriverPayroll(() => true, 'พขร')
 
 const router = useRouter()
+
+/** สถานะจ่ายรายเดือน — store เช็คสิทธิ์ (ADMIN) และคืนข้อความเมื่อบันทึกไม่สำเร็จ */
+const changePaymentStatus = async (driver: string, status: 'UNPAID' | 'PAID') => {
+  const result = await setPaymentStatus(driver, status)
+  if (!result.ok) alert(result.message || 'บันทึกสถานะจ่ายไม่สำเร็จ')
+}
 
 /** ค้นหาในตาราง (ไม่สนตัวพิมพ์เล็ก-ใหญ่) — กรองเฉพาะที่แสดง ไม่กระทบยอด/ไฟล์ Excel ที่นำออก */
 const search = ref('')

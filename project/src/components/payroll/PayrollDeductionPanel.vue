@@ -4,7 +4,7 @@
       <h3 class="text-sm font-bold text-text">{{ isAddition ? 'รายได้อื่นๆ' : 'รายการหักเงินเดือน' }}</h3>
       <div class="flex items-center gap-3">
         <div class="text-xs text-muted">รอบ {{ periodLabel }}{{ driverName ? ` · ${driverName}` : '' }}</div>
-        <button v-if="driverName && !formOpen" @click="openAddForm" class="btn-sm">
+        <button v-if="driverName && !formOpen && !readonly" @click="openAddForm" class="btn-sm">
           <span class="material-symbols-rounded text-sm align-middle">add</span>
           {{ isAddition ? 'เพิ่มรายการ' : 'เพิ่มรายการหัก' }}
         </button>
@@ -53,8 +53,8 @@
               <td class="px-3 py-2 text-muted">{{ row.date ? formatDate(row.date) : formatDate(row.createdAt) }}</td>
               <td class="px-3 py-2 text-right font-semibold" :class="isAddition ? 'text-green-600' : 'text-text'">{{ formatBaht(row.amount) }}</td>
               <td class="px-3 py-2 text-right whitespace-nowrap">
-                <button @click="startEdit(row)" class="text-muted hover:text-text text-xs">แก้ไข</button>
-                <button @click="remove(row.id)" class="text-red-500 hover:text-red-600 text-xs ml-2">ลบ</button>
+                <button v-if="!readonly" @click="startEdit(row)" class="text-muted hover:text-text text-xs">แก้ไข</button>
+                <button v-if="!readonly" @click="remove(row.id)" class="text-red-500 hover:text-red-600 text-xs ml-2">ลบ</button>
               </td>
             </tr>
             <tr v-if="rows.length === 0">
@@ -84,7 +84,8 @@ import type { PayrollDeduction, PayrollLineKind } from '@/types'
  * บวกเข้ารายได้สุทธิ, DEDUCTION (ค่าเริ่มต้น) หักออก ห้ามสร้างรายการอัตโนมัติจาก Vehicle Expense/Booking/Vehicle
  * Income/Driver Income/Fuel Cost — ยังคง Reuse store/repository/collection เดิมทั้งหมด ไม่มีการสร้างใหม่
  */
-const props = withDefaults(defineProps<{ driverName: string; periodLabel: string; kind?: PayrollLineKind }>(), { kind: 'DEDUCTION' })
+/** readonly = ดูอย่างเดียว (เช่นฝ่ายบัญชี — Firestore Rules ให้เขียน payrollDeductions ได้เฉพาะ ADMIN) */
+const props = withDefaults(defineProps<{ driverName: string; periodLabel: string; kind?: PayrollLineKind; readonly?: boolean }>(), { kind: 'DEDUCTION', readonly: false })
 
 const isAddition = computed(() => props.kind === 'ADDITION')
 

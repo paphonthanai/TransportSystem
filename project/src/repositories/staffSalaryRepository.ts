@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, deleteField, doc, getDocs, updateDoc } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import type { StaffSalaryRecord } from '@/stores/staffSalaries'
 
@@ -14,7 +14,12 @@ function sanitize(data: Partial<StaffSalaryRecord> & Record<string, unknown>): R
 }
 
 function revive(raw: any): StaffSalaryRecord {
-  return { ...raw, createdAt: new Date(raw.createdAt), updatedAt: new Date(raw.updatedAt) } as StaffSalaryRecord
+  return {
+    ...raw,
+    createdAt: new Date(raw.createdAt),
+    updatedAt: new Date(raw.updatedAt),
+    documentDate: raw.documentDate ? new Date(raw.documentDate) : undefined,
+  } as StaffSalaryRecord
 }
 
 export const staffSalaryRepository = {
@@ -30,6 +35,15 @@ export const staffSalaryRepository = {
 
   async update(id: string, data: Omit<StaffSalaryRecord, 'id'>): Promise<void> {
     await updateDoc(doc(db, COLLECTION, id), sanitize(data))
+  },
+
+  /** แก้บาง field (inline edit หน้ารายละเอียด) — ค่า undefined = ล้าง field นั้นใน Firestore จริง (deleteField) ไม่ใช่ข้ามไป */
+  async patch(id: string, data: Partial<Omit<StaffSalaryRecord, 'id'>>): Promise<void> {
+    const out: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(data)) {
+      out[key] = value === undefined ? deleteField() : value instanceof Date ? value.toISOString() : value
+    }
+    await updateDoc(doc(db, COLLECTION, id), out)
   },
 
   async delete(id: string): Promise<void> {

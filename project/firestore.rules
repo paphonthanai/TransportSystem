@@ -67,6 +67,8 @@ service cloud.firestore {
 
     match /drivers/{driverId} {
       allow read, write: if hasRole(['ADMIN', 'DISPATCHER']);
+      // ฝ่ายบัญชี (ACCOUNTING) อ่านอย่างเดียว — หน้าเงินเดือน/เอกสารรายได้คนขับต้องใช้ทะเบียนคนขับ (driverId/ชื่อ) จับคู่งาน
+      allow read: if hasRole(['ACCOUNTING']);
       // เสมียน (STAFF) อ่านได้อย่างเดียว — จำเป็นต่อการ import งานจาก Excel/จัดงาน (จับคู่ชื่อเล่นคนขับกับทะเบียนรถ) ถ้าอ่านไม่ได้
       // รายชื่อคนขับว่างทุกแถว (เขียนไม่ได้ และหน้าจัดการคนขับยังจำกัด ADMIN/DISPATCHER ที่ route guard) หมายเหตุ: เอกสารคนขับมี
       // field การเงิน (เลขบัญชี/รายได้) Firestore จำกัดระดับ field ไม่ได้ จึงอ่านได้ทั้งเอกสารผ่านการเรียก API ตรงๆ
@@ -114,6 +116,8 @@ service cloud.firestore {
       // (vehiclesStore.assignDriver ตอนสร้าง/จัดงาน) เขียน driverCode ลงเอกสารรถ ถ้าเขียนไม่ได้จะ error เงียบๆ ทุกครั้งที่จัดงาน
       // ลบรถถาวรยังเป็น ADMIN/DISPATCHER เท่านั้น
       allow read, create, update: if hasRole(['STAFF']);
+      // ฝ่ายบัญชี (ACCOUNTING) อ่านอย่างเดียว — หน้ารถร่วม/เอกสารรายได้รถร่วมต้องใช้ทะเบียนรถจับคู่งาน
+      allow read: if hasRole(['ACCOUNTING']);
     }
 
     match /bookings/{bookingId} {
@@ -215,8 +219,10 @@ service cloud.firestore {
     }
 
     // รายการหักเงินเดือนคนขับต่อรอบ — หน้าเงินเดือน (payroll/*) ทุก route จำกัดแค่ ADMIN อยู่แล้ว
+    // ฝ่ายบัญชี (ACCOUNTING) อ่านได้อย่างเดียว — ต้องใช้ตอนออกเอกสารรายได้คนขับ (Snapshot รายการหัก) ถ้าอ่านไม่ได้ยอดหักจะเป็น 0
     match /payrollDeductions/{deductionId} {
-      allow read, write: if hasRole(['ADMIN']);
+      allow read: if hasRole(['ADMIN', 'ACCOUNTING']);
+      allow write: if hasRole(['ADMIN']);
     }
 
     // เงินเดือนพนักงานเสมียน (payroll/staff) — เช่นเดียวกับ payrollDeductions จำกัดแค่ ADMIN อยู่แล้ว
@@ -226,12 +232,28 @@ service cloud.firestore {
 
     // ค่าใช้จ่ายประจำรถ (ประกัน/GPS/ค่างวด/อื่นๆ) ผูกกับ vehicleId — ข้อมูลการเงินของรถ จำกัดแค่ ADMIN เหมือน payrollDeductions/staffSalaries
     match /vehicleExpenses/{expenseId} {
-      allow read, write: if hasRole(['ADMIN']);
+      allow read: if hasRole(['ADMIN', 'ACCOUNTING']);
+      allow write: if hasRole(['ADMIN']);
     }
 
     // สถานะจ่ายรายได้คนขับต่อรอบ (ยังไม่จ่าย/จ่ายแล้ว) — แยกจาก Operational Status ของ Booking โดยเจตนา จำกัดแค่ ADMIN เหมือน payrollDeductions
+    // ฝ่ายบัญชีอ่านได้อย่างเดียว (หน้าเงินเดือนคนขับ/เช็คล็อก "จ่ายแล้ว" ของงาน) — ตั้งสถานะรายเดือนยังเป็น ADMIN ดู stores/driverPayments.ts
     match /driverPayments/{paymentId} {
-      allow read, write: if hasRole(['ADMIN']);
+      allow read: if hasRole(['ADMIN', 'ACCOUNTING']);
+      allow write: if hasRole(['ADMIN']);
+    }
+
+    // เอกสารรายได้คนขับ (Snapshot ยอด ณ ตอนออก) — สร้าง/จ่าย/รีเซ็ต/ยกเลิกได้เฉพาะ ADMIN และฝ่ายบัญชี (store บังคับซ้ำอีกชั้น ดู
+    // stores/driverPayrollDocuments.ts) DISPATCHER อ่านอย่างเดียว เพราะ route settings/drivers/:id และ
+    // payroll/drivers/documents/:docId เปิดให้ DISPATCHER ดูได้ — เดิมไม่มี match block นี้ เอกสารจึงบันทึก/โหลดไม่ได้เลย
+    match /driverPayrollDocuments/{docId} {
+      allow read: if hasRole(['ADMIN', 'ACCOUNTING', 'DISPATCHER']);
+      allow write: if hasRole(['ADMIN', 'ACCOUNTING']);
+    }
+
+    // เอกสารรายได้รถร่วม/รถหุ้นส่วน — route payroll/vendor-fleet/* เปิดให้ ADMIN และฝ่ายบัญชี ดู stores/vehicleIncomeDocuments.ts
+    match /vehicleIncomeDocuments/{docId} {
+      allow read, write: if hasRole(['ADMIN', 'ACCOUNTING']);
     }
 
     // ประวัติถาวรของเอกสารขาย (Phase 4) — append-only โดยเจตนา: ห้าม update/delete เด็ดขาดแม้แต่ ADMIN บังคับที่ชั้น

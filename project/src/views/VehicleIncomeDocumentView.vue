@@ -55,6 +55,7 @@
               <th class="border border-gray-400 px-2 py-1 text-left">รายละเอียดงาน</th>
               <th class="border border-gray-400 px-2 py-1 text-right w-20">รายได้</th>
               <th class="border border-gray-400 px-2 py-1 text-right w-20">ค่าน้ำมัน</th>
+              <th v-if="doc.lines" class="border border-gray-400 px-2 py-1 text-right w-24">ค่าใช้จ่ายประจำรถ</th>
             </tr>
           </thead>
           <tbody>
@@ -63,11 +64,12 @@
               <td class="border border-gray-400 px-2 py-1 font-mono">{{ row.booking.docNo }}</td>
               <td class="border border-gray-400 px-2 py-1">{{ formatDate(row.booking.shipDate || row.booking.completedAt) }}</td>
               <td class="border border-gray-400 px-2 py-1">{{ destinationLabel(row.booking) }}</td>
-              <td class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.booking.tripFee) }}</td>
+              <td class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.tripFee) }}</td>
               <td class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.fuelCost) }}</td>
+              <td v-if="doc.lines" class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.vehicleExpense) }}</td>
             </tr>
             <tr v-if="rows.length === 0">
-              <td colspan="6" class="border border-gray-400 px-2 py-4 text-center text-gray-400">ไม่มีงานในเอกสารนี้</td>
+              <td :colspan="doc.lines ? 7 : 6" class="border border-gray-400 px-2 py-4 text-center text-gray-400">ไม่มีงานในเอกสารนี้</td>
             </tr>
           </tbody>
         </table>
@@ -94,7 +96,7 @@
               <span class="text-right tabular-nums">{{ formatBaht(doc.fuelCostTotal) }}</span>
             </div>
             <div v-if="doc.vehicleExpenseTotal > 0" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
-              <span>ค่าใช้จ่ายประจำรถ (รวม)</span>
+              <span>ค่าใช้จ่ายประจำรถ{{ doc.lines ? '' : ' (รวม)' }}</span>
               <span class="text-right tabular-nums">{{ formatBaht(doc.vehicleExpenseTotal) }}</span>
             </div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 font-bold border-t border-gray-300 mt-1 pt-1">
@@ -192,12 +194,22 @@ const periodThaiLabel = computed(() => {
 
 const fuelCost = (booking: { fuelLiters?: number; fuelRate?: number }) => fuelCostOf(booking)
 
+/**
+ * ยอดต่องานใช้ Snapshot ใน doc.lines (เอกสารใหม่ — ค่าน้ำมัน/ค่าใช้จ่ายประจำรถที่ผู้ใช้กรอกเอง) ถ้าไม่มี (เอกสารเก่า)
+ * ใช้ค่าเที่ยวจากงาน + ค่าน้ำมันลิตร × เรท แบบเดิม
+ */
 const rows = computed(() => {
   if (!doc.value) return []
+  const lines = doc.value.lines
   return doc.value.bookingIds
     .map((id) => bookingStore.bookings.find((b) => b.id === id))
     .filter((b): b is NonNullable<typeof b> => !!b)
-    .map((b) => ({ booking: b, fuelCost: fuelCost(b) }))
+    .map((b) => {
+      const line = lines?.find((l) => l.bookingId === b.id)
+      return line
+        ? { booking: b, tripFee: line.tripFee, fuelCost: line.fuelCost, vehicleExpense: line.vehicleExpense }
+        : { booking: b, tripFee: b.tripFee || 0, fuelCost: fuelCost(b), vehicleExpense: 0 }
+    })
     .sort((a, b) => new Date(a.booking.shipDate || a.booking.completedAt || 0).getTime() - new Date(b.booking.shipDate || b.booking.completedAt || 0).getTime())
 })
 

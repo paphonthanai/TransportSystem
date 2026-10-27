@@ -4,7 +4,7 @@
       <h3 class="text-sm font-bold text-text">ค่าใช้จ่ายประจำรถ</h3>
       <div class="flex items-center gap-3">
         <div class="text-xs text-muted">รวมทั้งหมด {{ formatBaht(totalExpenses) }}</div>
-        <button v-if="!formOpen" @click="openAddForm" class="btn-sm">
+        <button v-if="!formOpen && !readonly" @click="openAddForm" class="btn-sm">
           <span class="material-symbols-rounded text-sm align-middle">add</span>
           เพิ่มค่าใช้จ่าย
         </button>
@@ -46,8 +46,8 @@
             <td class="px-3 py-2 text-muted">{{ formatDate(row.date) }}</td>
             <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(row.amount) }}</td>
             <td class="px-3 py-2 text-right whitespace-nowrap">
-              <button @click="startEdit(row)" class="text-muted hover:text-text text-xs">แก้ไข</button>
-              <button @click="remove(row.id)" class="text-red-500 hover:text-red-600 text-xs ml-2">ลบ</button>
+              <button v-if="!readonly" @click="startEdit(row)" class="text-muted hover:text-text text-xs">แก้ไข</button>
+              <button v-if="!readonly" @click="remove(row.id)" class="text-red-500 hover:text-red-600 text-xs ml-2">ลบ</button>
             </td>
           </tr>
           <tr v-if="expenses.length === 0">
@@ -74,7 +74,8 @@ import type { VehicleExpense } from '@/types'
  * placeholder ไม่ใช่ default ของระบบ) ผู้ใช้กรอกประเภท/รายการเองเป็นข้อความอิสระ เก็บลง field expenseType เดิม
  * (ยังคง Reuse store/repository/collection เดิมทั้งหมด ไม่มีการสร้างใหม่)
  */
-const props = defineProps<{ vehicleId: string }>()
+/** readonly = ดูอย่างเดียว (เช่นฝ่ายบัญชี — Firestore Rules ให้เขียน vehicleExpenses ได้เฉพาะ ADMIN) */
+const props = defineProps<{ vehicleId: string; readonly?: boolean }>()
 
 const expensesStore = useVehicleExpensesStore()
 

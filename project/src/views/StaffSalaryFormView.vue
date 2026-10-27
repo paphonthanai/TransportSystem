@@ -25,7 +25,7 @@
         </div>
         <div>
           <label class="field-label">เงินเดือนฐาน</label>
-          <input v-model.number="baseSalary" type="number" min="0" class="input-field w-full" />
+          <input v-model.number="baseSalary" type="number" min="0" :disabled="!!paidLock" class="input-field w-full disabled:opacity-70" />
         </div>
         <div>
           <label class="field-label">สถานะจ่ายเงิน (Payment Status)</label>
@@ -36,20 +36,24 @@
         </div>
         <div>
           <label class="field-label">เลขที่เอกสาร (ไม่บังคับ)</label>
-          <input v-model="documentNumber" placeholder="เช่น SLR2569-0001" class="input-field w-full" />
+          <input v-model="documentNumber" placeholder="เช่น SLR2569-0001" :disabled="!!paidLock" class="input-field w-full disabled:opacity-70" />
           <div v-if="documentNumberDuplicate" class="text-[11px] text-red-600 mt-1">เลขที่เอกสารนี้ถูกใช้ไปแล้ว</div>
         </div>
         <div>
           <label class="field-label">วันที่ออกเอกสาร (ไม่บังคับ)</label>
-          <input v-model="documentDateValue" type="date" class="input-field w-full" />
+          <input v-model="documentDateValue" type="date" :disabled="!!paidLock" class="input-field w-full disabled:opacity-70" />
         </div>
         <div>
           <label class="field-label">สถานะเอกสาร (Document Status)</label>
-          <select v-model="documentStatus" class="input-field w-full">
+          <select v-model="documentStatus" :disabled="!!paidLock" class="input-field w-full disabled:opacity-70">
             <option value="DRAFT">ร่าง</option>
             <option value="ISSUED">ออกเอกสารแล้ว</option>
           </select>
         </div>
+      </div>
+
+      <div v-if="paidLock" class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg p-3">
+        ใบนี้จ่ายแล้ว — ล็อกยอดเงินและเลขที่/วันที่/สถานะเอกสาร (แก้หมายเหตุได้) ถ้าต้องแก้ยอด ให้เปลี่ยนสถานะเป็นรอจ่ายแล้วบันทึกก่อน
       </div>
 
       <div v-if="duplicateWarning" class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
@@ -59,15 +63,15 @@
       <div class="border-t border-border pt-4 space-y-2">
         <div class="flex items-center justify-between">
           <div class="text-sm font-semibold text-text">รายการเพิ่ม</div>
-          <button @click="additions.push({ id: genId(), label: '', amount: 0 })" class="btn-sm">
+          <button v-if="!paidLock" @click="additions.push({ id: genId(), label: '', amount: 0 })" class="btn-sm">
             <span class="material-symbols-rounded text-sm">add</span>
             เพิ่มรายการ
           </button>
         </div>
         <div v-for="(a, idx) in additions" :key="a.id" class="flex items-center gap-2">
-          <input v-model="a.label" placeholder="รายการ เช่น ค่าล่วงเวลา" class="input-field flex-1" />
-          <input v-model.number="a.amount" type="number" placeholder="0" class="input-field w-32" />
-          <button @click="additions.splice(idx, 1)" class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-red-50 hover:text-red-600 flex-shrink-0">
+          <input v-model="a.label" placeholder="รายการ เช่น ค่าล่วงเวลา" :disabled="!!paidLock" class="input-field flex-1 disabled:opacity-70" />
+          <input v-model.number="a.amount" type="number" placeholder="0" :disabled="!!paidLock" class="input-field w-32 disabled:opacity-70" />
+          <button v-if="!paidLock" @click="additions.splice(idx, 1)" class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-red-50 hover:text-red-600 flex-shrink-0">
             <span class="material-symbols-rounded text-sm">close</span>
           </button>
         </div>
@@ -76,15 +80,15 @@
       <div class="border-t border-border pt-4 space-y-2">
         <div class="flex items-center justify-between">
           <div class="text-sm font-semibold text-text">รายการหัก</div>
-          <button @click="deductions.push({ id: genId(), label: '', amount: 0 })" class="btn-sm">
+          <button v-if="!paidLock" @click="deductions.push({ id: genId(), label: '', amount: 0 })" class="btn-sm">
             <span class="material-symbols-rounded text-sm">add</span>
             เพิ่มรายการ
           </button>
         </div>
         <div v-for="(d, idx) in deductions" :key="d.id" class="flex items-center gap-2">
-          <input v-model="d.label" placeholder="รายการ เช่น ประกันสังคม" class="input-field flex-1" />
-          <input v-model.number="d.amount" type="number" placeholder="0" class="input-field w-32" />
-          <button @click="deductions.splice(idx, 1)" class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-red-50 hover:text-red-600 flex-shrink-0">
+          <input v-model="d.label" placeholder="รายการ เช่น ประกันสังคม" :disabled="!!paidLock" class="input-field flex-1 disabled:opacity-70" />
+          <input v-model.number="d.amount" type="number" placeholder="0" :disabled="!!paidLock" class="input-field w-32 disabled:opacity-70" />
+          <button v-if="!paidLock" @click="deductions.splice(idx, 1)" class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-red-50 hover:text-red-600 flex-shrink-0">
             <span class="material-symbols-rounded text-sm">close</span>
           </button>
         </div>
@@ -145,6 +149,8 @@ const isEditMode = !!props.id
 const staffPool = computed(() => staffStore.staffList)
 
 const record = computed(() => (props.id ? staffSalaryStore.records.find((r) => r.id === props.id) || null : null))
+/** ล็อกตามสถานะที่บันทึกไว้ (ไม่ใช่ค่าใน dropdown) — store ก็ปฏิเสธการแก้ยอดของใบที่จ่ายแล้วซ้ำอีกชั้น */
+const paidLock = computed(() => (record.value ? staffSalaryStore.paidLockReason(record.value) : ''))
 
 function currentMonthValue(): string {
   const now = new Date()
@@ -231,7 +237,9 @@ const confirmSave = async () => {
   }
   const result = props.id ? await staffSalaryStore.updateSalary(props.id, payload) : await staffSalaryStore.createSalary(payload)
   if (!result) {
-    submitError.value = 'บันทึกไม่สำเร็จ — พนักงานคนนี้อาจมีข้อมูลเงินเดือนของรอบนี้อยู่แล้ว'
+    submitError.value = paidLock.value
+      ? `บันทึกไม่สำเร็จ — ${paidLock.value}`
+      : 'บันทึกไม่สำเร็จ — พนักงานคนนี้อาจมีข้อมูลเงินเดือนของรอบนี้อยู่แล้ว'
     return
   }
   router.push(`/payroll/staff/${result.id}`)

@@ -36,7 +36,7 @@
       <div class="card-lg grid grid-cols-2 sm:grid-cols-6 gap-4 text-sm">
         <div>
           <div class="text-xs text-muted">จำนวนเที่ยว (รอบนี้)</div>
-          <div class="font-semibold text-text">{{ rows.length }}</div>
+          <div class="font-semibold text-text">{{ countedRows.length }}</div>
         </div>
         <div>
           <div class="text-xs text-muted">ค่าเที่ยวรวม</div>
@@ -58,12 +58,14 @@
           <div class="text-xs text-muted mb-1">สถานะการจ่ายเงิน (รอบนี้)</div>
           <select
             :value="paymentStatus"
+            :disabled="!paymentsStore.canEdit()"
             @change="setPaymentStatus(($event.target as HTMLSelectElement).value as 'UNPAID' | 'PAID')"
-            :class="['status-select', paymentStatus === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700']"
+            :class="['status-select disabled:cursor-default', paymentStatus === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700']"
           >
             <option value="UNPAID">ยังไม่จ่าย</option>
             <option value="PAID">จ่ายแล้ว</option>
           </select>
+          <div v-if="!paymentsStore.canEdit()" class="text-[11px] text-muted mt-1">(ตั้งได้เฉพาะผู้ดูแลระบบ)</div>
         </div>
       </div>
 
@@ -71,6 +73,26 @@
         <span class="font-semibold text-text">รายได้สุทธิ (เบี้ยเลี้ยง + รายได้อื่นๆ − รายการหัก)</span>
         <span class="text-lg font-bold text-primary">{{ formatBaht(totalIncome + additionTotal - deductionTotal) }}</span>
       </div>
+
+      <div v-if="conflictRows.length" class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 space-y-1">
+        <div class="font-semibold">
+          พบ {{ conflictRows.length }} งานที่ข้อมูลคนขับไม่ตรงกับทะเบียน — ไม่นำมารวมยอดด้านบนและเลือกออกเอกสารไม่ได้ จนกว่าจะแก้ข้อมูลในงานให้ตรง
+        </div>
+        <div v-for="row in conflictRows" :key="row.booking.id" class="text-xs">
+          <RouterLink :to="`/job/${row.booking.id}`" class="font-mono underline">{{ row.booking.docNo }}</RouterLink>: {{ row.identityIssue }}
+        </div>
+      </div>
+
+      <div v-if="paymentConflictRows.length" class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg p-3 space-y-1">
+        <div class="font-semibold">
+          พบ {{ paymentConflictRows.length }} งานที่สถานะจ่ายรายเดือนบันทึกไว้ไม่ตรงกับข้อมูลคนขับในงาน — ระบบไม่เปลี่ยนสถานะ/ไม่ปลดล็อกให้อัตโนมัติ กรุณาตรวจสอบ
+        </div>
+        <div v-for="row in paymentConflictRows" :key="row.booking.id" class="text-xs">
+          <RouterLink :to="`/job/${row.booking.id}`" class="font-mono underline">{{ row.booking.docNo }}</RouterLink>: {{ row.paymentConflict }}
+        </div>
+      </div>
+
+      <div v-if="actionError" class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 whitespace-pre-line">{{ actionError }}</div>
 
       <div class="card-lg overflow-x-auto">
         <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
@@ -95,6 +117,7 @@
               <th class="px-3 py-2 font-semibold">รายละเอียดงาน</th>
               <th class="px-3 py-2 font-semibold text-right">ค่าเที่ยว</th>
               <th class="px-3 py-2 font-semibold text-right">รายได้</th>
+              <th class="px-3 py-2 font-semibold">รายการหัก</th>
               <th class="px-3 py-2 font-semibold">สถานะงาน</th>
               <th class="px-3 py-2 font-semibold">สถานะเอกสาร</th>
               <th class="px-3 py-2 font-semibold"></th>
@@ -104,7 +127,7 @@
             <tr v-for="row in rows" :key="row.booking.id" class="border-t border-border hover:bg-surface-2 transition-colors">
               <td class="px-3 py-2">
                 <input
-                  v-if="!row.booking.driverPayrollDocId"
+                  v-if="!row.booking.driverPayrollDocId && !row.identityIssue"
                   type="checkbox"
                   :checked="selectedIds.has(row.booking.id)"
                   @change="toggleSelect(row.booking.id)"
@@ -116,12 +139,32 @@
               <td class="px-3 py-2 text-muted">{{ row.booking.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ destinationLabel(row.booking) }}</td>
               <td class="px-3 py-2 text-right text-text">{{ formatBaht(row.booking.tripFee) }}</td>
-              <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(row.income) }}</td>
+              <td class="px-3 py-2 text-right text-text">
+                <div class="font-semibold">{{ formatBaht(row.income) }}</div>
+                <div v-if="row.booking.debtAdjustments?.length" class="text-[11px] text-muted">เบี้ยเลี้ยง {{ formatBaht(row.booking.allowance || 0) }}</div>
+                <div v-for="adj in row.booking.debtAdjustments || []" :key="adj.id" class="text-[11px]" :class="adj.amount >= 0 ? 'text-red-500' : 'text-green-600'">
+                  {{ adj.label || (adj.amount >= 0 ? 'หัก' : 'คืน') }} {{ adj.amount >= 0 ? '-' : '+' }}{{ formatBaht(Math.abs(adj.amount)) }}
+                </div>
+                <div v-if="row.identityIssue" class="text-[11px] text-red-600">ไม่นำมารวมยอด</div>
+              </td>
+              <td class="px-3 py-2 whitespace-nowrap">
+                <button v-if="!incomeBlockedReason(row.booking)" @click="incomeEditTarget = row.booking" class="edit-link" title="แก้เบี้ยเลี้ยง/เพิ่ม-ลดหนี้ของงานนี้">
+                  <span class="material-symbols-rounded text-sm">edit</span>รายการหัก
+                </button>
+                <span v-else class="text-[11px] text-muted" :title="incomeBlockedReason(row.booking)">({{ shortReason(incomeBlockedReason(row.booking)) }})</span>
+              </td>
               <td class="px-3 py-2">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[row.booking.status]]">{{ bookingStatusLabel[row.booking.status] }}</span>
               </td>
               <td class="px-3 py-2">
-                <span v-if="row.booking.driverPayrollDocId" class="text-xs font-semibold px-2 py-1 rounded-full bg-teal-100 text-teal-700">ออกเอกสารแล้ว</span>
+                <template v-if="row.booking.driverPayrollDocId && driverPayrollDocumentsStore.isOrphanedBooking(row.booking)">
+                  <span class="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700">ไม่พบเอกสาร</span>
+                  <button v-if="canManageDocs" @click="releaseOrphan(row.booking)" class="edit-link ml-1" title="ปลดป้ายออกเอกสารแล้ว ให้เลือกออกเอกสารใหม่ได้">
+                    <span class="material-symbols-rounded text-sm">lock_open</span>ปลดล็อก
+                  </button>
+                </template>
+                <span v-else-if="row.booking.driverPayrollDocId" class="text-xs font-semibold px-2 py-1 rounded-full bg-teal-100 text-teal-700">ออกเอกสารแล้ว</span>
+                <span v-else-if="row.identityIssue" class="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700" :title="row.identityIssue">ข้อมูลคนขับไม่ตรง</span>
                 <span v-else class="text-xs text-muted">-</span>
               </td>
               <td class="px-3 py-2 text-right">
@@ -129,7 +172,7 @@
               </td>
             </tr>
             <tr v-if="rows.length === 0">
-              <td colspan="10" class="px-3 py-8 text-center text-muted">ยังไม่มีงานในรอบนี้</td>
+              <td colspan="11" class="px-3 py-8 text-center text-muted">ยังไม่มีงานในรอบนี้</td>
             </tr>
           </tbody>
         </table>
@@ -158,16 +201,25 @@
               <td class="px-3 py-2 text-right text-text">{{ doc.bookingIds.length }}</td>
               <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(doc.netIncome) }}</td>
               <td class="px-3 py-2">
-                <button
-                  v-if="doc.paymentStatus === 'UNPAID'"
-                  @click="markDocPaid(doc.id)"
-                  class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700 cursor-pointer hover:opacity-80"
-                >
-                  รอจ่าย · บันทึกจ่ายแล้ว
-                </button>
-                <span v-else class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">จ่ายแล้ว</span>
+                <span :class="['text-xs font-semibold px-2 py-1 rounded-full', doc.paymentStatus === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700']">
+                  {{ doc.paymentStatus === 'PAID' ? `จ่ายแล้ว${doc.paidDate ? ` (${formatDate(doc.paidDate)})` : ''}` : 'รอจ่าย' }}
+                </span>
               </td>
-              <td class="px-3 py-2 text-right">
+              <td class="px-3 py-2 text-right whitespace-nowrap space-x-3">
+                <template v-if="canManageDocs">
+                  <template v-if="doc.paymentStatus === 'UNPAID'">
+                    <button @click="markDocPaid(doc.id)" class="edit-link">
+                      <span class="material-symbols-rounded text-sm">payments</span>บันทึกจ่ายแล้ว
+                    </button>
+                    <button @click="cancelDoc(doc.id, doc.number)" class="inline-flex items-center gap-0.5 text-xs text-red-600 hover:underline">
+                      <span class="material-symbols-rounded text-sm">cancel</span>ยกเลิกเอกสาร
+                    </button>
+                  </template>
+                  <button v-else @click="resetDoc(doc.id, doc.number)" class="edit-link">
+                    <span class="material-symbols-rounded text-sm">undo</span>รีเซ็ตเป็นรอจ่าย
+                  </button>
+                </template>
+                <span v-else class="text-[11px] text-muted">(จัดการเอกสารได้เฉพาะผู้ดูแลระบบ/ฝ่ายบัญชี)</span>
                 <RouterLink :to="`/payroll/drivers/documents/${doc.id}`" class="text-primary hover:underline text-xs">ดู/พิมพ์</RouterLink>
               </td>
             </tr>
@@ -178,9 +230,11 @@
         </table>
       </div>
 
-      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" kind="ADDITION" />
-      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" kind="DEDUCTION" />
+      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" kind="ADDITION" :readonly="!paymentsStore.canEdit()" />
+      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" kind="DEDUCTION" :readonly="!paymentsStore.canEdit()" />
     </template>
+
+    <DriverIncomeEditDialog :booking="incomeEditTarget" @close="incomeEditTarget = null" />
   </div>
 </template>
 
@@ -194,8 +248,10 @@ import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import { useDriverPayrollDocumentsStore } from '@/stores/driverPayrollDocuments'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
+import DriverIncomeEditDialog from '@/components/booking/DriverIncomeEditDialog.vue'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
-import type { DriverPaymentStatusValue } from '@/types'
+import { driverIdentityIssue } from '@/utils/driverIdentity'
+import type { Booking, DriverPaymentStatusValue } from '@/types'
 
 const props = defineProps<{ id: string }>()
 const route = useRoute()
@@ -243,12 +299,15 @@ const rows = computed(() => {
     .filter((b) => b.status === 'DELIVERED')
     .filter((b) => (driver.value!.id ? b.driverId === driver.value!.id || (!b.driverId && b.driverName === fullName) : b.driverName === fullName))
     .filter((b) => inPeriod(b.shipDate || b.completedAt, period.value))
-    .map((b) => ({ booking: b, income: b.finalAllowance ?? b.allowance ?? 0 }))
+    .map((b) => ({ booking: b, income: b.finalAllowance ?? b.allowance ?? 0, identityIssue: driverIdentityIssue(b, driver.value!, fullName) }))
     .sort((a, b) => new Date(b.booking.shipDate || b.booking.completedAt || 0).getTime() - new Date(a.booking.shipDate || a.booking.completedAt || 0).getTime())
 })
+/** งานที่ driverId/ชื่อคนขับขัดกับทะเบียน — แสดงให้เห็นแต่ไม่นำมารวมยอด/ออกเอกสารอัตโนมัติ ต้องให้ผู้ใช้ตรวจสอบก่อน */
+const conflictRows = computed(() => rows.value.filter((r) => r.identityIssue))
+const countedRows = computed(() => rows.value.filter((r) => !r.identityIssue))
 
-const totalTripFee = computed(() => rows.value.reduce((sum, r) => sum + (r.booking.tripFee || 0), 0))
-const totalIncome = computed(() => rows.value.reduce((sum, r) => sum + r.income, 0))
+const totalTripFee = computed(() => countedRows.value.reduce((sum, r) => sum + (r.booking.tripFee || 0), 0))
+const totalIncome = computed(() => countedRows.value.reduce((sum, r) => sum + r.income, 0))
 const deductionTotal = computed(() => {
   if (!driver.value) return 0
   return deductionsStore.deductionsFor(driversStore.fullName(driver.value), periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
@@ -259,11 +318,19 @@ const additionTotal = computed(() => {
 })
 
 /** สถานะจ่ายรายได้คนขับของรอบนี้ — คนละเรื่องกับสถานะงาน (bookingStatusLabel ด้านบนในตาราง) โดยเจตนา ไม่แตะกันเลย */
-const paymentStatus = computed(() => (driver.value ? paymentsStore.statusFor(driversStore.fullName(driver.value), periodLabel.value) : 'UNPAID'))
-const setPaymentStatus = (status: DriverPaymentStatusValue) => {
+const paymentStatus = computed(() =>
+  driver.value ? paymentsStore.statusFor(driversStore.fullName(driver.value), periodLabel.value, driver.value.id) : 'UNPAID'
+)
+const setPaymentStatus = async (status: DriverPaymentStatusValue) => {
   if (!driver.value) return
-  paymentsStore.setStatus(driversStore.fullName(driver.value), periodLabel.value, status)
+  actionError.value = ''
+  const result = await paymentsStore.setStatus(driversStore.fullName(driver.value), periodLabel.value, status, driver.value.id)
+  if (!result.ok) actionError.value = result.message || 'บันทึกสถานะจ่ายไม่สำเร็จ'
 }
+/** งานที่สถานะจ่ายรายเดือนบันทึกไว้ขัดกับ driverId/ชื่อในงาน — แสดงเตือน ไม่ปลดล็อก/เปลี่ยนสถานะให้อัตโนมัติ (ดู monthlyPaidCheck) */
+const paymentConflictRows = computed(() =>
+  rows.value.map((r) => ({ ...r, paymentConflict: bookingStore.driverPaymentConflict(r.booking) })).filter((r) => r.paymentConflict)
+)
 
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {
   if (!booking.items.length) return '-'
@@ -276,7 +343,7 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 
 /** เลือกงานเพื่อสร้างเอกสารรายได้ — งานที่ออกเอกสารไปแล้ว (driverPayrollDocId) เลือกซ้ำไม่ได้ ไม่มี checkbox ให้เลย */
 const selectedIds = ref<Set<string>>(new Set())
-const selectableRows = computed(() => rows.value.filter((r) => !r.booking.driverPayrollDocId))
+const selectableRows = computed(() => countedRows.value.filter((r) => !r.booking.driverPayrollDocId))
 const allSelectableChecked = computed(() => selectableRows.value.length > 0 && selectableRows.value.every((r) => selectedIds.value.has(r.booking.id)))
 const toggleSelect = (id: string) => {
   if (selectedIds.value.has(id)) selectedIds.value.delete(id)
@@ -288,24 +355,55 @@ const toggleSelectAll = () => {
 }
 const selectedIncomeTotal = computed(() => rows.value.filter((r) => selectedIds.value.has(r.booking.id)).reduce((sum, r) => sum + r.income, 0))
 
-const createDocument = () => {
-  if (!driver.value || selectedIds.value.size === 0) return
+/** จัดการเอกสารรายได้ (สร้าง/จ่าย/รีเซ็ต/ยกเลิก/ปลดล็อก) — ADMIN และฝ่ายบัญชี (store/Rules บังคับซ้ำ) */
+const canManageDocs = computed(() => driverPayrollDocumentsStore.canManage())
+const actionError = ref('')
+const creating = ref(false)
+
+const createDocument = async () => {
+  if (!driver.value || selectedIds.value.size === 0 || creating.value) return
+  actionError.value = ''
+  creating.value = true
   // DriverRecord.id เป็น optional เฉพาะ record ฟอร์มว่างที่ยังไม่บันทึก (ดู DriversView.vue) — driver ที่มาจาก
   // driversStore.drivers (โหลดจาก Firestore จริง) มี id เสมอ จึง assert ได้ปลอดภัยตรงนี้
-  const doc = driverPayrollDocumentsStore.createDriverPayrollDocument(driver.value.id!, [...selectedIds.value], period.value)
-  if (!doc) {
-    alert('สร้างเอกสารไม่สำเร็จ — งานที่เลือกอาจถูกออกเอกสารไปแล้ว กรุณารีเฟรชหน้านี้แล้วลองใหม่')
+  const result = await driverPayrollDocumentsStore.createDriverPayrollDocument(driver.value.id!, [...selectedIds.value], period.value)
+  creating.value = false
+  if (!result.ok || !result.doc) {
+    const details = (result.mismatches || []).map((m) => `• ${m.docNo}: ${m.issue}`).join('\n')
+    actionError.value = `สร้างเอกสารไม่สำเร็จ — ${result.message || 'กรุณารีเฟรชหน้านี้แล้วลองใหม่'}${details ? `\n${details}` : ''}`
     return
   }
   selectedIds.value = new Set()
-  router.push(`/payroll/drivers/documents/${doc.id}`)
+  router.push(`/payroll/drivers/documents/${result.doc.id}`)
 }
 
 const issuedDocuments = computed(() => (driver.value ? driverPayrollDocumentsStore.documentsForDriver(driver.value.id!) : []))
-const markDocPaid = (docId: string) => {
-  if (!confirm('ยืนยันบันทึกว่าจ่ายเงินเอกสารนี้แล้ว?')) return
-  driverPayrollDocumentsStore.recordPayment(docId)
+const runAction = async (action: () => Promise<{ ok: boolean; message?: string }> | { ok: boolean; message?: string }) => {
+  actionError.value = ''
+  const result = await action()
+  if (!result.ok) actionError.value = result.message || 'ทำรายการไม่สำเร็จ'
 }
+const markDocPaid = (docId: string) => {
+  if (!confirm('ยืนยันบันทึกว่าจ่ายเงินเอกสารนี้แล้ว (วันที่จ่าย = วันนี้ แก้ได้ที่หน้าเอกสาร)?')) return
+  runAction(() => driverPayrollDocumentsStore.recordPayment(docId))
+}
+const cancelDoc = (docId: string, number: string) => {
+  if (!confirm(`ยืนยันยกเลิกเอกสาร ${number}? เอกสารจะถูกลบ และงานในเอกสารจะกลับมาเลือกออกเอกสารใหม่ได้`)) return
+  runAction(() => driverPayrollDocumentsStore.cancelDriverPayrollDocument(docId))
+}
+const resetDoc = (docId: string, number: string) => {
+  if (!confirm(`ยืนยันรีเซ็ตเอกสาร ${number} จาก "จ่ายแล้ว" กลับเป็น "รอจ่าย"?`)) return
+  runAction(() => driverPayrollDocumentsStore.resetPayment(docId))
+}
+const releaseOrphan = (booking: Booking) => {
+  if (!confirm(`งาน ${booking.docNo} ติดป้าย "ออกเอกสารแล้ว" แต่ไม่พบเอกสารในระบบ — ยืนยันปลดล็อกให้เลือกออกเอกสารใหม่ได้?`)) return
+  runAction(() => driverPayrollDocumentsStore.releaseOrphanedBooking(booking.id))
+}
+
+/** ปุ่ม "รายการหัก" ต่องาน = ไดอะล็อกแก้เบี้ยเลี้ยง/เพิ่ม-ลดหนี้ตัวเดียวกับหน้ารายละเอียดงาน ล็อกตามกฎเดิม (driverIncomeEditBlockedReason) */
+const incomeEditTarget = ref<Booking | null>(null)
+const incomeBlockedReason = (booking: Booking) => bookingStore.driverIncomeEditBlockedReason(booking)
+const shortReason = (reason: string) => (reason.includes('เอกสารรายได้คนขับ') ? 'อยู่ในเอกสารแล้ว' : reason.includes('จ่ายรายได้') ? 'จ่ายแล้ว' : reason.split(' ')[0])
 </script>
 
 <style scoped>
@@ -319,6 +417,10 @@ const markDocPaid = (docId: string) => {
 
 .btn-primary {
   @apply h-9 px-3 rounded-lg border-0 bg-primary text-white font-semibold text-sm flex items-center gap-2 cursor-pointer transition-all hover:opacity-90 shadow-md;
+}
+
+.edit-link {
+  @apply inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline;
 }
 
 .status-select {

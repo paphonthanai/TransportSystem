@@ -259,6 +259,11 @@ export interface Booking {
    *  กันสร้างซ้ำ ดู driverPayrollDocId — งานเดียวกันมี driverPayrollDocId "และ" vehicleIncomeDocId พร้อมกันได้ (คนขับกับรถ
    *  เป็นคนละ Entity กัน) */
   vehicleIncomeDocId?: string
+  /** ค่าน้ำมัน (บาท) ที่ผู้ใช้กรอกเองในหน้ารถร่วม/รถหุ้นส่วน — ใช้คิดรายได้รถร่วมแทนการคำนวณลิตร × เรทอัตโนมัติ (ปิดไว้ก่อน
+   *  ตามที่ผู้ใช้สั่ง) ไม่แตะ fuelLiters/fuelRate ของงาน ไม่มีค่า = ยังไม่กรอก (นับเป็น 0) */
+  vendorFuelCost?: number
+  /** ค่าใช้จ่ายประจำรถ (บาท) ที่ผู้ใช้กรอกเองต่องานในหน้ารถร่วม — แทนยอดสะสมจาก vehicleExpenses ตอนออกเอกสาร */
+  vendorVehicleExpense?: number
   /** สถานะตรวจสอบ POD ของออฟฟิศ (ดู PodReviewStatus) — ไม่มีค่า = ไม่ผ่านขั้นตอนนี้ (งานที่ออฟฟิศจบเอง) หรือยังไม่จบงาน */
   podReviewStatus?: PodReviewStatus
   /** เหตุผลที่ออฟฟิศ REJECTED (ถ้ามี) ให้คนขับเห็นว่าต้องแก้อะไร */
@@ -349,6 +354,8 @@ export type DriverPaymentStatusValue = 'UNPAID' | 'PAID'
 export interface DriverPaymentRecord {
   id: string
   driverName: string
+  /** รหัสคนขับในทะเบียน — ระเบียนใหม่ที่ตั้งจากหน้าที่รู้ driverId จะมีค่านี้ (ระเบียนเก่าไม่มี จับคู่ด้วยชื่ออย่างเดียว) ดู utils/driverPaid.ts */
+  driverId?: string
   /** รอบบัญชี รูปแบบ "YYYY-MM" (พ.ศ.) เช่น "2569-08" — ธรรมเนียมเดียวกับ PayrollDeduction.periodLabel */
   periodLabel: string
   status: DriverPaymentStatusValue

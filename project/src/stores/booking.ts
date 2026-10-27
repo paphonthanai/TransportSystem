@@ -10,7 +10,7 @@ import { useFuelRateStore } from '@/stores/fuelRates'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import { useDriverPayrollDocumentsStore } from '@/stores/driverPayrollDocuments'
-import { isBookingPaidToDriver } from '@/utils/driverPaid'
+import { isBookingPaidToDriver, monthlyPaidCheck, payrollPeriodLabelOf } from '@/utils/driverPaid'
 import { resolveTripNumber } from '@/utils/tripSequence'
 import { pruneResolvedNote } from '@/utils/bookingNote'
 import { bookingRepository } from '@/repositories/bookingRepository'
@@ -147,8 +147,16 @@ export const useBookingStore = defineStore('booking', () => {
     const payments = useDriverPaymentsStore()
     return isBookingPaidToDriver(booking, {
       payrollDocStatus: (docId) => payrollDocs.documents.find((d) => d.id === docId)?.paymentStatus,
-      monthlyStatus: (driver, period) => payments.statusFor(driver, period),
+      monthlyRecords: (period) => payments.recordsForPeriod(period),
     })
+  }
+
+  /** คำเตือนเมื่อสถานะจ่ายรายเดือนที่บันทึกไว้ขัดกับข้อมูลคนขับในงาน (driverId/ชื่อไม่ตรง) — ว่าง = ไม่มีปัญหา ดู monthlyPaidCheck */
+  function driverPaymentConflict(booking: Booking): string {
+    if (booking.status !== 'DELIVERED') return ''
+    const period = payrollPeriodLabelOf(booking)
+    if (!period) return ''
+    return monthlyPaidCheck(booking, useDriverPaymentsStore().recordsForPeriod(period)).conflict
   }
 
   /** ท่อนหมายเหตุอัตโนมัติเรื่องเรทน้ำมัน (ขึ้นต้นด้วยคำนี้เสมอ) — ลบ/เติมใหม่ได้โดยไม่แตะหมายเหตุที่ผู้ใช้พิมพ์เอง */
@@ -702,8 +710,12 @@ export const useBookingStore = defineStore('booking', () => {
     return { ok: true }
   }
 
-  /** แก้ค่าเที่ยวได้ไหม: ก่อนจัดรถทุก role / หลังจากนั้น ADMIN เสมอ และเสมียนจนกว่างานจะถูกนำไปวางบิล */
+  /**
+   * แก้ค่าเที่ยวได้ไหม: ก่อนจัดรถทุก role / หลังจากนั้น ADMIN เสมอ และเสมียนจนกว่างานจะถูกนำไปวางบิล — ยกเว้นงานที่อยู่ใน
+   * เอกสารรายได้รถร่วมแล้ว ล็อกทุก role (เอกสารเก็บยอด snapshot ไว้ แก้ที่งานจะไม่ตรงกับเอกสาร ต้องยกเลิกเอกสารก่อน)
+   */
   function tripFeeEditBlockedReason(booking: Booking): string {
+    if (booking.vehicleIncomeDocId) return 'งานนี้อยู่ในเอกสารรายได้รถร่วมแล้ว ต้องยกเลิกเอกสารก่อนจึงจะแก้ค่าเที่ยวได้'
     const role = useAuthStore().role
     if (booking.status === 'WAITING_DISPATCH' || role === 'ADMIN') return ''
     if (role === 'STAFF') return staffBilledEditBlockedReason(booking)
@@ -1160,7 +1172,10 @@ export const useBookingStore = defineStore('booking', () => {
     if (booking.status !== 'DELIVERED') return 'แก้รายได้คนขับได้เฉพาะงานที่จบแล้ว (งานที่ยังไม่จบใช้ "แก้ไขงาน")'
     const billed = staffBilledEditBlockedReason(booking)
     if (billed) return billed
-    if (isPaidToDriver(booking)) return 'จ่ายรายได้ให้คนขับไปแล้ว แก้ไม่ได้'
+    if (isPaidToDriver(booking)) {
+      const conflict = driverPaymentConflict(booking)
+      return conflict ? `ล็อกไว้ก่อน (จ่ายรายได้แล้ว) — ${conflict}` : 'จ่ายรายได้ให้คนขับไปแล้ว แก้ไม่ได้'
+    }
     if (booking.driverPayrollDocId) return 'งานนี้อยู่ในเอกสารรายได้คนขับแล้ว ต้องนำงานออกจากเอกสารก่อนจึงจะแก้ได้'
     return ''
   }
@@ -1565,6 +1580,7 @@ export const useBookingStore = defineStore('booking', () => {
     completeJob,
     updateCompletedAt,
     driverIncomeEditBlockedReason,
+    driverPaymentConflict,
     staffBilledEditBlockedReason,
     tripFeeEditBlockedReason,
     updateBookingRefs,

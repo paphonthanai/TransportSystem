@@ -3,10 +3,10 @@
     <div class="flex items-center gap-3 flex-wrap">
       <h2 class="text-lg font-bold text-text">{{ isCompanyFleet ? 'รถบริษัท' : 'รถร่วม / รถหุ้นส่วน' }}</h2>
       <div v-if="isCompanyFleet" class="text-xs text-muted">
-        ข้อมูลของรถบริษัท (รายได้/ค่าน้ำมัน/ค่าแรงคนขับ Sync จาก Booking, ค่าใช้จ่ายประจำรถกรอกเอง) — ค่าแรงคนขับ = เบี้ยเลี้ยงหลังเพิ่ม/ลดหนี้ของงานที่จบแล้ว
+        ข้อมูลของรถบริษัท (รายได้/ค่าแรงคนขับ Sync จาก Booking, ค่าน้ำมัน/ค่าใช้จ่ายประจำรถกรอกเองต่องานที่หน้ารายละเอียดรถ) — ค่าแรงคนขับ = เบี้ยเลี้ยงหลังเพิ่ม/ลดหนี้ของงานที่จบแล้ว
       </div>
       <div v-else class="text-xs text-muted">
-        ข้อมูลของ "รถ" เท่านั้น (รายได้/ค่าน้ำมัน Sync จาก Booking, ค่าใช้จ่ายประจำรถกรอกเอง) — รายได้คนขับดูที่หน้า
+        ข้อมูลของ "รถ" เท่านั้น (รายได้ Sync จาก Booking, ค่าน้ำมัน/ค่าใช้จ่ายประจำรถกรอกเองต่องานที่หน้ารายละเอียดรถ) — รายได้คนขับดูที่หน้า
         <RouterLink to="/payroll/drivers" class="text-primary hover:underline">พนักงานขับรถ</RouterLink> แทน
       </div>
     </div>
@@ -34,7 +34,7 @@
         <div class="font-semibold text-green-600">{{ formatBaht(grandTotals.income) }}</div>
       </div>
       <div>
-        <div class="text-xs text-muted">ค่าใช้จ่ายรวม (น้ำมันรอบนี้{{ isCompanyFleet ? ' + ค่าแรงคนขับรอบนี้' : '' }} + ค่าใช้จ่ายประจำรถสะสม)</div>
+        <div class="text-xs text-muted">ค่าใช้จ่ายรวม (น้ำมันรอบนี้{{ isCompanyFleet ? ' + ค่าแรงคนขับรอบนี้' : '' }} + ค่าใช้จ่ายประจำรถรอบนี้)</div>
         <div class="font-semibold text-red-500">-{{ formatBaht(grandTotals.expense) }}</div>
       </div>
       <div>
@@ -64,9 +64,15 @@
             <td class="px-4 py-3 text-muted">{{ row.vehicle.department }}</td>
             <td class="px-4 py-3 text-right text-text">{{ row.trips }}</td>
             <td class="px-4 py-3 text-right text-green-600">{{ formatBaht(row.income) }}</td>
-            <td class="px-4 py-3 text-right text-red-500">-{{ formatBaht(row.fuelCost) }}</td>
+            <td class="px-4 py-3 text-right text-red-500">
+              -{{ formatBaht(row.fuelCost) }}
+              <RouterLink :to="`/payroll/vendor-fleet/${row.vehicle.id}`" class="edit-link ml-1" title="แก้ค่าน้ำมันต่องานที่หน้ารายละเอียดรถ"><span class="material-symbols-rounded text-sm">edit</span>แก้</RouterLink>
+            </td>
             <td v-if="isCompanyFleet" class="px-4 py-3 text-right text-red-500">-{{ formatBaht(row.driverWage) }}</td>
-            <td class="px-4 py-3 text-right text-red-500">-{{ formatBaht(row.vehicleExpense) }}</td>
+            <td class="px-4 py-3 text-right text-red-500">
+              -{{ formatBaht(row.vehicleExpense) }}
+              <RouterLink :to="`/payroll/vendor-fleet/${row.vehicle.id}`" class="edit-link ml-1" title="แก้ค่าใช้จ่ายประจำรถต่องานที่หน้ารายละเอียดรถ"><span class="material-symbols-rounded text-sm">edit</span>แก้</RouterLink>
+            </td>
             <td class="px-4 py-3 text-right font-bold text-text">{{ formatBaht(row.net) }}</td>
             <td class="px-4 py-3 text-right">
               <RouterLink :to="`/payroll/vendor-fleet/${row.vehicle.id}`" class="btn-sm">รายละเอียด</RouterLink>
@@ -85,9 +91,9 @@
 import { ref, computed } from 'vue'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
-import { useVehicleExpensesStore } from '@/stores/vehicleExpenses'
+import { vendorFuelCostOf, vendorVehicleExpenseOf } from '@/stores/vehicleIncomeDocuments'
 import { exportRowsToExcel } from '@/utils/exportExcel'
-import { fuelCostOf, roundMoney } from '@/utils/bookingMoney'
+import { roundMoney } from '@/utils/bookingMoney'
 import type { Booking, Vehicle, VehicleType } from '@/types'
 import { vehicleGroupOf, type VehicleGroup } from '@/utils/vehicleType'
 
@@ -125,7 +131,6 @@ const departmentFilter = (department: VehicleType | undefined) => {
 
 const vehiclesStore = useVehiclesStore()
 const bookingStore = useBookingStore()
-const vehicleExpensesStore = useVehicleExpensesStore()
 
 const vendorFleetVehicles = computed(() => vehiclesStore.vehicles.filter((v) => departmentFilter(v.department)))
 
@@ -141,7 +146,9 @@ function inPeriod(date: Date | undefined, monthValue: string): boolean {
 
 const period = ref(currentMonthValue())
 
-const fuelCost = (booking: Booking) => fuelCostOf(booking)
+/** ค่าน้ำมัน/ค่าใช้จ่ายประจำรถใช้ยอดที่ผู้ใช้กรอกเองต่องานในหน้ารายละเอียดรถ (ปิดการคำนวณลิตร × เรท และยอดสะสม vehicleExpenses
+ *  ไว้ก่อนตามที่ผู้ใช้สั่ง) — ให้ตรงกับ VendorFleetVehicleDetailView.vue และเอกสารรายได้รถร่วม */
+const fuelCost = (booking: Booking) => vendorFuelCostOf(booking)
 
 /** งานของรถคันนี้ในรอบที่เลือก — Trace ตรงจาก Booking.plate เหมือน VendorFleetVehicleDetailView.vue (ไม่ใช้ currentDriver ของรถมาไล่ย้อนหลัง) */
 const bookingsForVehicle = (vehicle: Vehicle) => {
@@ -157,8 +164,7 @@ const vehicleRows = computed(() =>
     const trips = bookings.length
     const income = bookings.reduce((sum, b) => sum + (b.tripFee || 0), 0)
     const fuelTotal = bookings.reduce((sum, b) => sum + fuelCost(b), 0)
-    /** ค่าใช้จ่ายประจำรถเป็นยอดสะสมทั้งหมด ไม่กรองตามรอบเดือน เหมือน VendorFleetVehicleDetailView.vue (ประกันต่อปี ฯลฯ กรองตามรอบจะทำให้ยอดหายไปผิดๆ) */
-    const vehicleExpense = vehicleExpensesStore.expensesForVehicle(vehicle.id).reduce((sum, e) => sum + e.amount, 0)
+    const vehicleExpense = bookings.reduce((sum, b) => sum + vendorVehicleExpenseOf(b), 0)
     /** ค่าแรงคนขับ = เบี้ยเลี้ยงหลังกระทบยอดเพิ่ม/ลดหนี้ (สูตรเดียวกับ computeBookingMoney/เงินเดือนคนขับ) — หักเฉพาะรถบริษัท */
     const driverWage = isCompanyFleet.value ? bookings.reduce((sum, b) => sum + roundMoney(b.finalAllowance ?? b.allowance ?? 0), 0) : 0
     const net = income - fuelTotal - driverWage - vehicleExpense
@@ -193,6 +199,10 @@ const exportSummary = () => {
 </script>
 
 <style scoped>
+.edit-link {
+  @apply inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline;
+}
+
 .input-field {
   @apply h-9 px-3 border border-border rounded-lg bg-surface text-text text-sm font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:ring-opacity-20 transition-all;
 }

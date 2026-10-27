@@ -82,7 +82,13 @@
               <span>รายได้จากเที่ยว (เบี้ยเลี้ยง)</span>
               <span class="text-right tabular-nums">{{ formatBaht(doc.tripIncomeTotal) }}</span>
             </div>
-            <div v-if="doc.additionTotal > 0" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+            <template v-if="doc.additionItems">
+              <div v-for="(a, i) in doc.additionItems" :key="`a${i}`" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+                <span>{{ lineLabel(a) }}</span>
+                <span class="text-right tabular-nums">{{ formatBaht(a.amount) }}</span>
+              </div>
+            </template>
+            <div v-else-if="doc.additionTotal > 0" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
               <span>รายได้อื่นๆ (รวม)</span>
               <span class="text-right tabular-nums">{{ formatBaht(doc.additionTotal) }}</span>
             </div>
@@ -97,6 +103,12 @@
               <span>จำนวนเงิน</span>
             </div>
             <div v-if="doc.deductionTotal === 0" class="text-gray-400 py-0.5">ไม่มีรายการหัก</div>
+            <template v-else-if="doc.deductionItems">
+              <div v-for="(d, i) in doc.deductionItems" :key="`d${i}`" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+                <span>{{ lineLabel(d) }}</span>
+                <span class="text-right tabular-nums">{{ formatBaht(d.amount) }}</span>
+              </div>
+            </template>
             <div v-else class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
               <span>รายการหัก (รวม)</span>
               <span class="text-right tabular-nums">{{ formatBaht(doc.deductionTotal) }}</span>
@@ -119,10 +131,30 @@
             <span class="text-xl font-bold bg-yellow-100 px-3 py-1 rounded">{{ formatBaht(doc.netIncome) }}</span>
           </div>
         </div>
-        <div class="flex justify-end -mt-4 mb-6">
-          <span class="text-xs" :class="doc.paymentStatus === 'PAID' ? 'text-green-700 font-semibold' : 'text-amber-700 font-semibold'">
-            สถานะจ่ายเงิน: {{ doc.paymentStatus === 'PAID' ? `จ่ายแล้ว (${formatDate(doc.paidDate)})` : 'รอจ่าย' }}
-          </span>
+        <div class="flex flex-col items-end gap-1 -mt-4 mb-6">
+          <div class="flex items-center gap-2">
+            <span class="text-xs" :class="doc.paymentStatus === 'PAID' ? 'text-green-700 font-semibold' : 'text-amber-700 font-semibold'">
+              สถานะจ่ายเงิน: {{ doc.paymentStatus === 'PAID' ? `จ่ายแล้ว (${formatDate(doc.paidDate)})` : 'รอจ่าย' }}
+            </span>
+            <template v-if="!paymentEditing">
+              <button v-if="canManage" @click="startPaymentEdit" class="no-print inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="แก้สถานะจ่ายเงิน">
+                <span class="material-symbols-rounded text-sm">edit</span>แก้
+              </button>
+              <span v-else class="no-print text-xs text-gray-400">(เฉพาะผู้ดูแลระบบ/ฝ่ายบัญชี)</span>
+            </template>
+          </div>
+          <div v-if="paymentEditing" class="no-print flex items-center gap-2 flex-wrap justify-end text-xs">
+            <span>วันที่จ่าย</span>
+            <input v-model="paidDateDraft" type="date" :max="todayValue" class="h-8 px-2 border border-gray-300 rounded-lg" />
+            <button @click="savePayment" :disabled="saving || !paidDateDraft" class="h-8 px-3 rounded-lg bg-primary text-white font-semibold disabled:opacity-40">
+              {{ doc.paymentStatus === 'PAID' ? 'บันทึกวันที่จ่าย' : 'บันทึกจ่ายแล้ว' }}
+            </button>
+            <button v-if="doc.paymentStatus === 'PAID'" @click="resetPayment" :disabled="saving" class="h-8 px-3 rounded-lg border border-gray-300 text-red-600">
+              รีเซ็ตเป็นรอจ่าย
+            </button>
+            <button @click="paymentEditing = false" class="h-8 px-3 rounded-lg border border-gray-300">ยกเลิก</button>
+          </div>
+          <div v-if="paymentError" class="no-print text-xs text-red-600">{{ paymentError }}</div>
         </div>
 
         <!-- ลายเซ็น -->
@@ -159,7 +191,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDriversStore } from '@/stores/drivers'
 import { useBookingStore } from '@/stores/booking'
@@ -213,6 +245,47 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 const formatDateTime = (date: Date) => new Date(date).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
 
 const printDoc = () => window.print()
+
+const lineLabel = (item: { type: string; label: string }) => (item.label ? `${item.type} — ${item.label}` : item.type)
+
+/** inline "แก้" สถานะจ่าย — บันทึกจ่าย/แก้วันที่จ่าย/รีเซ็ตเป็นรอจ่าย ผ่าน store (เช็คสิทธิ์ ADMIN + เขียน log ที่ store) ยอดเงินอื่นล็อกตาม snapshot */
+const canManage = computed(() => driverPayrollDocumentsStore.canManage())
+const toDateValue = (date: Date) => {
+  const d = new Date(date)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+const todayValue = toDateValue(new Date())
+const paymentEditing = ref(false)
+const paidDateDraft = ref('')
+const saving = ref(false)
+const paymentError = ref('')
+const startPaymentEdit = () => {
+  paidDateDraft.value = doc.value?.paidDate ? toDateValue(doc.value.paidDate) : todayValue
+  paymentError.value = ''
+  paymentEditing.value = true
+}
+const runPayment = async (action: () => Promise<{ ok: boolean; message?: string }>) => {
+  saving.value = true
+  const result = await action()
+  saving.value = false
+  if (!result.ok) {
+    paymentError.value = result.message || 'บันทึกไม่สำเร็จ'
+    return
+  }
+  paymentEditing.value = false
+}
+const savePayment = () => {
+  if (!doc.value || !paidDateDraft.value) return
+  const [y, m, d] = paidDateDraft.value.split('-').map(Number)
+  const paidDate = new Date(y, m - 1, d)
+  const id = doc.value.id
+  runPayment(() => (doc.value!.paymentStatus === 'PAID' ? driverPayrollDocumentsStore.updatePaidDate(id, paidDate) : driverPayrollDocumentsStore.recordPayment(id, paidDate)))
+}
+const resetPayment = () => {
+  if (!doc.value || !confirm(`ยืนยันรีเซ็ตเอกสาร ${doc.value.number} จาก "จ่ายแล้ว" กลับเป็น "รอจ่าย"?`)) return
+  const id = doc.value.id
+  runPayment(() => driverPayrollDocumentsStore.resetPayment(id))
+}
 </script>
 
 <style scoped>

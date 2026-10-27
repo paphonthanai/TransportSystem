@@ -79,11 +79,11 @@ export const useAppStore = defineStore('app', () => {
       id: '4',
       icon: 'payments',
       label: 'เงินเดือน',
-      roles: ['ADMIN'],
+      roles: ['ADMIN', 'ACCOUNTING'],
       children: [
-        { id: '4-1', icon: 'badge', label: 'เสมียน', route: '/payroll/staff' },
-        { id: '4-2', icon: 'local_shipping', label: 'พนักงานขับรถ', route: '/payroll/drivers' },
-        { id: '4-3', icon: 'handshake', label: 'รถร่วม', route: '/payroll/vendor-fleet' },
+        { id: '4-1', icon: 'badge', label: 'เสมียน', route: '/payroll/staff', roles: ['ADMIN'] },
+        { id: '4-2', icon: 'local_shipping', label: 'พนักงานขับรถ', route: '/payroll/drivers', roles: ['ADMIN', 'ACCOUNTING'] },
+        { id: '4-3', icon: 'handshake', label: 'รถร่วม', route: '/payroll/vendor-fleet', roles: ['ADMIN', 'ACCOUNTING'] },
       ],
     },
     {
