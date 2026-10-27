@@ -134,3 +134,41 @@ describe('เพดานลิตรน้ำมัน 200 (ยอมให้�
     expect(b.fuelLiters).toBe(30)
   })
 })
+
+describe('วันที่ส่งของสำเร็จ (เลือกได้ตอนจบงาน)', () => {
+  it('ออฟฟิศเลือกวันย้อนหลัง = completedAt และ deliveredAt ของจุดที่ยังไม่ส่งเป็นวันนั้น', () => {
+    const store = useBookingStore()
+    const b = makeBooking({ ...ready, items: [makeJobItem()] })
+    store.bookings.push(b)
+    const picked = new Date(2026, 9, 26, 10, 0)
+
+    expect(store.completeJob(b.id, [], 1250, undefined, picked).ok).toBe(true)
+    expect(b.completedAt).toEqual(picked)
+    expect(b.items[0].deliveredAt).toEqual(picked)
+  })
+
+  it('วันในอนาคต = ใช้เวลาปัจจุบันแทน', () => {
+    const store = useBookingStore()
+    const b = makeBooking({ ...ready })
+    store.bookings.push(b)
+    const before = Date.now()
+
+    store.completeJob(b.id, [], 1250, undefined, new Date(Date.now() + 3 * 86400000))
+    expect(new Date(b.completedAt!).getTime()).toBeGreaterThanOrEqual(before)
+    expect(new Date(b.completedAt!).getTime()).toBeLessThanOrEqual(Date.now())
+  })
+
+  it('คนขับเลือกวันย้อนหลังตอนดำเนินการเสร็จสิ้น', () => {
+    const store = useBookingStore()
+    const b = makeBooking({
+      status: 'DELIVERING',
+      items: [makeJobItem({ id: 'a', deliveryStatus: 'DELIVERED', deliveredAt: new Date(2026, 9, 26), podImage: 'pod-a' })],
+    })
+    store.bookings.push(b)
+    const picked = new Date(2026, 9, 26, 18, 0)
+
+    store.finishDriverJob(b.id, undefined, picked)
+    expect(b.status).toBe('DELIVERED')
+    expect(b.completedAt).toEqual(picked)
+  })
+})

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { rangeFor, inRange } from './dateRanges'
+import { rangeFor, inRange, toDateInputValue, fromDateInputValue } from './dateRanges'
 
 // พุธ 14 ต.ค. 2026
 const now = new Date(2026, 9, 14, 15, 30)
@@ -45,5 +45,25 @@ describe('inRange', () => {
     const from = new Date(2026, 8, 1)
     expect(inRange({ completedAt: new Date(2026, 9, 1) }, { from, to: null })).toBe(true)
     expect(inRange({ completedAt: new Date(2026, 7, 31) }, { from, to: null })).toBe(false)
+  })
+})
+
+describe('toDateInputValue / fromDateInputValue', () => {
+  it('แปลงเป็น YYYY-MM-DD ตามเวลาท้องถิ่น', () => {
+    expect(toDateInputValue(new Date(2026, 9, 14, 23, 59))).toBe('2026-10-14')
+  })
+
+  it('เลือกวันนี้ = เวลาปัจจุบันตรงๆ', () => {
+    expect(fromDateInputValue('2026-10-14', now)).toBe(now)
+  })
+
+  it('เลือกวันย้อนหลัง = วันนั้น เวลาเดียวกับตอนนี้', () => {
+    expect(fromDateInputValue('2026-10-12', now)).toEqual(new Date(2026, 9, 12, 15, 30, 0))
+  })
+
+  it('วันในอนาคต / รูปแบบผิด / วันไม่มีจริง = null', () => {
+    expect(fromDateInputValue('2026-10-15', now)).toBeNull()
+    expect(fromDateInputValue('', now)).toBeNull()
+    expect(fromDateInputValue('2026-02-30', now)).toBeNull()
   })
 })

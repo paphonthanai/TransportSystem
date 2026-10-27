@@ -30,6 +30,27 @@ export function rangeFor(kind: string, now: Date): DateRange {
   return { from: null, to: null }
 }
 
+/** ค่าสำหรับ <input type="date"> (YYYY-MM-DD ตามเวลาท้องถิ่น — ไม่ใช้ toISOString เพราะจะเลื่อนวันตอนใกล้เที่ยงคืน) */
+export function toDateInputValue(d: Date | string | undefined): string {
+  const date = d ? new Date(d) : new Date()
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/**
+ * แปลงวันที่ที่ผู้ใช้เลือก (YYYY-MM-DD) เป็นเวลาที่จะบันทึก — วันเดียวกับ now = now ตรงๆ, วันย้อนหลัง = วันนั้นแต่เวลาเดียวกับ
+ * now (ให้เรียงลำดับในวันนั้นได้ปกติ) คืน null เมื่อรูปแบบผิดหรือเป็นวันในอนาคต (ห้ามลงวันที่ส่งของล่วงหน้า)
+ */
+export function fromDateInputValue(value: string, now: Date): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!m) return null
+  const picked = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), now.getHours(), now.getMinutes(), now.getSeconds())
+  if (picked.getFullYear() !== Number(m[1]) || picked.getMonth() !== Number(m[2]) - 1 || picked.getDate() !== Number(m[3])) return null
+  if (startOfDay(picked).getTime() > startOfDay(now).getTime()) return null
+  return toDateInputValue(picked) === toDateInputValue(now) ? now : picked
+}
+
 /** งานอยู่ในช่วงไหม ตามวันที่ส่งของเสร็จ — ช่วงไม่จำกัด = ผ่านทุกงาน, มีช่วงแต่ไม่มีวันที่เสร็จ = ไม่ผ่าน */
 export function inRange(b: { completedAt?: Date | string }, r: DateRange): boolean {
   if (!r.from && !r.to) return true
