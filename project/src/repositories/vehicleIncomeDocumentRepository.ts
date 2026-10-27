@@ -14,7 +14,7 @@ function sanitize(data: Record<string, unknown>): Record<string, unknown> {
 }
 
 function revive(raw: any): VehicleIncomeDocument {
-  return { ...raw, createdAt: new Date(raw.createdAt) }
+  return { ...raw, createdAt: new Date(raw.createdAt), paidDate: raw.paidDate ? new Date(raw.paidDate) : undefined }
 }
 
 export const vehicleIncomeDocumentRepository = {

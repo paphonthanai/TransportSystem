@@ -225,3 +225,46 @@ describe('รายการหักก่อนออกเอกสาร + �
     expect(a.vehicleIncomeDocId).toBe(doc.id)
   })
 })
+
+describe('สถานะจ่ายเอกสารรายได้รถร่วม (แบบเดียวกับคนขับ)', () => {
+  it('เอกสารใหม่ = รอจ่าย → บันทึกจ่าย → จ่ายแล้วยกเลิก/เอางานออกไม่ได้ → รีเซ็ตเป็นรอจ่ายแล้วยกเลิกได้', async () => {
+    loginAs('ACCOUNTING')
+    const { docs, bookings } = await setup()
+    const a = jobOf()
+    const b = jobOf()
+    bookings.bookings.push(a, b)
+    const doc = (await docs.createVehicleIncomeDocument('veh-1', [a.id, b.id], '2026-10')).doc!
+    expect(doc.paymentStatus).toBe('UNPAID')
+
+    const paidDate = new Date(2026, 9, 20)
+    expect((await docs.recordPayment(doc.id, paidDate)).ok).toBe(true)
+    expect(doc.paymentStatus).toBe('PAID')
+    expect(doc.paidDate).toEqual(paidDate)
+    expect((await docs.recordPayment(doc.id)).ok).toBe(false)
+    expect((await docs.cancelVehicleIncomeDocument(doc.id)).ok).toBe(false)
+    expect((await docs.removeBookingFromDocument(a.id)).ok).toBe(false)
+    expect(a.vehicleIncomeDocId).toBe(doc.id)
+
+    expect((await docs.updatePaidDate(doc.id, new Date(2026, 9, 21))).ok).toBe(true)
+    expect((await docs.resetPayment(doc.id)).ok).toBe(true)
+    expect(doc.paymentStatus).toBe('UNPAID')
+    expect(doc.paidDate).toBeUndefined()
+    expect((await docs.cancelVehicleIncomeDocument(doc.id)).ok).toBe(true)
+    expect(a.vehicleIncomeDocId).toBeUndefined()
+    expect(bookings.logs.some((l) => l.action.startsWith('บันทึกจ่ายเงินเอกสาร'))).toBe(true)
+  })
+
+  it('ห้ามวันที่จ่ายล่วงหน้า / เอกสารเก่าที่ไม่มีสถานะ = รอจ่าย / DISPATCHER บันทึกจ่ายไม่ได้', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings } = await setup()
+    const a = jobOf()
+    bookings.bookings.push(a)
+    const doc = (await docs.createVehicleIncomeDocument('veh-1', [a.id], '2026-10')).doc!
+    expect((await docs.recordPayment(doc.id, new Date(Date.now() + 86400000 * 2))).ok).toBe(false)
+    delete doc.paymentStatus
+    loginAs('DISPATCHER')
+    expect((await docs.recordPayment(doc.id)).ok).toBe(false)
+    loginAs('ADMIN')
+    expect((await docs.recordPayment(doc.id)).ok).toBe(true)
+  })
+})

@@ -75,7 +75,10 @@
             </td>
             <td class="px-4 py-3 text-right font-bold text-text">{{ formatBaht(row.net) }}</td>
             <td class="px-4 py-3 text-right">
-              <RouterLink :to="`/payroll/vendor-fleet/${row.vehicle.id}`" class="btn-sm">รายละเอียด</RouterLink>
+              <RouterLink :to="{ path: `/payroll/vendor-fleet/${row.vehicle.id}`, query: { period } }" class="btn-sm" title="เลือกงาน/สร้างเอกสารรายได้">
+                <span class="material-symbols-rounded text-sm">receipt_long</span>
+                เลือกงาน/สร้างเอกสาร
+              </RouterLink>
             </td>
           </tr>
           <tr v-if="vehicleRows.length === 0">

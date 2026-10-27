@@ -217,6 +217,7 @@
               <th class="px-3 py-2 font-semibold">รอบ</th>
               <th class="px-3 py-2 font-semibold text-right">จำนวนงาน</th>
               <th class="px-3 py-2 font-semibold text-right">ยอดสุทธิ</th>
+              <th class="px-3 py-2 font-semibold">สถานะจ่าย</th>
               <th class="px-3 py-2 font-semibold"></th>
             </tr>
           </thead>
@@ -226,15 +227,31 @@
               <td class="px-3 py-2 text-muted">{{ doc.period }}</td>
               <td class="px-3 py-2 text-right text-text">{{ doc.bookingIds.length }}</td>
               <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(doc.netTotal) }}</td>
+              <td class="px-3 py-2">
+                <span :class="['text-xs font-semibold px-2 py-1 rounded-full', paymentStatusOf(doc) === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700']">
+                  {{ paymentStatusOf(doc) === 'PAID' ? `จ่ายแล้ว${doc.paidDate ? ` (${formatDate(doc.paidDate)})` : ''}` : 'รอจ่าย' }}
+                </span>
+              </td>
               <td class="px-3 py-2 text-right whitespace-nowrap space-x-3">
-                <button v-if="vehicleIncomeDocumentsStore.canManage()" @click="cancelDoc(doc.id, doc.number)" class="inline-flex items-center gap-0.5 text-xs text-red-600 hover:underline">
-                  <span class="material-symbols-rounded text-sm">cancel</span>ยกเลิกเอกสาร
-                </button>
+                <template v-if="vehicleIncomeDocumentsStore.canManage()">
+                  <template v-if="paymentStatusOf(doc) === 'UNPAID'">
+                    <button @click="markDocPaid(doc.id)" class="edit-link">
+                      <span class="material-symbols-rounded text-sm">payments</span>บันทึกจ่ายแล้ว
+                    </button>
+                    <button @click="cancelDoc(doc.id, doc.number)" class="inline-flex items-center gap-0.5 text-xs text-red-600 hover:underline">
+                      <span class="material-symbols-rounded text-sm">cancel</span>ยกเลิกเอกสาร
+                    </button>
+                  </template>
+                  <button v-else @click="resetDocPayment(doc.id, doc.number)" class="edit-link">
+                    <span class="material-symbols-rounded text-sm">undo</span>รีเซ็ตเป็นรอจ่าย
+                  </button>
+                </template>
+                <span v-else class="text-[11px] text-muted">(จัดการเอกสารได้เฉพาะผู้ดูแลระบบ/ฝ่ายบัญชี)</span>
                 <RouterLink :to="`/payroll/vendor-fleet/documents/${doc.id}`" class="text-primary hover:underline text-xs">ดู/พิมพ์</RouterLink>
               </td>
             </tr>
             <tr v-if="issuedDocuments.length === 0">
-              <td colspan="5" class="px-3 py-8 text-center text-muted">ยังไม่เคยออกเอกสารรายได้ให้รถคันนี้</td>
+              <td colspan="6" class="px-3 py-8 text-center text-muted">ยังไม่เคยออกเอกสารรายได้ให้รถคันนี้</td>
             </tr>
           </tbody>
         </table>
@@ -250,7 +267,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
@@ -261,6 +278,7 @@ import {
   useVehicleIncomeDocumentsStore,
   vendorFuelCostOf,
   vendorVehicleExpenseOf,
+  paymentStatusOf,
   type VehicleIncomeDeductionOption,
 } from '@/stores/vehicleIncomeDocuments'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
@@ -269,6 +287,7 @@ import VehicleExpensePanel from '@/components/vehicle/VehicleExpensePanel.vue'
 import type { Booking } from '@/types'
 
 const props = defineProps<{ vehicleId: string }>()
+const route = useRoute()
 const router = useRouter()
 const vehiclesStore = useVehiclesStore()
 const driversStore = useDriversStore()
@@ -299,7 +318,8 @@ function inPeriod(date: Date | undefined, monthValue: string): boolean {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthValue
 }
 
-const period = ref(currentMonthValue())
+/** รอบเดือนเริ่มต้นมาจาก query ?period=YYYY-MM ถ้ามี (เข้ามาจากหน้า /payroll/vendor-fleet ที่เลือกรอบไว้แล้ว) เหมือนหน้าคนขับ */
+const period = ref(typeof route.query.period === 'string' ? route.query.period : currentMonthValue())
 const periodLabel = computed(() => toBEPeriodLabel(period.value))
 
 /**
@@ -444,6 +464,19 @@ const resetIssued = async (booking: Booking) => {
   actionError.value = ''
   const result = await vehicleIncomeDocumentsStore.removeBookingFromDocument(booking.id)
   if (!result.ok) actionError.value = result.message || 'รีเซ็ตไม่สำเร็จ'
+}
+const runDocAction = async (action: () => Promise<{ ok: boolean; message?: string }>) => {
+  actionError.value = ''
+  const result = await action()
+  if (!result.ok) actionError.value = result.message || 'ดำเนินการไม่สำเร็จ'
+}
+const markDocPaid = (docId: string) => {
+  if (!confirm('ยืนยันบันทึกว่าจ่ายเงินเอกสารนี้แล้ว (วันที่จ่าย = วันนี้ แก้ได้ที่หน้าเอกสาร)?')) return
+  runDocAction(() => vehicleIncomeDocumentsStore.recordPayment(docId))
+}
+const resetDocPayment = (docId: string, number: string) => {
+  if (!confirm(`ยืนยันรีเซ็ตเอกสาร ${number} จาก "จ่ายแล้ว" กลับเป็น "รอจ่าย"?`)) return
+  runDocAction(() => vehicleIncomeDocumentsStore.resetPayment(docId))
 }
 const releaseOrphan = (booking: Booking) => {
   if (!confirm(`งาน ${booking.docNo} ติดป้าย "ออกเอกสารแล้ว" แต่ไม่พบเอกสารในระบบ — ยืนยันปลดล็อกให้เลือกออกเอกสารใหม่ได้?`)) return

@@ -127,6 +127,31 @@
             <span class="text-xl font-bold bg-yellow-100 px-3 py-1 rounded">{{ formatBaht(doc.netTotal) }}</span>
           </div>
         </div>
+        <div class="flex flex-col items-end gap-1 -mt-4 mb-6">
+          <div class="flex items-center gap-2">
+            <span class="text-xs" :class="paymentStatus === 'PAID' ? 'text-green-700 font-semibold' : 'text-amber-700 font-semibold'">
+              สถานะจ่ายเงิน: {{ paymentStatus === 'PAID' ? `จ่ายแล้ว (${formatDate(doc.paidDate)})` : 'รอจ่าย' }}
+            </span>
+            <template v-if="!paymentEditing">
+              <button v-if="canManage" @click="startPaymentEdit" class="no-print inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="แก้สถานะจ่ายเงิน">
+                <span class="material-symbols-rounded text-sm">edit</span>แก้
+              </button>
+              <span v-else class="no-print text-xs text-gray-400">(เฉพาะผู้ดูแลระบบ/ฝ่ายบัญชี)</span>
+            </template>
+          </div>
+          <div v-if="paymentEditing" class="no-print flex items-center gap-2 flex-wrap justify-end text-xs">
+            <span>วันที่จ่าย</span>
+            <input v-model="paidDateDraft" type="date" :max="todayValue" class="h-8 px-2 border border-gray-300 rounded-lg" />
+            <button @click="savePayment" :disabled="saving || !paidDateDraft" class="h-8 px-3 rounded-lg bg-primary text-white font-semibold disabled:opacity-40">
+              {{ paymentStatus === 'PAID' ? 'บันทึกวันที่จ่าย' : 'บันทึกจ่ายแล้ว' }}
+            </button>
+            <button v-if="paymentStatus === 'PAID'" @click="resetPayment" :disabled="saving" class="h-8 px-3 rounded-lg border border-gray-300 text-red-600">
+              รีเซ็ตเป็นรอจ่าย
+            </button>
+            <button @click="paymentEditing = false" class="h-8 px-3 rounded-lg border border-gray-300">ยกเลิก</button>
+          </div>
+          <div v-if="paymentError" class="no-print text-xs text-red-600">{{ paymentError }}</div>
+        </div>
 
         <div class="text-[11px] text-gray-500 mb-6">
           หมายเหตุ: ยอดทั้งหมดในเอกสารนี้เป็น Snapshot ณ ตอนสร้างเอกสาร ไม่เปลี่ยนตามภายหลังแม้จะมีการแก้ไขค่าใช้จ่ายประจำรถเพิ่มเติม —
@@ -167,11 +192,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
-import { useVehicleIncomeDocumentsStore } from '@/stores/vehicleIncomeDocuments'
+import { paymentStatusOf, useVehicleIncomeDocumentsStore } from '@/stores/vehicleIncomeDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useAuthStore } from '@/stores/auth'
 import { bahtText } from '@/utils/companyInfo'
@@ -234,6 +259,46 @@ const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('t
 const formatDateTime = (date: Date) => new Date(date).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
 
 const printDoc = () => window.print()
+
+/** inline "แก้" สถานะจ่าย — เหมือนหน้าเอกสารรายได้คนขับ (DriverIncomeDocumentView.vue) store เช็คสิทธิ์ + เขียน log */
+const paymentStatus = computed(() => (doc.value ? paymentStatusOf(doc.value) : 'UNPAID'))
+const canManage = computed(() => vehicleIncomeDocumentsStore.canManage())
+const toDateValue = (date: Date) => {
+  const d = new Date(date)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+const todayValue = toDateValue(new Date())
+const paymentEditing = ref(false)
+const paidDateDraft = ref('')
+const saving = ref(false)
+const paymentError = ref('')
+const startPaymentEdit = () => {
+  paidDateDraft.value = doc.value?.paidDate ? toDateValue(doc.value.paidDate) : todayValue
+  paymentError.value = ''
+  paymentEditing.value = true
+}
+const runPayment = async (action: () => Promise<{ ok: boolean; message?: string }>) => {
+  saving.value = true
+  const result = await action()
+  saving.value = false
+  if (!result.ok) {
+    paymentError.value = result.message || 'บันทึกไม่สำเร็จ'
+    return
+  }
+  paymentEditing.value = false
+}
+const savePayment = () => {
+  if (!doc.value || !paidDateDraft.value) return
+  const [y, m, d] = paidDateDraft.value.split('-').map(Number)
+  const paidDate = new Date(y, m - 1, d)
+  const id = doc.value.id
+  runPayment(() => (paymentStatus.value === 'PAID' ? vehicleIncomeDocumentsStore.updatePaidDate(id, paidDate) : vehicleIncomeDocumentsStore.recordPayment(id, paidDate)))
+}
+const resetPayment = () => {
+  if (!doc.value || !confirm(`ยืนยันรีเซ็ตเอกสาร ${doc.value.number} จาก "จ่ายแล้ว" กลับเป็น "รอจ่าย"?`)) return
+  const id = doc.value.id
+  runPayment(() => vehicleIncomeDocumentsStore.resetPayment(id))
+}
 </script>
 
 <style scoped>

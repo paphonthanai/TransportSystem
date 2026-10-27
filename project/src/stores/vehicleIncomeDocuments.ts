@@ -31,6 +31,9 @@ export interface VehicleIncomeDocument {
   /** รายการหักที่เลือกตอนออกเอกสาร (ภาษี ณ ที่จ่าย/ค่าดำเนินการ/อื่นๆ) คิด % จากรายได้จากงาน (tripIncomeTotal) — เอกสารเก่าไม่มี */
   deductions?: VehicleIncomeDeduction[]
   deductionTotal?: number
+  /** สถานะจ่ายของเอกสาร (แบบเดียวกับเอกสารรายได้คนขับ) — เอกสารเก่าก่อนมี field นี้ = รอจ่าย ดู paymentStatusOf */
+  paymentStatus?: 'UNPAID' | 'PAID'
+  paidDate?: Date
   createdAt: Date
 }
 
@@ -58,6 +61,8 @@ export interface VehicleIncomeLine {
 }
 
 export type ActionResult = { ok: boolean; message?: string }
+
+export const paymentStatusOf = (doc: Pick<VehicleIncomeDocument, 'paymentStatus'>) => doc.paymentStatus ?? 'UNPAID'
 
 const roundMoney = (n: number) => Math.round(n * 100) / 100
 
@@ -166,6 +171,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
       bookingIds: targetBookings.map((b) => b.id),
       ...totals,
       lines,
+      paymentStatus: 'UNPAID',
       createdAt: now,
     }
     const { id, ...rest } = doc
@@ -188,6 +194,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     if (!canManage()) return { ok: false, message: 'ยกเลิกเอกสารได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
     const doc = documents.value.find((d) => d.id === id)
     if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (paymentStatusOf(doc) === 'PAID') return { ok: false, message: 'เอกสารนี้จ่ายแล้ว ต้องรีเซ็ตเป็นรอจ่ายก่อนจึงจะยกเลิกได้' }
     try {
       await vehicleIncomeDocumentRepository.delete(id)
     } catch (err: any) {
@@ -214,6 +221,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     if (!booking?.vehicleIncomeDocId) return { ok: false, message: 'งานนี้ยังไม่ได้ออกเอกสาร' }
     const doc = documents.value.find((d) => d.id === booking.vehicleIncomeDocId)
     if (!doc) return { ok: false, message: 'ไม่พบเอกสาร — ใช้ปุ่มปลดล็อกแทน' }
+    if (paymentStatusOf(doc) === 'PAID') return { ok: false, message: `เอกสาร ${doc.number} จ่ายแล้ว ต้องรีเซ็ตเป็นรอจ่ายก่อนจึงจะเอางานออกได้` }
     if (doc.bookingIds.length <= 1) return cancelVehicleIncomeDocument(doc.id)
 
     const remainingIds = doc.bookingIds.filter((id) => id !== bookingId)
@@ -234,6 +242,54 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     booking.vehicleIncomeDocId = undefined
     bookingStore.addLog(`เอางาน ${booking.docNo} ออกจากเอกสาร ${doc.number} (สุทธิ ${doc.netTotal} → ${updated.netTotal} บาท)`, { docId: id, bookingId })
     return { ok: true }
+  }
+
+  const paidDateIssue = (date: Date) => {
+    if (Number.isNaN(date.getTime())) return 'วันที่ไม่ถูกต้อง'
+    if (date.getTime() > Date.now()) return 'ห้ามเลือกวันที่จ่ายล่วงหน้า'
+    return ''
+  }
+
+  /** บันทึกเอกสารที่แก้แล้วลง Firestore ให้สำเร็จก่อน ค่อยอัปเดตในหน้าจอ + log — เหมือน update() ใน driverPayrollDocuments.ts */
+  async function update(doc: VehicleIncomeDocument, patch: Partial<VehicleIncomeDocument>, logAction: string): Promise<ActionResult> {
+    const { id, ...rest } = { ...doc, ...patch }
+    try {
+      await vehicleIncomeDocumentRepository.set(id, rest)
+    } catch (err: any) {
+      return { ok: false, message: `บันทึกไม่สำเร็จ (${err?.message || 'Firestore ปฏิเสธ'})` }
+    }
+    Object.assign(doc, patch)
+    useBookingStore().addLog(logAction, { docId: doc.id })
+    return { ok: true }
+  }
+
+  async function recordPayment(id: string, paidDate: Date = new Date()): Promise<ActionResult> {
+    if (!canManage()) return { ok: false, message: 'บันทึกจ่ายเงินได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
+    const doc = documents.value.find((d) => d.id === id)
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (paymentStatusOf(doc) === 'PAID') return { ok: false, message: 'เอกสารนี้จ่ายแล้ว' }
+    const dateIssue = paidDateIssue(paidDate)
+    if (dateIssue) return { ok: false, message: dateIssue }
+    return update(doc, { paymentStatus: 'PAID', paidDate }, `บันทึกจ่ายเงินเอกสาร ${doc.number} (${paidDate.toLocaleDateString('th-TH')})`)
+  }
+
+  async function updatePaidDate(id: string, paidDate: Date): Promise<ActionResult> {
+    if (!canManage()) return { ok: false, message: 'แก้วันที่จ่ายได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
+    const doc = documents.value.find((d) => d.id === id)
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (paymentStatusOf(doc) !== 'PAID') return { ok: false, message: 'เอกสารนี้ยังไม่จ่าย' }
+    const dateIssue = paidDateIssue(paidDate)
+    if (dateIssue) return { ok: false, message: dateIssue }
+    return update(doc, { paidDate }, `แก้วันที่จ่ายเอกสาร ${doc.number} → ${paidDate.toLocaleDateString('th-TH')}`)
+  }
+
+  /** รีเซ็ตเอกสารที่จ่ายแล้วกลับเป็นรอจ่าย (UI ต้องให้ยืนยันก่อนเรียก) งานในเอกสารยังผูกอยู่เหมือนเดิม */
+  async function resetPayment(id: string): Promise<ActionResult> {
+    if (!canManage()) return { ok: false, message: 'รีเซ็ตสถานะจ่ายได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
+    const doc = documents.value.find((d) => d.id === id)
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (paymentStatusOf(doc) !== 'PAID') return { ok: false, message: 'เอกสารนี้ยังไม่จ่าย' }
+    return update(doc, { paymentStatus: 'UNPAID', paidDate: undefined }, `รีเซ็ตเอกสาร ${doc.number} จากจ่ายแล้วเป็นรอจ่าย`)
   }
 
   /** เหตุผลที่แก้ค่าน้ำมัน/ค่าใช้จ่ายประจำรถของงานในหน้ารถร่วมไม่ได้ — ว่าง = แก้ได้ */
@@ -295,6 +351,9 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     createVehicleIncomeDocument,
     cancelVehicleIncomeDocument,
     removeBookingFromDocument,
+    recordPayment,
+    updatePaidDate,
+    resetPayment,
     vendorCostEditBlockedReason,
     updateVendorCosts,
     isOrphanedBooking,
