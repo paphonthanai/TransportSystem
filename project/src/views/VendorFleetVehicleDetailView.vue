@@ -84,10 +84,47 @@
           <h3 class="font-semibold text-text">ประวัติงาน — รอบ {{ periodLabel }}</h3>
           <div v-if="selectedIds.size > 0" class="flex items-center gap-3 text-sm">
             <span class="text-muted">เลือกแล้ว {{ selectedIds.size }} งาน • สุทธิ <span class="font-bold text-primary">{{ formatBaht(selectedNetTotal) }}</span></span>
-            <button @click="createDocument" :disabled="creating" class="btn-primary disabled:opacity-40">
+            <button v-if="!deductionPanelOpen" @click="openDeductionPanel" class="btn-primary">
               <span class="material-symbols-rounded text-base">receipt_long</span>
               สร้างเอกสาร
             </button>
+          </div>
+        </div>
+        <!-- เลือกรายการหักก่อนออกเอกสาร — คิด % จากรายได้จากงาน (ยอดจริง) ของงานที่เลือก -->
+        <div v-if="deductionPanelOpen && selectedIds.size > 0" class="mb-3 rounded-lg border border-primary/40 bg-surface-2 p-4 space-y-3 text-sm">
+          <div class="font-semibold text-text">รายการหัก (คิดจากรายได้จากงาน {{ formatBaht(selectedTripTotal) }})</div>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="deductWht" class="w-4 h-4" />
+            <span class="flex-1">หักภาษี ณ ที่จ่าย 1%</span>
+            <span v-if="deductWht" class="tabular-nums text-red-600">-{{ formatBaht(previewAmount(DEFAULT_DEDUCTION_PERCENT.WHT)) }}</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="deductService" class="w-4 h-4" />
+            <span class="flex-1">หักค่าดำเนินการ 10%</span>
+            <span v-if="deductService" class="tabular-nums text-red-600">-{{ formatBaht(previewAmount(DEFAULT_DEDUCTION_PERCENT.SERVICE)) }}</span>
+          </label>
+          <div class="flex items-center gap-2 flex-wrap">
+            <input type="checkbox" v-model="deductOther" class="w-4 h-4" />
+            <span>หักอื่นๆ</span>
+            <template v-if="deductOther">
+              <input v-model="otherLabel" type="text" placeholder="ระบุรายการ" class="input-field !h-8 w-48" />
+              <input v-model.number="otherPercent" type="number" min="0" max="100" step="0.01" class="input-field !h-8 w-24 text-right" />
+              <span>%</span>
+              <span class="flex-1 text-right tabular-nums text-red-600">-{{ formatBaht(previewAmount(otherPercent || 0)) }}</span>
+            </template>
+          </div>
+          <div class="flex items-center justify-between border-t border-border pt-3 flex-wrap gap-2">
+            <span class="text-muted">
+              หักรวม <span class="font-semibold text-red-600">{{ formatBaht(previewDeductionTotal) }}</span> • สุทธิ
+              <span class="font-bold text-primary">{{ formatBaht(selectedNetTotal - previewDeductionTotal) }}</span>
+            </span>
+            <div class="flex gap-2">
+              <button @click="deductionPanelOpen = false" class="btn-xs-ghost">ยกเลิก</button>
+              <button @click="createDocument" :disabled="creating" class="btn-primary disabled:opacity-40">
+                <span class="material-symbols-rounded text-base">receipt_long</span>
+                ยืนยันออกเอกสาร
+              </button>
+            </div>
           </div>
         </div>
         <table class="min-w-[1080px] w-full text-sm border-separate border-spacing-0">
@@ -152,7 +189,12 @@
                     <span class="material-symbols-rounded text-sm">lock_open</span>ปลดล็อก
                   </button>
                 </template>
-                <span v-else-if="row.booking.vehicleIncomeDocId" class="text-xs font-semibold px-2 py-1 rounded-full bg-orange-100 text-orange-700">ออกเอกสารแล้ว</span>
+                <template v-else-if="row.booking.vehicleIncomeDocId">
+                  <span class="text-xs font-semibold px-2 py-1 rounded-full bg-orange-100 text-orange-700">ออกเอกสารแล้ว</span>
+                  <button v-if="vehicleIncomeDocumentsStore.canManage()" @click="resetIssued(row.booking)" class="edit-link ml-1" title="เอางานนี้ออกจากเอกสาร ให้แก้ยอด/ออกเอกสารใหม่ได้">
+                    <span class="material-symbols-rounded text-sm">restart_alt</span>รีเซ็ต
+                  </button>
+                </template>
                 <span v-else class="text-xs text-muted">-</span>
               </td>
               <td class="px-3 py-2 text-right">
@@ -213,7 +255,14 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
 import { isMultiPricing, useBookingStore } from '@/stores/booking'
-import { useVehicleIncomeDocumentsStore, vendorFuelCostOf, vendorVehicleExpenseOf } from '@/stores/vehicleIncomeDocuments'
+import {
+  DEFAULT_DEDUCTION_PERCENT,
+  computeDeductions,
+  useVehicleIncomeDocumentsStore,
+  vendorFuelCostOf,
+  vendorVehicleExpenseOf,
+  type VehicleIncomeDeductionOption,
+} from '@/stores/vehicleIncomeDocuments'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import { fuelCostOf } from '@/utils/bookingMoney'
 import VehicleExpensePanel from '@/components/vehicle/VehicleExpensePanel.vue'
@@ -339,6 +388,27 @@ const selectedNetTotal = computed(() =>
   rows.value.filter((r) => selectedIds.value.has(r.booking.id)).reduce((sum, r) => sum + (r.booking.tripFee || 0) - r.fuelCost - r.vehicleExpense, 0)
 )
 
+const selectedTripTotal = computed(() => rows.value.filter((r) => selectedIds.value.has(r.booking.id)).reduce((sum, r) => sum + (r.booking.tripFee || 0), 0))
+
+// รายการหักที่เลือกก่อนออกเอกสาร (ไม่ติ๊กอะไร = ไม่หัก เหมือนเดิม)
+const deductionPanelOpen = ref(false)
+const deductWht = ref(false)
+const deductService = ref(false)
+const deductOther = ref(false)
+const otherLabel = ref('')
+const otherPercent = ref<number>(0)
+const openDeductionPanel = () => {
+  actionError.value = ''
+  deductionPanelOpen.value = true
+}
+const deductionOptions = computed<VehicleIncomeDeductionOption[]>(() => [
+  ...(deductWht.value ? [{ kind: 'WHT' as const, percent: DEFAULT_DEDUCTION_PERCENT.WHT }] : []),
+  ...(deductService.value ? [{ kind: 'SERVICE' as const, percent: DEFAULT_DEDUCTION_PERCENT.SERVICE }] : []),
+  ...(deductOther.value ? [{ kind: 'OTHER' as const, percent: Number(otherPercent.value), label: otherLabel.value }] : []),
+])
+const previewAmount = (percent: number) => computeDeductions(selectedTripTotal.value, [{ kind: 'WHT', percent }])[0].amount
+const previewDeductionTotal = computed(() => computeDeductions(selectedTripTotal.value, deductionOptions.value).reduce((sum, d) => sum + d.amount, 0))
+
 const creating = ref(false)
 const createDocument = async () => {
   if (!vehicle.value || selectedIds.value.size === 0 || creating.value) return
@@ -346,13 +416,14 @@ const createDocument = async () => {
   if (missing.length && !confirm(`มี ${missing.length} งานที่ยังไม่กรอกค่าน้ำมัน (จะนับเป็น 0) — ยืนยันสร้างเอกสาร?`)) return
   actionError.value = ''
   creating.value = true
-  const result = await vehicleIncomeDocumentsStore.createVehicleIncomeDocument(vehicle.value.id, [...selectedIds.value], period.value)
+  const result = await vehicleIncomeDocumentsStore.createVehicleIncomeDocument(vehicle.value.id, [...selectedIds.value], period.value, deductionOptions.value)
   creating.value = false
   if (!result.ok || !result.doc) {
     actionError.value = `สร้างเอกสารไม่สำเร็จ — ${result.message || 'กรุณารีเฟรชหน้านี้แล้วลองใหม่'}`
     return
   }
   selectedIds.value = new Set()
+  deductionPanelOpen.value = false
   router.push(`/payroll/vendor-fleet/documents/${result.doc.id}`)
 }
 
@@ -362,6 +433,17 @@ const cancelDoc = async (docId: string, number: string) => {
   actionError.value = ''
   const result = await vehicleIncomeDocumentsStore.cancelVehicleIncomeDocument(docId)
   if (!result.ok) actionError.value = result.message || 'ยกเลิกเอกสารไม่สำเร็จ'
+}
+const resetIssued = async (booking: Booking) => {
+  const doc = vehicleIncomeDocumentsStore.documents.find((d) => d.id === booking.vehicleIncomeDocId)
+  const lastJob = (doc?.bookingIds.length ?? 0) <= 1
+  const msg = lastJob
+    ? `งาน ${booking.docNo} เป็นงานสุดท้ายในเอกสาร ${doc?.number ?? ''} — รีเซ็ตแล้วเอกสารจะถูกยกเลิกทั้งใบ ยืนยัน?`
+    : `ยืนยันเอางาน ${booking.docNo} ออกจากเอกสาร ${doc?.number ?? ''}? ยอดในเอกสารจะคำนวณใหม่จากงานที่เหลือ และงานนี้จะกลับมาแก้ยอด/ออกเอกสารใหม่ได้`
+  if (!confirm(msg)) return
+  actionError.value = ''
+  const result = await vehicleIncomeDocumentsStore.removeBookingFromDocument(booking.id)
+  if (!result.ok) actionError.value = result.message || 'รีเซ็ตไม่สำเร็จ'
 }
 const releaseOrphan = (booking: Booking) => {
   if (!confirm(`งาน ${booking.docNo} ติดป้าย "ออกเอกสารแล้ว" แต่ไม่พบเอกสารในระบบ — ยืนยันปลดล็อกให้เลือกออกเอกสารใหม่ได้?`)) return

@@ -85,6 +85,16 @@
               <span>รายได้จากงาน</span>
               <span class="text-right tabular-nums">{{ formatBaht(doc.tripIncomeTotal) }}</span>
             </div>
+            <template v-if="doc.deductions?.length">
+              <div v-for="d in doc.deductions" :key="d.kind + d.label" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+                <span>{{ d.label }} {{ d.percent }}%</span>
+                <span class="text-right tabular-nums text-red-600">-{{ formatBaht(d.amount) }}</span>
+              </div>
+              <div class="grid grid-cols-[1fr_auto] gap-x-2 font-bold border-t border-gray-300 mt-1 pt-1">
+                <span>รายได้หลังหัก</span>
+                <span class="text-right tabular-nums">{{ formatBaht(doc.tripIncomeTotal - (doc.deductionTotal ?? 0)) }}</span>
+              </div>
+            </template>
           </div>
           <div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 font-bold text-primary border-b border-gray-300 pb-1 mb-1">

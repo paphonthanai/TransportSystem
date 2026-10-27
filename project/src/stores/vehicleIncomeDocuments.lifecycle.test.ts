@@ -147,3 +147,81 @@ describe('สิทธิ์แต่ละ role — เอกสารราย
     expect(a.vehicleIncomeDocId).toBeUndefined()
   })
 })
+
+describe('รายการหักก่อนออกเอกสาร + รีเซ็ตงานที่ออกเอกสารแล้ว', () => {
+  it('หักภาษี 1% / ค่าดำเนินการ 10% / อื่นๆ ระบุ % คิดจากรายได้จากงาน แล้วหักออกจากยอดสุทธิ', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings } = await setup()
+    const a = jobOf()
+    const b = jobOf({ tripFee: 2000 })
+    bookings.bookings.push(a, b)
+    docs.updateVendorCosts(a.id, { fuelCost: 1000 })
+
+    const result = await docs.createVehicleIncomeDocument('veh-1', [a.id, b.id], '2026-10', [
+      { kind: 'WHT', percent: 1 },
+      { kind: 'SERVICE', percent: 10 },
+      { kind: 'OTHER', percent: 2.5, label: 'ค่าประกันสินค้า' },
+    ])
+
+    expect(result.ok).toBe(true)
+    const doc = result.doc!
+    expect(doc.deductions).toEqual([
+      { kind: 'WHT', label: 'หักภาษี ณ ที่จ่าย', percent: 1, amount: 50 },
+      { kind: 'SERVICE', label: 'หักค่าดำเนินการ', percent: 10, amount: 500 },
+      { kind: 'OTHER', label: 'ค่าประกันสินค้า', percent: 2.5, amount: 125 },
+    ])
+    expect(doc.deductionTotal).toBe(675)
+    expect(doc.netTotal).toBe(5000 - 675 - 1000)
+  })
+
+  it('ไม่ติ๊กรายการหัก = ไม่หัก / % ไม่ถูกต้องหรือหักอื่นๆ ไม่ระบุชื่อ = ไม่สร้างเอกสาร', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings } = await setup()
+    const a = jobOf()
+    bookings.bookings.push(a)
+    expect((await docs.createVehicleIncomeDocument('veh-1', [a.id], '2026-10', [{ kind: 'OTHER', percent: 0, label: 'x' }])).ok).toBe(false)
+    expect((await docs.createVehicleIncomeDocument('veh-1', [a.id], '2026-10', [{ kind: 'OTHER', percent: 101, label: 'x' }])).ok).toBe(false)
+    expect((await docs.createVehicleIncomeDocument('veh-1', [a.id], '2026-10', [{ kind: 'OTHER', percent: 5, label: ' ' }])).ok).toBe(false)
+    expect(a.vehicleIncomeDocId).toBeUndefined()
+    const doc = (await docs.createVehicleIncomeDocument('veh-1', [a.id], '2026-10')).doc!
+    expect(doc.deductionTotal).toBe(0)
+    expect(doc.netTotal).toBe(3000)
+  })
+
+  it('รีเซ็ตงานเดียว = เอาออกจากเอกสาร คิดยอด/รายการหักใหม่จากงานที่เหลือ, รีเซ็ตงานสุดท้าย = ยกเลิกเอกสาร', async () => {
+    loginAs('ACCOUNTING')
+    const { docs, bookings } = await setup()
+    const a = jobOf()
+    const b = jobOf({ tripFee: 2000 })
+    bookings.bookings.push(a, b)
+    const doc = (await docs.createVehicleIncomeDocument('veh-1', [a.id, b.id], '2026-10', [{ kind: 'SERVICE', percent: 10 }])).doc!
+
+    expect((await docs.removeBookingFromDocument(a.id)).ok).toBe(true)
+    expect(a.vehicleIncomeDocId).toBeUndefined()
+    const updated = docs.documents.find((d) => d.id === doc.id)!
+    expect(updated.bookingIds).toEqual([b.id])
+    expect(updated.tripIncomeTotal).toBe(2000)
+    expect(updated.deductions?.[0].amount).toBe(200)
+    expect(updated.netTotal).toBe(1800)
+    expect(docs.vendorCostEditBlockedReason(a)).toBe('')
+
+    expect((await docs.removeBookingFromDocument(b.id)).ok).toBe(true)
+    expect(b.vehicleIncomeDocId).toBeUndefined()
+    expect(docs.documents.some((d) => d.id === doc.id)).toBe(false)
+  })
+
+  it('บันทึกเอกสารไม่สำเร็จ = งานยังผูกเอกสารอยู่ / DISPATCHER รีเซ็ตไม่ได้', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings } = await setup()
+    const a = jobOf()
+    const b = jobOf()
+    bookings.bookings.push(a, b)
+    const doc = (await docs.createVehicleIncomeDocument('veh-1', [a.id, b.id], '2026-10')).doc!
+    vi.spyOn(vehicleIncomeDocumentRepository, 'set').mockRejectedValueOnce(new Error('denied'))
+    expect((await docs.removeBookingFromDocument(a.id)).ok).toBe(false)
+    expect(a.vehicleIncomeDocId).toBe(doc.id)
+    loginAs('DISPATCHER')
+    expect((await docs.removeBookingFromDocument(a.id)).ok).toBe(false)
+    expect(a.vehicleIncomeDocId).toBe(doc.id)
+  })
+})

@@ -28,8 +28,27 @@ export interface VehicleIncomeDocument {
   netTotal: number
   /** Snapshot ยอดต่องาน ณ ตอนสร้าง — เอกสารเก่าก่อนมี field นี้ (ค่าน้ำมันคำนวณลิตร × เรท, ค่าใช้จ่ายประจำรถเป็นยอดสะสม) ไม่มี */
   lines?: VehicleIncomeLine[]
+  /** รายการหักที่เลือกตอนออกเอกสาร (ภาษี ณ ที่จ่าย/ค่าดำเนินการ/อื่นๆ) คิด % จากรายได้จากงาน (tripIncomeTotal) — เอกสารเก่าไม่มี */
+  deductions?: VehicleIncomeDeduction[]
+  deductionTotal?: number
   createdAt: Date
 }
+
+export type VehicleIncomeDeductionKind = 'WHT' | 'SERVICE' | 'OTHER'
+
+export interface VehicleIncomeDeduction {
+  kind: VehicleIncomeDeductionKind
+  label: string
+  percent: number
+  amount: number
+}
+
+/** ตัวเลือกการหักที่ผู้ใช้ติ๊กก่อนออกเอกสาร — label ใช้เฉพาะ OTHER (ที่เหลือใช้ชื่อมาตรฐาน) */
+export type VehicleIncomeDeductionOption = { kind: VehicleIncomeDeductionKind; percent: number; label?: string }
+
+export const DEFAULT_DEDUCTION_PERCENT: Record<Exclude<VehicleIncomeDeductionKind, 'OTHER'>, number> = { WHT: 1, SERVICE: 10 }
+const deductionLabelOf = (o: VehicleIncomeDeductionOption) =>
+  o.kind === 'WHT' ? 'หักภาษี ณ ที่จ่าย' : o.kind === 'SERVICE' ? 'หักค่าดำเนินการ' : (o.label || '').trim() || 'หักอื่นๆ'
 
 export interface VehicleIncomeLine {
   bookingId: string
@@ -41,6 +60,22 @@ export interface VehicleIncomeLine {
 export type ActionResult = { ok: boolean; message?: string }
 
 const roundMoney = (n: number) => Math.round(n * 100) / 100
+
+/** คิดยอดหักแต่ละรายการเป็น % ของรายได้จากงาน (ยอดจริงก่อนหักค่าน้ำมัน/ค่าใช้จ่าย) */
+export function computeDeductions(tripIncomeTotal: number, options: VehicleIncomeDeductionOption[]): VehicleIncomeDeduction[] {
+  return options.map((o) => ({ kind: o.kind, label: deductionLabelOf(o), percent: o.percent, amount: roundMoney((tripIncomeTotal * o.percent) / 100) }))
+}
+
+/** ยอดรวม/สุทธิของเอกสารจาก lines + ตัวเลือกการหัก — ใช้ทั้งตอนสร้างและตอนเอางานออกจากเอกสาร */
+function totalsOf(lines: VehicleIncomeLine[], options: VehicleIncomeDeductionOption[]) {
+  const tripIncomeTotal = roundMoney(lines.reduce((sum, l) => sum + l.tripFee, 0))
+  const fuelCostTotal = roundMoney(lines.reduce((sum, l) => sum + l.fuelCost, 0))
+  const vehicleExpenseTotal = roundMoney(lines.reduce((sum, l) => sum + l.vehicleExpense, 0))
+  const deductions = computeDeductions(tripIncomeTotal, options)
+  const deductionTotal = roundMoney(deductions.reduce((sum, d) => sum + d.amount, 0))
+  const netTotal = roundMoney(tripIncomeTotal - deductionTotal - fuelCostTotal - vehicleExpenseTotal)
+  return { tripIncomeTotal, fuelCostTotal, vehicleExpenseTotal, deductions, deductionTotal, netTotal }
+}
 
 /**
  * ค่าน้ำมัน/ค่าใช้จ่ายประจำรถต่องานสำหรับรายได้รถร่วม — ผู้ใช้กรอกเองในตารางหน้ารถร่วม (ปิดการคำนวณอัตโนมัติจาก
@@ -90,9 +125,17 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
    * (vehicleIncomeDocId) ค่าน้ำมัน/ค่าใช้จ่ายประจำรถรวมจากที่ผู้ใช้กรอกเองต่องาน (vendorFuelCostOf/vendorVehicleExpenseOf)
    * — บันทึกเอกสารลง Firestore สำเร็จก่อนค่อยผูกงาน กันงานค้างป้าย "ออกเอกสารแล้ว" ทั้งที่ไม่มีเอกสารจริง
    */
-  async function createVehicleIncomeDocument(vehicleId: string, bookingIds: string[], period: string): Promise<ActionResult & { doc?: VehicleIncomeDocument }> {
+  async function createVehicleIncomeDocument(
+    vehicleId: string,
+    bookingIds: string[],
+    period: string,
+    deductionOptions: VehicleIncomeDeductionOption[] = []
+  ): Promise<ActionResult & { doc?: VehicleIncomeDocument }> {
     if (!canManage()) return { ok: false, message: 'สร้างเอกสารรายได้รถร่วมได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
     if (bookingIds.length === 0) return { ok: false, message: 'ยังไม่ได้เลือกงาน' }
+    if (deductionOptions.some((o) => !Number.isFinite(o.percent) || o.percent <= 0 || o.percent > 100))
+      return { ok: false, message: 'เปอร์เซ็นต์การหักต้องมากกว่า 0 และไม่เกิน 100' }
+    if (deductionOptions.some((o) => o.kind === 'OTHER' && !(o.label || '').trim())) return { ok: false, message: 'กรุณาระบุชื่อรายการหักอื่นๆ' }
     const bookingStore = useBookingStore()
     const vehiclesStore = useVehiclesStore()
     const vehicle = vehiclesStore.vehicles.find((v) => v.id === vehicleId)
@@ -109,10 +152,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
       fuelCost: vendorFuelCostOf(b),
       vehicleExpense: vendorVehicleExpenseOf(b),
     }))
-    const tripIncomeTotal = roundMoney(lines.reduce((sum, l) => sum + l.tripFee, 0))
-    const fuelCostTotal = roundMoney(lines.reduce((sum, l) => sum + l.fuelCost, 0))
-    const vehicleExpenseTotal = roundMoney(lines.reduce((sum, l) => sum + l.vehicleExpense, 0))
-    const netTotal = roundMoney(tripIncomeTotal - fuelCostTotal - vehicleExpenseTotal)
+    const totals = totalsOf(lines, deductionOptions)
 
     const registry = useDocumentNumberRegistryStore()
     const seq = registry.nextSequence('VEHICLE_INCOME')
@@ -124,10 +164,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
       plate: full,
       period,
       bookingIds: targetBookings.map((b) => b.id),
-      tripIncomeTotal,
-      fuelCostTotal,
-      vehicleExpenseTotal,
-      netTotal,
+      ...totals,
       lines,
       createdAt: now,
     }
@@ -163,6 +200,39 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     })
     documents.value = documents.value.filter((d) => d.id !== id)
     bookingStore.addLog(`ยกเลิกเอกสาร ${doc.number} (ปลดงาน ${doc.bookingIds.length} งาน)`, { docId: id })
+    return { ok: true }
+  }
+
+  /**
+   * เอางานเดียวออกจากเอกสาร (รีเซ็ตป้าย "ออกเอกสารแล้ว" ของงานนั้น) — คิดยอดรวม/รายการหัก % ใหม่จากงานที่เหลือ บันทึกเอกสาร
+   * ลง Firestore สำเร็จก่อนค่อยปลดงาน ถ้าเป็นงานสุดท้ายในเอกสาร = ยกเลิกเอกสารทั้งใบ
+   */
+  async function removeBookingFromDocument(bookingId: string): Promise<ActionResult> {
+    if (!canManage()) return { ok: false, message: 'รีเซ็ตงานได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
+    const bookingStore = useBookingStore()
+    const booking = bookingStore.bookings.find((b) => b.id === bookingId)
+    if (!booking?.vehicleIncomeDocId) return { ok: false, message: 'งานนี้ยังไม่ได้ออกเอกสาร' }
+    const doc = documents.value.find((d) => d.id === booking.vehicleIncomeDocId)
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร — ใช้ปุ่มปลดล็อกแทน' }
+    if (doc.bookingIds.length <= 1) return cancelVehicleIncomeDocument(doc.id)
+
+    const remainingIds = doc.bookingIds.filter((id) => id !== bookingId)
+    // เอกสารเก่าไม่มี lines — สร้างจากงานจริงตอนนี้ (ยอดของงานในเอกสารเก่าถูกล็อกไว้ตั้งแต่ออกเอกสารอยู่แล้ว)
+    const lines: VehicleIncomeLine[] = (doc.lines ?? remainingIds.map((id) => {
+      const b = bookingStore.bookings.find((bk) => bk.id === id)
+      return { bookingId: id, tripFee: b?.tripFee || 0, fuelCost: b ? vendorFuelCostOf(b) : 0, vehicleExpense: b ? vendorVehicleExpenseOf(b) : 0 }
+    })).filter((l) => l.bookingId !== bookingId)
+    const options: VehicleIncomeDeductionOption[] = (doc.deductions ?? []).map((d) => ({ kind: d.kind, percent: d.percent, label: d.label }))
+    const updated: VehicleIncomeDocument = { ...doc, bookingIds: remainingIds, lines, ...totalsOf(lines, options) }
+    const { id, ...rest } = updated
+    try {
+      await vehicleIncomeDocumentRepository.set(id, rest)
+    } catch (err: any) {
+      return { ok: false, message: `บันทึกเอกสารไม่สำเร็จ (${err?.message || 'Firestore ปฏิเสธ'}) — ยังไม่ได้ปลดงาน` }
+    }
+    documents.value = documents.value.map((d) => (d.id === id ? updated : d))
+    booking.vehicleIncomeDocId = undefined
+    bookingStore.addLog(`เอางาน ${booking.docNo} ออกจากเอกสาร ${doc.number} (สุทธิ ${doc.netTotal} → ${updated.netTotal} บาท)`, { docId: id, bookingId })
     return { ok: true }
   }
 
@@ -224,6 +294,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     canManage,
     createVehicleIncomeDocument,
     cancelVehicleIncomeDocument,
+    removeBookingFromDocument,
     vendorCostEditBlockedReason,
     updateVendorCosts,
     isOrphanedBooking,
