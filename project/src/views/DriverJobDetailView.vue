@@ -52,19 +52,6 @@
             <div class="text-sm text-text">
               <span class="text-muted">ต้องรับน้ำมันทั้งหมด:</span> <span class="font-bold text-base">{{ job.fuelLiters || 0 }} ล.</span>
             </div>
-            <!-- ขั้นแรกโชว์เบอร์โทร/นำทางของทุกจุดส่งเลย ให้คนขับโทรนัดหน้างาน/ดูเส้นทางได้ก่อนออกรถ (เดิมเห็นแค่ตอนส่งของ) -->
-            <div v-for="(item, idx) in job.items" :key="item.id" class="pt-3 border-t border-border space-y-1.5">
-              <div class="text-sm text-text flex items-start justify-between gap-2">
-                <span class="font-semibold">
-                  <span v-if="job.items.length > 1" class="text-muted font-normal">{{ idx + 1 }}.</span>
-                  {{ item.siteName }}
-                  <span class="text-xs text-muted font-normal">({{ item.province }} · {{ item.district }})</span>
-                </span>
-                <span class="font-semibold whitespace-nowrap">{{ item.product }} {{ item.qty }} {{ item.unit }}</span>
-              </div>
-              <div v-if="item.siteContactName" class="text-sm text-text"><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName }}</div>
-              <SiteContactActions :item="item" />
-            </div>
           </div>
         </template>
 
@@ -160,15 +147,25 @@
               เสร็จแล้ว {{ deliveryProgress(job.items).completed }}/{{ deliveryProgress(job.items).total }} จุด
             </div>
           </div>
-          <div v-for="item in job.items" :key="item.id" class="text-sm text-text flex items-center justify-between gap-2">
-            <span class="text-muted truncate">{{ item.siteName }}</span>
-            <span class="whitespace-nowrap flex items-center gap-1">
-              {{ item.product }} {{ item.qty }} {{ item.unit }}
-              <span v-if="item.deliveryStatus === 'DELIVERED'" class="inline-flex items-center gap-0.5 text-green-700 text-xs font-semibold">
-                <span class="material-symbols-rounded text-sm">check_circle</span>
-                ส่งแล้ว
+          <!-- ทุกจุดส่งโชว์ผู้ติดต่อ + ปุ่มโทร/นำทางไว้ตลอดทุกขั้นตอน (จัดรถแล้ว → ระหว่างส่ง → ส่งเสร็จ) ให้คนขับโทรนัด/ดูเส้นทาง
+               จุดไหนก็ได้ตลอดเวลา ไม่ใช่แค่จุดถัดไป -->
+          <div v-for="(item, idx) in job.items" :key="item.id" class="bg-white border border-border rounded-xl p-3 space-y-1.5">
+            <div class="text-sm text-text flex items-start justify-between gap-2">
+              <span class="font-semibold">
+                <span v-if="job.items.length > 1" class="text-muted font-normal">{{ idx + 1 }}.</span>
+                {{ item.siteName }}
+                <span class="text-xs text-muted font-normal">({{ item.province }} · {{ item.district }})</span>
               </span>
-            </span>
+              <span class="whitespace-nowrap flex items-center gap-1">
+                {{ item.product }} {{ item.qty }} {{ item.unit }}
+                <span v-if="item.deliveryStatus === 'DELIVERED'" class="inline-flex items-center gap-0.5 text-green-700 text-xs font-semibold">
+                  <span class="material-symbols-rounded text-sm">check_circle</span>
+                  ส่งแล้ว
+                </span>
+              </span>
+            </div>
+            <div v-if="item.siteContactName" class="text-sm text-text"><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName }}</div>
+            <SiteContactActions :item="item" />
           </div>
         </div>
       </template>
@@ -265,10 +262,6 @@
           <div class="p-5 space-y-4">
             <div class="text-sm text-muted">ส่งสินค้าครบทุกรายการแล้ว กรอกเลขไมล์สิ้นสุด (ถ้ามี) แล้วกดยืนยันเพื่อจบงาน</div>
             <div>
-              <label class="block text-xs font-semibold text-muted mb-1">วันที่ส่งของสำเร็จ <span class="text-[10px] font-normal text-muted">(ค่าเริ่มต้น = วันนี้ แก้ย้อนหลังได้)</span></label>
-              <input v-model="finishDate" type="date" :max="finishToday" class="w-full h-12 px-3 rounded-lg border border-border text-base bg-white" />
-            </div>
-            <div>
               <label class="block text-xs font-semibold text-muted mb-1">เลขไมล์สิ้นสุด (กม.) <span class="text-[10px] font-normal text-muted">(ไม่บังคับ)</span></label>
               <input v-model.number="finishOdometerAfter" type="number" placeholder="0" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
             </div>
@@ -282,7 +275,7 @@
             <button @click="closeFinishJob" class="flex-1 h-12 rounded-lg border border-border text-base font-medium text-text">ยกเลิก</button>
             <button
               @click="confirmFinishJob"
-              :disabled="missingPodItems.length > 0 || !finishCompletedAt"
+              :disabled="missingPodItems.length > 0"
               class="flex-[2] h-12 rounded-lg bg-primary text-white text-base font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-xl">flag_circle</span>
@@ -307,7 +300,6 @@ import type { Booking, JobItem } from '@/types'
 import { bookingStatusLabel } from '@/utils/bookingStatus'
 import { isDriverVisibleBooking, nextPickup as nextPickupItems, nextDelivery as nextDeliveryItems } from '@/utils/driverJobs'
 import { deliveryProgress, pickupProgress } from '@/utils/deliveryProgress'
-import { toDateInputValue, fromDateInputValue } from '@/utils/dateRanges'
 import { bookingTitle } from '@/utils/bookingTitle'
 import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
 import PhotoPicker from '@/components/driver/PhotoPicker.vue'
@@ -444,16 +436,10 @@ const confirmDeliverItem = () => {
 // --- Finish driver job (DELIVERING -> DELIVERED) หลังส่งของครบทุกรายการแล้ว บันทึกเลขไมล์สิ้นสุดที่จุดนี้ ---
 const finishTarget = ref<Booking | null>(null)
 const finishOdometerAfter = ref(0)
-const finishToday = ref(toDateInputValue(new Date()))
-const finishDate = ref(finishToday.value)
-/** null = ว่าง/ผิดรูปแบบ/วันล่วงหน้า (ปุ่มยืนยันกดไม่ได้) */
-const finishCompletedAt = computed(() => fromDateInputValue(finishDate.value, new Date()))
 
 const openFinishJob = (b: Booking) => {
   finishTarget.value = b
   finishOdometerAfter.value = b.odometerAfter || 0
-  finishToday.value = toDateInputValue(new Date())
-  finishDate.value = finishToday.value
 }
 
 const closeFinishJob = () => {
@@ -465,7 +451,7 @@ const confirmFinishJob = () => {
   const bookingId = finishTarget.value.id
   /** ส่งของสำเร็จแล้ว -> เปลี่ยนสถานะเป็น DELIVERED + PENDING_REVIEW เท่านั้น ห้ามสร้างใบวางบิลจากฝั่งคนขับ
    *  ต้องรอออฟฟิศตรวจสอบ POD แล้วอนุมัติก่อน (ดู reviewPod ใน stores/booking.ts + CompletedJobsView.vue) */
-  bookingStore.finishDriverJob(bookingId, finishOdometerAfter.value || undefined, fromDateInputValue(finishDate.value, new Date()) ?? undefined)
+  bookingStore.finishDriverJob(bookingId, finishOdometerAfter.value || undefined)
   closeFinishJob()
   router.push('/driver-app')
 }

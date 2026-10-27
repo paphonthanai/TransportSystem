@@ -14,13 +14,6 @@
         <div class="px-6 py-5 space-y-3">
           <div>
             <label class="block text-xs font-semibold text-muted mb-1">
-              วันที่ส่งของสำเร็จ
-              <span class="text-[10px] font-normal text-muted">(ค่าเริ่มต้น = วันนี้ แก้ย้อนหลังได้ ห้ามเลือกวันล่วงหน้า)</span>
-            </label>
-            <input v-model="completedDate" type="date" :max="todayValue" class="input-field w-full" />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-muted mb-1">
               เลขไมล์สิ้นสุด (กม.)
               <span class="text-[10px] font-normal text-muted">(ไม่บังคับ — เมื่อรถกลับถึง ใช้คำนวณระยะทาง/อัตราสิ้นเปลืองน้ำมัน)</span>
             </label>
@@ -88,7 +81,7 @@
         </div>
         <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
           <button @click="$emit('close')" class="btn-secondary">ยกเลิก</button>
-          <button @click="confirm" :disabled="issues.length > 0 || !completedAtValue" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+          <button @click="confirm" :disabled="issues.length > 0" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
             <span class="material-symbols-rounded">task_alt</span>
             ยืนยันจบงาน
           </button>
@@ -103,7 +96,6 @@ import { computed, ref, watch } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useFuelRateStore } from '@/stores/fuelRates'
 import { bookingCompletionIssues } from '@/utils/bookingCompletion'
-import { toDateInputValue, fromDateInputValue } from '@/utils/dateRanges'
 import type { Booking, DebtAdjustment } from '@/types'
 
 /**
@@ -120,16 +112,10 @@ const debtAdjustments = ref<DebtAdjustment[]>([])
 const odometerAfter = ref(0)
 const fuelLiters = ref(0)
 const fuelNotRefilled = ref(false)
-const todayValue = ref(toDateInputValue(new Date()))
-const completedDate = ref(todayValue.value)
-/** วันที่ที่เลือกแปลงเป็นเวลาที่จะบันทึก — null = ว่าง/ผิดรูปแบบ/วันล่วงหน้า (ปุ่มยืนยันกดไม่ได้) */
-const completedAtValue = computed(() => fromDateInputValue(completedDate.value, new Date()))
 
 watch(
   () => props.booking,
   (booking) => {
-    todayValue.value = toDateInputValue(new Date())
-    completedDate.value = todayValue.value
     debtAdjustments.value = []
     odometerAfter.value = booking?.odometerAfter || 0
     fuelLiters.value = booking?.fuelLiters || 0
@@ -188,8 +174,7 @@ const confirm = () => {
     booking.id,
     debtAdjustments.value.filter((d) => d.label || d.amount),
     odometerAfter.value || undefined,
-    { liters: fuelNotRefilled.value ? 0 : Number(fuelLiters.value) || 0, notRefilled: fuelNotRefilled.value },
-    fromDateInputValue(completedDate.value, new Date()) ?? undefined
+    { liters: fuelNotRefilled.value ? 0 : Number(fuelLiters.value) || 0, notRefilled: fuelNotRefilled.value }
   )
   if (!result.ok) {
     alert(`จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}`)

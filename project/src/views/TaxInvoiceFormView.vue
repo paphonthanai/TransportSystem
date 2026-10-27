@@ -344,6 +344,7 @@ import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
 import ContactPickerField from '@/components/shared/ContactPickerField.vue'
 import TaxRateCell from '@/components/shared/TaxRateCell.vue'
 import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
+import { billingDateOf } from '@/utils/bookingStatus'
 import type { Booking } from '@/types'
 
 const route = useRoute()
@@ -554,7 +555,7 @@ const addBookingRow = (b: Booking) => {
     discountAmount: b.discountAmount || 0,
     vatRate: b.vatRate ?? documentSettingsStore.settings.vatRate,
     whtRate: 0,
-    shipDate: b.shipDate || b.loadingDate,
+    shipDate: billingDateOf(b),
     plate: b.plate,
     referenceDoc: bookingReferenceDoc(b),
     deliveryNo: b.docNo,

@@ -1039,19 +1039,27 @@ export const useBookingStore = defineStore('booking', () => {
     return resolveTripNumber(booking, group.some((b) => b.id === booking.id) ? group : [...group, booking])
   }
 
-  /** วันที่ส่งของสำเร็จที่ผู้ใช้เลือกตอนจบงาน (แก้ย้อนหลังได้) — ไม่ได้เลือก/ไม่ถูกต้อง/อยู่ในอนาคต = ตอนนี้ */
-  function resolveCompletedAt(picked?: Date): Date {
-    const now = new Date()
-    if (!picked || Number.isNaN(picked.getTime()) || picked.getTime() > now.getTime()) return now
-    return picked
+  /**
+   * แก้วันที่ส่งของสำเร็จของงานที่จบแล้ว (หน้ารายละเอียดงาน) — เช่นคนขับกดจบงานในแอปช้ากว่าวันที่ส่งจริง ห้ามลงวันล่วงหน้า
+   * กระทบ Dashboard (จัดเดือนตาม completedAt) และรอบรายได้ของงานที่ไม่มี shipDate
+   */
+  function updateCompletedAt(id: string, completedAt: Date): { ok: boolean; message?: string } {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return { ok: false, message: 'ไม่พบงาน' }
+    if (booking.status !== 'DELIVERED' || !booking.completedAt) return { ok: false, message: 'แก้ได้เฉพาะงานที่ส่งของเสร็จแล้ว' }
+    if (Number.isNaN(completedAt.getTime())) return { ok: false, message: 'วันที่ไม่ถูกต้อง' }
+    if (completedAt.getTime() > Date.now()) return { ok: false, message: 'ห้ามเลือกวันที่ล่วงหน้า' }
+    const before = new Date(booking.completedAt)
+    booking.completedAt = completedAt
+    addLog(`แก้วันที่ส่งของสำเร็จ ${booking.docNo}: ${before.toLocaleDateString('th-TH')} → ${completedAt.toLocaleDateString('th-TH')}`, { bookingId: booking.id })
+    return { ok: true }
   }
 
   function completeJob(
     id: string,
     debtAdjustments: DebtAdjustment[],
     odometerAfter?: number,
-    fuel?: { liters?: number; notRefilled?: boolean },
-    completedAt?: Date
+    fuel?: { liters?: number; notRefilled?: boolean }
   ): { ok: boolean; issues: CompletionIssue[] } {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return { ok: false, issues: [] }
@@ -1065,7 +1073,6 @@ export const useBookingStore = defineStore('booking', () => {
       tripNumber: tripNumberOf(booking),
     })
     if (issues.length) return { ok: false, issues }
-    const deliveredAt = resolveCompletedAt(completedAt)
     if (fuel) {
       if (fuel.notRefilled) {
         booking.fuelNotRefilled = true
@@ -1080,7 +1087,7 @@ export const useBookingStore = defineStore('booking', () => {
     booking.items.forEach((item) => {
       if (item.deliveryStatus !== 'DELIVERED') {
         item.deliveryStatus = 'DELIVERED'
-        item.deliveredAt = item.deliveredAt || deliveredAt
+        item.deliveredAt = item.deliveredAt || new Date()
       }
     })
     const netAdjustment = debtAdjustments.reduce((sum, d) => sum + d.amount, 0)
@@ -1089,7 +1096,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (odometerAfter !== undefined) booking.odometerAfter = odometerAfter
     booking.status = 'DELIVERED'
     // billingStatus ไม่เกี่ยวกับสถานะงานเลย ปล่อยไว้ตามเดิม (UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล)
-    booking.completedAt = deliveredAt
+    booking.completedAt = new Date()
     addLog(`จบงาน ${booking.docNo}${booking.podImage ? ' (แนบ POD จากคนขับ)' : ' (ปิดงานโดยออฟฟิศ)'}`, { bookingId: booking.id })
     return { ok: true, issues: [] }
   }
@@ -1185,7 +1192,7 @@ export const useBookingStore = defineStore('booking', () => {
    * ครบก่อนถึงจะจบงานได้ (deliverJobItem บังคับแนบรูปไว้แล้วทุกครั้งที่ส่งของ เช็คซ้ำตรงนี้อีกชั้นกันกรณีข้อมูลเก่าก่อน
    * เปลี่ยนมาบังคับที่ยังค้าง DELIVERING อยู่โดยบางรายการไม่มีรูป)
    */
-  function finishDriverJob(bookingId: string, odometerAfter?: number, completedAt?: Date) {
+  function finishDriverJob(bookingId: string, odometerAfter?: number) {
     const booking = bookings.value.find((b) => b.id === bookingId)
     if (!booking) return
     const allDelivered = booking.items.every((i) => i.deliveryStatus === 'DELIVERED')
@@ -1199,7 +1206,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (lastDelivered?.podImage) booking.podImage = lastDelivered.podImage
     booking.finalAllowance = booking.finalAllowance ?? booking.allowance
     booking.status = 'DELIVERED'
-    booking.completedAt = resolveCompletedAt(completedAt)
+    booking.completedAt = new Date()
     // งานที่จบผ่านแอปคนขับต้องรอออฟฟิศตรวจสอบ POD ก่อนเสมอ ห้ามสร้างใบแจ้งหนี้/ใบเสร็จจนกว่าจะ APPROVED (ไม่บล็อกใบวางบิล — ดู reviewPod ด้านล่าง + createTaxInvoiceFromBookings/createReceiptFromBookings)
     booking.podReviewStatus = 'PENDING_REVIEW'
     booking.podReviewNote = undefined
@@ -1503,6 +1510,7 @@ export const useBookingStore = defineStore('booking', () => {
     pickupJobItem,
     startTransit,
     completeJob,
+    updateCompletedAt,
     driverIncomeEditBlockedReason,
     updateDriverIncome,
     deliverJobItem,

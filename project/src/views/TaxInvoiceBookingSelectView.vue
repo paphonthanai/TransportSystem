@@ -15,7 +15,7 @@
     </div>
 
     <div class="card-lg space-y-4">
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl">
         <div>
           <label class="field-label">ลูกค้า</label>
           <select v-model="customerName" class="input-field w-full">
@@ -28,6 +28,13 @@
           <select v-model="bookingCategory" :disabled="!customerName.trim()" class="input-field w-full disabled:opacity-40">
             <option value="">เลือกประเภทงาน...</option>
             <option v-for="c in bookingCategories" :key="c" :value="c">{{ categoryFeedLabel[c] }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">เดือนที่ส่งของสำเร็จ</label>
+          <select v-model="monthFilter" :disabled="!customerName.trim()" class="input-field w-full disabled:opacity-40">
+            <option value="">ทุกเดือน</option>
+            <option v-for="m in monthOptions" :key="m" :value="m">{{ billingMonthLabel(m) }}</option>
           </select>
         </div>
       </div>
@@ -48,7 +55,7 @@
                 เลขที่ PO ลูกค้า<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('po') }}</span>
               </th>
               <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('shipDate')">
-                วันที่ส่งงาน<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('shipDate') }}</span>
+                วันที่ส่งของสำเร็จ<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('shipDate') }}</span>
               </th>
               <th class="text-right px-3 py-2 font-semibold">จำนวน</th>
               <th class="text-left px-3 py-2 font-semibold">หน่วย</th>
@@ -66,7 +73,7 @@
               <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ bookingProducts(b) }}</td>
               <td class="px-3 py-2 text-text">{{ b.reference || '-' }}</td>
-              <td class="px-3 py-2 text-text">{{ formatDateShort(b.shipDate || b.loadingDate) }}</td>
+              <td class="px-3 py-2 text-text">{{ formatDateShort(billingDateOf(b)) }}</td>
               <td class="px-3 py-2 text-right text-text">1</td>
               <td class="px-3 py-2 text-text">เที่ยว</td>
               <td class="px-3 py-2 text-right text-text">{{ formatBaht(bookingTotal(b)) }}</td>
@@ -92,7 +99,7 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
-import { categoryFeedLabel } from '@/utils/bookingStatus'
+import { categoryFeedLabel, billingDateOf, billingMonthKey, billingMonthLabel } from '@/utils/bookingStatus'
 import type { Booking, BookingCategory } from '@/types'
 
 const router = useRouter()
@@ -108,6 +115,20 @@ const customerName = ref('')
 const bookingCategory = ref<BookingCategory | ''>('')
 const pickerSelectedIds = ref<Set<string>>(new Set())
 
+/** กรองตามเดือนที่ส่งของสำเร็จ (รองรับลูกค้าที่วางบิลรายเดือน) — ว่าง = ทุกเดือน เปลี่ยนเดือน/ลูกค้าแล้วล้างงานที่เลือกไว้นอกเดือนนั้นทิ้ง */
+const monthFilter = ref('')
+const monthOptions = computed(() =>
+  [...new Set(bookingStore.bookings.filter((b) => b.customer === customerName.value && isBookingBillable(b)).map(billingMonthKey))].sort().reverse()
+)
+const inMonth = (b: Booking) => !monthFilter.value || billingMonthKey(b) === monthFilter.value
+watch(customerName, () => {
+  monthFilter.value = ''
+})
+watch(monthFilter, () => {
+  const visible = new Set(eligibleBookings.value.map((b) => b.id))
+  pickerSelectedIds.value = new Set([...pickerSelectedIds.value].filter((id) => visible.has(id)))
+})
+
 const bookingCategories = computed<BookingCategory[]>(() => {
   if (!customerName.value.trim()) return []
   const cats = new Set(bookingStore.bookings.filter((b) => b.customer === customerName.value && isBookingBillable(b)).map((b) => b.category))
@@ -116,7 +137,7 @@ const bookingCategories = computed<BookingCategory[]>(() => {
 
 const eligibleBookings = computed<Booking[]>(() => {
   if (!bookingCategory.value) return []
-  return bookingStore.bookings.filter((b) => b.customer === customerName.value && b.category === bookingCategory.value && isBookingBillable(b))
+  return bookingStore.bookings.filter((b) => inMonth(b) && b.customer === customerName.value && b.category === bookingCategory.value && isBookingBillable(b))
 })
 
 /** เรียงลำดับตารางตามคอลัมน์ที่คลิก (ลำดับ/เลขที่ PO/วันที่ส่งงาน) — 'ลำดับ' หมายถึงลำดับเดิมจากการ query เรียง
@@ -137,7 +158,7 @@ const sortedEligibleBookings = computed(() => {
   const list = [...eligibleBookings.value]
   const dir = sortDir.value === 'asc' ? 1 : -1
   if (sortKey.value === 'po') list.sort((a, b) => (a.reference || '').localeCompare(b.reference || '') * dir)
-  else if (sortKey.value === 'shipDate') list.sort((a, b) => (new Date(a.shipDate || a.loadingDate || 0).getTime() - new Date(b.shipDate || b.loadingDate || 0).getTime()) * dir)
+  else if (sortKey.value === 'shipDate') list.sort((a, b) => ((billingDateOf(a)?.getTime() ?? 0) - (billingDateOf(b)?.getTime() ?? 0)) * dir)
   else if (sortKey.value === 'index' && dir === -1) list.reverse()
   return list
 })

@@ -341,7 +341,7 @@ import { useUserStore } from '@/stores/users'
 import { useDocumentPrefillStore } from '@/stores/documentPrefill'
 import { useBookingStore } from '@/stores/booking'
 import { useBillingRuleStore } from '@/stores/billingRule'
-import { isBookingConfirmedForBilling } from '@/utils/bookingStatus'
+import { isBookingConfirmedForBilling, billingDateOf } from '@/utils/bookingStatus'
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
@@ -549,7 +549,7 @@ const addBookingRow = (b: Booking) => {
     discountAmount: b.discountAmount || 0,
     vatRate: b.vatRate ?? documentSettingsStore.settings.vatRate,
     whtRate: 0,
-    shipDate: b.shipDate || b.loadingDate,
+    shipDate: billingDateOf(b),
     plate: b.plate,
     referenceDoc: bookingReferenceDoc(b),
     deliveryNo: b.docNo,

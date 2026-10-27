@@ -241,7 +241,30 @@
           <div><span class="text-muted">คนขับ:</span> {{ booking.driverName || '-' }}</div>
           <div v-if="booking.dispatchedAt"><span class="text-muted">วันที่จ่ายงาน:</span> {{ formatDate(booking.dispatchedAt) }}</div>
           <div v-if="booking.transitStartedAt"><span class="text-muted">วันที่เริ่มขนส่ง:</span> {{ formatDate(booking.transitStartedAt) }}</div>
-          <div v-if="booking.completedAt"><span class="text-muted">วันที่ส่งของสำเร็จ:</span> {{ formatDate(booking.completedAt) }}</div>
+          <div v-if="booking.completedAt" class="flex items-center gap-2 flex-wrap">
+            <span class="text-muted">วันที่ส่งของสำเร็จ:</span>
+            <template v-if="completedDateEditing">
+              <input v-model="completedDateValue" type="date" :max="todayInputValue" class="input-field h-8 px-2 text-sm" />
+              <button @click="saveCompletedDate" class="btn-primary h-8 px-3 text-xs">บันทึก</button>
+              <button @click="completedDateEditing = false" class="btn-secondary h-8 px-3 text-xs">ยกเลิก</button>
+              <span v-if="completedDateError" class="basis-full text-xs text-red-600">{{ completedDateError }}</span>
+              <span v-if="issuedDocsLabel" class="basis-full text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                ⚠ งานนี้ออก{{ issuedDocsLabel }}ไปแล้ว — เอกสารที่ออกไปแล้วจะยังแสดงวันที่เดิม ถ้าต้องให้เอกสารใช้วันที่ใหม่ ต้องยกเลิกแล้วออกเอกสารใหม่
+              </span>
+            </template>
+            <template v-else>
+              {{ formatDate(booking.completedAt) }}
+              <button
+                v-if="booking.status === 'DELIVERED'"
+                @click="startEditCompletedDate"
+                class="inline-flex items-center gap-0.5 text-xs text-primary hover:underline"
+                title="แก้วันที่ส่งของสำเร็จ"
+              >
+                <span class="material-symbols-rounded text-sm">edit</span>
+                แก้
+              </button>
+            </template>
+          </div>
           <div v-if="booking.odometerBefore !== undefined"><span class="text-muted">เลขไมล์เริ่มต้น:</span> {{ booking.odometerBefore }} กม.</div>
           <div v-if="booking.odometerAfter !== undefined"><span class="text-muted">เลขไมล์สิ้นสุด:</span> {{ booking.odometerAfter }} กม.</div>
         </div>
@@ -548,6 +571,7 @@ import { bookingStatusLabel, bookingStatusClass, documentClaimBadges } from '@/u
 import { computeRowDiscountBaht, computeRowAmount, computeRowVat } from '@/utils/documentTotals'
 import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
 import { priceCellText, PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
+import { toDateInputValue, fromDateInputValue } from '@/utils/dateRanges'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import ImageLightbox from '@/components/shared/ImageLightbox.vue'
 import BookingCompleteDialog from '@/components/booking/BookingCompleteDialog.vue'
@@ -572,6 +596,45 @@ const lightbox = ref<{ src: string; title: string; filename?: string } | null>(n
 const openImage = (src: string, title: string) => {
   const docNo = booking.value?.docNo || ''
   lightbox.value = { src, title: docNo ? `${docNo} · ${title}` : title, filename: `${docNo || 'งาน'} ${title}` }
+}
+
+// ---- แก้วันที่ส่งของสำเร็จของงานที่จบแล้ว (กดแก้ที่บรรทัดในการ์ดข้อมูลรถ-คนขับ) ----
+const completedDateEditing = ref(false)
+const completedDateValue = ref('')
+const completedDateError = ref('')
+const todayInputValue = ref(toDateInputValue(new Date()))
+/** เอกสารการเงินที่ผูกกับงานนี้แล้ว — เอกสารเก็บวันที่ไว้ตอนออก แก้ที่งานจะไม่เปลี่ยนตามจึงต้องเตือน (แก้ได้ ไม่บล็อก) */
+const issuedDocsLabel = computed(() => {
+  const b = booking.value
+  if (!b) return ''
+  const docs = [b.billingNoteDocId && 'ใบวางบิล', b.taxInvoiceDocId && 'ใบกำกับภาษี', b.receiptDocId && 'ใบเสร็จ'].filter(Boolean)
+  return docs.join(' / ')
+})
+const startEditCompletedDate = () => {
+  if (!booking.value?.completedAt) return
+  todayInputValue.value = toDateInputValue(new Date())
+  completedDateValue.value = toDateInputValue(booking.value.completedAt)
+  completedDateError.value = ''
+  completedDateEditing.value = true
+}
+const saveCompletedDate = () => {
+  if (!booking.value?.completedAt) return
+  const now = new Date()
+  const picked = fromDateInputValue(completedDateValue.value, now)
+  if (!picked) {
+    completedDateError.value = 'เลือกวันที่ให้ถูกต้อง (ห้ามวันล่วงหน้า)'
+    return
+  }
+  // วันที่ที่เลือก + เวลาเดิมของงาน (ถ้าเลือกวันนี้แล้วเวลาเดิมเลยตอนนี้ไป = ใช้ตอนนี้)
+  const old = new Date(booking.value.completedAt)
+  const withOldTime = new Date(picked.getFullYear(), picked.getMonth(), picked.getDate(), old.getHours(), old.getMinutes(), old.getSeconds())
+  const value = withOldTime.getTime() > now.getTime() ? now : withOldTime
+  const result = bookingStore.updateCompletedAt(booking.value.id, value)
+  if (!result.ok) {
+    completedDateError.value = result.message || 'บันทึกไม่สำเร็จ'
+    return
+  }
+  completedDateEditing.value = false
 }
 
 // ---- ปุ่มดำเนินการ: จบงาน / ยืนยัน POD / ยืนยันการจบงาน (กติกาเดียวกับเมนู "⋮" ของตารางหน้า Booking) ----

@@ -12,6 +12,27 @@ export function isBookingConfirmedForBilling(b: Pick<Booking, 'podReviewStatus' 
   return !b.podReviewStatus || !!b.completionConfirmedAt
 }
 
+/** วันที่ที่ใช้ในเอกสารการเงิน (ใบวางบิล/ใบกำกับภาษี/ใบเสร็จ) และกรองรอบวางบิลรายเดือน = วันที่ส่งของสำเร็จ (แก้ได้ที่หน้า
+ *  รายละเอียดงาน) — งานที่ยังไม่มีวันที่ส่งของสำเร็จ (ยังไม่จบงาน แต่เงื่อนไขวางบิลเปิดให้วางได้) ใช้วันที่ลงงานแทน */
+export function billingDateOf(b: Pick<Booking, 'completedAt' | 'shipDate' | 'loadingDate'>): Date | undefined {
+  const d = b.completedAt || b.shipDate || b.loadingDate
+  return d ? new Date(d) : undefined
+}
+
+/** คีย์เดือน YYYY-MM ของวันที่ส่งของสำเร็จ (ว่าง = ไม่มีวันที่) ใช้กรองงานตามเดือนในหน้าเลือกงานออกเอกสาร */
+export function billingMonthKey(b: Pick<Booking, 'completedAt' | 'shipDate' | 'loadingDate'>): string {
+  const d = billingDateOf(b)
+  return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : ''
+}
+
+const THAI_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+
+/** ชื่อเดือนของคีย์ YYYY-MM เช่น "ตุลาคม 2569" */
+export function billingMonthLabel(key: string): string {
+  const [y, m] = key.split('-').map(Number)
+  return y && m ? `${THAI_MONTHS[m - 1]} ${y + 543}` : 'ไม่มีวันที่'
+}
+
 /** ป้ายกำกับ Feed (ประเภทสินค้า) ที่ใช้ทั้งตอนสร้างใบวางบิล (บังคับ 1 Feed ต่อใบวางบิล) และตอนพิมพ์ใบกำกับภาษี/ใบเสร็จ
  *  (ชื่องาน/รายละเอียดรายการ) — booking.category เป็นฟิลด์เดียวที่บอก "ประเภทสินค้า" ได้เชื่อถือได้ เพราะรายได้แต่ละ Feed
  *  คำนวณคนละกติกากัน (JobItem.product เป็น free text ต่อปลายทาง/รหัสงาน ไม่ใช่ตัวแบ่งกลุ่มรายได้ ห้ามใช้แทนกัน) */

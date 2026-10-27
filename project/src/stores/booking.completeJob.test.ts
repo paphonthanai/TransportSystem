@@ -135,40 +135,33 @@ describe('เพดานลิตรน้ำมัน 200 (ยอมให้�
   })
 })
 
-describe('วันที่ส่งของสำเร็จ (เลือกได้ตอนจบงาน)', () => {
-  it('ออฟฟิศเลือกวันย้อนหลัง = completedAt และ deliveredAt ของจุดที่ยังไม่ส่งเป็นวันนั้น', () => {
+describe('updateCompletedAt — แก้วันที่ส่งของสำเร็จในหน้ารายละเอียดงาน', () => {
+  it('งานที่จบแล้ว แก้เป็นวันย้อนหลังได้', () => {
     const store = useBookingStore()
-    const b = makeBooking({ ...ready, items: [makeJobItem()] })
+    const b = makeBooking({ ...ready, status: 'DELIVERED', completedAt: new Date(2026, 9, 27, 9, 0) })
     store.bookings.push(b)
-    const picked = new Date(2026, 9, 26, 10, 0)
+    const picked = new Date(2026, 9, 26, 9, 0)
 
-    expect(store.completeJob(b.id, [], 1250, undefined, picked).ok).toBe(true)
+    expect(store.updateCompletedAt(b.id, picked).ok).toBe(true)
     expect(b.completedAt).toEqual(picked)
-    expect(b.items[0].deliveredAt).toEqual(picked)
   })
 
-  it('วันในอนาคต = ใช้เวลาปัจจุบันแทน', () => {
+  it('วันล่วงหน้า = ไม่บันทึก', () => {
+    const store = useBookingStore()
+    const original = new Date(2026, 9, 27, 9, 0)
+    const b = makeBooking({ ...ready, status: 'DELIVERED', completedAt: original })
+    store.bookings.push(b)
+
+    expect(store.updateCompletedAt(b.id, new Date(Date.now() + 3 * 86400000)).ok).toBe(false)
+    expect(b.completedAt).toEqual(original)
+  })
+
+  it('งานที่ยังไม่จบ = แก้ไม่ได้', () => {
     const store = useBookingStore()
     const b = makeBooking({ ...ready })
     store.bookings.push(b)
-    const before = Date.now()
 
-    store.completeJob(b.id, [], 1250, undefined, new Date(Date.now() + 3 * 86400000))
-    expect(new Date(b.completedAt!).getTime()).toBeGreaterThanOrEqual(before)
-    expect(new Date(b.completedAt!).getTime()).toBeLessThanOrEqual(Date.now())
-  })
-
-  it('คนขับเลือกวันย้อนหลังตอนดำเนินการเสร็จสิ้น', () => {
-    const store = useBookingStore()
-    const b = makeBooking({
-      status: 'DELIVERING',
-      items: [makeJobItem({ id: 'a', deliveryStatus: 'DELIVERED', deliveredAt: new Date(2026, 9, 26), podImage: 'pod-a' })],
-    })
-    store.bookings.push(b)
-    const picked = new Date(2026, 9, 26, 18, 0)
-
-    store.finishDriverJob(b.id, undefined, picked)
-    expect(b.status).toBe('DELIVERED')
-    expect(b.completedAt).toEqual(picked)
+    expect(store.updateCompletedAt(b.id, new Date(2026, 9, 26)).ok).toBe(false)
+    expect(b.completedAt).toBeUndefined()
   })
 })
