@@ -149,7 +149,7 @@
                 </td>
                 <td class="px-4 py-3">
                   <!-- หน้านี้โชว์เฉพาะงานที่ "ยืนยันการจบงาน" แล้วเท่านั้น (ดู isBookingConfirmedForBilling ใน
-                       useCompletedJobs.ts) งานที่มี podReviewStatus เลยเป็น APPROVED เสมอ ไม่มีทาง PENDING_REVIEW
+                       useCompletedJobs.ts) งานที่มี podReviewStatus เลยเป็น APPROVED เสมอ ไม่มีทาง PENDING_REVIEW จริง
                        โผล่มาที่นี่ได้อีก — เอาปุ่มอนุมัติ/ตีกลับออก (ย้ายไปตรวจที่ตาราง "งานที่กำลังขนส่ง" ใน
                        BookingView.vue แทนแล้ว) เหลือไว้แค่แสดงสถานะให้ดู -->
                   <div v-if="booking.podReviewStatus" class="space-y-1">
@@ -158,7 +158,21 @@
                     </span>
                     <div v-if="booking.podReviewNote" class="text-[11px] text-muted">{{ booking.podReviewNote }}</div>
                   </div>
-                  <span v-else class="text-xs text-muted">-</span>
+                  <!-- ยังไม่เคยผ่านขั้นตรวจ POD (ออฟฟิศปิดเอง) = แสดงเป็น "รอตรวจสอบ POD" เสมอ ไม่ใช่ "-" — มีรูปแล้วกดยืนยันได้เลย
+                       ยังไม่มีรูปให้กด "แนบ POD" ในช่องจัดการก่อน (ดู approveLegacyPod ใน stores/booking.ts) -->
+                  <div v-else class="space-y-1">
+                    <span :class="['text-xs font-semibold px-2 py-1 rounded-full inline-block', podReviewStatusClass.PENDING_REVIEW]">
+                      {{ podReviewStatusLabel.PENDING_REVIEW }}
+                    </span>
+                    <button
+                      v-if="bookingStore.canApproveLegacyPod(booking)"
+                      @click="approveLegacyPod(booking)"
+                      class="flex items-center gap-1 text-xs font-semibold text-green-700 hover:underline"
+                    >
+                      <span class="material-symbols-rounded text-sm">check_circle</span>
+                      ยืนยัน POD
+                    </button>
+                  </div>
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex flex-wrap items-center gap-1.5">
@@ -303,6 +317,11 @@ const hasActiveDateOrPicks = computed(
 
 const clearFilters = () => {
   filters.value = { fleet: undefined, search: filters.value.search, dateFrom: '', dateTo: '', customer: '', driverName: '', docClaim: '', price: '', money: '', site: '', district: '' }
+}
+
+const approveLegacyPod = (booking: Booking) => {
+  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${booking.docNo} ตรงกับข้อมูลในระบบ? (กด "รูป" เพื่อดูรูปก่อนได้)`)) return
+  bookingStore.approveLegacyPod(booking.id)
 }
 
 /** งานที่ออฟฟิศจบเอง (podReviewStatus undefined) แต่ยังไม่มีรายการไหนแนบ POD เลยสักรูป — ให้แสดงปุ่มแนบ POD แทนขีด "-" */

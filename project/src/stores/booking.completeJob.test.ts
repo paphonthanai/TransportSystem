@@ -177,13 +177,14 @@ describe('ออฟฟิศจบงานเองแต่มีรูป POD
     expect(b.podReviewStatus).toBe('PENDING_REVIEW')
   })
 
-  it('ไม่มีรูป POD เลย → ถือว่ายืนยันแล้วเหมือนเดิม (podReviewStatus ว่าง)', () => {
+  it('ไม่มีรูป POD ก็ต้องรอตรวจสอบ POD เช่นกัน (ออฟฟิศยืนยัน POD ถึงจะจบงานจริง)', () => {
     const store = useBookingStore()
     const b = makeBooking({ ...ready, items: [makeJobItem()] })
     store.bookings.push(b)
 
     store.completeJob(b.id, [], 1250)
-    expect(b.podReviewStatus).toBeUndefined()
+    expect(b.podReviewStatus).toBe('PENDING_REVIEW')
+    expect(b.completionConfirmedAt).toBeUndefined()
   })
 
   it('POD ที่อนุมัติไปแล้วคงไว้ ไม่ต้องตรวจซ้ำ', () => {
@@ -196,29 +197,32 @@ describe('ออฟฟิศจบงานเองแต่มีรูป POD
   })
 })
 
-describe('requestPodReview — งานเก่าที่ออฟฟิศปิดเองแต่มี POD (ตรวจสอบ POD = "-")', () => {
+describe('approveLegacyPod — งานที่ออฟฟิศปิดเองและยังไม่เคยตรวจ POD (แสดงเป็น "รอตรวจสอบ POD")', () => {
   const legacy = { ...ready, status: 'DELIVERED' as const, completedAt: new Date(2026, 9, 27), items: [makeJobItem({ deliveryStatus: 'DELIVERED', podImage: 'pod-a' })] }
 
-  it('ยังไม่วางบิล → ส่งเข้าขั้นตรวจ POD ได้', () => {
+  it('มีรูป POD → ยืนยันได้ (ตรวจสอบแล้ว + ยืนยันการจบงาน) รวมงานที่วางบิลแล้ว', () => {
     const store = useBookingStore()
     const b = makeBooking({ ...legacy })
-    store.bookings.push(b)
+    const billed = makeBooking({ ...legacy, billingNoteDocId: 'doc-1' })
+    store.bookings.push(b, billed)
 
-    expect(store.canRequestPodReview(b)).toBe(true)
-    expect(store.requestPodReview(b.id)).toBe(true)
-    expect(b.podReviewStatus).toBe('PENDING_REVIEW')
+    for (const x of [b, billed]) {
+      expect(store.isLegacyPodUnreviewed(x)).toBe(true)
+      expect(store.approveLegacyPod(x.id)).toBe(true)
+      expect(x.podReviewStatus).toBe('APPROVED')
+      expect(x.completionConfirmedAt).toBeInstanceOf(Date)
+    }
   })
 
-  it('วางบิลแล้ว / ไม่มี POD / ยืนยันจบงานแล้ว → ไม่แตะ', () => {
+  it('ไม่มีรูป POD / ผ่านการตรวจมาแล้ว → ไม่แตะ', () => {
     const store = useBookingStore()
-    const billed = makeBooking({ ...legacy, billingNoteDocId: 'doc-1' })
     const noPod = makeBooking({ ...legacy, items: [makeJobItem({ deliveryStatus: 'DELIVERED' })] })
-    const confirmedJob = makeBooking({ ...legacy, completionConfirmedAt: new Date() })
-    store.bookings.push(billed, noPod, confirmedJob)
+    const reviewed = makeBooking({ ...legacy, podReviewStatus: 'PENDING_REVIEW' })
+    store.bookings.push(noPod, reviewed)
 
-    for (const b of [billed, noPod, confirmedJob]) {
-      expect(store.requestPodReview(b.id)).toBe(false)
-      expect(b.podReviewStatus).toBeUndefined()
-    }
+    expect(store.approveLegacyPod(noPod.id)).toBe(false)
+    expect(noPod.podReviewStatus).toBeUndefined()
+    expect(store.approveLegacyPod(reviewed.id)).toBe(false)
+    expect(reviewed.podReviewStatus).toBe('PENDING_REVIEW')
   })
 })

@@ -678,20 +678,29 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
-   * งานเก่าที่ออฟฟิศปิดเองก่อนมีกติกา "มี POD = ต้องตรวจ POD" (podReviewStatus ว่าง แต่มีรูป POD จากคนขับ) ยังไม่ได้ยืนยันจบงาน
-   * และยังไม่ถูกนำไปวางบิล — ส่งเข้าขั้นตรวจ POD ได้ (หลังจากนั้นใช้ "ยืนยัน POD และจบงาน" ตามปกติ)
+   * งานที่จบแล้วแต่ยังไม่เคยผ่านขั้นตรวจ POD (podReviewStatus ว่าง = ออฟฟิศปิดเองก่อนมีกติกา "มี POD = ต้องตรวจ POD")
+   * แสดงเป็น "รอตรวจสอบ POD" และยืนยันได้เมื่อมีรูป POD อย่างน้อย 1 จุด — ยืนยันแล้ว = ตรวจสอบแล้ว + ยืนยันการจบงาน
+   * (งานกลุ่มนี้ถือว่ายืนยันจบงานแล้วอยู่ก่อน จึงไม่กระทบการวางบิล/เอกสารที่ออกไปแล้ว)
    */
-  function canRequestPodReview(booking: Booking): boolean {
-    const hasPod = !!booking.podImage || booking.items.some((i) => !!i.podImage)
-    return booking.status === 'DELIVERED' && !booking.podReviewStatus && hasPod && !booking.completionConfirmedAt && !isBookingBilled(booking)
+  function isLegacyPodUnreviewed(booking: Booking): boolean {
+    return booking.status === 'DELIVERED' && !booking.podReviewStatus
   }
 
-  function requestPodReview(id: string): boolean {
+  function canApproveLegacyPod(booking: Booking): boolean {
+    const hasPod = !!booking.podImage || booking.items.some((i) => !!i.podImage)
+    return isLegacyPodUnreviewed(booking) && hasPod
+  }
+
+  function approveLegacyPod(id: string): boolean {
     const booking = bookings.value.find((b) => b.id === id)
-    if (!booking || !canRequestPodReview(booking)) return false
-    booking.podReviewStatus = 'PENDING_REVIEW'
+    if (!booking || !canApproveLegacyPod(booking)) return false
+    booking.podReviewStatus = 'APPROVED'
     booking.podReviewNote = undefined
-    addLog(`ส่งงาน ${booking.docNo} เข้าขั้นตรวจสอบ POD (งานที่ออฟฟิศปิดเองแต่มีรูป POD จากคนขับ)`, { bookingId: booking.id })
+    if (!booking.completionConfirmedAt) {
+      booking.completionConfirmedAt = new Date()
+      booking.completionConfirmedBy = authStore.userName || undefined
+    }
+    addLog(`ยืนยัน POD งาน ${booking.docNo} (งานที่ออฟฟิศปิดเอง)`, { bookingId: booking.id })
     return true
   }
 
@@ -1178,18 +1187,15 @@ export const useBookingStore = defineStore('booking', () => {
     booking.status = 'DELIVERED'
     // billingStatus ไม่เกี่ยวกับสถานะงานเลย ปล่อยไว้ตามเดิม (UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล)
     booking.completedAt = new Date()
-    // ออฟฟิศปิดงานเองแต่มีรูป POD จากคนขับอยู่แล้ว (ส่งของบางจุด/ทุกจุดผ่านแอป) = ต้องผ่านขั้นตรวจ POD + ยืนยันการจบงานก่อนวางบิล
-    // เหมือนงานที่คนขับจบเอง (ดู finishDriverJob / isBookingConfirmedForBilling) — POD ที่อนุมัติไปแล้วคงไว้ ไม่ต้องตรวจซ้ำ
-    // ไม่มีรูป POD เลย = ปิดงานโดยออฟฟิศล้วน ถือว่ายืนยันแล้วเหมือนเดิม
-    const hasDriverPod = !!booking.podImage || booking.items.some((i) => !!i.podImage)
-    if (hasDriverPod && booking.podReviewStatus !== 'APPROVED') {
+    // หลักการ: งานจะ "จบจริง" ก็ต่อเมื่อออฟฟิศยืนยัน POD แล้วเท่านั้น — ออฟฟิศกดจบงานเอง = ส่งของเสร็จ แต่ต้องรอตรวจสอบ POD
+    // เสมอ (มีหรือไม่มีรูปก็ตาม ไม่มีรูปให้แนบ POD ที่หน้ารายละเอียดงานก่อนยืนยัน) เหมือนงานที่คนขับจบเองผ่านแอป (ดู finishDriverJob
+    // / isBookingConfirmedForBilling) — POD ที่อนุมัติไปแล้วคงไว้ ไม่ต้องตรวจซ้ำ
+    if (booking.podReviewStatus !== 'APPROVED') {
       booking.podReviewStatus = 'PENDING_REVIEW'
       booking.podReviewNote = undefined
     }
-    addLog(
-      `จบงาน ${booking.docNo}${hasDriverPod ? ' (มี POD จากคนขับ — รอออฟฟิศตรวจสอบ POD)' : ' (ปิดงานโดยออฟฟิศ)'}`,
-      { bookingId: booking.id }
-    )
+    const hasDriverPod = !!booking.podImage || booking.items.some((i) => !!i.podImage)
+    addLog(`จบงาน ${booking.docNo} โดยออฟฟิศ${hasDriverPod ? ' (มี POD จากคนขับ)' : ' (ยังไม่มี POD)'} — รอตรวจสอบ POD`, { bookingId: booking.id })
     return { ok: true, issues: [] }
   }
 
@@ -1613,8 +1619,9 @@ export const useBookingStore = defineStore('booking', () => {
     staffBilledEditBlockedReason,
     tripFeeEditBlockedReason,
     updateBookingRefs,
-    canRequestPodReview,
-    requestPodReview,
+    isLegacyPodUnreviewed,
+    canApproveLegacyPod,
+    approveLegacyPod,
     updateDriverIncome,
     deliverJobItem,
     confirmPodImage,
