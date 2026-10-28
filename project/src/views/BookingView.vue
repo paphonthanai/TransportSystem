@@ -1899,6 +1899,7 @@ const IMPORT_COLUMN_ORDER = [
   IMPORT_HEADERS.jobType,
   IMPORT_HEADERS.mapLink,
   IMPORT_HEADERS.note,
+  IMPORT_HEADERS.customerCondition,
 ]
 
 /** สร้างไฟล์ตัวอย่างคอลัมน์ตรงกับชีทงานจริงที่ใช้อยู่ทุกคอลัมน์ (รวมคอลัมน์ที่ไม่ได้ใช้จริงด้วย ดู IMPORT_COLUMN_ORDER)
@@ -1920,6 +1921,7 @@ const downloadImportTemplate = () => {
     0,
     0,
     0,
+    '',
     '',
     '',
     '',
@@ -2122,6 +2124,7 @@ const confirmImport = () => {
       loadingTime: row.time || undefined,
       ticketChecked: row.ticketChecked || undefined,
       note: row.note || undefined,
+      customerCondition: row.customerCondition || undefined,
     })
     const salesOrderDoc = salesDocumentsStore.createSalesOrderForBooking({
       bookingId: newBooking.id,

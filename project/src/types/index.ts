@@ -182,6 +182,8 @@ export interface Booking {
   description?: string
   /** หมายเหตุ */
   note?: string
+  /** เงื่อนไขลูกค้า จากคอลัมน์ "เงื่อนไขลูกค้า" ตอน import (ไม่บังคับ) — ไม่มีค่า = แอปคนขับดึงจากหมายเหตุแทน (ดู customerConditionsFor) */
+  customerCondition?: string
   customer: string
   /** รายการสินค้า/ปลายทางภายในงานนี้ (1 งานมีได้หลายรายการ) */
   items: JobItem[]

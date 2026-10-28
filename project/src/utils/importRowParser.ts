@@ -37,6 +37,8 @@ export const IMPORT_HEADERS = {
   mapLink: 'พิกัด/ลิงก์ Google Maps หน้างาน',
   tripNo: 'เที่ยวที่',
   note: 'หมายเหตุ',
+  /** ไม่บังคับ — ไม่มีคอลัมน์/เซลล์ว่าง = แอปคนขับดึงเงื่อนไขลูกค้าจากหมายเหตุแทน */
+  customerCondition: 'เงื่อนไขลูกค้า',
 } as const
 
 /**
@@ -204,6 +206,8 @@ export interface ImportRowResult {
   fuelNotRefilled?: boolean
   jobType?: BookingJobType
   note: string
+  /** คอลัมน์ "เงื่อนไขลูกค้า" (ไม่บังคับ) ว่าง = '' */
+  customerCondition: string
   warnings: string[]
   /** ข้อควรตรวจก่อนนำเข้า (พิกัด/ลิงก์ GPS, เลขเที่ยวอ่านไม่ได้) — แสดงในพรีวิวให้ตรวจก่อนยืนยัน ไม่ถูกแปะลง note ของงาน และไม่บล็อกการสร้างงาน
    *  (ต่างจาก warnings ที่ข้อมูลขาด/จับคู่ไม่ได้ซึ่งแปะลง note) */
@@ -547,6 +551,7 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
     fuelNotRefilled: fuelNoRefill || undefined,
     jobType,
     note,
+    customerCondition: str(raw[IMPORT_HEADERS.customerCondition]),
     warnings,
     checks,
   }

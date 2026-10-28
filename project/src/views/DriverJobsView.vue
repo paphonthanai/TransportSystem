@@ -138,8 +138,9 @@
                เข้าหน้ารายละเอียดงานเหมือนกดที่การ์ดเฉยๆ (เป็นปุ่ม CTA เด่นชัดเจนกว่าแค่แตะทั้งใบ) หน้ารายละเอียดงานขั้น
                ACCEPTED จะโชว์น้ำมัน+สินค้า/จำนวน แล้วบังคับถ่ายรูปขึ้นสินค้าก่อนไปขั้นต่อไป (ดู DriverJobDetailView.vue)
                — "แสดงรายละเอียด" เปิด card ดูข้อมูลแบบไม่นำทางออกจากหน้ารายการ -->
-          <div v-if="job.id === latestAcceptedJob?.id || (DRIVER_CAN_PICK_TRIP && job.status === 'ACCEPTED')" class="flex gap-2 mt-3 pt-3 border-t border-border" @click.stop>
+          <div class="flex gap-2 mt-3 pt-3 border-t border-border" @click.stop>
             <button
+              v-if="job.id === latestAcceptedJob?.id || (DRIVER_CAN_PICK_TRIP && job.status === 'ACCEPTED')"
               @click="router.push(`/driver-app/job/${job.id}`)"
               class="flex-1 h-10 rounded-lg bg-teal-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-teal-700"
             >
@@ -200,12 +201,26 @@
                 <div class="text-xs text-muted mb-0.5">น้ำมันที่ต้องรับ</div>
                 <div class="font-semibold text-text">{{ jobDetailsTarget.fuelLiters || 0 }} ล.</div>
               </div>
+              <div class="bg-surface-2 rounded-lg p-3 col-span-2">
+                <div class="text-xs text-muted mb-0.5">เลขที่ PO ลูกค้า</div>
+                <div class="font-semibold text-text break-all">{{ jobDetailsTarget.reference || '-' }}</div>
+              </div>
+            </div>
+            <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+              <div class="text-xs font-bold text-amber-800 mb-1">เงื่อนไขลูกค้า</div>
+              <div v-if="customerConditionsFor(jobDetailsTarget).length" class="space-y-0.5 text-amber-900">
+                <div v-for="(c, i) in customerConditionsFor(jobDetailsTarget)" :key="i" class="whitespace-pre-wrap">• {{ c }}</div>
+              </div>
+              <div v-else class="text-amber-900/70">-</div>
             </div>
             <div class="text-xs font-bold text-muted uppercase tracking-wide pt-1">รายการสินค้า ({{ jobDetailsTarget.items.length }})</div>
             <div v-for="item in jobDetailsTarget.items" :key="item.id" class="rounded-lg border border-border p-3 space-y-1">
               <div class="font-semibold text-text">{{ item.product }} <span class="font-normal text-muted">{{ item.qty }} {{ item.unit }}</span></div>
+              <div v-for="(ep, epIdx) in item.extraProducts || []" :key="epIdx" class="font-semibold text-text">
+                {{ ep.product }} <span class="font-normal text-muted">{{ ep.qty }} {{ ep.unit }}</span>
+              </div>
               <div class="text-sm text-muted">{{ item.siteName }} ({{ item.province }} · {{ item.district }})</div>
-              <div v-if="item.jobType" class="text-sm text-muted">ประเภทงาน: {{ item.jobType }}</div>
+              <div class="text-sm text-muted">ประเภทการลงสินค้า: {{ item.jobType || '-' }}</div>
             </div>
           </div>
           <div class="px-5 py-4 border-t border-border">
@@ -363,6 +378,7 @@ import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import { isDriverVisibleBooking } from '@/utils/driverJobs'
 import { deliveryProgress } from '@/utils/deliveryProgress'
 import { bookingTitle } from '@/utils/bookingTitle'
+import { customerConditionsFor } from '@/utils/bookingNote'
 import { usePwaInstall, usePwaUpdate } from '@/composables/usePwa'
 
 const router = useRouter()

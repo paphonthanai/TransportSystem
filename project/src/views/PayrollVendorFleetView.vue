@@ -3,10 +3,10 @@
     <div class="flex items-center gap-3 flex-wrap">
       <h2 class="text-lg font-bold text-text">{{ isCompanyFleet ? 'รถบริษัท' : 'รถร่วม / รถหุ้นส่วน' }}</h2>
       <div v-if="isCompanyFleet" class="text-xs text-muted">
-        ข้อมูลของรถบริษัท (รายได้/ค่าแรงคนขับ Sync จาก Booking, ค่าน้ำมัน/ค่าใช้จ่ายประจำรถกรอกเองต่องานที่หน้ารายละเอียดรถ) — ค่าแรงคนขับ = เบี้ยเลี้ยงหลังเพิ่ม/ลดหนี้ของงานที่จบแล้ว
+        ข้อมูลของรถบริษัท (รายได้/ค่าแรงคนขับ Sync จาก Booking, ค่าน้ำมัน/ค่าใช้จ่ายประจำรถระบบคำนวณให้ แก้ได้ต่องานที่หน้ารายละเอียดรถ) — ค่าแรงคนขับ = เบี้ยเลี้ยงหลังเพิ่ม/ลดหนี้ของงานที่จบแล้ว
       </div>
       <div v-else class="text-xs text-muted">
-        ข้อมูลของ "รถ" เท่านั้น (รายได้ Sync จาก Booking, ค่าน้ำมัน/ค่าใช้จ่ายประจำรถกรอกเองต่องานที่หน้ารายละเอียดรถ) — รายได้คนขับดูที่หน้า
+        ข้อมูลของ "รถ" เท่านั้น (รายได้ Sync จาก Booking, ค่าน้ำมัน/ค่าใช้จ่ายประจำรถระบบคำนวณให้ แก้ได้ต่องานที่หน้ารายละเอียดรถ) — รายได้คนขับดูที่หน้า
         <RouterLink to="/payroll/drivers" class="text-primary hover:underline">พนักงานขับรถ</RouterLink> แทน
       </div>
     </div>
@@ -94,7 +94,7 @@
 import { ref, computed } from 'vue'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
-import { vendorFuelCostOf, vendorVehicleExpenseOf } from '@/stores/vehicleIncomeDocuments'
+import { useVehicleIncomeDocumentsStore, vendorFuelCostOf } from '@/stores/vehicleIncomeDocuments'
 import { exportRowsToExcel } from '@/utils/exportExcel'
 import { roundMoney } from '@/utils/bookingMoney'
 import type { Booking, Vehicle, VehicleType } from '@/types'
@@ -134,6 +134,7 @@ const departmentFilter = (department: VehicleType | undefined) => {
 
 const vehiclesStore = useVehiclesStore()
 const bookingStore = useBookingStore()
+const vehicleIncomeDocumentsStore = useVehicleIncomeDocumentsStore()
 
 const vendorFleetVehicles = computed(() => vehiclesStore.vehicles.filter((v) => departmentFilter(v.department)))
 
@@ -149,8 +150,8 @@ function inPeriod(date: Date | undefined, monthValue: string): boolean {
 
 const period = ref(currentMonthValue())
 
-/** ค่าน้ำมัน/ค่าใช้จ่ายประจำรถใช้ยอดที่ผู้ใช้กรอกเองต่องานในหน้ารายละเอียดรถ (ปิดการคำนวณลิตร × เรท และยอดสะสม vehicleExpenses
- *  ไว้ก่อนตามที่ผู้ใช้สั่ง) — ให้ตรงกับ VendorFleetVehicleDetailView.vue และเอกสารรายได้รถร่วม */
+/** ค่าน้ำมัน (ลิตร × เรท) และค่าใช้จ่ายประจำรถ (เฉลี่ยต่องานจากยอดเดือน) ระบบคำนวณให้ แก้ทับได้ต่องานในหน้ารายละเอียดรถ
+ *  — ให้ตรงกับ VendorFleetVehicleDetailView.vue และเอกสารรายได้รถร่วม */
 const fuelCost = (booking: Booking) => vendorFuelCostOf(booking)
 
 /** งานของรถคันนี้ในรอบที่เลือก — Trace ตรงจาก Booking.plate เหมือน VendorFleetVehicleDetailView.vue (ไม่ใช้ currentDriver ของรถมาไล่ย้อนหลัง) */
@@ -167,7 +168,7 @@ const vehicleRows = computed(() =>
     const trips = bookings.length
     const income = bookings.reduce((sum, b) => sum + (b.tripFee || 0), 0)
     const fuelTotal = bookings.reduce((sum, b) => sum + fuelCost(b), 0)
-    const vehicleExpense = bookings.reduce((sum, b) => sum + vendorVehicleExpenseOf(b), 0)
+    const vehicleExpense = bookings.reduce((sum, b) => sum + vehicleIncomeDocumentsStore.vehicleExpenseOf(b), 0)
     /** ค่าแรงคนขับ = เบี้ยเลี้ยงหลังกระทบยอดเพิ่ม/ลดหนี้ (สูตรเดียวกับ computeBookingMoney/เงินเดือนคนขับ) — หักเฉพาะรถบริษัท */
     const driverWage = isCompanyFleet.value ? bookings.reduce((sum, b) => sum + roundMoney(b.finalAllowance ?? b.allowance ?? 0), 0) : 0
     const net = income - fuelTotal - driverWage - vehicleExpense

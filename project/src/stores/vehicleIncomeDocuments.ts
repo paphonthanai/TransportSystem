@@ -5,6 +5,8 @@ import { useBookingStore } from './booking'
 import { useVehiclesStore } from './vehicles'
 import { useAuthStore } from './auth'
 import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
+import { useVehicleExpensesStore } from './vehicleExpenses'
+import { fuelCostOf } from '@/utils/bookingMoney'
 import { vehicleIncomeDocumentRepository } from '@/repositories/vehicleIncomeDocumentRepository'
 import type { Booking } from '@/types'
 
@@ -83,11 +85,16 @@ function totalsOf(lines: VehicleIncomeLine[], options: VehicleIncomeDeductionOpt
 }
 
 /**
- * ค่าน้ำมัน/ค่าใช้จ่ายประจำรถต่องานสำหรับรายได้รถร่วม — ผู้ใช้กรอกเองในตารางหน้ารถร่วม (ปิดการคำนวณอัตโนมัติจาก
- * ลิตร × เรท และยอดสะสม vehicleExpenses ไว้ก่อนตามที่ผู้ใช้สั่ง) ยังไม่กรอก = 0
+ * ค่าน้ำมันต่องานสำหรับรายได้รถร่วม — ระบบคำนวณให้จากลิตร × เรทของงาน ถ้าผู้ใช้แก้เองในตารางหน้ารถร่วม
+ * (vendorFuelCost) ใช้ค่าที่แก้แทน — ค่าใช้จ่ายประจำรถดู vehicleExpenseOf ใน store (ต้องรู้งานทั้งเดือนของรถ)
  */
-export const vendorFuelCostOf = (b: Pick<Booking, 'vendorFuelCost'>) => b.vendorFuelCost ?? 0
-export const vendorVehicleExpenseOf = (b: Pick<Booking, 'vendorVehicleExpense'>) => b.vendorVehicleExpense ?? 0
+export const vendorFuelCostOf = (b: Pick<Booking, 'vendorFuelCost' | 'fuelLiters' | 'fuelRate'>) => b.vendorFuelCost ?? fuelCostOf(b)
+
+const monthKeyOf = (date?: Date) => {
+  if (!date) return ''
+  const d = new Date(date)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
 
 export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocuments', () => {
   const documents = ref<VehicleIncomeDocument[]>([])
@@ -127,7 +134,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
   /**
    * สร้างเอกสารรายได้รถจากงานที่เลือกเอง — เฉพาะ ADMIN ต้องเป็นงานของรถคันนี้ทุกงาน (จับคู่ด้วย Booking.plate ตรงกับทะเบียนรถ
    * ไม่ใช้คนขับประจำปัจจุบันมา join ย้อนหลัง), ส่งของสำเร็จแล้ว (DELIVERED), และยังไม่เคยถูกดึงไปออกเอกสารรายได้รถอื่น
-   * (vehicleIncomeDocId) ค่าน้ำมัน/ค่าใช้จ่ายประจำรถรวมจากที่ผู้ใช้กรอกเองต่องาน (vendorFuelCostOf/vendorVehicleExpenseOf)
+   * (vehicleIncomeDocId) ค่าน้ำมัน/ค่าใช้จ่ายประจำรถต่องาน (vendorFuelCostOf/vehicleExpenseOf — ระบบคำนวณ หรือค่าที่ผู้ใช้แก้เอง)
    * — บันทึกเอกสารลง Firestore สำเร็จก่อนค่อยผูกงาน กันงานค้างป้าย "ออกเอกสารแล้ว" ทั้งที่ไม่มีเอกสารจริง
    */
   async function createVehicleIncomeDocument(
@@ -155,7 +162,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
       bookingId: b.id,
       tripFee: b.tripFee || 0,
       fuelCost: vendorFuelCostOf(b),
-      vehicleExpense: vendorVehicleExpenseOf(b),
+      vehicleExpense: vehicleExpenseOf(b),
     }))
     const totals = totalsOf(lines, deductionOptions)
 
@@ -228,7 +235,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     // เอกสารเก่าไม่มี lines — สร้างจากงานจริงตอนนี้ (ยอดของงานในเอกสารเก่าถูกล็อกไว้ตั้งแต่ออกเอกสารอยู่แล้ว)
     const lines: VehicleIncomeLine[] = (doc.lines ?? remainingIds.map((id) => {
       const b = bookingStore.bookings.find((bk) => bk.id === id)
-      return { bookingId: id, tripFee: b?.tripFee || 0, fuelCost: b ? vendorFuelCostOf(b) : 0, vehicleExpense: b ? vendorVehicleExpenseOf(b) : 0 }
+      return { bookingId: id, tripFee: b?.tripFee || 0, fuelCost: b ? vendorFuelCostOf(b) : 0, vehicleExpense: b ? vehicleExpenseOf(b) : 0 }
     })).filter((l) => l.bookingId !== bookingId)
     const options: VehicleIncomeDeductionOption[] = (doc.deductions ?? []).map((d) => ({ kind: d.kind, percent: d.percent, label: d.label }))
     const updated: VehicleIncomeDocument = { ...doc, bookingIds: remainingIds, lines, ...totalsOf(lines, options) }
@@ -300,23 +307,58 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     return ''
   }
 
-  /** แก้ค่าน้ำมัน/ค่าใช้จ่ายประจำรถที่ผู้ใช้กรอกเองต่องาน (บาท, ไม่ติดลบ) — ไม่แตะลิตร/เรทน้ำมันของงาน */
-  function updateVendorCosts(bookingId: string, data: { fuelCost?: number; vehicleExpense?: number }): ActionResult {
+  /** งานที่จบแล้วของรถคันเดียวกับ booking ในเดือนเดียวกัน (จับคู่ด้วย Booking.plate เหมือนตอนออกเอกสาร) */
+  function vehicleOfBooking(booking: Pick<Booking, 'plate'>) {
+    const vehiclesStore = useVehiclesStore()
+    return vehiclesStore.vehicles.find((v) => booking.plate === vehiclesStore.fullPlate(v) || booking.plate === v.plate)
+  }
+
+  /**
+   * ค่าใช้จ่ายประจำรถเฉลี่ยต่องาน = ค่าใช้จ่ายประจำรถของเดือนนั้น (vehicleExpenses ตามวันที่รายการ) ÷ จำนวนงานที่จบแล้ว
+   * ของรถคันนี้ในเดือนเดียวกัน — ปัดทีละงานเป็นสตางค์ ผลรวมอาจคลาดจากยอดเดือนได้ไม่เกินไม่กี่สตางค์
+   */
+  function autoVehicleExpenseOf(booking: Booking): number {
+    const vehicle = vehicleOfBooking(booking)
+    const month = monthKeyOf(booking.shipDate || booking.completedAt)
+    if (!vehicle || !month) return 0
+    const vehiclesStore = useVehiclesStore()
+    const full = vehiclesStore.fullPlate(vehicle)
+    const jobCount = useBookingStore().bookings.filter(
+      (b) => b.status === 'DELIVERED' && (b.plate === full || b.plate === vehicle.plate) && monthKeyOf(b.shipDate || b.completedAt) === month
+    ).length
+    if (jobCount === 0) return 0
+    const monthTotal = useVehicleExpensesStore()
+      .expensesForVehicle(vehicle.id)
+      .filter((e) => monthKeyOf(e.date) === month)
+      .reduce((sum, e) => sum + (e.amount || 0), 0)
+    return roundMoney(monthTotal / jobCount)
+  }
+
+  /** ค่าใช้จ่ายประจำรถต่องาน — ค่าที่ผู้ใช้แก้เอง (vendorVehicleExpense) ถ้ามี ไม่งั้นค่าเฉลี่ยอัตโนมัติ */
+  const vehicleExpenseOf = (booking: Booking) => booking.vendorVehicleExpense ?? autoVehicleExpenseOf(booking)
+
+  /**
+   * แก้ค่าน้ำมัน/ค่าใช้จ่ายประจำรถต่องาน (บาท, ไม่ติดลบ) — ไม่แตะลิตร/เรทน้ำมันของงาน ส่ง null = ล้างค่าที่แก้เอง กลับไปใช้
+   * ค่าที่ระบบคำนวณอัตโนมัติ
+   */
+  function updateVendorCosts(bookingId: string, data: { fuelCost?: number | null; vehicleExpense?: number | null }): ActionResult {
     const bookingStore = useBookingStore()
     const booking = bookingStore.bookings.find((b) => b.id === bookingId)
     if (!booking) return { ok: false, message: 'ไม่พบงาน' }
     const blocked = vendorCostEditBlockedReason(booking)
     if (blocked) return { ok: false, message: blocked }
-    const values = [data.fuelCost, data.vehicleExpense].filter((v) => v !== undefined) as number[]
+    const values = [data.fuelCost, data.vehicleExpense].filter((v) => v !== undefined && v !== null) as number[]
     if (values.some((v) => !Number.isFinite(v) || v < 0)) return { ok: false, message: 'จำนวนเงินต้องเป็นตัวเลขไม่ติดลบ' }
     const changes: string[] = []
     if (data.fuelCost !== undefined) {
-      changes.push(`ค่าน้ำมัน ${vendorFuelCostOf(booking)} → ${roundMoney(data.fuelCost)}`)
-      booking.vendorFuelCost = roundMoney(data.fuelCost)
+      const before = vendorFuelCostOf(booking)
+      booking.vendorFuelCost = data.fuelCost === null ? undefined : roundMoney(data.fuelCost)
+      changes.push(`ค่าน้ำมัน ${before} → ${vendorFuelCostOf(booking)}${data.fuelCost === null ? ' (กลับไปคำนวณอัตโนมัติ)' : ''}`)
     }
     if (data.vehicleExpense !== undefined) {
-      changes.push(`ค่าใช้จ่ายประจำรถ ${vendorVehicleExpenseOf(booking)} → ${roundMoney(data.vehicleExpense)}`)
-      booking.vendorVehicleExpense = roundMoney(data.vehicleExpense)
+      const before = vehicleExpenseOf(booking)
+      booking.vendorVehicleExpense = data.vehicleExpense === null ? undefined : roundMoney(data.vehicleExpense)
+      changes.push(`ค่าใช้จ่ายประจำรถ ${before} → ${vehicleExpenseOf(booking)}${data.vehicleExpense === null ? ' (กลับไปเฉลี่ยอัตโนมัติ)' : ''}`)
     }
     if (changes.length) bookingStore.addLog(`แก้ยอดรถร่วม ${booking.docNo}: ${changes.join(', ')} บาท`, { bookingId: booking.id })
     return { ok: true }
@@ -356,6 +398,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     resetPayment,
     vendorCostEditBlockedReason,
     updateVendorCosts,
+    vehicleExpenseOf,
     isOrphanedBooking,
     releaseOrphanedBooking,
     documentsForVehicle,

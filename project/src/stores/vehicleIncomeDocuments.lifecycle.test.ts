@@ -3,7 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useBookingStore } from './booking'
 import { useAuthStore } from './auth'
 import { useVehiclesStore } from './vehicles'
-import { useVehicleIncomeDocumentsStore } from './vehicleIncomeDocuments'
+import { useVehicleIncomeDocumentsStore, vendorFuelCostOf } from './vehicleIncomeDocuments'
+import { useVehicleExpensesStore } from './vehicleExpenses'
 import { vehicleIncomeDocumentRepository } from '@/repositories/vehicleIncomeDocumentRepository'
 import { makeBooking } from '../../tests/fixtures/booking'
 import type { UserRole } from './users'
@@ -22,7 +23,7 @@ function loginAs(role: UserRole) {
 }
 
 const jobOf = (overrides: Record<string, unknown> = {}) =>
-  makeBooking({ status: 'DELIVERED', plate: '70-1234 กรุงเทพมหานคร', tripFee: 3000, fuelLiters: 50, fuelRate: 30, ...overrides })
+  makeBooking({ status: 'DELIVERED', plate: '70-1234 กรุงเทพมหานคร', tripFee: 3000, fuelLiters: 0, fuelRate: 30, shipDate: new Date(2026, 9, 5), ...overrides })
 
 async function setup() {
   const docs = useVehicleIncomeDocumentsStore()
@@ -40,11 +41,11 @@ beforeEach(() => {
 })
 
 describe('รายได้รถร่วม — ค่าน้ำมัน/ค่าใช้จ่ายประจำรถกรอกเองต่องาน', () => {
-  it('ยอดเอกสารรวมจากค่าที่กรอกเอง ไม่ใช้ลิตร × เรทอัตโนมัติ (ยังไม่กรอก = 0) และเก็บยอดต่องานไว้ใน lines', async () => {
+  it('ค่าที่แก้เองทับค่าอัตโนมัติ, ไม่แก้ = ลิตร × เรท และเก็บยอดต่องานไว้ใน lines', async () => {
     loginAs('ADMIN')
     const { docs, bookings } = await setup()
     const a = jobOf()
-    const b = jobOf({ tripFee: 2000 })
+    const b = jobOf({ tripFee: 2000, fuelLiters: 50 })
     bookings.bookings.push(a, b)
 
     expect(docs.updateVendorCosts(a.id, { fuelCost: 1200.5, vehicleExpense: 300 }).ok).toBe(true)
@@ -53,15 +54,15 @@ describe('รายได้รถร่วม — ค่าน้ำมัน/�
     expect(result.ok).toBe(true)
     const doc = result.doc!
     expect(doc.tripIncomeTotal).toBe(5000)
-    expect(doc.fuelCostTotal).toBe(1200.5)
+    expect(doc.fuelCostTotal).toBe(2700.5)
     expect(doc.vehicleExpenseTotal).toBe(300)
-    expect(doc.netTotal).toBe(3499.5)
+    expect(doc.netTotal).toBe(1999.5)
     expect(doc.lines).toEqual([
       { bookingId: a.id, tripFee: 3000, fuelCost: 1200.5, vehicleExpense: 300 },
-      { bookingId: b.id, tripFee: 2000, fuelCost: 0, vehicleExpense: 0 },
+      { bookingId: b.id, tripFee: 2000, fuelCost: 1500, vehicleExpense: 0 },
     ])
     expect(a.vehicleIncomeDocId).toBe(doc.id)
-    expect(a.fuelLiters).toBe(50)
+    expect(b.fuelLiters).toBe(50)
     expect(bookings.logs.some((l) => l.action.startsWith('แก้ยอดรถร่วม'))).toBe(true)
   })
 
@@ -266,5 +267,35 @@ describe('สถานะจ่ายเอกสารรายได้รถ�
     expect((await docs.recordPayment(doc.id)).ok).toBe(false)
     loginAs('ADMIN')
     expect((await docs.recordPayment(doc.id)).ok).toBe(true)
+  })
+})
+
+describe('ค่าน้ำมัน/ค่าใช้จ่ายประจำรถคำนวณอัตโนมัติ แก้ทับได้', () => {
+  it('ค่าใช้จ่ายประจำรถ = ยอดเดือน ÷ จำนวนงานของรถในเดือน, แก้เองแล้วกด null = กลับไปค่าอัตโนมัติ', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings } = await setup()
+    const expenses = useVehicleExpensesStore()
+    await vi.waitFor(() => expect(expenses.loading).toBe(false))
+    expenses.expenses.push(
+      { id: 'e1', vehicleId: 'veh-1', expenseType: 'ประกันภัย', amount: 900, date: new Date(2026, 9, 1), createdAt: new Date(), updatedAt: new Date() },
+      { id: 'e2', vehicleId: 'veh-1', expenseType: 'GPS', amount: 100, date: new Date(2026, 8, 1), createdAt: new Date(), updatedAt: new Date() }
+    )
+    const a = jobOf({ fuelLiters: 10 })
+    const b = jobOf()
+    const c = jobOf()
+    const otherMonth = jobOf({ shipDate: new Date(2026, 8, 20) })
+    bookings.bookings.push(a, b, c, otherMonth)
+
+    expect(docs.vehicleExpenseOf(a)).toBe(300)
+    expect(docs.vehicleExpenseOf(otherMonth)).toBe(100)
+
+    expect(docs.updateVendorCosts(a.id, { fuelCost: 999, vehicleExpense: 50 }).ok).toBe(true)
+    expect(vendorFuelCostOf(a)).toBe(999)
+    expect(docs.vehicleExpenseOf(a)).toBe(50)
+
+    expect(docs.updateVendorCosts(a.id, { fuelCost: null, vehicleExpense: null }).ok).toBe(true)
+    expect(a.vendorFuelCost).toBeUndefined()
+    expect(vendorFuelCostOf(a)).toBe(300)
+    expect(docs.vehicleExpenseOf(a)).toBe(300)
   })
 })

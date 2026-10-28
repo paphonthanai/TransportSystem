@@ -48,8 +48,18 @@
             <td class="px-4 py-3 text-right cursor-pointer" :class="row.debtNet >= 0 ? 'text-red-500' : 'text-green-600'" @click="selectDriverDetail(row.driver)">
               {{ row.debtNet >= 0 ? '-' : '+' }}{{ formatBaht(Math.abs(row.debtNet)) }}
             </td>
-            <td class="px-4 py-3 text-right text-green-600 cursor-pointer" @click="selectDriverDetail(row.driver)">+{{ formatBaht(row.additionTotal) }}</td>
-            <td class="px-4 py-3 text-right text-red-500 cursor-pointer" @click="selectDriverDetail(row.driver)">-{{ formatBaht(row.deductionTotal) }}</td>
+            <td class="px-4 py-3 text-right text-green-600 whitespace-nowrap">
+              +{{ formatBaht(row.additionTotal) }}
+              <button v-if="canEditPayroll" @click="lineEditTarget = { driver: row.driver, kind: 'ADDITION' }" class="edit-link ml-1" title="เพิ่ม/แก้รายได้อื่นๆ ของคนขับคนนี้">
+                <span class="material-symbols-rounded text-sm">edit</span>แก้
+              </button>
+            </td>
+            <td class="px-4 py-3 text-right text-red-500 whitespace-nowrap">
+              -{{ formatBaht(row.deductionTotal) }}
+              <button v-if="canEditPayroll" @click="lineEditTarget = { driver: row.driver, kind: 'DEDUCTION' }" class="edit-link ml-1" title="เพิ่ม/แก้รายการหักของคนขับคนนี้">
+                <span class="material-symbols-rounded text-sm">edit</span>แก้
+              </button>
+            </td>
             <td class="px-4 py-3 text-right font-bold text-text cursor-pointer" @click="selectDriverDetail(row.driver)">{{ formatBaht(row.finalNet) }}</td>
             <td class="px-4 py-3">
               <select
@@ -110,6 +120,18 @@
 
     <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" kind="ADDITION" :readonly="!canEditPayroll" />
     <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" kind="DEDUCTION" :readonly="!canEditPayroll" />
+
+    <!-- "แก้" ในตารางสรุป — เปิดรายการรายได้อื่นๆ/รายการหักของคนขับคนนั้นตรงนี้เลย ยอดในตารางคำนวณจากรายการเหล่านี้ทันที -->
+    <Teleport to="body" v-if="lineEditTarget">
+      <div @click="lineEditTarget = null" class="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+        <div @click.stop class="w-full max-w-2xl max-h-[85vh] overflow-y-auto space-y-3">
+          <PayrollDeductionPanel :driver-name="lineEditTarget.driver" :period-label="periodLabel" :kind="lineEditTarget.kind" :readonly="!canEditPayroll" />
+          <div class="flex justify-end">
+            <button @click="lineEditTarget = null" class="btn-secondary">ปิด</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -126,6 +148,9 @@ const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, d
   useDriverPayroll(() => true, 'พขร')
 
 const router = useRouter()
+
+/** คนขับ + ประเภทรายการ (รายได้อื่นๆ/รายการหัก) ที่กด "แก้" จากตารางสรุป */
+const lineEditTarget = ref<{ driver: string; kind: 'ADDITION' | 'DEDUCTION' } | null>(null)
 
 /** สถานะจ่ายรายเดือน — store เช็คสิทธิ์ (ADMIN) และคืนข้อความเมื่อบันทึกไม่สำเร็จ */
 const changePaymentStatus = async (driver: string, status: 'UNPAID' | 'PAID') => {
@@ -149,6 +174,10 @@ const selectDriverDetail = (driver: string) => {
 </script>
 
 <style scoped>
+.edit-link {
+  @apply inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline;
+}
+
 .input-field {
   @apply h-9 px-3 border border-border rounded-lg bg-surface text-text text-sm font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:ring-opacity-20 transition-all;
 }

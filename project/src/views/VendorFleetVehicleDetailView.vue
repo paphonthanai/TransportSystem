@@ -61,8 +61,8 @@
           <div class="font-semibold text-red-500">-{{ formatBaht(totalVehicleExpense) }}</div>
         </div>
         <div>
-          <div class="text-xs text-muted">งานที่ยังไม่กรอกค่าน้ำมัน</div>
-          <div class="font-semibold" :class="missingFuelCount ? 'text-amber-600' : 'text-text'">{{ missingFuelCount }}</div>
+          <div class="text-xs text-muted">งานที่แก้ยอดเอง</div>
+          <div class="font-semibold text-text">{{ manualCostCount }}</div>
         </div>
       </div>
 
@@ -72,9 +72,9 @@
       </div>
 
       <div class="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg p-3">
-        งานในตารางด้านล่าง Trace ตรงจาก Booking → ทะเบียนรถ (ไม่ใช้คนขับประจำปัจจุบันของรถมาไล่ย้อนหลัง) — ค่าน้ำมันและค่าใช้จ่ายประจำรถ
-        ต่องานกรอกเองในตาราง (ปิดการคำนวณอัตโนมัติไว้ก่อน ยังไม่กรอก = 0) ตัวเลขสีเทาใต้ช่องค่าน้ำมันคือค่าที่ระบบคำนวณจากลิตร × เรท
-        ไว้ใช้อ้างอิงเท่านั้น ไม่นำมารวมยอด — งานที่ออกเอกสารแล้วล็อกยอดทั้งหมด ต้องยกเลิกเอกสารก่อนจึงจะแก้ได้
+        งานในตารางด้านล่าง Trace ตรงจาก Booking → ทะเบียนรถ (ไม่ใช้คนขับประจำปัจจุบันของรถมาไล่ย้อนหลัง) — ค่าน้ำมัน = ลิตร × เรทของงาน,
+        ค่าใช้จ่ายประจำรถ = ยอดค่าใช้จ่ายประจำรถของเดือน ÷ จำนวนงานในเดือน (ระบบคำนวณให้) กด "แก้" เพื่อใส่ยอดเองได้ และกด "คำนวณใหม่"
+        เพื่อกลับไปใช้ค่าอัตโนมัติ — งานที่ออกเอกสารแล้วล็อกยอดทั้งหมด ต้องยกเลิก/รีเซ็ตก่อนจึงจะแก้ได้
       </div>
 
       <div v-if="actionError" class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{{ actionError }}</div>
@@ -174,8 +174,12 @@
                     </button>
                     <span v-else class="text-[11px] text-muted" :title="cellBlockedReason(row.booking, field)">({{ shortReason(cellBlockedReason(row.booking, field)) }})</span>
                   </div>
-                  <div v-if="field === 'fuelCost' && row.booking.vendorFuelCost === undefined" class="text-[11px] text-muted">
-                    ยังไม่กรอก{{ row.calculatedFuel ? ` · ระบบคำนวณ ${formatBaht(row.calculatedFuel)}` : '' }}
+                  <div v-if="field !== 'tripFee'" class="text-[11px] text-muted">
+                    <template v-if="isManual(row.booking, field)">
+                      แก้เอง
+                      <button v-if="!cellBlockedReason(row.booking, field)" @click="resetCell(row.booking, field)" class="edit-link" title="กลับไปใช้ค่าที่ระบบคำนวณ">คำนวณใหม่</button>
+                    </template>
+                    <template v-else>อัตโนมัติ</template>
                   </div>
                 </template>
               </td>
@@ -277,12 +281,10 @@ import {
   computeDeductions,
   useVehicleIncomeDocumentsStore,
   vendorFuelCostOf,
-  vendorVehicleExpenseOf,
   paymentStatusOf,
   type VehicleIncomeDeductionOption,
 } from '@/stores/vehicleIncomeDocuments'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
-import { fuelCostOf } from '@/utils/bookingMoney'
 import VehicleExpensePanel from '@/components/vehicle/VehicleExpensePanel.vue'
 import type { Booking } from '@/types'
 
@@ -325,8 +327,7 @@ const periodLabel = computed(() => toBEPeriodLabel(period.value))
 /**
  * Trace ตรงจาก Booking.plate -> ทะเบียนรถคันนี้ (เก็บไว้ ณ ตอนจ่ายงานจริง) ไม่ผ่านคนขับปัจจุบันของรถเลย จึงยังเห็นงาน
  * เก่าของรถคันนี้ครบแม้จะเปลี่ยนคนขับไปแล้ว — ตรงตามกฎ "ห้ามใช้ Current Driver มา Join ย้อนหลัง"
- * ค่าน้ำมัน/ค่าใช้จ่ายประจำรถใช้ยอดที่ผู้ใช้กรอกเองต่องาน (vendorFuelCostOf/vendorVehicleExpenseOf) — calculatedFuel
- * (ลิตร × เรท) แสดงไว้อ้างอิงเท่านั้น ไม่นำมารวมยอด (ปิดการคำนวณอัตโนมัติไว้ก่อนตามที่ผู้ใช้สั่ง)
+ * ค่าน้ำมัน (ลิตร × เรท) และค่าใช้จ่ายประจำรถ (เฉลี่ยต่องานจากยอดเดือน) ระบบคำนวณให้ ผู้ใช้แก้ทับต่องานได้
  */
 const rows = computed(() => {
   if (!vehicle.value) return []
@@ -335,7 +336,7 @@ const rows = computed(() => {
     .filter((b) => b.status === 'DELIVERED')
     .filter((b) => b.plate === full || b.plate === vehicle.value!.plate)
     .filter((b) => inPeriod(b.shipDate || b.completedAt, period.value))
-    .map((b) => ({ booking: b, fuelCost: vendorFuelCostOf(b), vehicleExpense: vendorVehicleExpenseOf(b), calculatedFuel: fuelCostOf(b) }))
+    .map((b) => ({ booking: b, fuelCost: vendorFuelCostOf(b), vehicleExpense: vehicleIncomeDocumentsStore.vehicleExpenseOf(b) }))
     .sort((a, b) => new Date(b.booking.shipDate || b.booking.completedAt || 0).getTime() - new Date(a.booking.shipDate || a.booking.completedAt || 0).getTime())
 })
 
@@ -343,7 +344,7 @@ const totalTripFee = computed(() => rows.value.reduce((sum, r) => sum + (r.booki
 const totalFuelCost = computed(() => rows.value.reduce((sum, r) => sum + r.fuelCost, 0))
 const totalVehicleExpense = computed(() => rows.value.reduce((sum, r) => sum + r.vehicleExpense, 0))
 const netTotal = computed(() => totalTripFee.value - totalFuelCost.value - totalVehicleExpense.value)
-const missingFuelCount = computed(() => rows.value.filter((r) => r.booking.vendorFuelCost === undefined).length)
+const manualCostCount = computed(() => rows.value.filter((r) => r.booking.vendorFuelCost !== undefined || r.booking.vendorVehicleExpense !== undefined).length)
 
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {
   if (!booking.items.length) return '-'
@@ -362,7 +363,14 @@ const editingCell = ref<{ bookingId: string; field: MoneyField } | null>(null)
 const draft = ref<number>(0)
 const actionError = ref('')
 
-const cellValue = (b: Booking, field: MoneyField) => (field === 'tripFee' ? b.tripFee || 0 : field === 'fuelCost' ? vendorFuelCostOf(b) : vendorVehicleExpenseOf(b))
+const cellValue = (b: Booking, field: MoneyField) =>
+  field === 'tripFee' ? b.tripFee || 0 : field === 'fuelCost' ? vendorFuelCostOf(b) : vehicleIncomeDocumentsStore.vehicleExpenseOf(b)
+const isManual = (b: Booking, field: MoneyField) => (field === 'fuelCost' ? b.vendorFuelCost !== undefined : b.vendorVehicleExpense !== undefined)
+const resetCell = (b: Booking, field: MoneyField) => {
+  actionError.value = ''
+  const result = vehicleIncomeDocumentsStore.updateVendorCosts(b.id, field === 'fuelCost' ? { fuelCost: null } : { vehicleExpense: null })
+  if (!result.ok) actionError.value = result.message || 'บันทึกไม่สำเร็จ'
+}
 const cellBlockedReason = (b: Booking, field: MoneyField) => {
   if (field !== 'tripFee') return vehicleIncomeDocumentsStore.vendorCostEditBlockedReason(b)
   if (isMultiPricing(b)) return 'แยกราคาตามปลายทาง — แก้ที่หน้างาน'
@@ -432,8 +440,6 @@ const previewDeductionTotal = computed(() => computeDeductions(selectedTripTotal
 const creating = ref(false)
 const createDocument = async () => {
   if (!vehicle.value || selectedIds.value.size === 0 || creating.value) return
-  const missing = rows.value.filter((r) => selectedIds.value.has(r.booking.id) && r.booking.vendorFuelCost === undefined)
-  if (missing.length && !confirm(`มี ${missing.length} งานที่ยังไม่กรอกค่าน้ำมัน (จะนับเป็น 0) — ยืนยันสร้างเอกสาร?`)) return
   actionError.value = ''
   creating.value = true
   const result = await vehicleIncomeDocumentsStore.createVehicleIncomeDocument(vehicle.value.id, [...selectedIds.value], period.value, deductionOptions.value)

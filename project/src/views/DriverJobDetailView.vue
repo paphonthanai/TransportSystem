@@ -98,8 +98,8 @@
               <div class="text-base font-semibold text-text">
                 {{ nextDelivery(job)!.siteName }} <span class="text-sm text-muted font-normal">({{ nextDelivery(job)!.province }} · {{ nextDelivery(job)!.district }})</span>
               </div>
-              <div class="text-sm text-text"><span class="text-muted">สินค้า:</span> {{ nextDelivery(job)!.product }} {{ nextDelivery(job)!.qty }} {{ nextDelivery(job)!.unit }}</div>
-              <div v-if="nextDelivery(job)!.jobType" class="text-sm text-text"><span class="text-muted">ประเภทงาน:</span> {{ nextDelivery(job)!.jobType }}</div>
+              <div class="text-sm text-text"><span class="text-muted">สินค้า:</span> {{ productsLabel(nextDelivery(job)!) }}</div>
+              <div class="text-sm text-text"><span class="text-muted">ประเภทการลงสินค้า:</span> {{ nextDelivery(job)!.jobType || '-' }}</div>
               <!-- ผู้ติดต่อหน้างานที่ออฟฟิศกรอกไว้ล่วงหน้า (siteContactName) — เดิมมีแค่เบอร์โทร/ปุ่มนำทาง ไม่มีชื่อให้คนขับดู/รู้จักเลย -->
               <div v-if="nextDelivery(job)!.siteContactName" class="text-sm text-text"><span class="text-muted">ผู้ติดต่อ:</span> {{ nextDelivery(job)!.siteContactName }}</div>
               <SiteContactActions :item="nextDelivery(job)!" class="pt-1" />
@@ -147,6 +147,13 @@
               เสร็จแล้ว {{ deliveryProgress(job.items).completed }}/{{ deliveryProgress(job.items).total }} จุด
             </div>
           </div>
+          <div class="bg-white border border-border rounded-xl p-3 text-sm text-text">
+            <span class="text-muted">เลขที่ PO ลูกค้า:</span> <span class="font-semibold break-all">{{ job.reference || '-' }}</span>
+          </div>
+          <div v-if="customerConditionsFor(job).length" class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+            <div class="text-xs font-bold text-amber-800 mb-1">เงื่อนไขลูกค้า</div>
+            <div v-for="(c, i) in customerConditionsFor(job)" :key="i" class="text-amber-900 whitespace-pre-wrap">• {{ c }}</div>
+          </div>
           <!-- ทุกจุดส่งโชว์ผู้ติดต่อ + ปุ่มโทร/นำทางไว้ตลอดทุกขั้นตอน (จัดรถแล้ว → ระหว่างส่ง → ส่งเสร็จ) ให้คนขับโทรนัด/ดูเส้นทาง
                จุดไหนก็ได้ตลอดเวลา ไม่ใช่แค่จุดถัดไป -->
           <div v-for="(item, idx) in job.items" :key="item.id" class="bg-white border border-border rounded-xl p-3 space-y-1.5">
@@ -156,8 +163,8 @@
                 {{ item.siteName }}
                 <span class="text-xs text-muted font-normal">({{ item.province }} · {{ item.district }})</span>
               </span>
-              <span class="whitespace-nowrap flex items-center gap-1">
-                {{ item.product }} {{ item.qty }} {{ item.unit }}
+              <span class="flex items-center gap-1 text-right">
+                {{ productsLabel(item) }}
                 <span v-if="item.deliveryStatus === 'DELIVERED'" class="inline-flex items-center gap-0.5 text-green-700 text-xs font-semibold">
                   <span class="material-symbols-rounded text-sm">check_circle</span>
                   ส่งแล้ว
@@ -298,6 +305,7 @@
 </template>
 
 <script setup lang="ts">
+import { customerConditionsFor } from '@/utils/bookingNote'
 import PageGate from '@/components/shared/PageGate.vue'
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -357,6 +365,10 @@ const actingDriverName = computed(() => {
  *  ที่นี่แค่ wrap ให้ยังเรียกด้วย Booking ทั้งก้อนเหมือนเดิมทุกจุดในเทมเพลต ไม่ต้องแก้ template */
 const nextDelivery = (b: Booking): JobItem | null => nextDeliveryItems(b.items)
 const nextPickup = (b: Booking): JobItem | null => nextPickupItems(b.items)
+
+/** สินค้าทุกชนิดของจุดส่งนี้ (สินค้าหลัก + extraProducts) — เดิมโชว์แค่สินค้าหลักตัวเดียว งานที่มีสินค้า 2 ชนิดขึ้นไปจึงหายไป */
+const productsLabel = (item: JobItem) =>
+  [item, ...(item.extraProducts || [])].map((p) => `${p.product} ${p.qty} ${p.unit}`).join(' + ')
 
 /** พิกัดของจุดส่งสำหรับแสดงเป็นตัวเลข — ใช้ latitude/longitude ที่บันทึกไว้ก่อน ไม่มีก็ลองอ่านจากลิงก์/ข้อความแผนที่
  *  อ่านเป็นตัวเลขไม่ได้แต่มีลิงก์ (เช่นลิงก์ย่อ maps.app.goo.gl) = แสดงเป็น "เปิดแผนที่" แทน ไม่มีอะไรเลย = null */
