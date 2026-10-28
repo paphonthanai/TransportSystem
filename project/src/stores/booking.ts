@@ -1289,6 +1289,23 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`แนบรูปขึ้นสินค้า ${booking.docNo}`, { bookingId: booking.id })
   }
 
+  /** แนบรูปให้คนขับดู (ตอนจัดรถ/หน้ารายละเอียดงาน) — ไม่บังคับ ไม่เปลี่ยนสถานะงาน */
+  function addDriverAttachment(bookingId: string, url: string) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
+    if (!booking) return
+    booking.driverAttachments = [...(booking.driverAttachments || []), url]
+    addLog(`แนบรูปให้คนขับ ${booking.docNo}`, { bookingId: booking.id })
+  }
+
+  /** เอารูปแนบให้คนขับออก (ไฟล์ใน Storage ยังอยู่ แค่ไม่แสดงในงานแล้ว) */
+  function removeDriverAttachment(bookingId: string, url: string) {
+    const booking = bookings.value.find((b) => b.id === bookingId)
+    if (!booking?.driverAttachments?.includes(url)) return
+    const next = booking.driverAttachments.filter((u) => u !== url)
+    booking.driverAttachments = next.length ? next : undefined
+    addLog(`ลบรูปแนบให้คนขับ ${booking.docNo}`, { bookingId: booking.id })
+  }
+
   /**
    * คนขับกดยืนยัน "ดำเนินการเสร็จสิ้น" หลังส่งของครบทุกรายการแล้ว — จบงานฝั่งคนขับ (DELIVERING -> DELIVERED)
    * เป็นจุดที่บันทึกเลขไมล์สิ้นสุด (ย้ายมาจากที่เคยถามในโมดัลส่งของจุดสุดท้าย) บังคับทุกรายการที่ส่งแล้วต้องมีรูป POD
@@ -1627,6 +1644,8 @@ export const useBookingStore = defineStore('booking', () => {
     confirmPodImage,
     setDeliveryNoteImage,
     setLoadingImage,
+    addDriverAttachment,
+    removeDriverAttachment,
     toggleTicketChecked,
     finishDriverJob,
     stripDateSuffixFromSiteNames,

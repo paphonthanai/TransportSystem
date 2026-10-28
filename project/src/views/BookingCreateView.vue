@@ -191,7 +191,7 @@
             <tbody>
               <tr v-for="(li, idx) in lineItems" :key="li.id" class="border-b border-border last:border-0">
                 <td class="px-3 py-2 text-text">
-                  {{ li.product }} <span v-if="li.jobType" class="text-muted">({{ li.jobType }})</span>
+                  {{ li.product }} <span v-if="li.jobType" class="text-muted">({{ jobTypeCode(li.jobType) }})</span>
                   <div v-for="(ep, epIdx) in li.extraProducts || []" :key="epIdx" class="text-[11px] text-muted">
                     + สินค้าอื่น: {{ ep.product }} {{ ep.qty }} {{ ep.unit }}
                   </div>
@@ -306,6 +306,7 @@
 </template>
 
 <script setup lang="ts">
+import { jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'

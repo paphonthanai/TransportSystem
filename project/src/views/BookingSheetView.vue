@@ -146,13 +146,14 @@
         <option v-for="c in customerCodes" :key="c" :value="c" />
       </datalist>
       <datalist id="sheet-jobtypes">
-        <option v-for="t in jobTypes" :key="t" :value="t" />
+        <option v-for="(t, i) in jobTypes" :key="t" :value="t">{{ JOB_TYPE_OPTIONS[i] }}</option>
       </datalist>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { JOB_TYPE_CODE, JOB_TYPE_OPTIONS } from '@/utils/jobType'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
@@ -215,7 +216,7 @@ const baseColumns: SheetColumn[] = [
   { key: IMPORT_HEADERS.allowance, label: 'เบี้ยเลี้ยง', narrow: true },
   { key: IMPORT_HEADERS.price, label: 'ราคาปูน', narrow: true },
   { key: IMPORT_HEADERS.fuel, label: 'น้ำมัน', narrow: true },
-  { key: IMPORT_HEADERS.jobType, label: 'ประเภทงาน' },
+  { key: IMPORT_HEADERS.jobType, label: 'ประเภท (d1/d2/d3)', narrow: true },
   { key: IMPORT_HEADERS.mapLink, label: 'พิกัด/ลิงก์ Google Maps', wide: true },
   { key: IMPORT_HEADERS.note, label: 'หมายเหตุ', wide: true },
 ]
@@ -383,7 +384,7 @@ const rowTone = (idx: number) => {
 const plateOptions = computed(() => vehiclesStore.vehicles.map((v) => vehiclesStore.fullPlate(v)))
 const driverNicknames = computed(() => [...new Set(driversStore.drivers.map((d) => (d.nickname || '').trim()).filter(Boolean))])
 const customerCodes = computed(() => customerStore.customers.map((c) => c.code).filter(Boolean))
-const jobTypes = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
+const jobTypes = JOB_TYPE_OPTIONS.map((t) => JOB_TYPE_CODE[t])
 const datalistFor = (key: string) => {
   if (key === IMPORT_HEADERS.plate) return 'sheet-plates'
   if (key === IMPORT_HEADERS.driverName) return 'sheet-drivers'

@@ -59,4 +59,20 @@ describe('รูปตอนขึ้นสินค้า (ไม่บัง�
     expect(b.loadingImage).toBe('https://x/load.jpg')
     expect(b.status).toBe('LOADING')
   })
+
+  it('แนบรูปให้คนขับดู: เพิ่มหลายรูป / เอาออก / เอาออกหมดแล้วล้างฟิลด์', () => {
+    const store = useBookingStore()
+    const b = makeBooking({ status: 'ASSIGNED' })
+    store.bookings.push(b)
+
+    store.addDriverAttachment(b.id, 'https://x/a.jpg')
+    store.addDriverAttachment(b.id, 'https://x/b.jpg')
+    expect(b.driverAttachments).toEqual(['https://x/a.jpg', 'https://x/b.jpg'])
+    expect(b.status).toBe('ASSIGNED')
+
+    store.removeDriverAttachment(b.id, 'https://x/a.jpg')
+    expect(b.driverAttachments).toEqual(['https://x/b.jpg'])
+    store.removeDriverAttachment(b.id, 'https://x/b.jpg')
+    expect(b.driverAttachments).toBeUndefined()
+  })
 })

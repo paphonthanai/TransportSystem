@@ -146,7 +146,7 @@
             </template>
             <template v-if="isCements">
               <div class="md:col-span-2">
-                <label class="block text-xs font-semibold text-muted mb-1">ประเภทงาน</label>
+                <label class="block text-xs font-semibold text-muted mb-1">ประเภท</label>
                 <div class="flex gap-2 flex-wrap">
                   <button
                     v-for="jt in jobTypeOptions"
@@ -158,7 +158,7 @@
                       draft.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
                     ]"
                   >
-                    {{ jt }}
+                    {{ jobTypeOptionLabel(jt) }}
                   </button>
                 </div>
               </div>
@@ -179,6 +179,7 @@
 </template>
 
 <script setup lang="ts">
+import { JOB_TYPE_OPTIONS, jobTypeOptionLabel } from '@/utils/jobType'
 import { ref, computed, watch } from 'vue'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
@@ -239,7 +240,7 @@ const authStore = useAuthStore()
  *  หน้า Unauthorized เฉยๆ จึงโชว์ปุ่มเฉพาะ ADMIN เท่านั้น role อื่นเห็นข้อความให้ไปแจ้ง Admin แทน */
 const isAdmin = computed(() => authStore.role === 'ADMIN')
 
-const jobTypeOptions: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
+const jobTypeOptions = JOB_TYPE_OPTIONS
 
 const defaultDraft = (): JobItemDraft => ({
   siteName: '',

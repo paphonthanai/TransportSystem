@@ -115,7 +115,7 @@
               <td class="border border-gray-400 px-2 py-1">{{ row.seq }}</td>
               <td class="border border-gray-400 px-2 py-1">
                 {{ row.destinationName }} ({{ row.province }} · {{ row.district }}) · {{ row.product }}
-                <span v-if="row.jobType" class="text-xs text-gray-600">· {{ row.jobType }}</span>
+                <span v-if="row.jobType" class="text-xs text-gray-600">· {{ jobTypeCode(row.jobType) }}</span>
               </td>
               <td class="border border-gray-400 px-2 py-1 text-right">{{ row.qty }}</td>
               <td class="border border-gray-400 px-2 py-1">{{ row.unit }}</td>
@@ -495,6 +495,12 @@
         </div>
       </div>
 
+      <!-- รูปที่ออฟฟิศแนบให้คนขับดู (แนบตอนจัดรถ หรือเพิ่ม/ลบที่นี่ภายหลัง) -->
+      <div v-if="canEditBookingRole || booking.driverAttachments?.length" class="card-lg no-print space-y-2">
+        <h3 class="font-semibold text-text">รูปแนบให้คนขับดู</h3>
+        <DriverAttachments :booking="booking" :editable="canEditBookingRole" />
+      </div>
+
       <!-- รูปตอนขึ้นสินค้า — คนขับถ่ายจากแอป ถ้าไม่ได้ถ่ายออฟฟิศแนบให้ที่นี่ (ไม่บังคับ) -->
       <div v-if="booking.status !== 'WAITING_DISPATCH'" class="card-lg no-print space-y-2">
         <h3 class="font-semibold text-text">รูปตอนขึ้นสินค้า</h3>
@@ -602,6 +608,7 @@
 </template>
 
 <script setup lang="ts">
+import { jobTypeCode } from '@/utils/jobType'
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -617,6 +624,7 @@ import { priceCellText, PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import { toDateInputValue, fromDateInputValue } from '@/utils/dateRanges'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import ImageLightbox from '@/components/shared/ImageLightbox.vue'
+import DriverAttachments from '@/components/booking/DriverAttachments.vue'
 import BookingCompleteDialog from '@/components/booking/BookingCompleteDialog.vue'
 import DriverIncomeEditDialog from '@/components/booking/DriverIncomeEditDialog.vue'
 import { bookingCompletionIssues, describeCompletionIssues, STATIC_COMPLETION_CODES } from '@/utils/bookingCompletion'

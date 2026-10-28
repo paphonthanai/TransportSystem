@@ -14,6 +14,8 @@ export const photoPaths = {
   loading: (bookingId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/loading-${Date.now()}.jpg`,
   delivery: (bookingId: string, itemId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/goods-${itemId}-${Date.now()}.jpg`,
   deliveryNote: (bookingId: string, itemId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/note-${itemId}-${Date.now()}.jpg`,
+  /** รูปที่ออฟฟิศแนบให้คนขับดู — ออฟฟิศเท่านั้นที่แนบ จึงอยู่โซน office-uploads/ เสมอ (คนขับอ่านงานของตัวเองได้) */
+  driverAttachment: (bookingId: string) => `office-uploads/${bookingId}/attach-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.jpg`,
 }
 
 /** ย่อ+บีบรูป แล้วอัปโหลดขึ้น Firebase Storage คืน download URL ที่เก็บลง Firestore ได้เลย */

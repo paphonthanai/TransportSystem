@@ -71,7 +71,7 @@
               {{ nextPickup(job)!.product }} <span class="text-sm text-muted font-normal">{{ nextPickup(job)!.qty }} {{ nextPickup(job)!.unit }}</span>
             </div>
             <div class="text-sm text-muted">ต้นทาง: {{ nextPickup(job)!.pickupOriginName || job.origin || '-' }}</div>
-            <div v-if="nextPickup(job)!.jobType" class="text-sm text-muted">ประเภทงาน: {{ nextPickup(job)!.jobType }}</div>
+            <div v-if="nextPickup(job)!.jobType" class="text-sm text-muted">ประเภท: {{ jobTypeCode(nextPickup(job)!.jobType) }}</div>
             <button
               @click="bookingStore.pickupJobItem(job.id, nextPickup(job)!.id, actingDriverName)"
               class="w-full h-12 rounded-lg bg-teal-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-teal-700"
@@ -99,7 +99,7 @@
                 {{ nextDelivery(job)!.siteName }} <span class="text-sm text-muted font-normal">({{ nextDelivery(job)!.province }} · {{ nextDelivery(job)!.district }})</span>
               </div>
               <div class="text-sm text-text"><span class="text-muted">สินค้า:</span> {{ productsLabel(nextDelivery(job)!) }}</div>
-              <div class="text-sm text-text"><span class="text-muted">ประเภทการลงสินค้า:</span> {{ nextDelivery(job)!.jobType || '-' }}</div>
+              <div class="text-sm text-text"><span class="text-muted">ประเภท:</span> <span class="font-bold">{{ jobTypeCode(nextDelivery(job)!.jobType) || '-' }}</span></div>
               <!-- ผู้ติดต่อหน้างานที่ออฟฟิศกรอกไว้ล่วงหน้า (siteContactName) — เดิมมีแค่เบอร์โทร/ปุ่มนำทาง ไม่มีชื่อให้คนขับดู/รู้จักเลย -->
               <div v-if="nextDelivery(job)!.siteContactName" class="text-sm text-text"><span class="text-muted">ผู้ติดต่อ:</span> {{ nextDelivery(job)!.siteContactName }}</div>
               <SiteContactActions :item="nextDelivery(job)!" class="pt-1" />
@@ -153,6 +153,10 @@
           <div v-if="customerConditionsFor(job).length" class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
             <div class="text-xs font-bold text-amber-800 mb-1">เงื่อนไขลูกค้า</div>
             <div v-for="(c, i) in customerConditionsFor(job)" :key="i" class="text-amber-900 whitespace-pre-wrap">• {{ c }}</div>
+          </div>
+          <div v-if="job.driverAttachments?.length" class="bg-white border border-border rounded-xl p-3">
+            <div class="text-xs font-bold text-muted mb-2">รูปแนบจากออฟฟิศ</div>
+            <DriverAttachments :booking="job" />
           </div>
           <!-- ทุกจุดส่งโชว์ผู้ติดต่อ + ปุ่มโทร/นำทางไว้ตลอดทุกขั้นตอน (จัดรถแล้ว → ระหว่างส่ง → ส่งเสร็จ) ให้คนขับโทรนัด/ดูเส้นทาง
                จุดไหนก็ได้ตลอดเวลา ไม่ใช่แค่จุดถัดไป -->
@@ -305,6 +309,8 @@
 </template>
 
 <script setup lang="ts">
+import DriverAttachments from '@/components/booking/DriverAttachments.vue'
+import { jobTypeCode } from '@/utils/jobType'
 import { customerConditionsFor } from '@/utils/bookingNote'
 import PageGate from '@/components/shared/PageGate.vue'
 import { ref, computed, watch } from 'vue'

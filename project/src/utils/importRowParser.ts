@@ -2,6 +2,7 @@ import type { BookingJobType } from '@/types'
 import { normalizePlateCode } from '@/utils/importReconciliation'
 import { parseGpsInput } from '@/utils/gps'
 import { extractPhones } from '@/utils/phone'
+import { parseJobType } from '@/utils/jobType'
 
 // --- นำเข้า Booking จากไฟล์ Excel งานจริง (Requirement: "Import Excel เพื่อสร้างงาน" ตามคอลัมน์ที่หน้างานใช้อยู่จริง) ---
 // 1 แถว Excel = 1 Booking เสมอ (ไม่มีคอลัมน์กลุ่มงานแล้วเหมือนเทมเพลตเดิม) — เจตนาของฟีเจอร์นี้เปลี่ยนจาก "สร้างงานใหม่
@@ -18,6 +19,9 @@ import { extractPhones } from '@/utils/phone'
 // ไฟล์ล่าสุดบางไฟล์เริ่มมีคอลัมน์ "ประเภทงาน" เพิ่มมาด้วย (ค่าที่เจอ เช่น "ลงมือ"/"พาเรท") — เดาคอลัมน์ตามชื่อที่ลูกค้า
 // พิมพ์มาตรงๆ เพราะไม่มีไฟล์จริงมายืนยัน pattern แน่ชัด ถ้าไม่เจอคอลัมน์นี้เลยหรืออ่านค่าไม่ตรงกับ BookingJobType ที่ระบบ
 // รู้จัก (ลงมือ/พาเลทโรงงาน/พาเลทฟรี) ห้ามบล็อกการสร้างงาน แค่เว้นว่างไว้แล้วเตือนให้ไปตรวจสอบเอง (ดู jobType ด้านล่าง)
+/** หัวคอลัมน์ประเภทงานแบบเดิม — ยังรับอยู่ถ้าไฟล์ไม่มีคอลัมน์ "ประเภท" */
+const LEGACY_JOB_TYPE_HEADER = 'ประเภทงาน'
+
 export const IMPORT_HEADERS = {
   driverName: 'พขร.',
   plate: 'คอนเฟิร์ม',
@@ -33,7 +37,8 @@ export const IMPORT_HEADERS = {
   allowance: 'เบี้ยเลี้ยง',
   price: 'ราคาปูน',
   fuel: 'น้ำมัน',
-  jobType: 'ประเภทงาน',
+  /** ค่า d1 (ลงมือ) / d2 (พาเลทโรงงาน) / d3 (พาเลทฟรี) หรือชื่อไทยเต็มก็ได้ — ไฟล์เก่าที่ใช้หัว "ประเภทงาน" ยังอ่านได้ (LEGACY_JOB_TYPE_HEADER) */
+  jobType: 'ประเภท',
   mapLink: 'พิกัด/ลิงก์ Google Maps หน้างาน',
   tripNo: 'เที่ยวที่',
   note: 'หมายเหตุ',
@@ -500,14 +505,11 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
     warnings.push(`น้ำมันจาก Excel (${fuelFromExcel} ล.) ไม่ตรงกับเรทที่ตั้งไว้สำหรับ ${district}/${province} (${configuredFuelRate} ล.)`)
   }
 
-  // "ประเภทงาน" เป็นคอลัมน์ที่ไฟล์บางไฟล์เพิ่งเริ่มมี ต้องตรงกับ BookingJobType เป๊ะเท่านั้นถึงจะใส่ให้ (เทียบแบบ trim
-  // ไม่สนตัวพิมพ์เล็ก-ใหญ่เพราะเป็นภาษาไทยอยู่แล้วไม่มีผล) ถ้าช่องนี้ว่างเปล่าไม่ต้องเตือนอะไร (ไฟล์เก่าไม่มีคอลัมน์นี้อยู่
-  // แล้วเป็นปกติ) แต่ถ้ามีค่าแต่จับคู่ไม่ได้ (เช่น "พาเรท" ไม่ตรงกับ "พาเลทโรงงาน"/"พาเลทฟรี" เป๊ะ แยกไม่ออกว่าหมายถึง
-  // อันไหน) ให้เว้นว่างไว้ก่อนแล้วเตือนแทนการเดา
-  const jobTypeRaw = str(raw[IMPORT_HEADERS.jobType])
-  const JOB_TYPE_OPTIONS: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
-  const jobType = JOB_TYPE_OPTIONS.find((t) => t === jobTypeRaw)
-  if (jobTypeRaw && !jobType) warnings.push(`ประเภทงานจาก Excel "${jobTypeRaw}" ไม่ตรงกับระบบเป๊ะ (มี "ลงมือ"/"พาเลทโรงงาน"/"พาเลทฟรี") — เว้นว่างไว้ก่อน ตรวจสอบเองภายหลัง`)
+  // คอลัมน์ "ประเภท" (d1/d2/d3 หรือชื่อไทยเต็ม ดู parseJobType) — ไฟล์เก่าใช้หัว "ประเภทงาน" ก็ยังอ่านได้ ช่องว่างไม่ต้องเตือน
+  // แต่ถ้ามีค่าแล้วจับคู่ไม่ได้ (เช่น "พาเรท" แยกไม่ออกว่าโรงงานหรือฟรี) ให้เว้นว่างไว้ก่อนแล้วเตือนแทนการเดา
+  const jobTypeRaw = str(raw[IMPORT_HEADERS.jobType]) || str(raw[LEGACY_JOB_TYPE_HEADER])
+  const jobType = parseJobType(jobTypeRaw)
+  if (jobTypeRaw && !jobType) warnings.push(`ประเภทจาก Excel "${jobTypeRaw}" ไม่ตรงกับระบบ (ใช้ d1 ลงมือ / d2 พาเลทโรงงาน / d3 พาเลทฟรี) — เว้นว่างไว้ก่อน ตรวจสอบเองภายหลัง`)
 
   const fuelRemark = fuelCell.remark ? `น้ำมัน: ${fuelCell.remark}` : ''
   // ข้อควรตรวจก่อนนำเข้า (ไม่แปะลง note) — พิกัด/ลิงก์ GPS และเลขเที่ยวที่อ่านไม่ได้ (เลขเที่ยวชนกับงานเดิมของวันตรวจในพรีวิว)

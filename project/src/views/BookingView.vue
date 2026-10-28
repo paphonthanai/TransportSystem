@@ -529,6 +529,15 @@
               <input v-model.number="dispatchForm.tripSequence" type="number" min="1" step="1" class="input-field w-24" />
             </div>
 
+            <!-- รูปแนบให้คนขับดู (ไม่บังคับ) — อัปโหลดแล้วบันทึกลงงานทันที แก้เพิ่ม/ลบภายหลังได้ที่หน้ารายละเอียดงาน -->
+            <div v-if="dispatchTarget">
+              <label class="block text-xs font-semibold text-muted mb-1">
+                รูปแนบให้คนขับดู
+                <span class="text-[10px] font-normal text-muted">(ไม่บังคับ — คนขับเห็นในรายละเอียดงานบนแอป)</span>
+              </label>
+              <DriverAttachments :booking="dispatchTarget" editable />
+            </div>
+
             <div class="text-xs font-semibold text-muted pt-2 border-t border-border">
               รายการในงานนี้ ({{ dispatchTarget?.items.length || 0 }} รายการ)
             </div>
@@ -633,7 +642,7 @@
                       dispatchItemDraft.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
                     ]"
                   >
-                    {{ jt }}
+                    {{ jobTypeOptionLabel(jt) }}
                   </button>
                 </div>
               </template>
@@ -955,6 +964,8 @@
 </template>
 
 <script setup lang="ts">
+import DriverAttachments from '@/components/booking/DriverAttachments.vue'
+import { JOB_TYPE_OPTIONS, jobTypeOptionLabel } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -1162,7 +1173,7 @@ const resetCardRate = () => {
 const isCements = computed(() => props.fleet === 'cements')
 const productOptionsForFleet = computed(() => inventoryStore.products.filter((p) => p.category === props.fleet))
 
-const jobTypeOptions: BookingJobType[] = ['ลงมือ', 'พาเลทโรงงาน', 'พาเลทฟรี']
+const jobTypeOptions = JOB_TYPE_OPTIONS
 
 const driverOptions = computed(() =>
   driversStore.drivers.filter((d) => d.employmentStatus === 'active').map((d) => `${d.firstName} ${d.lastName}`)

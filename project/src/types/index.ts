@@ -241,6 +241,8 @@ export interface Booking {
   podImage?: string
   /** รูปตอนขึ้นสินค้า (คนขับถ่ายจากแอป หรือออฟฟิศแนบให้) — Firebase Storage URL ไม่บังคับ ไม่ขวางการเปลี่ยนสถานะ */
   loadingImage?: string
+  /** รูปที่ออฟฟิศแนบให้คนขับดู (ตอนจัดรถ หรือหน้ารายละเอียดงานภายหลัง) — Firebase Storage URL ไม่บังคับ แสดงในแอปคนขับ */
+  driverAttachments?: string[]
   /** สถานะการเงินจากระบบรอบบิลเดิม (batches/addBookingsToBatch/issueInvoiceFromBatch ใน stores/booking.ts) — คงไว้เพื่อความเข้ากันได้กับ
    *  หน้า /billing (BillingView.vue) เดิมเท่านั้น ระบบเอกสารรวมปัจจุบัน (createBillingFromBookings/createTaxInvoiceFromBookings/
    *  createReceiptFromBookings ใน stores/salesDocuments.ts) ไม่อ่าน/เขียน field นี้อีกต่อไป — ดู billingNoteDocId/taxInvoiceDocId/receiptDocId */
