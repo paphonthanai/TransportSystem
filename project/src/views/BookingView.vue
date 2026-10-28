@@ -551,7 +551,25 @@
                   <div>
                     <div class="font-semibold text-text">{{ idx + 1 }}. {{ li.siteName }} <span class="text-muted font-normal">({{ li.province }} · {{ li.district }})</span></div>
                     <div class="text-xs text-muted mt-0.5">{{ li.product }} · {{ li.qty }} {{ li.unit }}</div>
-                    <div v-if="li.jobType" class="text-xs text-text"><span class="text-muted">ประเภท:</span> <span class="font-semibold">{{ jobTypeLabel(li.jobType) }}</span></div>
+                    <div v-if="isCements" class="text-xs text-text flex items-center gap-1 flex-wrap mt-0.5">
+                      <span class="text-muted">ประเภท:</span>
+                      <span :class="li.jobType ? 'font-semibold' : 'text-amber-700'">{{ jobTypeLabel(li.jobType) || 'ยังไม่ระบุ' }}</span>
+                      <template v-if="canEditDispatchItems">
+                        <button
+                          v-for="jt in jobTypeOptions"
+                          :key="jt"
+                          type="button"
+                          @click="li.jobType = jt"
+                          :class="[
+                            'px-1.5 py-0.5 rounded border text-[11px]',
+                            li.jobType === jt ? 'bg-primary text-white border-primary' : 'bg-surface border-border hover:bg-border',
+                          ]"
+                          :title="jobTypeOptionLabel(jt)"
+                        >
+                          {{ jobTypeCode(jt) }}
+                        </button>
+                      </template>
+                    </div>
                     <div v-if="li.siteContactName || li.sitePhone" class="text-xs text-muted">
                       {{ li.siteContactName || '-' }} {{ li.sitePhone ? '· ' + li.sitePhone : '' }}
                     </div>
@@ -966,7 +984,7 @@
 
 <script setup lang="ts">
 import DriverAttachments from '@/components/booking/DriverAttachments.vue'
-import { JOB_TYPE_OPTIONS, jobTypeLabel, jobTypeOptionLabel } from '@/utils/jobType'
+import { JOB_TYPE_OPTIONS, jobTypeCode, jobTypeLabel, jobTypeOptionLabel } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'

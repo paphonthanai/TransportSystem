@@ -115,7 +115,7 @@
               <td class="border border-gray-400 px-2 py-1">{{ row.seq }}</td>
               <td class="border border-gray-400 px-2 py-1">
                 {{ row.destinationName }} ({{ row.province }} · {{ row.district }}) · {{ row.product }}
-                <span v-if="row.jobType" class="text-xs text-gray-600">· {{ jobTypeCode(row.jobType) }}</span>
+                <span v-if="row.jobType" class="text-xs text-gray-600">· {{ jobTypeLabel(row.jobType) }}</span>
               </td>
               <td class="border border-gray-400 px-2 py-1 text-right">{{ row.qty }}</td>
               <td class="border border-gray-400 px-2 py-1">{{ row.unit }}</td>
@@ -352,7 +352,10 @@
             <div v-for="(ep, epIdx) in item.extraProducts || []" :key="epIdx">
               <span class="text-muted">สินค้าอื่น:</span> {{ ep.product }} {{ ep.qty }} {{ ep.unit }}
             </div>
-            <div v-if="item.jobType"><span class="text-muted">ประเภท:</span> {{ jobTypeLabel(item.jobType) }}</div>
+            <div v-if="booking.category === 'cements'">
+              <span class="text-muted">ประเภท:</span>
+              <span :class="item.jobType ? 'font-semibold' : 'text-amber-700'">{{ jobTypeLabel(item.jobType) || 'ยังไม่ระบุ' }}</span>
+            </div>
             <div><span class="text-muted">ต้นทาง:</span> {{ item.pickupOriginName || booking.origin || '-' }}</div>
             <div><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName || '-' }} {{ item.sitePhone ? '· ' + item.sitePhone : '' }}</div>
             <div>
@@ -609,7 +612,7 @@
 </template>
 
 <script setup lang="ts">
-import { jobTypeCode, jobTypeLabel } from '@/utils/jobType'
+import { jobTypeLabel } from '@/utils/jobType'
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
