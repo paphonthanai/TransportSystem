@@ -224,7 +224,7 @@
                 {{ ep.product }} <span class="font-normal text-muted">{{ ep.qty }} {{ ep.unit }}</span>
               </div>
               <div class="text-sm text-muted">{{ item.siteName }} ({{ item.province }} · {{ item.district }})</div>
-              <div class="text-sm text-muted">ประเภท: <span class="font-bold text-text">{{ jobTypeCode(item.jobType) || '-' }}</span></div>
+              <div class="text-sm text-muted">ประเภท: <span class="font-bold text-text">{{ jobTypeLabel(item.jobType) || '-' }}</span></div>
             </div>
           </div>
           <div class="px-5 py-4 border-t border-border">
@@ -383,7 +383,7 @@ import { isDriverVisibleBooking } from '@/utils/driverJobs'
 import { deliveryProgress } from '@/utils/deliveryProgress'
 import { bookingTitle } from '@/utils/bookingTitle'
 import { customerConditionsFor } from '@/utils/bookingNote'
-import { jobTypeCode } from '@/utils/jobType'
+import { jobTypeLabel } from '@/utils/jobType'
 import DriverAttachments from '@/components/booking/DriverAttachments.vue'
 import { usePwaInstall, usePwaUpdate } from '@/composables/usePwa'
 

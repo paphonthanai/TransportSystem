@@ -26,3 +26,8 @@ export function parseJobType(raw: string): BookingJobType | undefined {
   const lower = v.toLowerCase()
   return JOB_TYPE_OPTIONS.find((t) => t === v || JOB_TYPE_CODE[t] === lower)
 }
+
+/** รหัสพร้อมชื่อเต็ม เช่น "d1 (ลงมือ)" — ใช้ในแอปคนขับและหน้ารายละเอียดงาน; ไม่มีประเภท = '' */
+export function jobTypeLabel(t?: BookingJobType): string {
+  return t ? `${JOB_TYPE_CODE[t]} (${t})` : ''
+}
