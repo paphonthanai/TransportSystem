@@ -545,7 +545,7 @@
               <span class="material-symbols-rounded text-base">task_alt</span>
               จบงาน{{ booking.status === 'IN_TRANSIT' || booking.status === 'DELIVERING' ? '' : ' (ข้ามขั้นตอน)' }}
             </button>
-            <button v-if="canApprovePod" type="button" class="btn-primary" @click="approvePod">
+            <button v-if="canApprovePod || canReviewLegacyPod" type="button" class="btn-primary" @click="approvePod">
               <span class="material-symbols-rounded text-base">check_circle</span>
               ยืนยัน POD และจบงาน
             </button>
@@ -729,6 +729,8 @@ const completeBlockedReason = computed(() =>
 const confirmBlockedReason = computed(() => (booking.value ? describeCompletionIssues(bookingCompletionIssues(booking.value, { standardFuelLiters: standardFuel.value, tripNumber: bookingStore.tripNumberOf(booking.value) })) : ''))
 const canComplete = computed(() => !!booking.value && booking.value.status !== 'DELIVERED' && booking.value.items.length > 0)
 const canApprovePod = computed(() => booking.value?.podReviewStatus === 'PENDING_REVIEW')
+/** งานเก่าที่ออฟฟิศปิดเองแต่มี POD (ตรวจสอบ POD = "-") — ยืนยัน POD ได้จากปุ่มเดียวกัน (ส่งเข้าขั้นตรวจแล้วยืนยันทันที) */
+const canReviewLegacyPod = computed(() => !!booking.value && bookingStore.canRequestPodReview(booking.value))
 const canConfirmCompletion = computed(
   () => !!booking.value && booking.value.status === 'DELIVERED' && booking.value.podReviewStatus === 'APPROVED' && !booking.value.completionConfirmedAt
 )
@@ -749,6 +751,7 @@ const podPhotos = computed(() => {
 const actionHint = computed(() => {
   const b = booking.value
   if (!b) return ''
+  if (canReviewLegacyPod.value) return 'งานนี้ปิดโดยออฟฟิศและมีรูป POD จากคนขับ แต่ยังไม่ได้ตรวจ POD — ตรวจรูปด้านบน แล้วกด "ยืนยัน POD และจบงาน"'
   if (canApprovePod.value) return 'คนขับส่งของแล้ว — ตรวจรูป POD ด้านล่าง (กดรูปเพื่อขยาย) แล้วกด "ยืนยัน POD และจบงาน"'
   if (canConfirmCompletion.value) return 'POD ตรวจแล้ว — กด "ยืนยันการจบงาน" เพื่อปิดงานและนำไปวางบิลได้'
   if (canComplete.value) return 'งานยังไม่จบ — กด "จบงาน" เพื่อปิดงานโดยออฟฟิศ'
@@ -760,6 +763,8 @@ const approvePod = () => {
   const b = booking.value
   if (!b) return
   if (!confirm(`ยืนยันว่ารูป POD ของงาน ${b.docNo} ตรงกับข้อมูลในระบบ และจบงาน? หลังยืนยันจะนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
+  // งานเก่าที่ยังไม่เคยเข้าขั้นตรวจ POD: ส่งเข้าขั้นตรวจก่อน (ข้อมูลไม่ครบ = ค้างอยู่ที่ "รอตรวจสอบ POD" ให้ไปแก้แล้วกดใหม่)
+  if (canReviewLegacyPod.value) bookingStore.requestPodReview(b.id)
   // ยืนยัน POD = ยืนยันการจบงานด้วยในคลิกเดียว — ข้อมูลไม่ครบ = ไม่แตะอะไร อยู่หน้านี้ต่อให้ไปแก้ก่อน
   const result = bookingStore.approvePodAndConfirmCompletion(b.id)
   if (!result.ok) {

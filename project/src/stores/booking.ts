@@ -678,6 +678,24 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
+   * งานเก่าที่ออฟฟิศปิดเองก่อนมีกติกา "มี POD = ต้องตรวจ POD" (podReviewStatus ว่าง แต่มีรูป POD จากคนขับ) ยังไม่ได้ยืนยันจบงาน
+   * และยังไม่ถูกนำไปวางบิล — ส่งเข้าขั้นตรวจ POD ได้ (หลังจากนั้นใช้ "ยืนยัน POD และจบงาน" ตามปกติ)
+   */
+  function canRequestPodReview(booking: Booking): boolean {
+    const hasPod = !!booking.podImage || booking.items.some((i) => !!i.podImage)
+    return booking.status === 'DELIVERED' && !booking.podReviewStatus && hasPod && !booking.completionConfirmedAt && !isBookingBilled(booking)
+  }
+
+  function requestPodReview(id: string): boolean {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking || !canRequestPodReview(booking)) return false
+    booking.podReviewStatus = 'PENDING_REVIEW'
+    booking.podReviewNote = undefined
+    addLog(`ส่งงาน ${booking.docNo} เข้าขั้นตรวจสอบ POD (งานที่ออฟฟิศปิดเองแต่มีรูป POD จากคนขับ)`, { bookingId: booking.id })
+    return true
+  }
+
+  /**
    * กฎแก้ค่าเที่ยว / เบี้ยเลี้ยง / วันที่ส่งของสำเร็จ ของงานที่จัดรถแล้วหรือจบงาน/ยืนยันการจบงานแล้ว: เสมียน (STAFF) แก้ได้
    * จนกว่างานจะถูกนำไปวางบิล หลังจากนั้นต้องให้ ADMIN แก้ — ว่าง = แก้ได้ (role อื่นคงกติกาเดิมของแต่ละจุด)
    */
@@ -1595,6 +1613,8 @@ export const useBookingStore = defineStore('booking', () => {
     staffBilledEditBlockedReason,
     tripFeeEditBlockedReason,
     updateBookingRefs,
+    canRequestPodReview,
+    requestPodReview,
     updateDriverIncome,
     deliverJobItem,
     confirmPodImage,

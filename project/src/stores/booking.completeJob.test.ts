@@ -195,3 +195,30 @@ describe('ออฟฟิศจบงานเองแต่มีรูป POD
     expect(b.podReviewStatus).toBe('APPROVED')
   })
 })
+
+describe('requestPodReview — งานเก่าที่ออฟฟิศปิดเองแต่มี POD (ตรวจสอบ POD = "-")', () => {
+  const legacy = { ...ready, status: 'DELIVERED' as const, completedAt: new Date(2026, 9, 27), items: [makeJobItem({ deliveryStatus: 'DELIVERED', podImage: 'pod-a' })] }
+
+  it('ยังไม่วางบิล → ส่งเข้าขั้นตรวจ POD ได้', () => {
+    const store = useBookingStore()
+    const b = makeBooking({ ...legacy })
+    store.bookings.push(b)
+
+    expect(store.canRequestPodReview(b)).toBe(true)
+    expect(store.requestPodReview(b.id)).toBe(true)
+    expect(b.podReviewStatus).toBe('PENDING_REVIEW')
+  })
+
+  it('วางบิลแล้ว / ไม่มี POD / ยืนยันจบงานแล้ว → ไม่แตะ', () => {
+    const store = useBookingStore()
+    const billed = makeBooking({ ...legacy, billingNoteDocId: 'doc-1' })
+    const noPod = makeBooking({ ...legacy, items: [makeJobItem({ deliveryStatus: 'DELIVERED' })] })
+    const confirmedJob = makeBooking({ ...legacy, completionConfirmedAt: new Date() })
+    store.bookings.push(billed, noPod, confirmedJob)
+
+    for (const b of [billed, noPod, confirmedJob]) {
+      expect(store.requestPodReview(b.id)).toBe(false)
+      expect(b.podReviewStatus).toBeUndefined()
+    }
+  })
+})
