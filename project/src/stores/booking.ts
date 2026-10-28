@@ -1160,7 +1160,18 @@ export const useBookingStore = defineStore('booking', () => {
     booking.status = 'DELIVERED'
     // billingStatus ไม่เกี่ยวกับสถานะงานเลย ปล่อยไว้ตามเดิม (UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล)
     booking.completedAt = new Date()
-    addLog(`จบงาน ${booking.docNo}${booking.podImage ? ' (แนบ POD จากคนขับ)' : ' (ปิดงานโดยออฟฟิศ)'}`, { bookingId: booking.id })
+    // ออฟฟิศปิดงานเองแต่มีรูป POD จากคนขับอยู่แล้ว (ส่งของบางจุด/ทุกจุดผ่านแอป) = ต้องผ่านขั้นตรวจ POD + ยืนยันการจบงานก่อนวางบิล
+    // เหมือนงานที่คนขับจบเอง (ดู finishDriverJob / isBookingConfirmedForBilling) — POD ที่อนุมัติไปแล้วคงไว้ ไม่ต้องตรวจซ้ำ
+    // ไม่มีรูป POD เลย = ปิดงานโดยออฟฟิศล้วน ถือว่ายืนยันแล้วเหมือนเดิม
+    const hasDriverPod = !!booking.podImage || booking.items.some((i) => !!i.podImage)
+    if (hasDriverPod && booking.podReviewStatus !== 'APPROVED') {
+      booking.podReviewStatus = 'PENDING_REVIEW'
+      booking.podReviewNote = undefined
+    }
+    addLog(
+      `จบงาน ${booking.docNo}${hasDriverPod ? ' (มี POD จากคนขับ — รอออฟฟิศตรวจสอบ POD)' : ' (ปิดงานโดยออฟฟิศ)'}`,
+      { bookingId: booking.id }
+    )
     return { ok: true, issues: [] }
   }
 

@@ -165,3 +165,33 @@ describe('updateCompletedAt — แก้วันที่ส่งของส
     expect(b.completedAt).toBeUndefined()
   })
 })
+
+describe('ออฟฟิศจบงานเองแต่มีรูป POD จากคนขับ = ต้องตรวจ POD ก่อนวางบิล', () => {
+  it('มีรูป POD อย่างน้อย 1 จุด → podReviewStatus = PENDING_REVIEW', () => {
+    const store = useBookingStore()
+    const b = makeBooking({ ...ready, items: [makeJobItem({ deliveryStatus: 'DELIVERED', podImage: 'pod-a' })] })
+    store.bookings.push(b)
+
+    expect(store.completeJob(b.id, [], 1250).ok).toBe(true)
+    expect(b.status).toBe('DELIVERED')
+    expect(b.podReviewStatus).toBe('PENDING_REVIEW')
+  })
+
+  it('ไม่มีรูป POD เลย → ถือว่ายืนยันแล้วเหมือนเดิม (podReviewStatus ว่าง)', () => {
+    const store = useBookingStore()
+    const b = makeBooking({ ...ready, items: [makeJobItem()] })
+    store.bookings.push(b)
+
+    store.completeJob(b.id, [], 1250)
+    expect(b.podReviewStatus).toBeUndefined()
+  })
+
+  it('POD ที่อนุมัติไปแล้วคงไว้ ไม่ต้องตรวจซ้ำ', () => {
+    const store = useBookingStore()
+    const b = makeBooking({ ...ready, podReviewStatus: 'APPROVED', items: [makeJobItem({ podImage: 'pod-a' })] })
+    store.bookings.push(b)
+
+    store.completeJob(b.id, [], 1250)
+    expect(b.podReviewStatus).toBe('APPROVED')
+  })
+})
