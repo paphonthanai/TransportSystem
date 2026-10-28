@@ -33,7 +33,7 @@
         </select>
         <div class="relative w-full max-w-xs">
           <span class="material-symbols-rounded text-base text-muted absolute left-3 top-1/2 -translate-y-1/2">search</span>
-          <input v-model="search" placeholder="ค้นหาลูกค้า/เลขที่เอกสาร" class="input-field w-full !pl-9" />
+          <input v-model="search" placeholder="ค้นหา วันที่, เลขที่เอกสาร, ลูกค้า/โปรเจ็ค, ยอดรวมสุทธิ, สถานะ" class="input-field w-full !pl-9" />
         </div>
       </div>
 
@@ -196,6 +196,7 @@
 </template>
 
 <script setup lang="ts">
+import { matchesSearchFields } from '@/utils/searchFields'
 import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } from '@/stores/salesDocuments'
@@ -240,7 +241,7 @@ const filteredDocs = computed(() => {
     if (statusFilter.value !== 'all' && d.status !== statusFilter.value) return false
     const q = search.value.trim().toLowerCase()
     if (!q) return true
-    return d.customer.toLowerCase().includes(q) || d.number.toLowerCase().includes(q)
+    return matchesSearchFields(q, [formatDate(d.date), d.number, d.customer, customerStore.findByName(d.customer)?.code, d.project, formatBaht(d.amount + (d.vatAmount || 0)), statusLabel[d.status]])
   })
   const dir = sortDir.value === 'asc' ? 1 : -1
   return [...list].sort((a, b) => {

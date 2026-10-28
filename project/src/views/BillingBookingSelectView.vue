@@ -40,14 +40,14 @@
       </div>
       <div v-if="bookingCategories.length > 1" class="text-[11px] text-muted">ลูกค้ารายนี้มีงานมากกว่าหนึ่งประเภท ต้องวางบิลแยกทีละประเภท (Feed) เสมอ</div>
 
-      <!-- ค้นหางานในตาราง: เลขชิพเม้น · เลขที่ PO ลูกค้า · หน้างาน · ทะเบียน · คนขับ ฯลฯ (ดู utils/bookingSearch.ts)
+      <!-- ค้นหางานในตารางตามคอลัมน์ที่แสดง (ดู matchesTableColumns)
            กรองแค่ที่แสดง งานที่ติ๊กไว้แล้วยังถูกเลือกอยู่แม้ค้นคำอื่น -->
       <div v-if="bookingCategory" class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface border border-border max-w-md">
         <span class="material-symbols-rounded text-muted">search</span>
         <input
           v-model="searchText"
           type="text"
-          placeholder="ค้นหาเลขชิพเม้น, เลขที่ PO ลูกค้า, หน้างาน, ทะเบียน, คนขับ..."
+          placeholder="ค้นหา รายละเอียด/หน้างาน, ทะเบียน, ชนิดปูน, เลขที่ PO ลูกค้า, วันที่ส่งของสำเร็จ, ราคา, เลขชิพเม้น"
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
@@ -121,7 +121,7 @@ import { useBookingStore } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBillingRuleStore } from '@/stores/billingRule'
 import { categoryFeedLabel, isBookingConfirmedForBilling, billingDateOf, billingMonthKey, billingMonthLabel } from '@/utils/bookingStatus'
-import { matchesBookingSearch } from '@/utils/bookingSearch'
+import { matchesSearchFields } from '@/utils/searchFields'
 import type { Booking, BookingCategory } from '@/types'
 
 const router = useRouter()
@@ -150,6 +150,17 @@ const pickerSelectedIds = ref<Set<string>>(new Set())
 
 /** กรองตามเดือนที่ส่งของสำเร็จ (รองรับลูกค้าที่วางบิลรายเดือน) — ว่าง = ทุกเดือน เปลี่ยนเดือน/ลูกค้าแล้วล้างงานที่เลือกไว้นอกเดือนนั้นทิ้ง */
 const searchText = ref('')
+/** ค้นหาตามคอลัมน์ที่แสดงในตาราง (รายละเอียด/หน้างาน · ทะเบียน · ชนิดปูน · เลขที่ PO ลูกค้า · วันที่ส่งของสำเร็จ · ราคา) + เลขชิพเม้น */
+const matchesTableColumns = (b: Booking) =>
+  matchesSearchFields(searchText.value, [
+    bookingDescription(b),
+    b.plate,
+    bookingProducts(b),
+    b.reference,
+    formatDateShort(billingDateOf(b)),
+    formatBaht(bookingTotal(b)),
+    b.shipmentNo,
+  ])
 const monthFilter = ref('')
 const monthOptions = computed(() =>
   [...new Set(bookingStore.bookings.filter((b) => b.customer === customerName.value && isBookingBillable(b)).map(billingMonthKey))].sort().reverse()
@@ -190,7 +201,7 @@ const toggleSort = (key: SortKey) => {
 }
 const sortIcon = (key: SortKey) => (sortKey.value !== key ? 'unfold_more' : sortDir.value === 'asc' ? 'arrow_upward' : 'arrow_downward')
 const sortedEligibleBookings = computed(() => {
-  const list = eligibleBookings.value.filter((b) => matchesBookingSearch(b, searchText.value))
+  const list = eligibleBookings.value.filter((b) => matchesTableColumns(b))
   const dir = sortDir.value === 'asc' ? 1 : -1
   if (sortKey.value === 'po') list.sort((a, b) => (a.reference || '').localeCompare(b.reference || '') * dir)
   else if (sortKey.value === 'shipDate') list.sort((a, b) => ((billingDateOf(a)?.getTime() ?? 0) - (billingDateOf(b)?.getTime() ?? 0)) * dir)
