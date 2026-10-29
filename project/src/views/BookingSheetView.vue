@@ -146,7 +146,7 @@
         <option v-for="c in customerCodes" :key="c" :value="c" />
       </datalist>
       <datalist id="sheet-jobtypes">
-        <option v-for="(t, i) in jobTypes" :key="t" :value="t">{{ JOB_TYPE_OPTIONS[i] }}</option>
+        <option v-for="t in jobTypes" :key="t" :value="t" />
       </datalist>
     </div>
   </div>

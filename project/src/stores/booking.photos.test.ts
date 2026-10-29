@@ -65,14 +65,27 @@ describe('รูปตอนขึ้นสินค้า (ไม่บัง�
     const b = makeBooking({ status: 'ASSIGNED' })
     store.bookings.push(b)
 
-    store.addDriverAttachment(b.id, 'https://x/a.jpg')
-    store.addDriverAttachment(b.id, 'https://x/b.jpg')
+    store.addBookingPhoto(b.id, 'driverAttachments', 'https://x/a.jpg')
+    store.addBookingPhoto(b.id, 'driverAttachments', 'https://x/b.jpg')
     expect(b.driverAttachments).toEqual(['https://x/a.jpg', 'https://x/b.jpg'])
     expect(b.status).toBe('ASSIGNED')
 
-    store.removeDriverAttachment(b.id, 'https://x/a.jpg')
+    store.removeBookingPhoto(b.id, 'driverAttachments', 'https://x/a.jpg')
     expect(b.driverAttachments).toEqual(['https://x/b.jpg'])
-    store.removeDriverAttachment(b.id, 'https://x/b.jpg')
+    store.removeBookingPhoto(b.id, 'driverAttachments', 'https://x/b.jpg')
     expect(b.driverAttachments).toBeUndefined()
+  })
+
+  it('รูปเพิ่มเติมจากคนขับแยกชุดจากรูปแนบให้คนขับ + ส่งของพร้อมรูปเพิ่มเติม', () => {
+    const store = useBookingStore()
+    const item = makeJobItem()
+    const b = makeBooking({ status: 'IN_TRANSIT', items: [item] })
+    store.bookings.push(b)
+    store.addBookingPhoto(b.id, 'driverPhotos', 'https://x/d.jpg')
+    expect(b.driverPhotos).toEqual(['https://x/d.jpg'])
+    expect(b.driverAttachments).toBeUndefined()
+
+    store.deliverJobItem(b.id, item.id, 'https://x/pod.jpg', '-', undefined, ['https://x/e1.jpg', 'https://x/e2.jpg'])
+    expect(item.extraPodImages).toEqual(['https://x/e1.jpg', 'https://x/e2.jpg'])
   })
 })

@@ -142,7 +142,9 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
       const where = booking.items.length > 1 ? ` (จุดที่ ${idx + 1}: ${item.siteName})` : ''
       if (item.podImage) photos.push({ label: `สินค้าตอนลง${where}`, url: item.podImage })
       if (item.deliveryNoteImage) photos.push({ label: `ใบส่งของ${where}`, url: item.deliveryNoteImage })
+      ;(item.extraPodImages || []).forEach((url, n) => photos.push({ label: `รูปเพิ่มเติม ${n + 1}${where}`, url }))
     })
+    ;(booking.driverPhotos || []).forEach((url, n) => photos.push({ label: `รูปจากคนขับ ${n + 1}`, url }))
     return photos
   }
 

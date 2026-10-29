@@ -19,6 +19,10 @@
           <span class="material-symbols-rounded text-base">edit</span>
           แก้ไขงาน
         </button>
+        <button v-if="canAddPhoto" @click="fire('add-photo')" class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-text">
+          <span class="material-symbols-rounded text-base">add_a_photo</span>
+          เพิ่มรูป
+        </button>
         <button v-if="booking.status === 'LOADED'" @click="fire('start-transit')" class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface-2 text-indigo-700">
           <span class="material-symbols-rounded text-base">directions</span>
           เริ่มขนส่ง
@@ -97,6 +101,8 @@ defineProps<{
   completeBlockedReason?: string
   /** มีค่า = ข้อมูลไม่ครบ ปุ่ม "ยืนยันการจบงาน" กดไม่ได้ */
   confirmBlockedReason?: string
+  /** แสดงเมนู "เพิ่มรูป" (รูปแนบให้คนขับดูในแอป) */
+  canAddPhoto?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -109,6 +115,7 @@ const emit = defineEmits<{
   'approve-pod': []
   'edit-pod': []
   'confirm-completion': []
+  'add-photo': []
 }>()
 
 const open = ref(false)
@@ -140,7 +147,7 @@ const toggle = async () => {
   }
 }
 
-const fire = (action: 'view' | 'edit' | 'start-transit' | 'complete' | 'delete' | 'cancel' | 'approve-pod' | 'edit-pod' | 'confirm-completion') => {
+const fire = (action: 'view' | 'edit' | 'start-transit' | 'complete' | 'delete' | 'cancel' | 'approve-pod' | 'edit-pod' | 'confirm-completion' | 'add-photo') => {
   open.value = false
   /** defineEmits ทำให้ emit มีชนิดเป็น overload แยกต่อชื่อ event — เรียกด้วยตัวแปร union ไม่ผ่าน TS ทั้งที่ทุกแขนง
    *  ถูกต้องจริง (ข้อจำกัดที่รู้จักของ TS กับ overloaded function + union argument) ฟังก์ชัน fire() เองยังคง

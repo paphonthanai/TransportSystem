@@ -2,6 +2,9 @@ export type BookingCategory = 'cements' | 'ceramics'
 
 export type BookingJobType = 'ลงมือ' | 'พาเลทโรงงาน' | 'พาเลทฟรี'
 
+/** ชุดรูปหลายรูปของงาน — ดู Booking.driverAttachments / Booking.driverPhotos */
+export type BookingPhotoListField = 'driverAttachments' | 'driverPhotos'
+
 /**
  * โหมดการคิดราคาค่าเที่ยวของงาน — ตั้งตอนสร้างงาน แก้ไขภายหลังได้ (ผ่าน confirmation เท่านั้น ดู switchPricingMode ใน stores/booking.ts)
  * SINGLE_DESTINATION (ค่า default เสมอ รวมถึงงานเก่าที่ไม่มีฟิลด์นี้): กรอกค่าเที่ยวครั้งเดียวทั้งงาน (booking.tripFee) ไม่ว่ามีกี่รายการ/ปลายทาง — พฤติกรรมเดิมของระบบ
@@ -122,6 +125,8 @@ export interface JobItem {
   loadingDate?: Date
   /** เวลาลงสินค้าของจุดส่งนี้โดยเฉพาะ รูปแบบ "HH:mm" (ไม่บังคับ) ข้อมูลเก่าก่อนมี field นี้ไม่มีค่า แสดง "-" แทน */
   loadingTime?: string
+  /** รูปเพิ่มเติมตอนส่งของจุดนี้ (นอกจากรูปสินค้าตอนลง/ใบส่งของ) — ไม่บังคับ หลายรูปได้ */
+  extraPodImages?: string[]
   /** สถานะการรับสินค้าที่ต้นทางของรายการนี้ — ไม่มีค่า = ยังไม่รับ (PENDING) */
   pickupStatus?: 'PENDING' | 'PICKED_UP'
   /** ลำดับที่คนขับเลือกไปรับสินค้ารายการนี้ (0 = รับก่อนสุด) กำหนดตอนกดรับสินค้าจริง */
@@ -243,6 +248,8 @@ export interface Booking {
   loadingImage?: string
   /** รูปที่ออฟฟิศแนบให้คนขับดู (ตอนจัดรถ หรือหน้ารายละเอียดงานภายหลัง) — Firebase Storage URL ไม่บังคับ แสดงในแอปคนขับ */
   driverAttachments?: string[]
+  /** รูปเพิ่มเติมที่คนขับแนบเองจากแอป (นอกเหนือจากรูปขึ้นสินค้า/POD) — Firebase Storage URL ไม่บังคับ ออฟฟิศเห็นในหน้ารายละเอียดงาน */
+  driverPhotos?: string[]
   /** สถานะการเงินจากระบบรอบบิลเดิม (batches/addBookingsToBatch/issueInvoiceFromBatch ใน stores/booking.ts) — คงไว้เพื่อความเข้ากันได้กับ
    *  หน้า /billing (BillingView.vue) เดิมเท่านั้น ระบบเอกสารรวมปัจจุบัน (createBillingFromBookings/createTaxInvoiceFromBookings/
    *  createReceiptFromBookings ใน stores/salesDocuments.ts) ไม่อ่าน/เขียน field นี้อีกต่อไป — ดู billingNoteDocId/taxInvoiceDocId/receiptDocId */

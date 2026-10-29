@@ -115,7 +115,7 @@
               <td class="border border-gray-400 px-2 py-1">{{ row.seq }}</td>
               <td class="border border-gray-400 px-2 py-1">
                 {{ row.destinationName }} ({{ row.province }} · {{ row.district }}) · {{ row.product }}
-                <span v-if="row.jobType" class="text-xs text-gray-600">· {{ jobTypeLabel(row.jobType) }}</span>
+                <span v-if="row.jobType" class="text-xs text-gray-600">· {{ jobTypeCode(row.jobType) }}</span>
               </td>
               <td class="border border-gray-400 px-2 py-1 text-right">{{ row.qty }}</td>
               <td class="border border-gray-400 px-2 py-1">{{ row.unit }}</td>
@@ -352,9 +352,10 @@
             <div v-for="(ep, epIdx) in item.extraProducts || []" :key="epIdx">
               <span class="text-muted">สินค้าอื่น:</span> {{ ep.product }} {{ ep.qty }} {{ ep.unit }}
             </div>
+            <div><span class="text-muted">เวลาลงสินค้า:</span> {{ loadingTimeOf(booking, item) || '-' }}</div>
             <div v-if="booking.category === 'cements'">
               <span class="text-muted">ประเภท:</span>
-              <span :class="item.jobType ? 'font-semibold' : 'text-amber-700'">{{ jobTypeLabel(item.jobType) || 'ยังไม่ระบุ' }}</span>
+              <span :class="item.jobType ? 'font-semibold' : 'text-amber-700'">{{ jobTypeCode(item.jobType) || 'ยังไม่ระบุ' }}</span>
             </div>
             <div><span class="text-muted">ต้นทาง:</span> {{ item.pickupOriginName || booking.origin || '-' }}</div>
             <div><span class="text-muted">ผู้ติดต่อ:</span> {{ item.siteContactName || '-' }} {{ item.sitePhone ? '· ' + item.sitePhone : '' }}</div>
@@ -502,7 +503,13 @@
       <!-- รูปที่ออฟฟิศแนบให้คนขับดู (แนบตอนจัดรถ หรือเพิ่ม/ลบที่นี่ภายหลัง) -->
       <div v-if="canEditBookingRole || booking.driverAttachments?.length" class="card-lg no-print space-y-2">
         <h3 class="font-semibold text-text">รูปแนบให้คนขับดู</h3>
-        <DriverAttachments :booking="booking" :editable="canEditBookingRole" />
+        <BookingPhotoList :booking="booking" :editable="canEditBookingRole" />
+      </div>
+
+      <!-- รูปที่คนขับแนบเพิ่มเองจากแอป -->
+      <div v-if="booking.driverPhotos?.length" class="card-lg no-print space-y-2">
+        <h3 class="font-semibold text-text">รูปเพิ่มเติมจากคนขับ</h3>
+        <BookingPhotoList :booking="booking" field="driverPhotos" />
       </div>
 
       <!-- รูปตอนขึ้นสินค้า — คนขับถ่ายจากแอป ถ้าไม่ได้ถ่ายออฟฟิศแนบให้ที่นี่ (ไม่บังคับ) -->
@@ -612,7 +619,8 @@
 </template>
 
 <script setup lang="ts">
-import { jobTypeLabel } from '@/utils/jobType'
+import { jobTypeCode } from '@/utils/jobType'
+import { loadingTimeOf } from '@/utils/loadingTime'
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -628,7 +636,7 @@ import { priceCellText, PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import { toDateInputValue, fromDateInputValue } from '@/utils/dateRanges'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
 import ImageLightbox from '@/components/shared/ImageLightbox.vue'
-import DriverAttachments from '@/components/booking/DriverAttachments.vue'
+import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
 import BookingCompleteDialog from '@/components/booking/BookingCompleteDialog.vue'
 import DriverIncomeEditDialog from '@/components/booking/DriverIncomeEditDialog.vue'
 import { bookingCompletionIssues, describeCompletionIssues, STATIC_COMPLETION_CODES } from '@/utils/bookingCompletion'
@@ -756,6 +764,9 @@ const podPhotos = computed(() => {
     if (item.podImage && !photos.some((p) => p.src === item.podImage)) {
       photos.push({ src: item.podImage, label: b.items.length > 1 ? `POD จุดที่ ${idx + 1} - ${item.siteName}` : `POD - ${item.siteName}` })
     }
+    ;(item.extraPodImages || []).forEach((src, n) => {
+      photos.push({ src, label: `รูปเพิ่มเติม ${n + 1}${b.items.length > 1 ? ` จุดที่ ${idx + 1}` : ''} - ${item.siteName}` })
+    })
   })
   return photos
 })

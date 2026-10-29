@@ -10,11 +10,18 @@ const MAX_UPLOAD_BYTES = 350_000
  *  ดูตารางสิทธิ์ที่หัวไฟล์ storage.rules — path ต้องตรงกับกฎเสมอ ห้ามเปลี่ยนโดยไม่แก้กฎตามไปด้วย */
 export type PhotoActor = 'driver' | 'office'
 
+/** จำนวนรูปสูงสุดต่อชุด (รูปแนบให้คนขับ / รูปเพิ่มเติมของคนขับ / รูปเพิ่มเติมต่อจุดส่ง) — กันโควตา Storage ฟรีหมดเร็ว */
+export const MAX_PHOTOS_PER_LIST = 10
+
 export const photoPaths = {
   loading: (bookingId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/loading-${Date.now()}.jpg`,
   delivery: (bookingId: string, itemId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/goods-${itemId}-${Date.now()}.jpg`,
   deliveryNote: (bookingId: string, itemId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/note-${itemId}-${Date.now()}.jpg`,
   /** รูปที่ออฟฟิศแนบให้คนขับดู — ออฟฟิศเท่านั้นที่แนบ จึงอยู่โซน office-uploads/ เสมอ (คนขับอ่านงานของตัวเองได้) */
+  /** รูปเพิ่มเติมของงาน (คนขับแนบเอง) */
+  extra: (bookingId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/extra-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.jpg`,
+  /** รูปเพิ่มเติมตอนส่งของจุดนี้ */
+  deliveryExtra: (bookingId: string, itemId: string, actor: PhotoActor) => `${actor}-uploads/${bookingId}/goods-${itemId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.jpg`,
   driverAttachment: (bookingId: string) => `office-uploads/${bookingId}/attach-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.jpg`,
 }
 

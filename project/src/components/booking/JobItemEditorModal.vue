@@ -158,7 +158,7 @@
                       draft.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
                     ]"
                   >
-                    {{ jobTypeOptionLabel(jt) }}
+                    {{ jobTypeCode(jt) }}
                   </button>
                 </div>
               </div>
@@ -179,7 +179,7 @@
 </template>
 
 <script setup lang="ts">
-import { JOB_TYPE_OPTIONS, jobTypeOptionLabel } from '@/utils/jobType'
+import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch } from 'vue'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'

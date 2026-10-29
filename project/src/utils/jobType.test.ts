@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { jobTypeCode, jobTypeLabel, parseJobType } from './jobType'
+import { jobTypeCode, parseJobType } from './jobType'
 import { IMPORT_HEADERS, parseImportRow } from './importRowParser'
 
 describe('ประเภท d1/d2/d3', () => {
@@ -37,12 +37,5 @@ describe('import คอลัมน์ "ประเภท"', () => {
     const row = rowOf({ ประเภท: 'd9' })
     expect(row.jobType).toBeUndefined()
     expect(row.warnings.some((w) => w.includes('d9'))).toBe(true)
-  })
-})
-
-describe('jobTypeLabel', () => {
-  it('รหัสพร้อมชื่อ', () => {
-    expect(jobTypeLabel('ลงมือ')).toBe('d1 (ลงมือ)')
-    expect(jobTypeLabel(undefined)).toBe('')
   })
 })

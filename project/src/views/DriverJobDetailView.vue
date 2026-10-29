@@ -71,7 +71,7 @@
               {{ nextPickup(job)!.product }} <span class="text-sm text-muted font-normal">{{ nextPickup(job)!.qty }} {{ nextPickup(job)!.unit }}</span>
             </div>
             <div class="text-sm text-muted">ต้นทาง: {{ nextPickup(job)!.pickupOriginName || job.origin || '-' }}</div>
-            <div v-if="nextPickup(job)!.jobType" class="text-sm text-muted">ประเภท: {{ jobTypeLabel(nextPickup(job)!.jobType) }}</div>
+            <div v-if="nextPickup(job)!.jobType" class="text-sm text-muted">ประเภท: {{ jobTypeCode(nextPickup(job)!.jobType) }}</div>
             <button
               @click="bookingStore.pickupJobItem(job.id, nextPickup(job)!.id, actingDriverName)"
               class="w-full h-12 rounded-lg bg-teal-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-teal-700"
@@ -99,7 +99,8 @@
                 {{ nextDelivery(job)!.siteName }} <span class="text-sm text-muted font-normal">({{ nextDelivery(job)!.province }} · {{ nextDelivery(job)!.district }})</span>
               </div>
               <div class="text-sm text-text"><span class="text-muted">สินค้า:</span> {{ productsLabel(nextDelivery(job)!) }}</div>
-              <div class="text-sm text-text"><span class="text-muted">ประเภท:</span> <span class="font-bold">{{ jobTypeLabel(nextDelivery(job)!.jobType) || '-' }}</span></div>
+              <div class="text-sm text-text"><span class="text-muted">เวลาลงสินค้า:</span> <span class="font-bold">{{ loadingTimeOf(job, nextDelivery(job)!) || '-' }}</span></div>
+              <div class="text-sm text-text"><span class="text-muted">ประเภท:</span> <span class="font-bold">{{ jobTypeCode(nextDelivery(job)!.jobType) || '-' }}</span></div>
               <!-- ผู้ติดต่อหน้างานที่ออฟฟิศกรอกไว้ล่วงหน้า (siteContactName) — เดิมมีแค่เบอร์โทร/ปุ่มนำทาง ไม่มีชื่อให้คนขับดู/รู้จักเลย -->
               <div v-if="nextDelivery(job)!.siteContactName" class="text-sm text-text"><span class="text-muted">ผู้ติดต่อ:</span> {{ nextDelivery(job)!.siteContactName }}</div>
               <SiteContactActions :item="nextDelivery(job)!" class="pt-1" />
@@ -148,6 +149,9 @@
             </div>
           </div>
           <div class="bg-white border border-border rounded-xl p-3 text-sm text-text">
+            <span class="text-muted">เวลาลงสินค้า:</span> <span class="font-semibold">{{ loadingTimeOf(job) || '-' }}</span>
+          </div>
+          <div class="bg-white border border-border rounded-xl p-3 text-sm text-text">
             <span class="text-muted">เลขที่ PO ลูกค้า:</span> <span class="font-semibold break-all">{{ job.reference || '-' }}</span>
           </div>
           <div v-if="customerConditionsFor(job).length" class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
@@ -156,7 +160,12 @@
           </div>
           <div v-if="job.driverAttachments?.length" class="bg-white border border-border rounded-xl p-3">
             <div class="text-xs font-bold text-muted mb-2">รูปแนบจากออฟฟิศ</div>
-            <DriverAttachments :booking="job" />
+            <BookingPhotoList :booking="job" />
+          </div>
+          <div class="bg-white border border-border rounded-xl p-3">
+            <div class="text-xs font-bold text-muted mb-1">รูปเพิ่มเติมจากคนขับ</div>
+            <div class="text-xs text-muted mb-2">แนบรูปอื่นๆ ที่อยากให้ออฟฟิศเห็น (ไม่บังคับ ได้หลายรูป)</div>
+            <BookingPhotoList :booking="job" field="driverPhotos" :editable="!job.completionConfirmedAt" :actor="photoActor" />
           </div>
           <!-- ทุกจุดส่งโชว์ผู้ติดต่อ + ปุ่มโทร/นำทางไว้ตลอดทุกขั้นตอน (จัดรถแล้ว → ระหว่างส่ง → ส่งเสร็จ) ให้คนขับโทรนัด/ดูเส้นทาง
                จุดไหนก็ได้ตลอดเวลา ไม่ใช่แค่จุดถัดไป -->
@@ -248,6 +257,23 @@
             </div>
             <PhotoPicker label="รูปสินค้าตอนลง (บังคับ)" :preview="goodsPhotoUrl" :busy="photoBusy === 'goods'" :error="photoError.goods" @file="(f) => onDeliveryPhoto('goods', f)" />
             <PhotoPicker label="รูปใบส่งของ (ไม่บังคับ)" :preview="notePhotoUrl" :busy="photoBusy === 'note'" :error="photoError.note" @file="(f) => onDeliveryPhoto('note', f)" />
+            <div>
+              <div class="text-sm font-semibold text-text mb-1.5">รูปเพิ่มเติม (ไม่บังคับ สูงสุด {{ MAX_PHOTOS_PER_LIST }} รูป)</div>
+              <div v-if="extraPhotoUrls.length" class="grid grid-cols-3 gap-2 mb-2">
+                <div v-for="url in extraPhotoUrls" :key="url" class="relative">
+                  <img :src="url" class="w-full h-24 object-cover rounded-lg border border-border" />
+                  <button type="button" class="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center" @click="removeExtraPhoto(url)">
+                    <span class="material-symbols-rounded text-base">close</span>
+                  </button>
+                </div>
+              </div>
+              <label v-if="extraPhotoUrls.length < MAX_PHOTOS_PER_LIST" class="h-12 rounded-lg border border-dashed border-border flex items-center justify-center gap-1.5 text-base text-text cursor-pointer">
+                <span class="material-symbols-rounded text-xl">add_a_photo</span>
+                {{ photoBusy === 'extra' ? 'กำลังอัปโหลด...' : 'เพิ่มรูป (' + extraPhotoUrls.length + '/' + MAX_PHOTOS_PER_LIST + ')' }}
+                <input type="file" accept="image/*" multiple class="hidden" :disabled="!!photoBusy" @change="onExtraDeliveryPhotos" />
+              </label>
+              <div v-if="photoError.extra" class="text-xs text-red-600 mt-1">{{ photoError.extra }}</div>
+            </div>
             <div class="text-sm text-muted">
               ต้องถ่ายรูปสินค้าตอนลงก่อนถึงจะยืนยันส่งของได้ — รูปใบส่งของไม่บังคับ ไม่ได้ถ่ายออฟฟิศแนบให้ทีหลังได้จากหน้ารายละเอียดงาน
             </div>
@@ -309,8 +335,9 @@
 </template>
 
 <script setup lang="ts">
-import DriverAttachments from '@/components/booking/DriverAttachments.vue'
-import { jobTypeLabel } from '@/utils/jobType'
+import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
+import { jobTypeCode } from '@/utils/jobType'
+import { loadingTimeOf } from '@/utils/loadingTime'
 import { customerConditionsFor } from '@/utils/bookingNote'
 import PageGate from '@/components/shared/PageGate.vue'
 import { ref, computed, watch } from 'vue'
@@ -324,7 +351,7 @@ import { isDriverVisibleBooking, nextPickup as nextPickupItems, nextDelivery as 
 import { deliveryProgress, pickupProgress } from '@/utils/deliveryProgress'
 import { bookingTitle } from '@/utils/bookingTitle'
 import { parseGpsInput } from '@/utils/gps'
-import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
+import { uploadJobPhoto, photoPaths, MAX_PHOTOS_PER_LIST } from '@/utils/photoUpload'
 import PhotoPicker from '@/components/driver/PhotoPicker.vue'
 import SiteContactActions from '@/components/driver/SiteContactActions.vue'
 
@@ -424,14 +451,16 @@ const deliverTarget = ref<JobItem | null>(null)
 const photoActor = computed<'driver' | 'office'>(() => (isDriverRole.value ? 'driver' : 'office'))
 const goodsPhotoUrl = ref<string | undefined>()
 const notePhotoUrl = ref<string | undefined>()
-const photoBusy = ref<'goods' | 'note' | null>(null)
-const photoError = ref<{ goods: string; note: string }>({ goods: '', note: '' })
+const extraPhotoUrls = ref<string[]>([])
+const photoBusy = ref<'goods' | 'note' | 'extra' | null>(null)
+const photoError = ref<{ goods: string; note: string; extra: string }>({ goods: '', note: '', extra: '' })
 
 const openDeliverItem = (item: JobItem) => {
   deliverTarget.value = item
   goodsPhotoUrl.value = undefined
   notePhotoUrl.value = undefined
-  photoError.value = { goods: '', note: '' }
+  extraPhotoUrls.value = []
+  photoError.value = { goods: '', note: '', extra: '' }
 }
 
 /** อัปโหลดทันทีที่ถ่ายเสร็จ (เก็บแค่ URL) กดยืนยันส่งของแล้วค่อยบันทึกลงงานพร้อมกัน — อัปโหลดล้มเหลวไม่บล็อกการส่งของ */
@@ -449,6 +478,30 @@ const onDeliveryPhoto = async (kind: 'goods' | 'note', file: File) => {
   } finally {
     photoBusy.value = null
   }
+}
+
+/** รูปเพิ่มเติมตอนส่งของ — เลือกได้หลายรูปพร้อมกัน อัปโหลดทีละรูป เกินจำนวนสูงสุดตัดส่วนเกินทิ้ง */
+const onExtraDeliveryPhotos = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const picked = Array.from(input.files || [])
+  input.value = ''
+  if (!job.value || !deliverTarget.value || !picked.length) return
+  const files = picked.slice(0, Math.max(0, MAX_PHOTOS_PER_LIST - extraPhotoUrls.value.length))
+  photoBusy.value = 'extra'
+  photoError.value = { ...photoError.value, extra: picked.length > files.length ? `ได้สูงสุด ${MAX_PHOTOS_PER_LIST} รูป — อัปโหลดเฉพาะ ${files.length} รูปแรก` : '' }
+  try {
+    for (const file of files) {
+      const url = await uploadJobPhoto(photoPaths.deliveryExtra(job.value.id, deliverTarget.value.id, photoActor.value), file)
+      extraPhotoUrls.value = [...extraPhotoUrls.value, url]
+    }
+  } catch (err: any) {
+    photoError.value = { ...photoError.value, extra: err?.message || 'อัปโหลดรูปไม่สำเร็จ ลองใหม่' }
+  } finally {
+    photoBusy.value = null
+  }
+}
+const removeExtraPhoto = (url: string) => {
+  extraPhotoUrls.value = extraPhotoUrls.value.filter((u) => u !== url)
 }
 
 const loadingPhotoBusy = ref(false)
@@ -473,7 +526,7 @@ const closeDeliverItem = () => {
 
 const confirmDeliverItem = () => {
   if (!job.value || !deliverTarget.value) return
-  bookingStore.deliverJobItem(job.value.id, deliverTarget.value.id, goodsPhotoUrl.value, deliverTarget.value.siteContactName || '-', notePhotoUrl.value)
+  bookingStore.deliverJobItem(job.value.id, deliverTarget.value.id, goodsPhotoUrl.value, deliverTarget.value.siteContactName || '-', notePhotoUrl.value, extraPhotoUrls.value)
   closeDeliverItem()
 }
 

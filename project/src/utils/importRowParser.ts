@@ -509,7 +509,7 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
   // แต่ถ้ามีค่าแล้วจับคู่ไม่ได้ (เช่น "พาเรท" แยกไม่ออกว่าโรงงานหรือฟรี) ให้เว้นว่างไว้ก่อนแล้วเตือนแทนการเดา
   const jobTypeRaw = str(raw[IMPORT_HEADERS.jobType]) || str(raw[LEGACY_JOB_TYPE_HEADER])
   const jobType = parseJobType(jobTypeRaw)
-  if (jobTypeRaw && !jobType) warnings.push(`ประเภทจาก Excel "${jobTypeRaw}" ไม่ตรงกับระบบ (ใช้ d1 ลงมือ / d2 พาเลทโรงงาน / d3 พาเลทฟรี) — เว้นว่างไว้ก่อน ตรวจสอบเองภายหลัง`)
+  if (jobTypeRaw && !jobType) warnings.push(`ประเภทจาก Excel "${jobTypeRaw}" ไม่ตรงกับระบบ (ใช้ d1 / d2 / d3) — เว้นว่างไว้ก่อน ตรวจสอบเองภายหลัง`)
 
   const fuelRemark = fuelCell.remark ? `น้ำมัน: ${fuelCell.remark}` : ''
   // ข้อควรตรวจก่อนนำเข้า (ไม่แปะลง note) — พิกัด/ลิงก์ GPS และเลขเที่ยวที่อ่านไม่ได้ (เลขเที่ยวชนกับงานเดิมของวันตรวจในพรีวิว)

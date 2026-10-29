@@ -15,7 +15,7 @@ import { resolveTripNumber } from '@/utils/tripSequence'
 import { pruneResolvedNote } from '@/utils/bookingNote'
 import { bookingRepository } from '@/repositories/bookingRepository'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
-import type { Booking, BookingCategory, BookingStatus, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
+import type { Booking, BookingCategory, BookingPhotoListField, BookingStatus, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
 import { bookingCompletionIssues, maxFuelLitersFor, type CompletionIssue } from '@/utils/bookingCompletion'
 
 /** งาน MULTI_DESTINATION = แต่ละรายการมีค่าเที่ยวเป็นของตัวเอง, ไม่มีค่า pricingMode (ข้อมูลเก่า) ถือเป็น SINGLE_DESTINATION เสมอ */
@@ -1243,13 +1243,21 @@ export const useBookingStore = defineStore('booking', () => {
    * ไม่ตัดสต๊อกที่นี่ (ตัดไปแล้วตอนรับสินค้าที่ต้นทาง — ดู pickupJobItem)
    * ไม่ปิดงานอัตโนมัติที่นี่แม้ส่งครบทุกรายการแล้ว — ต้องรอคนขับกดยืนยัน "ดำเนินการเสร็จสิ้น" เอง (ดู finishDriverJob)
    */
-  function deliverJobItem(bookingId: string, itemId: string, podImage: string | undefined, deliveredBy: string, deliveryNoteImage?: string) {
+  function deliverJobItem(
+    bookingId: string,
+    itemId: string,
+    podImage: string | undefined,
+    deliveredBy: string,
+    deliveryNoteImage?: string,
+    extraPodImages?: string[]
+  ) {
     const booking = bookings.value.find((b) => b.id === bookingId)
     const item = booking?.items.find((i) => i.id === itemId)
     if (!booking || !item || item.deliveryStatus === 'DELIVERED' || !podImage) return
     item.deliveryStatus = 'DELIVERED'
     item.podImage = podImage
     if (deliveryNoteImage) item.deliveryNoteImage = deliveryNoteImage
+    if (extraPodImages?.length) item.extraPodImages = [...extraPodImages]
     item.deliveredBy = deliveredBy
     item.deliveredAt = new Date()
     addLog(`ส่งของสำเร็จ ${booking.docNo}: ${item.siteName} - ${item.product} (ผู้รับ: ${deliveredBy})`, { bookingId: booking.id })
@@ -1289,21 +1297,23 @@ export const useBookingStore = defineStore('booking', () => {
     addLog(`แนบรูปขึ้นสินค้า ${booking.docNo}`, { bookingId: booking.id })
   }
 
-  /** แนบรูปให้คนขับดู (ตอนจัดรถ/หน้ารายละเอียดงาน) — ไม่บังคับ ไม่เปลี่ยนสถานะงาน */
-  function addDriverAttachment(bookingId: string, url: string) {
+  /** ชุดรูปของงาน: driverAttachments = ออฟฟิศแนบให้คนขับดู, driverPhotos = คนขับแนบเพิ่มเอง — ไม่บังคับ ไม่เปลี่ยนสถานะงาน */
+  const PHOTO_LIST_LABEL: Record<BookingPhotoListField, string> = { driverAttachments: 'รูปแนบให้คนขับ', driverPhotos: 'รูปเพิ่มเติมจากคนขับ' }
+
+  function addBookingPhoto(bookingId: string, field: BookingPhotoListField, url: string) {
     const booking = bookings.value.find((b) => b.id === bookingId)
     if (!booking) return
-    booking.driverAttachments = [...(booking.driverAttachments || []), url]
-    addLog(`แนบรูปให้คนขับ ${booking.docNo}`, { bookingId: booking.id })
+    booking[field] = [...(booking[field] || []), url]
+    addLog(`แนบ${PHOTO_LIST_LABEL[field]} ${booking.docNo}`, { bookingId: booking.id })
   }
 
-  /** เอารูปแนบให้คนขับออก (ไฟล์ใน Storage ยังอยู่ แค่ไม่แสดงในงานแล้ว) */
-  function removeDriverAttachment(bookingId: string, url: string) {
+  /** เอารูปออกจากชุด (ไฟล์ใน Storage ยังอยู่ แค่ไม่แสดงในงานแล้ว) */
+  function removeBookingPhoto(bookingId: string, field: BookingPhotoListField, url: string) {
     const booking = bookings.value.find((b) => b.id === bookingId)
-    if (!booking?.driverAttachments?.includes(url)) return
-    const next = booking.driverAttachments.filter((u) => u !== url)
-    booking.driverAttachments = next.length ? next : undefined
-    addLog(`ลบรูปแนบให้คนขับ ${booking.docNo}`, { bookingId: booking.id })
+    if (!booking?.[field]?.includes(url)) return
+    const next = booking[field]!.filter((u) => u !== url)
+    booking[field] = next.length ? next : undefined
+    addLog(`ลบ${PHOTO_LIST_LABEL[field]} ${booking.docNo}`, { bookingId: booking.id })
   }
 
   /**
@@ -1644,8 +1654,8 @@ export const useBookingStore = defineStore('booking', () => {
     confirmPodImage,
     setDeliveryNoteImage,
     setLoadingImage,
-    addDriverAttachment,
-    removeDriverAttachment,
+    addBookingPhoto,
+    removeBookingPhoto,
     toggleTicketChecked,
     finishDriverJob,
     stripDateSuffixFromSiteNames,

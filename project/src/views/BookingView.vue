@@ -257,6 +257,8 @@
                     :complete-blocked-reason="completeBlockedReason(booking)"
                     :confirm-blocked-reason="confirmBlockedReason(booking)"
                     @view="router.push(`/job/${booking.id}`)"
+                    :can-add-photo="true"
+                    @add-photo="photoTarget = booking"
                     @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
                     @start-transit="bookingStore.startTransit(booking.id)"
                     @complete="openCompleteDialog(booking)"
@@ -332,6 +334,8 @@
                     :complete-blocked-reason="completeBlockedReason(booking)"
                     :confirm-blocked-reason="confirmBlockedReason(booking)"
                     @view="router.push(`/job/${booking.id}`)"
+                    :can-add-photo="true"
+                    @add-photo="photoTarget = booking"
                     @edit="router.push(`/booking/${props.fleet}/${booking.id}/edit`)"
                     @start-transit="bookingStore.startTransit(booking.id)"
                     @complete="openCompleteDialog(booking)"
@@ -535,7 +539,7 @@
                 รูปแนบให้คนขับดู
                 <span class="text-[10px] font-normal text-muted">(ไม่บังคับ — คนขับเห็นในรายละเอียดงานบนแอป)</span>
               </label>
-              <DriverAttachments :booking="dispatchTarget" editable />
+              <BookingPhotoList :booking="dispatchTarget" editable />
             </div>
 
             <div class="text-xs font-semibold text-muted pt-2 border-t border-border">
@@ -553,7 +557,7 @@
                     <div class="text-xs text-muted mt-0.5">{{ li.product }} · {{ li.qty }} {{ li.unit }}</div>
                     <div v-if="isCements" class="text-xs text-text flex items-center gap-1 flex-wrap mt-0.5">
                       <span class="text-muted">ประเภท:</span>
-                      <span :class="li.jobType ? 'font-semibold' : 'text-amber-700'">{{ jobTypeLabel(li.jobType) || 'ยังไม่ระบุ' }}</span>
+                      <span :class="li.jobType ? 'font-semibold' : 'text-amber-700'">{{ jobTypeCode(li.jobType) || 'ยังไม่ระบุ' }}</span>
                       <template v-if="canEditDispatchItems">
                         <button
                           v-for="jt in jobTypeOptions"
@@ -564,7 +568,6 @@
                             'px-1.5 py-0.5 rounded border text-[11px]',
                             li.jobType === jt ? 'bg-primary text-white border-primary' : 'bg-surface border-border hover:bg-border',
                           ]"
-                          :title="jobTypeOptionLabel(jt)"
                         >
                           {{ jobTypeCode(jt) }}
                         </button>
@@ -661,7 +664,7 @@
                       dispatchItemDraft.jobType === jt ? 'bg-primary text-white' : 'bg-surface text-text border border-border hover:bg-border',
                     ]"
                   >
-                    {{ jobTypeOptionLabel(jt) }}
+                    {{ jobTypeCode(jt) }}
                   </button>
                 </div>
               </template>
@@ -683,6 +686,27 @@
               <span class="material-symbols-rounded">send</span>
               {{ isReassignDispatch ? 'ยืนยันเปลี่ยนคนขับ/รถ' : 'ส่งงาน' }}
             </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- เมนู "เพิ่มรูป" — รูปแนบให้คนขับดูในรายละเอียดงานบนแอป (ชุดเดียวกับที่แนบตอนจัดรถ) -->
+    <Teleport to="body" v-if="photoTarget">
+      <div @click="photoTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6 animate-fade">
+        <div @click.stop class="bg-surface rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+            <div class="font-bold text-text">เพิ่มรูปให้คนขับดู · {{ dispatchTitle(photoTarget) }}</div>
+            <button @click="photoTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+          <div class="p-6 space-y-2">
+            <div class="text-xs text-muted">รูปจะแสดงในรายละเอียดงานบนแอปคนขับทันที (ไม่บังคับ)</div>
+            <BookingPhotoList :booking="photoTarget" editable />
+          </div>
+          <div class="flex justify-end px-6 py-4 border-t border-border">
+            <button @click="photoTarget = null" class="btn-primary">เสร็จสิ้น</button>
           </div>
         </div>
       </div>
@@ -983,8 +1007,8 @@
 </template>
 
 <script setup lang="ts">
-import DriverAttachments from '@/components/booking/DriverAttachments.vue'
-import { JOB_TYPE_OPTIONS, jobTypeCode, jobTypeLabel, jobTypeOptionLabel } from '@/utils/jobType'
+import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
+import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -1425,6 +1449,9 @@ const deliveredItemCount = (booking: Booking) => booking.items.filter((i) => i.d
 
 const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+
+/** งานที่กด "เพิ่มรูป" จากเมนู ⋮ */
+const photoTarget = ref<Booking | null>(null)
 
 // --- Dispatch flow ---
 const dispatchTarget = ref<Booking | null>(null)

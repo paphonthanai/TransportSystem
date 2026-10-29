@@ -202,6 +202,10 @@
                 <div class="font-semibold text-text">{{ jobDetailsTarget.fuelLiters || 0 }} ล.</div>
               </div>
               <div class="bg-surface-2 rounded-lg p-3 col-span-2">
+                <div class="text-xs text-muted mb-0.5">เวลาลงสินค้า</div>
+                <div class="font-semibold text-text">{{ loadingTimeOf(jobDetailsTarget) || '-' }}</div>
+              </div>
+              <div class="bg-surface-2 rounded-lg p-3 col-span-2">
                 <div class="text-xs text-muted mb-0.5">เลขที่ PO ลูกค้า</div>
                 <div class="font-semibold text-text break-all">{{ jobDetailsTarget.reference || '-' }}</div>
               </div>
@@ -215,7 +219,7 @@
             </div>
             <div v-if="jobDetailsTarget.driverAttachments?.length" class="rounded-lg border border-border p-3">
               <div class="text-xs font-bold text-muted mb-2">รูปแนบจากออฟฟิศ</div>
-              <DriverAttachments :booking="jobDetailsTarget" />
+              <BookingPhotoList :booking="jobDetailsTarget" />
             </div>
             <div class="text-xs font-bold text-muted uppercase tracking-wide pt-1">รายการสินค้า ({{ jobDetailsTarget.items.length }})</div>
             <div v-for="item in jobDetailsTarget.items" :key="item.id" class="rounded-lg border border-border p-3 space-y-1">
@@ -224,7 +228,7 @@
                 {{ ep.product }} <span class="font-normal text-muted">{{ ep.qty }} {{ ep.unit }}</span>
               </div>
               <div class="text-sm text-muted">{{ item.siteName }} ({{ item.province }} · {{ item.district }})</div>
-              <div class="text-sm text-muted">ประเภท: <span class="font-bold text-text">{{ jobTypeLabel(item.jobType) || '-' }}</span></div>
+              <div class="text-sm text-muted">ประเภท: <span class="font-bold text-text">{{ jobTypeCode(item.jobType) || '-' }}</span></div>
             </div>
           </div>
           <div class="px-5 py-4 border-t border-border">
@@ -383,8 +387,9 @@ import { isDriverVisibleBooking } from '@/utils/driverJobs'
 import { deliveryProgress } from '@/utils/deliveryProgress'
 import { bookingTitle } from '@/utils/bookingTitle'
 import { customerConditionsFor } from '@/utils/bookingNote'
-import { jobTypeLabel } from '@/utils/jobType'
-import DriverAttachments from '@/components/booking/DriverAttachments.vue'
+import { jobTypeCode } from '@/utils/jobType'
+import { loadingTimeOf } from '@/utils/loadingTime'
+import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
 import { usePwaInstall, usePwaUpdate } from '@/composables/usePwa'
 
 const router = useRouter()
