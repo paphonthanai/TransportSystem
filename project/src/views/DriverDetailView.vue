@@ -246,7 +246,7 @@
                 </template>
                 <span v-else-if="row.booking.driverPayrollDocId" class="text-xs font-semibold px-2 py-1 rounded-full bg-teal-100 text-teal-700">ออกเอกสารแล้ว</span>
                 <span v-else-if="row.identityIssue" class="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700" :title="row.identityIssue">ข้อมูลคนขับไม่ตรง</span>
-                <span v-else class="text-xs text-muted">-</span>
+                <span v-else class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">ยังไม่ได้ออก</span>
               </td>
               <td class="px-3 py-2 text-right">
                 <RouterLink :to="`/job/${row.booking.id}`" class="text-primary hover:underline text-xs">ดูงาน</RouterLink>

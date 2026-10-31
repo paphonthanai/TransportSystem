@@ -86,7 +86,7 @@
             </td>
             <td class="px-4 py-3 text-right font-bold text-text">{{ formatBaht(row.net) }}</td>
             <td class="px-4 py-3 whitespace-nowrap">
-              <span v-if="row.trips === 0" class="text-xs text-muted">-</span>
+              <span v-if="row.trips === 0" class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">ยังไม่ได้ออก</span>
               <span v-else-if="row.notIssued === 0" class="text-xs font-semibold px-2 py-1 rounded-full bg-orange-100 text-orange-700">ออกเอกสารแล้ว</span>
               <span v-else class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">ยังไม่ได้ออก {{ row.notIssued }} งาน</span>
             </td>
@@ -199,7 +199,7 @@ const vehicleRows = computed(() =>
 const docStatusFilter = ref<'ALL' | 'ISSUED' | 'NOT_ISSUED'>('ALL')
 const displayedRows = computed(() =>
   vehicleRows.value.filter((r) =>
-    docStatusFilter.value === 'NOT_ISSUED' ? r.notIssued > 0 : docStatusFilter.value === 'ISSUED' ? r.trips > 0 && r.notIssued === 0 : true
+    docStatusFilter.value === 'NOT_ISSUED' ? r.notIssued > 0 || r.trips === 0 : docStatusFilter.value === 'ISSUED' ? r.trips > 0 && r.notIssued === 0 : true
   )
 )
 

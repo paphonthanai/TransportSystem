@@ -229,7 +229,7 @@
                     <span class="material-symbols-rounded text-sm">restart_alt</span>รีเซ็ต
                   </button>
                 </template>
-                <span v-else class="text-xs text-muted">-</span>
+                <span v-else class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">ยังไม่ได้ออก</span>
               </td>
               <td class="px-3 py-2 text-right">
                 <RouterLink :to="`/job/${row.booking.id}`" class="text-primary hover:underline text-xs">ดูงาน</RouterLink>
