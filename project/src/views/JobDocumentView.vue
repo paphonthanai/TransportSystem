@@ -628,6 +628,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { useFuelRateStore } from '@/stores/fuelRates'
+import { useVehiclesStore } from '@/stores/vehicles'
 import { bahtText } from '@/utils/companyInfo'
 import { bookingStatusLabel, bookingStatusClass, documentClaimBadges } from '@/utils/bookingStatus'
 import { computeRowDiscountBaht, computeRowAmount, computeRowVat } from '@/utils/documentTotals'
@@ -649,6 +650,7 @@ const authStore = useAuthStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const customerStore = useCustomerStore()
 const fuelRateStore = useFuelRateStore()
+const vehiclesStore = useVehiclesStore()
 
 const isAdmin = computed(() => authStore.role === 'ADMIN')
 
@@ -904,7 +906,7 @@ const mileageSummary = computed(() => {
   if (distanceKm <= 0) return null
   const cumulativeKm =
     bookingStore.bookings
-      .filter((x) => x.plate === b.plate && x.id !== b.id && x.odometerBefore !== undefined && x.odometerAfter !== undefined)
+      .filter((x) => vehiclesStore.plateKey(x.plate) === vehiclesStore.plateKey(b.plate) && x.id !== b.id && x.odometerBefore !== undefined && x.odometerAfter !== undefined)
       .reduce((sum, x) => sum + ((x.odometerAfter || 0) - (x.odometerBefore || 0)), 0) + distanceKm
   const avgKmPerLiter = b.fuelLiters ? Math.round((distanceKm / b.fuelLiters) * 100) / 100 : null
   const standardFuelLiters = fuelRateStore.standardFuelLiters(b.items, b.pricingMode) || null

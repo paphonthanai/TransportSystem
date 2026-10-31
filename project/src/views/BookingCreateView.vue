@@ -355,7 +355,7 @@ const isCements = computed(() => props.fleet === 'cements')
 const selectedCustomerRecord = computed(() => customerStore.customers.find((c) => c.name === header.value.customer))
 const selectedCustomerId = computed(() => selectedCustomerRecord.value?.id)
 const productOptionsForFleet = computed(() => inventoryStore.products.filter((p) => p.category === props.fleet))
-const vehicleOptions = computed(() => vehiclesStore.vehicles.map((v) => vehiclesStore.fullPlate(v)))
+const vehicleOptions = computed(() => vehiclesStore.vehicles.map((v) => v.plate))
 const nextReleaseNoPreview = computed(() => bookingStore.nextReleaseNo())
 
 // --- ป้ายกำกับคนขับใน dropdown: บอกว่าว่างหรือกำลังวิ่งเที่ยวที่เท่าไหร่ (ซ้ำกับ BookingView.vue เพราะฟอร์มสร้างงานแยกไฟล์แล้ว) ---
@@ -507,7 +507,7 @@ watch(
     const driver = findDriverByName(name)
     if (!driver) return
     const vehicle = vehiclesStore.vehicleForDriver(driver.code)
-    if (vehicle) header.value.plate = vehiclesStore.fullPlate(vehicle)
+    if (vehicle) header.value.plate = vehicle.plate
   }
 )
 watch(

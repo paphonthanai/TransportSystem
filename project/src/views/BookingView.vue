@@ -184,6 +184,12 @@
       <button v-if="canLinkDrivers && unlinkedDriverJobs.some((p) => p.driver)" @click="linkUnlinkedDrivers" class="btn-sm">ผูกรหัสคนขับให้งานเหล่านี้</button>
     </div>
 
+    <div v-if="nonStandardPlateCount" class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-sm p-3 flex items-center gap-3 flex-wrap">
+      <span class="material-symbols-rounded">directions_car</span>
+      <div class="flex-1 min-w-0">มี {{ nonStandardPlateCount }} งาน (ทุก Fleet) ที่ทะเบียนรถยังมีจังหวัดต่อท้าย — มาตรฐานใหม่คือเลขทะเบียนล้วน ไม่มีจังหวัด</div>
+      <button @click="normalizeOldPlates" class="btn-sm">ตัดจังหวัดออกจากทะเบียนงานเก่า</button>
+    </div>
+
     <!-- In-progress Table -->
     <div>
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
@@ -1207,6 +1213,12 @@ const unlinkedDriverJobs = computed(() =>
   bookingStore.bookingsMissingDriverLink(driversStore.drivers).filter((p) => p.booking.category === props.fleet)
 )
 const canLinkDrivers = computed(() => authStore.role === 'ADMIN' || authStore.role === 'DISPATCHER')
+/** งานเก่าที่ทะเบียนยังมีจังหวัดต่อท้าย (มาตรฐานคือไม่มีจังหวัด) */
+const nonStandardPlateCount = computed(() => (canLinkDrivers.value ? bookingStore.bookingsWithNonStandardPlate().length : 0))
+const normalizeOldPlates = () => {
+  const result = bookingStore.normalizeBookingPlates()
+  if (!result.ok) alert(result.message)
+}
 const linkUnlinkedDrivers = () => {
   const result = bookingStore.linkMissingDriverIds(driversStore.drivers)
   if (!result.ok) alert(result.message)
@@ -1240,7 +1252,7 @@ const matchDriverForImportRow = (nickname: string, plate: string) => {
         firstName: driver.firstName,
         lastName: driver.lastName,
         // มีคนขับต้องรู้ทะเบียน — คนขับผูกกับรถประจำ ถ้าแถวไม่ได้ระบุทะเบียนใช้ทะเบียนรถประจำนี้ (parseImportRow เตือนให้ตรวจ)
-        plate: driverVehicle ? vehiclesStore.fullPlate(driverVehicle) : undefined,
+        plate: driverVehicle?.plate,
       }
     : undefined
 }
@@ -1427,7 +1439,7 @@ const formatShortDate = (date?: Date) =>
  *  (ตาม Requirement ใหม่: แสดงสีตามจำนวนเที่ยว) และหาปลายทางของเที่ยวล่าสุดไปแสดงในป้าย dropdown */
 const activeBookingsForVehicle = (plate: string) =>
   bookingStore.bookings
-    .filter((b) => b.plate === plate && b.id !== dispatchTarget.value?.id && ACTIVE_STATUSES.includes(b.status))
+    .filter((b) => vehiclesStore.plateKey(b.plate) === vehiclesStore.plateKey(plate) && b.id !== dispatchTarget.value?.id && ACTIVE_STATUSES.includes(b.status))
     .sort((a, b) => new Date(b.dispatchedAt || b.createdAt).getTime() - new Date(a.dispatchedAt || a.createdAt).getTime())
 
 /** รถที่วิ่ง Feed ของงานนี้ได้เท่านั้น (ดู vehiclesStore.availableFor + Vehicle.allowedCategories) — Requirement ข้อ 3:
@@ -1438,16 +1450,15 @@ const availableVehiclesForDispatch = computed(() => (dispatchTarget.value ? vehi
  *  Requirement ใหม่ ("จัดรถ/สร้างงาน — ปรับการแสดงรถที่มีงานอยู่") — นับเที่ยวด้วย activeBookingsForVehicle เดิมที่มีอยู่
  *  แล้ว (ของเดิมแค่หยิบตัวล่าสุดตัวเดียว [0] ตอนนี้ใช้ .length ด้วย) ไม่สร้าง logic นับเที่ยวใหม่ซ้ำ */
 const vehicleOptionLabel = (v: Vehicle) => {
-  const full = vehiclesStore.fullPlate(v)
-  const active = activeBookingsForVehicle(full)
-  if (!active.length) return `${full} — ว่าง`
-  return `${full} — ${active.length} เที่ยว — ${destinationLabel(active[0])}`
+  const active = activeBookingsForVehicle(v.plate)
+  if (!active.length) return `${v.plate} — ว่าง`
+  return `${v.plate} — ${active.length} เที่ยว — ${destinationLabel(active[0])}`
 }
 
 /** สีพื้นหลังของแต่ละ <option> ตามจำนวนเที่ยวที่รถคันนี้มีอยู่ — เป็นแค่ UI ช่วยแยกสถานะการใช้งานรถให้มองเห็นง่าย
  *  (0 เที่ยว=ขาว, 1 เที่ยว=เขียว, 2 เที่ยวขึ้นไป=แดง) ไม่เปลี่ยน Booking Status/logic จัดรถ/workflow มอบหมายงานใดๆ */
 const vehicleOptionColor = (v: Vehicle) => {
-  const count = activeBookingsForVehicle(vehiclesStore.fullPlate(v)).length
+  const count = activeBookingsForVehicle(v.plate).length
   if (count >= 2) return '#fecaca'
   if (count === 1) return '#bbf7d0'
   return '#ffffff'
@@ -1643,7 +1654,7 @@ const canEditDispatchItems = computed(
 /** เลขไมล์สิ้นสุดล่าสุดของรถคันนี้ (จากเที่ยวก่อนหน้าที่จบงานแล้ว) เอาไว้ตั้งเป็นเลขไมล์เริ่มต้นของเที่ยวใหม่ให้อัตโนมัติ */
 const latestOdometerForPlate = (plate: string, excludeId: string) =>
   bookingStore.bookings
-    .filter((b) => b.plate === plate && b.id !== excludeId && b.odometerAfter !== undefined)
+    .filter((b) => vehiclesStore.plateKey(b.plate) === vehiclesStore.plateKey(plate) && b.id !== excludeId && b.odometerAfter !== undefined)
     .sort((a, b) => new Date(b.completedAt || b.dispatchedAt || 0).getTime() - new Date(a.completedAt || a.dispatchedAt || 0).getTime())[0]
 
 const showAddDispatchItem = ref(false)
@@ -1781,7 +1792,7 @@ watch(
     const driver = findDriverByName(name)
     if (!driver) return
     const vehicle = vehiclesStore.vehicleForDriver(driver.code)
-    if (vehicle) dispatchForm.value.plate = vehiclesStore.fullPlate(vehicle)
+    if (vehicle) dispatchForm.value.plate = vehicle.plate
   }
 )
 watch(
@@ -1804,7 +1815,7 @@ watch(
 /** ตัวเลือกใน SearchableSelect ของป๊อปอัพจัดรถ (ป้ายกำกับ/สีตามจำนวนเที่ยวเหมือน dropdown เดิมทุกประการ) */
 const dispatchPlateOptions = computed<SearchableOption[]>(() =>
   availableVehiclesForDispatch.value.map((v) => ({
-    value: vehiclesStore.fullPlate(v),
+    value: v.plate,
     label: vehicleOptionLabel(v),
     color: vehicleOptionColor(v),
   }))
@@ -2289,7 +2300,7 @@ const onImportPickDriver = (row: ImportRowResult, driverId: string) => {
     id: driver.id,
     firstName: driver.firstName,
     lastName: driver.lastName,
-    plate: vehicle ? vehiclesStore.fullPlate(vehicle) : undefined,
+    plate: vehicle?.plate,
   })
 }
 const importCheckRowCount = computed(() => importableRows.value.filter((r) => importChecksFor(r).length > 0).length)
@@ -2364,6 +2375,7 @@ const confirmImport = () => {
       fuelNotRefilled: row.fuelNotRefilled,
       // เรทจริงตั้งโดย bookingStore.addBooking ตามประเภทรถของทะเบียน (ไม่รู้ประเภท = 0 + หมายเหตุสาเหตุ)
       fuelRate: 0,
+      // ทะเบียนในไฟล์มีบ้างไม่มีบ้างจังหวัดต่อท้าย — addBooking ปรับเป็นแบบมาตรฐาน (ไม่มีจังหวัด) ให้เอง
       plate: row.plate || undefined,
       driverName: row.driverName || undefined,
       driverId: row.driverId,

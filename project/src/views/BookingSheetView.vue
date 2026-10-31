@@ -325,7 +325,7 @@ const matchDriver = (nickname: string, plate: string) => {
       fullName: `${d.firstName} ${d.lastName}`.trim(),
       firstName: d.firstName,
       lastName: d.lastName,
-      plate: v ? vehiclesStore.fullPlate(v) : undefined,
+      plate: v?.plate,
     }
   }
   // มีทะเบียนต้องมีคนขับ: ชื่อเล่นจับคู่ไม่ได้/ว่าง → ใช้คนขับประจำรถ (เตือนให้ตรวจ)
@@ -380,7 +380,7 @@ const rowTone = (idx: number) => {
 }
 
 // ---------- ตัวช่วยกรอก ----------
-const plateOptions = computed(() => vehiclesStore.vehicles.map((v) => vehiclesStore.fullPlate(v)))
+const plateOptions = computed(() => vehiclesStore.vehicles.map((v) => v.plate))
 const driverNicknames = computed(() => [...new Set(driversStore.drivers.map((d) => (d.nickname || '').trim()).filter(Boolean))])
 const customerCodes = computed(() => customerStore.customers.map((c) => c.code).filter(Boolean))
 const jobTypes = JOB_TYPE_OPTIONS.map((t) => JOB_TYPE_CODE[t])

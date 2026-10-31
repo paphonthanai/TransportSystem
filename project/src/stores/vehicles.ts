@@ -46,6 +46,17 @@ export const useVehiclesStore = defineStore('vehicles', () => {
     return vehicles.value.find((v) => normalizePlateCode(v.plate) === head)
   }
 
+  /** ทะเบียนมาตรฐานที่เก็บในงาน (Booking.plate) = เลขทะเบียนล้วนไม่มีจังหวัด ตามที่ผู้ใช้กำหนด — ข้อความที่ตรงกับรถในทะเบียน
+   *  (มี/ไม่มีจังหวัด) ใช้ Vehicle.plate ถ้าไม่พบรถในทะเบียนเก็บตามที่พิมพ์ */
+  const bookingPlate = (text: string | undefined) => {
+    const trimmed = (text || '').trim()
+    if (!trimmed) return ''
+    return findByPlateLoose(trimmed)?.plate || trimmed
+  }
+
+  /** key เทียบทะเบียนของงาน — งานเก่าที่มีจังหวัดต่อท้ายกับงานใหม่ที่ไม่มี ถือเป็นรถคันเดียวกัน */
+  const plateKey = (text: string | undefined) => normalizePlateCode((text || '').trim().split(/\s+/)[0] || '')
+
   /** รถที่มีคนขับรหัสนี้ประจำอยู่ (ถ้ามี) */
   const vehicleForDriver = (driverCode: string) => vehicles.value.find((v) => v.driverCode === driverCode)
 
@@ -102,6 +113,8 @@ export const useVehiclesStore = defineStore('vehicles', () => {
     loading,
     error,
     fullPlate,
+    bookingPlate,
+    plateKey,
     findByFullPlate,
     findByPlateLoose,
     vehicleForDriver,

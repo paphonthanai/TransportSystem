@@ -461,6 +461,7 @@ export const useBookingStore = defineStore('booking', () => {
     const { createdAt, ...rest } = data
     const booking: Booking = {
       ...rest,
+      plate: rest.plate ? useVehiclesStore().bookingPlate(rest.plate) || undefined : rest.plate,
       fuelLiters: resolveFuelLiters(rest.fuelLiters, rest.items, rest.pricingMode),
       id: bookingRepository.newId(),
       status: 'WAITING_DISPATCH',
@@ -877,6 +878,25 @@ export const useBookingStore = defineStore('booking', () => {
     return { ok: true, count: targets.length }
   }
 
+  /** งานที่ทะเบียนยังไม่เป็นแบบมาตรฐาน (มีจังหวัดต่อท้าย จากงานก่อนกำหนดมาตรฐาน) — แก้ได้เฉพาะรถที่อยู่ในทะเบียนรถ */
+  function bookingsWithNonStandardPlate() {
+    const vehiclesStore = useVehiclesStore()
+    return bookings.value.filter((b) => b.plate && vehiclesStore.bookingPlate(b.plate) !== b.plate)
+  }
+
+  /** ตัดจังหวัดออกจากทะเบียนของงานเก่า ให้เป็นแบบเดียวกับงานใหม่ — ADMIN/DISPATCHER */
+  function normalizeBookingPlates(): { ok: boolean; message?: string; count: number } {
+    const role = useAuthStore().role
+    if (role !== 'ADMIN' && role !== 'DISPATCHER') return { ok: false, message: 'แก้ทะเบียนงานได้เฉพาะผู้ดูแลระบบ/ผู้จัดรถ', count: 0 }
+    const vehiclesStore = useVehiclesStore()
+    const targets = bookingsWithNonStandardPlate()
+    targets.forEach((b) => {
+      b.plate = vehiclesStore.bookingPlate(b.plate)
+    })
+    if (targets.length) addLog(`ปรับทะเบียนงานเก่าเป็นแบบไม่มีจังหวัด ${targets.length} งาน`)
+    return { ok: true, count: targets.length }
+  }
+
   /**
    * งานที่จัดคนขับแล้วยังไม่จบ แต่ driverId ว่าง/ไม่อยู่ในทะเบียน — แอปคนขับดึงงานด้วย driverId (ตาม Firestore Rules)
    * งานพวกนี้จึงไม่ขึ้นในแอปคนขับเลย คืนคู่ (งาน, คนขับที่ชื่อตรงกันคนเดียวในทะเบียน) ที่ผูกได้
@@ -914,6 +934,7 @@ export const useBookingStore = defineStore('booking', () => {
   function assignPlateToBooking(id: string, plate: string) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking || !plate) return
+    plate = useVehiclesStore().bookingPlate(plate)
     booking.plate = plate
     applyFuelRate(booking)
     addLog(`ตั้งทะเบียน ${booking.docNo}: ${plate}`, { bookingId: booking.id })
@@ -949,6 +970,7 @@ export const useBookingStore = defineStore('booking', () => {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
     const previousDriver = { driverId: booking.driverId, driverName: booking.driverName }
+    plate = useVehiclesStore().bookingPlate(plate)
     booking.plate = plate
     if (extra?.tripSequence !== undefined) booking.tripSequence = extra.tripSequence
     if (extra?.driverName) {
@@ -1743,6 +1765,8 @@ export const useBookingStore = defineStore('booking', () => {
     setLoadingImage,
     relinkMissingDriverId,
     bookingsMissingDriverLink,
+    bookingsWithNonStandardPlate,
+    normalizeBookingPlates,
     linkMissingDriverIds,
     addBookingPhoto,
     removeBookingPhoto,

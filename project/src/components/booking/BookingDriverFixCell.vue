@@ -92,7 +92,7 @@ const suggested = computed(() => {
 const driverVehiclePlate = computed(() => {
   const driver = props.booking.driverId ? driversStore.drivers.find((d) => d.id === props.booking.driverId) : undefined
   const v = driver ? vehiclesStore.vehicleForDriver(driver.code) : undefined
-  return v ? vehiclesStore.fullPlate(v) : ''
+  return v?.plate || ''
 })
 
 const driverNote = computed(() =>

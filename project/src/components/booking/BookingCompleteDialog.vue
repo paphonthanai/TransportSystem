@@ -95,6 +95,7 @@
 import { computed, ref, watch } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useFuelRateStore } from '@/stores/fuelRates'
+import { useVehiclesStore } from '@/stores/vehicles'
 import { bookingCompletionIssues } from '@/utils/bookingCompletion'
 import type { Booking, DebtAdjustment } from '@/types'
 
@@ -107,6 +108,7 @@ const emit = defineEmits<{ close: []; done: [bookingId: string] }>()
 
 const bookingStore = useBookingStore()
 const fuelRateStore = useFuelRateStore()
+const vehiclesStore = useVehiclesStore()
 
 const debtAdjustments = ref<DebtAdjustment[]>([])
 const odometerAfter = ref(0)
@@ -159,7 +161,7 @@ const mileageSummary = computed(() => {
   if (distanceKm <= 0) return null
   const cumulativeKm =
     bookingStore.bookings
-      .filter((b) => b.plate === booking.plate && b.id !== booking.id && b.odometerBefore !== undefined && b.odometerAfter !== undefined)
+      .filter((b) => vehiclesStore.plateKey(b.plate) === vehiclesStore.plateKey(booking.plate) && b.id !== booking.id && b.odometerBefore !== undefined && b.odometerAfter !== undefined)
       .reduce((sum, b) => sum + ((b.odometerAfter || 0) - (b.odometerBefore || 0)), 0) + distanceKm
   const avgKmPerLiter = booking.fuelLiters ? Math.round((distanceKm / booking.fuelLiters) * 100) / 100 : null
   const standardFuelLiters = fuelRateStore.standardFuelLiters(booking.items, booking.pricingMode) || null
