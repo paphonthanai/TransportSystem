@@ -3,25 +3,45 @@
  * เพื่อให้จ่ายเที่ยว 1/เที่ยว 2 ลำดับไหนก็ได้ แล้วแอปคนขับยังรู้ว่าเที่ยวไหนต้องกดยืนยันก่อน
  * งานเก่า/งานที่ยังไม่ระบุ (tripSequence = undefined) fallback ไปใช้ลำดับเวลาจ่ายงานเดิม (dispatchedAt → createdAt) เหมือนที่เคยเป็น
  */
+/** คนขับ/รถวิ่งได้มากสุดวันละ 4 เที่ยว — เลขเที่ยวที่ใช้ได้คือ 1-4 เท่านั้น */
+export const MAX_TRIPS_PER_DAY = 4
+
+/** เลขเที่ยวที่ใช้ได้ (จำนวนเต็ม 1-4) ไม่งั้น undefined */
+export const validTripNumber = (n: unknown): number | undefined => {
+  const v = Math.floor(Number(n))
+  return v >= 1 && v <= MAX_TRIPS_PER_DAY ? v : undefined
+}
+
 export interface TripOrderable {
   tripSequence?: number
   dispatchedAt?: Date | string
   createdAt: Date | string
+  /** เวลาลงสินค้า "HH:mm" — ใช้เรียงงานที่ไม่มีเลขเที่ยวก่อนเวลาจ่ายงาน (import สร้างงานทั้งไฟล์พร้อมกัน เวลาสร้างแทบเท่ากัน) */
+  loadingTime?: string
+  docNo?: string
 }
 
 const timeOf = (b: TripOrderable) => new Date(b.dispatchedAt || b.createdAt).getTime()
 
-/** เรียงเที่ยวแรก→ท้าย: มีเลขเที่ยวมาก่อนไม่มีเลข, เลขเท่ากัน/ไม่มีทั้งคู่ เรียงตามเวลาจ่ายงานเดิม */
+const hhmm = (t?: string) => (t ? t.padStart(5, '0') : '')
+
+/** เรียงเที่ยวแรก→ท้าย: มีเลขเที่ยวมาก่อนไม่มีเลข, เลขเท่ากัน/ไม่มีทั้งคู่ เรียงตามเวลาลงสินค้า → เวลาจ่ายงาน → เลขที่งาน */
 export function compareByTrip(a: TripOrderable, b: TripOrderable): number {
   const sa = a.tripSequence
   const sb = b.tripSequence
   if (sa !== undefined && sb !== undefined && sa !== sb) return sa - sb
   if (sa !== undefined && sb === undefined) return -1
   if (sa === undefined && sb !== undefined) return 1
-  return timeOf(a) - timeOf(b)
+  const ta = hhmm(a.loadingTime)
+  const tb = hhmm(b.loadingTime)
+  if (ta && tb && ta !== tb) return ta.localeCompare(tb)
+  return timeOf(a) - timeOf(b) || (a.docNo || '').localeCompare(b.docNo || '')
 }
 
-/** เลขเที่ยวของงานนี้ภายในกลุ่มงานของคนขับ/วันเดียวกัน (sameGroup ต้องรวมตัวงานนี้เองด้วย) — ใช้ tripSequence ก่อน ไม่มีค่อยนับตามลำดับ */
+/**
+ * เลขเที่ยวที่ใช้คำนวณ — ใช้ tripSequence ที่ระบุไว้ (จากไฟล์ import/ที่เลือก) ตรงๆ ไม่มีเลข (ในตารางเว้นว่างได้) นับจากวันเป็นตัวตั้ง:
+ * งานของคนขับคนเดียวกันในวันเดียวกัน (sameGroup ต้องรวมตัวงานนี้เองด้วย) เรียงแล้วนับต่อ — เริ่มเที่ยว 1 ต่อจากงานที่มีเลขแล้ว
+ */
 export function resolveTripNumber<T extends TripOrderable & { id: string }>(booking: T, sameGroup: T[]): number {
   if (booking.tripSequence !== undefined) return booking.tripSequence
   const idx = [...sameGroup].sort(compareByTrip).findIndex((b) => b.id === booking.id)

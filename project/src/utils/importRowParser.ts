@@ -3,6 +3,7 @@ import { normalizePlateCode } from '@/utils/importReconciliation'
 import { parseGpsInput } from '@/utils/gps'
 import { extractPhones } from '@/utils/phone'
 import { parseJobType } from '@/utils/jobType'
+import { validTripNumber } from '@/utils/tripSequence'
 
 // --- นำเข้า Booking จากไฟล์ Excel งานจริง (Requirement: "Import Excel เพื่อสร้างงาน" ตามคอลัมน์ที่หน้างานใช้อยู่จริง) ---
 // 1 แถว Excel = 1 Booking เสมอ (ไม่มีคอลัมน์กลุ่มงานแล้วเหมือนเทมเพลตเดิม) — เจตนาของฟีเจอร์นี้เปลี่ยนจาก "สร้างงานใหม่
@@ -120,33 +121,13 @@ export function withColumnAliases(raw: Record<string, unknown>): Record<string, 
 }
 const str0 = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())
 
-/** อ่านเลขเที่ยวจากเซลล์ "เที่ยวที่" — "1", 2, "เที่ยว 2", "เที่ยวที่2", "T1" → ตัวเลขตัวแรก (ต้อง ≥ 1) ไม่มี/อ่านไม่ได้ = undefined */
+/** อ่านเลขเที่ยวจากเซลล์ "เที่ยวที่" — "1", 2, "เที่ยว 2", "เที่ยวที่2", "T1" → ตัวเลขตัวแรก (ต้อง 1-4 วันละไม่เกิน 4 เที่ยว) ไม่มี/อ่านไม่ได้/เกิน = undefined */
 export function parseTripNumber(raw: unknown): number | undefined {
   const m = str0(raw).match(/\d+/)
   if (!m) return undefined
-  const n = parseInt(m[0], 10)
-  return n >= 1 ? n : undefined
+  return validTripNumber(parseInt(m[0], 10))
 }
 
-/** ไฟล์ไม่มีคอลัมน์ "เที่ยวที่"/เซลล์ว่าง → ตั้งเลขเที่ยวจากลำดับแถวของ พขร./ทะเบียนเดียวกัน (ต่อจากเลขสูงสุดที่ระบุแล้วในกลุ่ม) */
-export function assignImportTripSequences<T extends { driverName: string; plate: string; tripSequence?: number; isEmpty: boolean }>(rows: T[]): T[] {
-  const maxByKey = new Map<string, number>()
-  const keyOf = (r: T) => r.driverName || r.plate
-  rows.forEach((r) => {
-    const k = keyOf(r)
-    if (!k || r.isEmpty || r.tripSequence === undefined) return
-    maxByKey.set(k, Math.max(maxByKey.get(k) || 0, r.tripSequence))
-  })
-  const counter = new Map<string, number>()
-  rows.forEach((r) => {
-    const k = keyOf(r)
-    if (!k || r.isEmpty || r.tripSequence !== undefined) return
-    const next = Math.max(counter.get(k) ?? 0, maxByKey.get(k) ?? 0) + 1
-    counter.set(k, next)
-    r.tripSequence = next
-  })
-  return rows
-}
 
 /** ไฟล์ Excel ที่ลิงก์ GPS เป็น hyperlink (ข้อความป้าย + URL ฝังในเซลล์) sheet_to_json ได้แค่ข้อความ → ดึง URL จริงจาก cell.l.Target
  *  แล้วใส่แทนค่าในคอลัมน์ลิงก์ (ใช้ชื่อคอลัมน์ที่ resolveImportColumns หาได้) — headerRowIndex = แถว (0-based) ของหัวคอลัมน์ในชีท */
@@ -192,7 +173,7 @@ export interface ImportRowResult {
   mapUrl?: string
   latitude?: number
   longitude?: number
-  /** เที่ยวที่ของคนขับ/รถนี้ในวันเดียวกัน (จากคอลัมน์ "เที่ยวที่" หรือเรียงตามแถวซ้ำคนขับ ดู assignImportTripSequences) */
+  /** เที่ยวที่ของคนขับ/รถนี้ในวันเดียวกัน (จากคอลัมน์ "เที่ยวที่" 1-4 ไม่ระบุ = ว่าง ระบบนับจากลำดับในวันเอง ดู resolveTripNumber) */
   tripSequence?: number
   product: string
   /** แยกจาก product ด้วยเครื่องหมาย "+" (เช่น "23 + 52" → ["23","52"]) — กรณีแถวเดียวมีหลายชนิดสินค้าปนกัน
@@ -515,7 +496,7 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
   // ข้อควรตรวจก่อนนำเข้า (ไม่แปะลง note) — พิกัด/ลิงก์ GPS และเลขเที่ยวที่อ่านไม่ได้ (เลขเที่ยวชนกับงานเดิมของวันตรวจในพรีวิว)
   const checks: string[] = [...checkMapLink(mapLinkRaw)]
   const tripCell = str(raw[IMPORT_HEADERS.tripNo])
-  if (tripCell && tripSequence === undefined) checks.push(`เลขเที่ยว "${tripCell}" อ่านไม่ได้ (ต้องเป็นตัวเลข 1 ขึ้นไป) — ระบบจะเรียงเลขเที่ยวให้ตามลำดับแถวของคนขับ แก้เลขในพรีวิวได้`)
+  if (tripCell && tripSequence === undefined) checks.push(`เลขเที่ยว "${tripCell}" อ่านไม่ได้หรือเกิน 4 (วันละไม่เกิน 4 เที่ยว ใช้ 1-4) — เว้นว่างไว้ ระบบนับเที่ยวตามลำดับในวันให้ เลือกเลขในพรีวิวได้`)
   const note = [timeExtraText, noteRaw, fuelRemark, ...warnings].filter(Boolean).join(' | ')
 
   return {

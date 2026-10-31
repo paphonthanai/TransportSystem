@@ -230,16 +230,17 @@
                      — จ่ายเที่ยว 1/2 ลำดับไหนก็ได้ แอปคนขับเรียงตามเลขนี้ ซ้ำกับงานอื่นของคนขับวันเดียวกัน = ขอบแดง -->
                 <select
                   v-if="booking.status !== 'DELIVERED' && booking.driverName"
-                  :value="driverTripNumberForBooking(booking)"
+                  :value="booking.tripSequence ?? 0"
                   @click.stop
                   @change="(e) => bookingStore.setTripSequence(booking.id, Number((e.target as HTMLSelectElement).value))"
                   class="input-field !py-0.5 !px-1 !text-xs w-14"
                   :class="tripSequenceClash(booking) ? '!border-red-400 !text-red-700' : ''"
                   :title="tripSequenceClash(booking) ? 'เลขเที่ยวซ้ำกับงานอื่นของคนขับคนนี้ในวันเดียวกัน' : 'เที่ยวที่ของคนขับในวันนี้ (เลือกเองได้ รวมงานที่จ่ายไปแล้ว — แอปคนขับเรียงตามเลขนี้)'"
                 >
+                  <option :value="0">-</option>
                   <option v-for="n in tripNumberChoices(booking)" :key="n" :value="n">{{ n }}</option>
                 </select>
-                <template v-else>{{ driverTripNumberForBooking(booking) }}</template>
+                <template v-else>{{ booking.tripSequence ?? '-' }}</template>
               </td>
               <td class="px-3 py-3 text-text"><BookingDriverFixCell :booking="booking" /></td>
               <td class="px-3 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
@@ -402,16 +403,17 @@
                      — จ่ายเที่ยว 1/2 ลำดับไหนก็ได้ แอปคนขับเรียงตามเลขนี้ ซ้ำกับงานอื่นของคนขับวันเดียวกัน = ขอบแดง -->
                 <select
                   v-if="booking.status !== 'DELIVERED' && booking.driverName"
-                  :value="driverTripNumberForBooking(booking)"
+                  :value="booking.tripSequence ?? 0"
                   @click.stop
                   @change="(e) => bookingStore.setTripSequence(booking.id, Number((e.target as HTMLSelectElement).value))"
                   class="input-field !py-0.5 !px-1 !text-xs w-14"
                   :class="tripSequenceClash(booking) ? '!border-red-400 !text-red-700' : ''"
                   :title="tripSequenceClash(booking) ? 'เลขเที่ยวซ้ำกับงานอื่นของคนขับคนนี้ในวันเดียวกัน' : 'เที่ยวที่ของคนขับในวันนี้ (เลือกเองได้ รวมงานที่จ่ายไปแล้ว — แอปคนขับเรียงตามเลขนี้)'"
                 >
+                  <option :value="0">-</option>
                   <option v-for="n in tripNumberChoices(booking)" :key="n" :value="n">{{ n }}</option>
                 </select>
-                <template v-else>{{ driverTripNumberForBooking(booking) }}</template>
+                <template v-else>{{ booking.tripSequence ?? '-' }}</template>
               </td>
               <td class="px-3 py-3 text-text"><BookingDriverFixCell :booking="booking" /></td>
               <td class="px-3 py-3 text-text font-semibold">{{ booking.plate || '-' }}</td>
@@ -597,7 +599,10 @@
                 เที่ยวที่
                 <span class="text-[10px] font-normal text-muted">(เที่ยวของคนขับคนนี้ในวันเดียวกัน — คนขับจะเห็นปุ่มยืนยันที่เที่ยวแรกก่อน)</span>
               </label>
-              <input v-model.number="dispatchForm.tripSequence" type="number" min="1" step="1" class="input-field w-24" />
+              <select v-model.number="dispatchForm.tripSequence" class="input-field w-24">
+                <option :value="0">-</option>
+                <option v-for="n in MAX_TRIPS_PER_DAY" :key="n" :value="n">{{ n }}</option>
+              </select>
             </div>
 
             <!-- รูปแนบให้คนขับดู (ไม่บังคับ) — อัปโหลดแล้วบันทึกลงงานทันที แก้เพิ่ม/ลบภายหลังได้ที่หน้ารายละเอียดงาน -->
@@ -897,15 +902,15 @@
                       </td>
                       <td class="px-2 py-1.5">{{ row.rowNumber }}</td>
                       <td class="px-2 py-1.5">
-                        <input
+                        <select
                           v-model.number="row.tripSequence"
-                          type="number"
-                          min="1"
-                          step="1"
                           class="input-field !py-0.5 !px-1 !text-xs w-14"
                           :class="importTripWarningFor(row) ? '!border-amber-500' : ''"
-                          :title="importTripWarningFor(row) || 'เที่ยวที่ของคนขับในวันนี้'"
-                        />
+                          :title="importTripWarningFor(row) || 'เที่ยวที่ของคนขับในวันนี้ (1-4)'"
+                        >
+                          <option :value="undefined">-</option>
+                          <option v-for="n in MAX_TRIPS_PER_DAY" :key="n" :value="n">{{ n }}</option>
+                        </select>
                       </td>
                       <td class="px-2 py-1.5 min-w-[190px]">
                         <!-- ผลการ map: ชื่อเล่นใน Excel → ชื่อจริงที่จับคู่ได้ — จับคู่ไม่ได้ให้เลือกคนขับเองตรงนี้ได้เลย -->
@@ -1102,6 +1107,8 @@
 import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
 import DriverJobDetailsContent from '@/components/booking/DriverJobDetailsContent.vue'
 import { compareInTransitBookings } from '@/utils/inTransitSort'
+import { tripNumberChoices as tripNumberChoicesFor } from '@/utils/driverDayTrips'
+import { normalizeDriverName } from '@/utils/driverIdentity'
 import { bookingFingerprint, duplicateGroupKey, findDuplicateGroups, fingerprintOf, type DuplicateGroup } from '@/utils/bookingDuplicates'
 import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
@@ -1134,11 +1141,10 @@ import {
   parseShipDateFromTitle,
   flagPriceOutliers,
   mapImportRowToDriver,
-  assignImportTripSequences,
   applySheetHyperlinks,
   type ImportRowResult,
 } from '@/utils/importRowParser'
-import { compareByTrip, resolveTripNumber, nextTripSequence, validateTripSequences } from '@/utils/tripSequence'
+import { compareByTrip, resolveTripNumber, nextTripSequence, validateTripSequences, MAX_TRIPS_PER_DAY } from '@/utils/tripSequence'
 /** ไลบรารี xlsx (~400 KB) โหลดตอนกด import/ดาวน์โหลดเทมเพลตเท่านั้น ไม่ให้หน้า Booking ช้าตั้งแต่เปิด */
 const loadXlsx = () => import('xlsx')
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
@@ -1326,10 +1332,11 @@ const isSameCalendarDay = (a: Date, b: Date) =>
 /** ใช้ตัดสินว่า "วันเดียวกัน" ของงานนี้คือวันไหน สำหรับนับเที่ยวที่ N และกรองตามวันขนส่ง: ใช้วันที่ขนส่งเป็นหลัก ถ้าไม่มีค่อย fallback เป็นวันที่สร้างงาน */
 const bookingDayKey = (b: Booking) => new Date(b.shipDate || b.createdAt)
 
-/** เรียงงานทั้งหมด (ทุก fleet) ของคนขับคนนี้ในวันเดียวกับ refDate ตามเวลาที่จ่ายงาน เพื่อนับว่าเป็นเที่ยวที่เท่าไหร่ */
+/** เรียงงานทั้งหมด (ทุก fleet) ของคนขับคนนี้ในวันเดียวกับ refDate ตามเวลาที่จ่ายงาน เพื่อนับว่าเป็นเที่ยวที่เท่าไหร่
+ *  เทียบชื่อแบบไม่สนช่องว่าง/คำนำหน้า — งานเก่าบางงานชื่อมีช่องว่างซ้อน ดูเหมือนกันบนจอแต่เคยถูกนับเป็นคนละคน (ดู utils/driverDayTrips.ts) */
 const driverBookingsForDay = (driverName: string, refDate: Date) =>
   bookingStore.bookings
-    .filter((b) => b.driverName === driverName && isSameCalendarDay(bookingDayKey(b), refDate))
+    .filter((b) => normalizeDriverName(b.driverName) === normalizeDriverName(driverName) && isSameCalendarDay(bookingDayKey(b), refDate))
     .sort(compareByTrip)
 
 const driverTripNumberForBooking = (booking: Booking) => {
@@ -1338,12 +1345,8 @@ const driverTripNumberForBooking = (booking: Booking) => {
   return resolveTripNumber(booking, list)
 }
 
-/** ตัวเลือก "เที่ยวที่" ของงานนี้: 1..(จำนวนงานของคนขับวันนั้น + 1) และเลขปัจจุบัน */
-const tripNumberChoices = (booking: Booking) => {
-  const count = booking.driverName ? driverBookingsForDay(booking.driverName, bookingDayKey(booking)).length : 1
-  const max = Math.max(count + 1, driverTripNumberForBooking(booking), 2)
-  return Array.from({ length: max }, (_, i) => i + 1)
-}
+/** ตัวเลือก "เที่ยวที่" — เท่ากันทุกงาน (1..10 ขยายเมื่องานของคนขับวันนั้นเกิน/เลขปัจจุบันสูงกว่า) ดู utils/driverDayTrips.ts */
+const tripNumberChoices = (booking: Booking) => tripNumberChoicesFor(booking)
 
 /** เลขเที่ยวที่ตั้งไว้ซ้ำกับงานอื่นของคนขับคนเดียวกันในวันเดียวกัน (ทำให้แอปคนขับเรียงไม่ชัด) */
 const tripSequenceClash = (booking: Booking) =>
@@ -1353,9 +1356,8 @@ const tripSequenceClash = (booking: Booking) =>
 
 /** ค่าตั้งต้นช่อง "เที่ยวที่" ตอนจัดรถ: เลขที่ระบุไว้แล้ว (import/จัดเที่ยว) ไม่งั้นเที่ยวถัดไปของคนขับวันนั้น */
 const defaultTripForDispatch = (booking: Booking) => {
-  if (booking.tripSequence !== undefined) return booking.tripSequence
-  if (!booking.driverName) return 1
-  return nextTripSequence(driverBookingsForDay(booking.driverName, bookingDayKey(booking)).filter((b) => b.id !== booking.id))
+  // เลขที่ระบุไว้แล้ว (1-4) ไม่งั้นเว้นว่าง (0 = ไม่ระบุ) — ระบบนับเที่ยวจากลำดับในวันเอง (ดู resolveTripNumber)
+  return booking.tripSequence !== undefined ? Math.min(booking.tripSequence, MAX_TRIPS_PER_DAY) : 0
 }
 
 /** งาน (ทั้งหมด ไม่ใช่แค่ล่าสุด) ที่ "คนขับคนนี้" กำลังวิ่งอยู่ (ยังไม่ DELIVERED) ไม่รวมตัว Booking ที่กำลังจัดรถอยู่นี้
@@ -2161,7 +2163,6 @@ const handleImportFile = async (e: Event) => {
   // เทียบราคาต่อหน่วยของแต่ละแถวกับราคามัธยฐานของสินค้าเดียวกันในไฟล์นี้ กันกรณีกรอกราคารวมมาแทนราคาต่อหน่วย
   // (ดู flagPriceOutliers) ต้องรอให้ parse ครบทุกแถวก่อนถึงจะเทียบได้ จึงทำหลัง map เสร็จ ไม่ใช่ต่อแถวใน parseImportRow
   flagPriceOutliers(importRows.value)
-  assignImportTripSequences(importRows.value)
   input.value = ''
 }
 
@@ -2181,7 +2182,6 @@ onMounted(() => {
     })
   )
   flagPriceOutliers(importRows.value)
-  assignImportTripSequences(importRows.value)
   importModalOpen.value = true
 })
 

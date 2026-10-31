@@ -11,7 +11,8 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import { useDriverPayrollDocumentsStore } from '@/stores/driverPayrollDocuments'
 import { isBookingPaidToDriver, monthlyPaidCheck, payrollPeriodLabelOf } from '@/utils/driverPaid'
-import { resolveTripNumber } from '@/utils/tripSequence'
+import { driverTripNumber } from '@/utils/driverDayTrips'
+import { validTripNumber } from '@/utils/tripSequence'
 import { pruneResolvedNote } from '@/utils/bookingNote'
 import { bookingRepository } from '@/repositories/bookingRepository'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
@@ -480,7 +481,9 @@ export const useBookingStore = defineStore('booking', () => {
   function setTripSequence(id: string, seq: number | undefined) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
-    const next = seq && seq >= 1 ? Math.floor(seq) : undefined
+    // วันละไม่เกิน 4 เที่ยว — เลขนอก 1-4 ไม่บันทึก
+    const next = seq === undefined || seq === 0 ? undefined : validTripNumber(seq)
+    if (seq && next === undefined) return
     if (booking.tripSequence === next) return
     booking.tripSequence = next
     addLog(`ตั้งเที่ยวที่ ${booking.docNo}: ${next ?? 'ไม่ระบุ'}`, { bookingId: booking.id })
@@ -1171,14 +1174,8 @@ export const useBookingStore = defineStore('booking', () => {
    * ใช้ตัดสินข้อยกเว้นจบงานที่ค่าเที่ยว/เบี้ยเลี้ยง 0 ของเที่ยวที่ 2 ขึ้นไป (ดู isUnpricedLaterTrip ใน utils/bookingCompletion.ts)
    */
   function tripNumberOf(booking: Booking): number {
-    const day = (b: Booking) => {
-      const d = new Date(b.shipDate || b.createdAt)
-      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-    }
-    const group = booking.driverName
-      ? bookings.value.filter((b) => b.driverName === booking.driverName && day(b) === day(booking))
-      : [booking]
-    return resolveTripNumber(booking, group.some((b) => b.id === booking.id) ? group : [...group, booking])
+    // กลุ่มคนขับเดียวกัน/วันเดียวกัน เทียบด้วย driverId หรือชื่อแบบไม่สนช่องว่าง/คำนำหน้า (ดู utils/driverDayTrips.ts)
+    return driverTripNumber(booking, bookings.value)
   }
 
   /**

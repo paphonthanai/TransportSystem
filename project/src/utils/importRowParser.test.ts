@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assignImportTripSequences, applySheetHyperlinks, matchCustomerForImport, matchDriverForImport, parseImportRow, parseFuelCell, IMPORT_HEADERS, type ParseImportRowDeps } from './importRowParser'
+import { applySheetHyperlinks, matchCustomerForImport, matchDriverForImport, parseImportRow, parseFuelCell, IMPORT_HEADERS, type ParseImportRowDeps } from './importRowParser'
 
 /** ลูกค้าในไฟล์ Excel มักกรอกแบบย่อ (เช่น "Sccc") ต้องจับคู่กับ "รหัสผู้ติดต่อ" ก่อนเสมอ ถ้าไม่เจอค่อยลองชื่อเต็ม
  *  เจอแล้วต้องได้ record คืนมา (ผู้เรียกจะเอา .name ไปใช้เป็นชื่อเต็มบน booking.customer เสมอ) */
@@ -283,18 +283,10 @@ describe('parseImportRow — หัวคอลัมน์ลิงก์ GPS/�
     expect(parseImportRow({ ...base, 'เที่ยวที่': 2 }, 1, deps).tripSequence).toBe(2)
     expect(parseImportRow({ ...base, เที่ยว: 'เที่ยว 3' }, 1, deps).tripSequence).toBe(3)
     expect(parseImportRow({ ...base, 'เที่ยวที่': '' }, 1, deps).tripSequence).toBeUndefined()
-  })
-})
-
-describe('assignImportTripSequences', () => {
-  const r = (driverName: string, tripSequence?: number) => ({ driverName, plate: '', tripSequence, isEmpty: false })
-  it('แถวซ้ำคนขับเดียวกัน เรียงเป็นเที่ยว 1,2 ตามแถว; คนขับอื่นเริ่ม 1 ใหม่', () => {
-    const rows = assignImportTripSequences([r('ก'), r('ข'), r('ก'), r('ก')])
-    expect(rows.map((x) => x.tripSequence)).toEqual([1, 1, 2, 3])
-  })
-  it('เลขที่ระบุเองในไฟล์ไม่ถูกทับ และแถวที่ไม่ระบุต่อจากเลขสูงสุด', () => {
-    const rows = assignImportTripSequences([r('ก', 2), r('ก')])
-    expect(rows.map((x) => x.tripSequence)).toEqual([2, 3])
+    // วันละไม่เกิน 4 เที่ยว — เลขเกิน 4 ใช้ไม่ได้ เว้นว่าง + เตือนในพรีวิว
+    const over = parseImportRow({ ...base, 'เที่ยวที่': 5 }, 1, deps)
+    expect(over.tripSequence).toBeUndefined()
+    expect(over.checks.some((c) => c.includes('เกิน 4'))).toBe(true)
   })
 })
 
