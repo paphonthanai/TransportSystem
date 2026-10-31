@@ -130,3 +130,37 @@ export function summarizeBilledMoney(
     monthly: { sales: monthly.sales.map(roundMoney), expense: monthly.expense.map(roundMoney), income: monthly.income.map(roundMoney) },
   }
 }
+
+export interface VehicleTypeMoney {
+  vehicleType: string
+  sales: number
+  expense: number
+  companyIncome: number
+}
+
+/**
+ * ยอดขาย/รายจ่าย/รายได้บริษัท แยกตามประเภทรถ (สำหรับแผนภูมิวงกลมใน Dashboard) — นับเฉพาะงานที่ส่งเสร็จและคิดเงินได้
+ * เกณฑ์เดียวกับ summarizeBilledMoney ผลรวมทุกประเภทจึงเท่ากับยอดรวมของการ์ดสรุป เรียงตามลำดับประเภทรถมาตรฐาน
+ */
+export function summarizeMoneyByVehicleType(
+  bookings: Array<MoneyInput & Pick<Booking, 'status' | 'completedAt'>>,
+  vehicleTypeOf: (plate: string) => VehicleType | undefined,
+  tripNumberOf?: (b: MoneyInput & Pick<Booking, 'status' | 'completedAt'>) => number
+): VehicleTypeMoney[] {
+  const order = ['รถบริษัท', 'รถหุ้นส่วน', 'รถร่วม', 'รถอู่เสริม']
+  const map = new Map<string, VehicleTypeMoney>()
+  for (const b of bookings) {
+    if (b.status !== 'DELIVERED') continue
+    const type = b.plate ? vehicleTypeOf(b.plate) : undefined
+    const m = computeBookingMoney(b, type, tripNumberOf ? () => tripNumberOf(b) : undefined)
+    if (m.companyIncome === null || !type) continue
+    const row = map.get(type) || { vehicleType: type, sales: 0, expense: 0, companyIncome: 0 }
+    row.sales += m.sales
+    row.expense += m.expense
+    row.companyIncome += m.companyIncome
+    map.set(type, row)
+  }
+  return [...map.values()]
+    .map((r) => ({ ...r, sales: roundMoney(r.sales), expense: roundMoney(r.expense), companyIncome: roundMoney(r.companyIncome) }))
+    .sort((a, b) => (order.indexOf(a.vehicleType) + 1 || 99) - (order.indexOf(b.vehicleType) + 1 || 99))
+}

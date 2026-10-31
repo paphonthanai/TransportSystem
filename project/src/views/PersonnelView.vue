@@ -92,13 +92,17 @@
             </td>
             <td class="px-4 py-3 text-muted">{{ plateOf(row) || '-' }}</td>
             <td class="px-4 py-3">
-              <span :class="['text-xs font-semibold px-2 py-1 rounded-full', row.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
+              <span :class="['text-xs font-semibold px-2 py-1 rounded-full', isWorking(row) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
                 {{ statusLabel(row) }}
               </span>
+              <div v-if="personnelStatusMismatch(row)" class="text-[11px] font-semibold text-amber-700 mt-1">⚠ {{ personnelStatusMismatch(row) }}</div>
             </td>
             <td class="px-4 py-3">
               <template v-if="row.user">
-                <span class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">มีบัญชี</span>
+                <span :class="['text-xs font-semibold px-2 py-1 rounded-full', row.user.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600']">
+                  {{ row.user.active ? 'มีบัญชี' : 'บัญชีปิดใช้งาน' }}
+                </span>
+                <div v-if="row.linkIssue" class="text-[11px] font-semibold text-red-600 mt-1 max-w-[220px] whitespace-normal">⚠ {{ row.linkIssue }}</div>
               </template>
               <template v-else-if="row.driver && isAdmin">
                 <div v-if="driverLoginReady(row.driver)" class="flex items-center gap-1.5">
@@ -113,20 +117,10 @@
               <span v-else class="text-xs text-muted">-</span>
             </td>
             <td class="px-4 py-3 text-right whitespace-nowrap">
+              <!-- ทุกแถวมีปุ่ม "แก้ไข" + เมนู ⋮ เหมือนกัน คำสั่งอื่นอยู่ในเมนู (แสดงเฉพาะที่ใช้ได้กับแถวนั้น) -->
               <div class="flex items-center justify-end gap-1.5">
-                <RouterLink v-if="row.driver?.id" :to="`/settings/drivers/${row.driver.id}`" class="btn-sm">รายละเอียด</RouterLink>
                 <button class="btn-sm" @click="editPrimary(row)">แก้ไข</button>
-                <button v-if="row.user && (row.driver || row.staff) && isAdmin" class="btn-sm" @click="users?.openEditDialog(row.user)">บัญชี</button>
-                <button class="btn-sm text-red-600 hover:bg-red-50" @click="removeRow(row)">ลบ</button>
-                <UserActionMenu
-                  v-if="row.user && isAdmin"
-                  :user="row.user"
-                  :can-hard-delete="isAdmin"
-                  :is-self="row.user.id === authStore.currentUser?.id"
-                  @reset-password="users?.openPasswordDialog(row.user)"
-                  @toggle-active="users?.toggleActive(row.user)"
-                  @delete="users?.hardDeleteUser(row.user)"
-                />
+                <PersonnelRowMenu :row="row" :is-admin="isAdmin" :is-self="row.user?.id === authStore.currentUser?.id" @action="(a) => onRowAction(row, a)" />
               </div>
             </td>
           </tr>
@@ -152,11 +146,18 @@ import { useUserStore, type UserRole } from '@/stores/users'
 import { useStaffStore, type StaffRecord } from '@/stores/staff'
 import { useDriversStore, type DriverRecord } from '@/stores/drivers'
 import { useVehiclesStore } from '@/stores/vehicles'
-import UserActionMenu from '@/components/settings/UserActionMenu.vue'
+import PersonnelRowMenu from '@/components/settings/PersonnelRowMenu.vue'
 import UserManagementView from '@/views/UserManagementView.vue'
 import StaffView from '@/views/StaffView.vue'
 import DriversView from '@/views/DriversView.vue'
-import { buildPersonnelRows, filterPersonnelRows, countByRole, type PersonnelRow } from '@/utils/personnelDirectory'
+import {
+  buildPersonnelRows,
+  filterPersonnelRows,
+  countByRole,
+  personnelStatusMismatch,
+  type PersonnelRow,
+  type PersonnelRowAction,
+} from '@/utils/personnelDirectory'
 
 /**
  * ตารางเดียวรวมทุกคน (บัญชีผู้ใช้ + ทะเบียนเสมียน + ทะเบียนคนขับ) แยกกลุ่มด้วย Role — ดู utils/personnelDirectory.ts
@@ -243,9 +244,14 @@ const visibleRows = computed(() =>
 // ---- แสดงผลแถว ----
 const avatarPhoto = (row: PersonnelRow) => row.driver?.photo || row.staff?.photo || null
 const avatarBg = (row: PersonnelRow) => row.driver?.avatarBg || row.staff?.avatarBg || '#64748b'
+/** สถานะ = สถานะทำงานตามทะเบียน (คนขับ/เสมียน) ถ้ามี ไม่งั้นสถานะบัญชี login — ใช้เกณฑ์เดียวกันทุกแถว ส่วนบัญชีแสดงที่คอลัมน์ "บัญชี login" */
+const isWorking = (row: PersonnelRow) => {
+  const registry = row.driver || row.staff
+  return registry ? registry.employmentStatus === 'active' : !!row.user?.active
+}
 const statusLabel = (row: PersonnelRow) => {
-  if (row.user) return row.active ? 'เปิดใช้งาน' : 'ปิดใช้งาน'
-  return row.active ? 'ทำงานปกติ' : 'ลาออกแล้ว'
+  if (row.driver || row.staff) return isWorking(row) ? 'ทำงานปกติ' : 'ลาออกแล้ว'
+  return isWorking(row) ? 'เปิดใช้งาน' : 'ปิดใช้งาน'
 }
 const driverLoginReady = (d: DriverRecord) => !!drivers.value?.driverLoginStatus?.[d.code]
 
@@ -269,6 +275,15 @@ const editPrimary = (row: PersonnelRow) => {
   if (row.driver) drivers.value?.openDialog(row.driver)
   else if (row.staff) staff.value?.openDialog(row.staff as StaffRecord)
   else if (row.user) users.value?.openEditDialog(row.user)
+}
+const onRowAction = (row: PersonnelRow, action: PersonnelRowAction) => {
+  if (action === 'detail' && row.driver?.id) router.push(`/settings/drivers/${row.driver.id}`)
+  else if (action === 'edit-account' && row.user) users.value?.openEditDialog(row.user)
+  else if (action === 'setup-login' && row.driver) drivers.value?.openSetupDialog(row.driver)
+  else if (action === 'reset-password' && row.user) users.value?.openPasswordDialog(row.user)
+  else if (action === 'toggle-active' && row.user) users.value?.toggleActive(row.user)
+  else if (action === 'delete-account' && row.user) users.value?.hardDeleteUser(row.user)
+  else if (action === 'remove') removeRow(row)
 }
 const removeRow = (row: PersonnelRow) => {
   if (row.driver) drivers.value?.remove(row.driver)

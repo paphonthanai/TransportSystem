@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeBookingMoney, summarizeBilledMoney } from './bookingMoney'
+import { computeBookingMoney, summarizeBilledMoney, summarizeMoneyByVehicleType } from './bookingMoney'
 import type { VehicleType } from '@/types'
 
 const base = {
@@ -187,5 +187,23 @@ describe('computeBookingMoney — เที่ยวที่ 2 ขึ้นไ�
     expect(result.totals.expense).toBe(3000 + 2000)
     // 6,900 (เที่ยวแรก) + (−2,000) = 4,900
     expect(result.totals.companyIncome).toBe(4900)
+  })
+})
+
+describe('summarizeMoneyByVehicleType', () => {
+  it('แยกตามประเภทรถ ผลรวมเท่ากับยอดรวมของ summarizeBilledMoney และเรียงตามลำดับประเภทมาตรฐาน', () => {
+    const typeOf = (plate: string): VehicleType | undefined =>
+      ({ 'A': 'รถร่วม', 'B': 'รถบริษัท' } as Record<string, VehicleType>)[plate]
+    const jobs = [
+      { ...base, plate: 'A', status: 'DELIVERED' as const },
+      { ...base, plate: 'B', status: 'DELIVERED' as const },
+      { ...base, plate: 'B', status: 'DELIVERED' as const, tripFee: 0 },
+      { ...base, plate: 'X', status: 'DELIVERED' as const },
+    ]
+    const rows = summarizeMoneyByVehicleType(jobs as never, typeOf)
+    expect(rows.map((r) => r.vehicleType)).toEqual(['รถบริษัท', 'รถร่วม'])
+    const totals = summarizeBilledMoney(jobs as never, typeOf).totals
+    expect(rows.reduce((n, r) => n + r.sales, 0)).toBe(totals.sales)
+    expect(rows.reduce((n, r) => n + r.companyIncome, 0)).toBe(totals.companyIncome)
   })
 })

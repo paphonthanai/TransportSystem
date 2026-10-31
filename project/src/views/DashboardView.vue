@@ -100,6 +100,15 @@
         <span class="material-symbols-rounded text-base">info</span>
         {{ summaryMoney.uncomputableCount }} งานในช่วงนี้ยังคิดเงินไม่ได้ จึงไม่ถูกนับในยอดข้างบน
       </div>
+      <!-- แยกตามประเภทรถ (แผนภูมิวงกลม) — ตัวกรองเดียวกับการ์ดด้านบน ผลรวมเท่ากับยอดด้านบน -->
+      <div class="mt-4 pt-4 border-t border-border">
+        <div class="text-xs font-semibold text-muted mb-3">แยกตามประเภทรถ</div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <DashboardPieChart title="ยอดขายรวม" accent="#2563eb" :segments="pieSegments('sales')" :format="formatBaht" />
+          <DashboardPieChart title="รายจ่าย" accent="#dc2626" :segments="pieSegments('expense')" :format="formatBaht" />
+          <DashboardPieChart title="รายได้บริษัท" accent="#16a34a" :segments="pieSegments('companyIncome')" :format="formatBaht" />
+        </div>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4 items-start">
@@ -396,13 +405,14 @@
 import { ref, computed, watch } from 'vue'
 import DashboardLineChart from '@/components/DashboardLineChart.vue'
 import DashboardBarChart from '@/components/DashboardBarChart.vue'
+import DashboardPieChart from '@/components/DashboardPieChart.vue'
 import Pager from '@/components/Pager.vue'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useFuelRateStore } from '@/stores/fuelRates'
-import { summarizeBilledMoney, computeBookingMoney } from '@/utils/bookingMoney'
+import { summarizeBilledMoney, summarizeMoneyByVehicleType, computeBookingMoney } from '@/utils/bookingMoney'
 import { useDriversStore } from '@/stores/drivers'
 import { bangkokDay } from '@/utils/fuelPrice'
 import type { Booking } from '@/types'
@@ -509,6 +519,18 @@ const summaryMoney = computed(() =>
     (b) => bookingStore.tripNumberOf(b as Booking)
   )
 )
+
+/** ยอดแยกตามประเภทรถ (ตัวกรองเดียวกับการ์ดสรุป) สำหรับแผนภูมิวงกลม — สีประจำประเภทรถเหมือนกันทั้ง 3 วง */
+const VEHICLE_TYPE_COLORS: Record<string, string> = { รถบริษัท: '#2563eb', รถหุ้นส่วน: '#f59e0b', รถร่วม: '#10b981', รถอู่เสริม: '#8b5cf6' }
+const moneyByVehicleType = computed(() =>
+  summarizeMoneyByVehicleType(
+    bookingStore.bookings.filter((b) => (summaryUnit.value === 'all' || b.category === summaryUnit.value) && inRange(b, summaryDateRange.value)),
+    vehicleTypeOf,
+    (b) => bookingStore.tripNumberOf(b as Booking)
+  )
+)
+const pieSegments = (field: 'sales' | 'expense' | 'companyIncome') =>
+  moneyByVehicleType.value.map((r) => ({ label: r.vehicleType, value: r[field], color: VEHICLE_TYPE_COLORS[r.vehicleType] || '#64748b' }))
 
 /** งานที่ผ่านตัวกรอง "ประเภทงาน" + "ช่วงวันที่" ของกราฟ (ใช้กับทั้งกราฟและยอดรวมใต้ตัวกรอง) */
 const chartBookings = computed(() => {

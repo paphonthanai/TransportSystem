@@ -119,6 +119,56 @@
       </div>
     </div>
 
+    <!-- งานที่น่าจะซ้ำ (import ไฟล์เดิมซ้ำ/สร้างซ้ำ) — ดู utils/bookingDuplicates.ts -->
+    <div v-if="activeDuplicateGroups.length" class="rounded-lg border border-red-200 bg-red-50 text-red-800 text-sm p-3 flex items-center gap-3 flex-wrap">
+      <span class="material-symbols-rounded">content_copy</span>
+      <span class="flex-1">พบงานที่อาจซ้ำกัน {{ activeDuplicateGroups.length }} กลุ่ม ({{ activeDuplicateGroups.reduce((n, g) => n + g.bookings.length, 0) }} งาน) — ตรวจแล้วลบงานที่เกิน หรือกด "ไม่ใช่งานซ้ำ"</span>
+      <button @click="duplicateModalOpen = true" class="btn-sm !border-red-200 !bg-white !text-red-700">ตรวจงานซ้ำ</button>
+    </div>
+    <Teleport to="body" v-if="duplicateModalOpen">
+      <div @click="duplicateModalOpen = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
+        <div @click.stop class="w-full max-w-4xl bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
+            <div class="font-bold text-text">ตรวจงานที่อาจซ้ำ ({{ activeDuplicateGroups.length }} กลุ่ม)</div>
+            <button @click="duplicateModalOpen = false" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </div>
+          <div class="p-6 space-y-4 text-sm">
+            <div class="text-xs text-muted">
+              เกณฑ์: เลขที่งานซ้ำกัน หรือวันที่ลงงาน + ลูกค้า + เลขที่ PO + คนขับ/รถ + หน้างาน + สินค้า/จำนวน เหมือนกันทุกอย่าง —
+              งานแรก (สร้างก่อน) น่าจะเป็นต้นฉบับ ลบได้เฉพาะผู้ดูแลระบบ
+            </div>
+            <div v-if="!activeDuplicateGroups.length" class="text-center text-muted py-6">ไม่มีงานที่อาจซ้ำแล้ว</div>
+            <div v-for="group in activeDuplicateGroups" :key="duplicateGroupKey(group)" class="rounded-lg border border-border">
+              <div class="flex items-center justify-between gap-2 px-3 py-2 bg-surface-2 rounded-t-lg">
+                <span class="font-semibold">{{ group.reason === 'SAME_DOC_NO' ? `เลขที่งานซ้ำ: ${group.bookings[0].docNo}` : `เนื้อหาเหมือนกัน: ${group.bookings[0].customer} · ${destinationLabel(group.bookings[0])}` }}</span>
+                <button @click="dismissDuplicateGroup(group)" class="btn-sm">ไม่ใช่งานซ้ำ</button>
+              </div>
+              <table class="w-full text-xs">
+                <tbody>
+                  <tr v-for="(b, idx) in group.bookings" :key="b.id" class="border-t border-border">
+                    <td class="px-3 py-2 font-mono whitespace-nowrap">
+                      <RouterLink :to="`/job/${b.id}`" class="text-primary hover:underline">{{ b.docNo }}</RouterLink>
+                      <span v-if="idx === 0" class="ml-1 text-[10px] font-semibold text-green-700">(สร้างก่อน)</span>
+                    </td>
+                    <td class="px-3 py-2 whitespace-nowrap">{{ formatShortDate(b.loadingDate) }} {{ b.loadingTime || '' }}</td>
+                    <td class="px-3 py-2">{{ b.driverName || '-' }} · {{ b.plate || '-' }}</td>
+                    <td class="px-3 py-2">{{ destinationLabel(b) }}</td>
+                    <td class="px-3 py-2"><span :class="['font-semibold px-2 py-0.5 rounded-full', bookingStatusClass[b.status]]">{{ bookingStatusLabel[b.status] }}</span></td>
+                    <td class="px-3 py-2 text-muted whitespace-nowrap">สร้าง {{ new Date(b.createdAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) }}</td>
+                    <td class="px-3 py-2 text-right">
+                      <button v-if="isAdmin" @click="deleteBooking(b)" class="btn-sm !text-red-700">ลบ</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- In-progress Table -->
     <div>
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
@@ -456,13 +506,30 @@
         <div @click.stop class="w-full max-w-lg bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto animate-slide">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
             <div class="font-bold text-text">
-              {{ isReassignDispatch ? 'เปลี่ยนคนขับ/รถ' : 'ส่งงาน' }} {{ dispatchTitle(dispatchTarget) }}
+              {{ dispatchReviewing ? 'ตรวจสอบก่อนส่ง · ' : '' }}{{ isReassignDispatch ? 'เปลี่ยนคนขับ/รถ' : 'ส่งงาน' }} {{ dispatchTitle(dispatchTarget) }}
             </div>
             <button @click="dispatchTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
           </div>
-          <div class="px-6 py-6 space-y-5">
+          <!-- ขั้นตรวจสอบก่อนส่ง: จำลองหน้าจอแอปคนขับด้วยคอมโพเนนต์เดียวกับที่คนขับเห็นจริง (DriverJobDetailsContent) -->
+          <div v-if="dispatchReviewing && dispatchPreviewBooking" class="px-6 py-5 space-y-4">
+            <div class="rounded-xl border border-border bg-surface-2 p-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              <div><span class="text-muted">คนขับ:</span> <span class="font-semibold">{{ dispatchForm.driverName }}</span></div>
+              <div><span class="text-muted">ทะเบียน:</span> <span class="font-semibold">{{ dispatchForm.plate }}</span></div>
+            </div>
+            <div class="text-xs font-semibold text-muted">สิ่งที่คนขับจะเห็นในแอป (กด "แสดงรายละเอียด" ที่การ์ดงาน)</div>
+            <div class="mx-auto w-full max-w-[380px] rounded-[2rem] border-[6px] border-gray-800 bg-white shadow-xl overflow-hidden">
+              <div class="flex items-center justify-between px-5 py-3 border-b border-border">
+                <div class="font-bold text-text text-base truncate">รายละเอียดงาน {{ dispatchTitle(dispatchPreviewBooking) }}</div>
+                <span class="material-symbols-rounded text-xl text-muted">close</span>
+              </div>
+              <div class="max-h-[55vh] overflow-y-auto">
+                <DriverJobDetailsContent :booking="dispatchPreviewBooking" :trip-number="dispatchPreviewTrip" />
+              </div>
+            </div>
+          </div>
+          <div v-else class="px-6 py-6 space-y-5">
             <!-- สรุปงานที่กำลังจัดรถ: ชื่อคนขับ/ทะเบียน/หน้างาน/ยอดเติมน้ำมัน (อัปเดตตามที่เลือกด้านล่าง) -->
             <div class="rounded-xl border border-border bg-surface-2 p-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               <div>
@@ -677,14 +744,24 @@
               </div>
             </div>
           </div>
-          <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
+          <div v-if="dispatchReviewing" class="flex justify-end gap-3 px-6 py-4 border-t border-border">
+            <button @click="dispatchReviewing = false" class="btn-secondary mr-auto">
+              <span class="material-symbols-rounded">arrow_back</span>
+              กลับไปแก้ไข
+            </button>
+            <button @click="confirmDispatch" class="btn-primary">
+              <span class="material-symbols-rounded">send</span>
+              {{ isReassignDispatch ? 'ยืนยันเปลี่ยนคนขับ/รถ' : 'ยืนยันส่งงาน' }}
+            </button>
+          </div>
+          <div v-else class="flex justify-end gap-3 px-6 py-4 border-t border-border">
             <button @click="dispatchTarget = null" class="btn-secondary">ยกเลิก</button>
             <div v-if="dispatchForm.plate && !dispatchForm.driverName" class="text-xs text-red-600 font-semibold mr-auto self-center">
               มีทะเบียนต้องมีคนขับ — รถคันนี้ยังไม่มีคนขับประจำ กรุณาเลือกคนขับ
             </div>
-            <button @click="confirmDispatch" :disabled="!dispatchForm.plate || !dispatchForm.driverName" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
-              <span class="material-symbols-rounded">send</span>
-              {{ isReassignDispatch ? 'ยืนยันเปลี่ยนคนขับ/รถ' : 'ส่งงาน' }}
+            <button @click="dispatchReviewing = true" :disabled="!dispatchForm.plate || !dispatchForm.driverName" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+              <span class="material-symbols-rounded">preview</span>
+              ตรวจสอบก่อนส่ง
             </button>
           </div>
         </div>
@@ -778,7 +855,8 @@
               </div>
               <div class="bg-surface-2 rounded-lg p-3 text-sm flex items-center gap-4 flex-wrap">
                 <span class="font-semibold text-text">อ่านได้ {{ importableRows.length }} แถว</span>
-                <span class="text-green-600">จะสร้าง {{ importableRows.length }} งาน</span>
+                <span class="text-green-600">จะสร้าง {{ rowsToCreate.length }} งาน</span>
+                <span v-if="importableRows.length > rowsToCreate.length" class="text-red-600 font-semibold">ข้าม {{ importableRows.length - rowsToCreate.length }} แถว (อาจซ้ำ/เลือกข้าม)</span>
                 <span v-if="Object.keys(importTripWarnings).length" class="text-amber-600">ตรวจเลขเที่ยว: {{ Object.entries(importTripWarnings).map(([k, v]) => `${k} ${v.join('/')}`).join(' · ') }}</span>
                 <span v-if="importWarningRowCount" class="text-amber-600">{{ importWarningRowCount }} แถวมีข้อมูลไม่ครบ — จะสร้างงานให้ก่อนแล้วแปะหมายเหตุไว้ให้กรอกเพิ่ม</span>
                 <span v-if="importCheckRowCount" class="text-indigo-700">{{ importCheckRowCount }} แถวมีข้อควรตรวจ (พิกัด/ลิงก์ GPS, เลขเที่ยว) — ดูคอลัมน์ "ตรวจก่อนนำเข้า"</span>
@@ -788,6 +866,7 @@
                 <table class="w-full text-xs">
                   <thead class="bg-surface-2 sticky top-0">
                     <tr>
+                      <th class="text-left px-2 py-1.5">ข้าม</th>
                       <th class="text-left px-2 py-1.5">แถว</th>
                       <th class="text-left px-2 py-1.5">เที่ยวที่</th>
                       <th class="text-left px-2 py-1.5">พขร.</th>
@@ -802,7 +881,20 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="row in importableRows" :key="row.rowNumber" class="border-t border-border" :class="row.warnings.length || importChecksFor(row).length ? 'bg-amber-50' : ''">
+                    <tr
+                      v-for="row in importableRows"
+                      :key="row.rowNumber"
+                      class="border-t border-border"
+                      :class="isImportSkipped(row) ? 'bg-red-50 opacity-60' : row.warnings.length || importChecksFor(row).length ? 'bg-amber-50' : ''"
+                    >
+                      <td class="px-2 py-1.5">
+                        <input
+                          type="checkbox"
+                          :checked="isImportSkipped(row)"
+                          @change="importSkip = { ...importSkip, [row.rowNumber]: ($event.target as HTMLInputElement).checked }"
+                          title="ติ๊ก = ไม่สร้างงานจากแถวนี้"
+                        />
+                      </td>
                       <td class="px-2 py-1.5">{{ row.rowNumber }}</td>
                       <td class="px-2 py-1.5">
                         <input
@@ -865,11 +957,11 @@
             <button @click="closeImportModal" class="btn-secondary">ยกเลิก</button>
             <button
               @click="confirmImport"
-              :disabled="!importableRows.length"
+              :disabled="!rowsToCreate.length"
               class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-base">save</span>
-              ยืนยันสร้างงาน ({{ importableRows.length }} งาน)
+              ยืนยันสร้างงาน ({{ rowsToCreate.length }} งาน)
             </button>
           </div>
         </div>
@@ -1008,7 +1100,9 @@
 
 <script setup lang="ts">
 import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
+import DriverJobDetailsContent from '@/components/booking/DriverJobDetailsContent.vue'
 import { compareInTransitBookings } from '@/utils/inTransitSort'
+import { bookingFingerprint, duplicateGroupKey, findDuplicateGroups, fingerprintOf, type DuplicateGroup } from '@/utils/bookingDuplicates'
 import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -1345,6 +1439,29 @@ const matchesSearch = (b: Booking, q: string) => {
   return matchesBookingSearch(b, q, [driver?.nickname, driver?.code])
 }
 
+/** งานที่อาจซ้ำของ Fleet นี้ — ซ่อนกลุ่มที่ผู้ใช้กด "ไม่ใช่งานซ้ำ" แล้ว (จำไว้ในเครื่องนี้) */
+const DUP_DISMISS_KEY = 'tms.dismissedDuplicateGroups'
+const readDismissed = (): string[] => {
+  try {
+    return JSON.parse(localStorage.getItem(DUP_DISMISS_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+const dismissedDuplicates = ref<string[]>(readDismissed())
+const duplicateModalOpen = ref(false)
+const activeDuplicateGroups = computed(() =>
+  findDuplicateGroups(fleetBookings.value).filter((g) => !dismissedDuplicates.value.includes(duplicateGroupKey(g)))
+)
+const dismissDuplicateGroup = (group: DuplicateGroup) => {
+  dismissedDuplicates.value = [...dismissedDuplicates.value, duplicateGroupKey(group)]
+  try {
+    localStorage.setItem(DUP_DISMISS_KEY, JSON.stringify(dismissedDuplicates.value))
+  } catch {
+    /* เก็บไม่ได้ (โหมดส่วนตัว) — ซ่อนแค่รอบนี้ */
+  }
+}
+
 const inProgressBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return fleetBookings.value
@@ -1462,6 +1579,23 @@ const dispatchForm = ref({
   odometerBefore: 0,
   tripSequence: 1,
 })
+
+/** ขั้นตรวจสอบก่อนส่ง — แสดงสิ่งที่คนขับจะเห็น ก่อนกดยืนยันส่งงานจริง */
+const dispatchReviewing = ref(false)
+/** งานตามที่จะถูกส่งจริง (คนขับ/รถ/เที่ยวที่ตามฟอร์ม) — ใช้จำลองหน้าจอแอปคนขับ ไม่ได้บันทึกอะไร */
+const dispatchPreviewBooking = computed<Booking | null>(() =>
+  dispatchTarget.value
+    ? {
+        ...dispatchTarget.value,
+        plate: dispatchForm.value.plate,
+        driverName: dispatchForm.value.driverName,
+        tripSequence: dispatchForm.value.tripSequence >= 1 ? dispatchForm.value.tripSequence : dispatchTarget.value.tripSequence,
+      }
+    : null
+)
+const dispatchPreviewTrip = computed(() =>
+  dispatchPreviewBooking.value ? dispatchPreviewBooking.value.tripSequence || bookingStore.tripNumberOf(dispatchPreviewBooking.value) : 1
+)
 
 /** งานที่ถูกจัดรถไปแล้ว (ไม่ใช่ครั้งแรก) — เปิด dialog นี้ซ้ำได้ทุกสถานะก่อนส่งของสำเร็จเพื่อ "เปลี่ยนรถ/คนขับ" */
 const isReassignDispatch = computed(() => !!dispatchTarget.value && dispatchTarget.value.status !== 'WAITING_DISPATCH')
@@ -1585,6 +1719,7 @@ const suppressDispatchAutofill = ref(false)
 
 const openDispatchDialog = (booking: Booking) => {
   dispatchTarget.value = booking
+  dispatchReviewing.value = false
   showAddDispatchItem.value = false
   suppressDispatchAutofill.value = true
   dispatchForm.value = {
@@ -1809,6 +1944,7 @@ const importShipDate = ref<Date | undefined>()
 
 const openImportModal = () => {
   importRows.value = []
+  importSkip.value = {}
   importFileName.value = ''
   importShipDate.value = undefined
   importModalOpen.value = true
@@ -2076,8 +2212,42 @@ const importTripClashFor = (row: ImportRowResult) => {
 /** ชื่อเล่นใน Excel ที่ยังไม่ได้ map เป็นคนขับ (ผู้ใช้ยังไม่ได้เลือก) — ต้องตรวจก่อนสร้างงาน */
 const importUnmappedDriverFor = (row: ImportRowResult) =>
   row.driverNickname && !row.driverName ? `ชื่อเล่น "${row.driverNickname}" ยังไม่ได้ map เป็นคนขับ — เลือกคนขับในคอลัมน์ พขร. ก่อน ไม่งั้นงานจะไม่มีคนขับ` : undefined
+/** แถวที่เนื้อหาเหมือนงานที่มีอยู่แล้ว (หรือแถวก่อนหน้าในไฟล์เดียวกัน) — ค่าเริ่มต้นข้ามไม่สร้าง กันงานซ้ำจากการ import ไฟล์เดิม */
+const importFingerprint = (row: ImportRowResult) =>
+  fingerprintOf({
+    category: props.fleet,
+    date: importShipDate.value,
+    customer: row.customer,
+    reference: row.docRef,
+    driver: row.driverName || row.plate,
+    sites: [
+      {
+        siteName: row.siteName,
+        district: row.district,
+        province: row.province,
+        products: row.productQtyPairs.length ? row.productQtyPairs : [{ product: row.product, qty: row.qty }],
+      },
+    ],
+  })
+const existingFingerprints = computed(() => {
+  const map = new Map<string, string>()
+  fleetBookings.value.forEach((b) => map.set(bookingFingerprint(b), b.docNo))
+  return map
+})
+const importDuplicateFor = (row: ImportRowResult): string | undefined => {
+  if (!importShipDate.value) return undefined
+  const fp = importFingerprint(row)
+  const docNo = existingFingerprints.value.get(fp)
+  if (docNo) return `อาจซ้ำกับงาน ${docNo} ที่มีอยู่แล้ว (วัน/ลูกค้า/PO/คนขับ/หน้างาน/สินค้าเหมือนกัน)`
+  const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importFingerprint(r) === fp)
+  return earlier ? `ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้` : undefined
+}
+/** แถวที่เลือก "ข้าม" (ค่าเริ่มต้น = ข้ามแถวที่อาจซ้ำ) */
+const importSkip = ref<Record<number, boolean>>({})
+const isImportSkipped = (row: ImportRowResult) => importSkip.value[row.rowNumber] ?? !!importDuplicateFor(row)
+const rowsToCreate = computed(() => importableRows.value.filter((r) => !isImportSkipped(r)))
 const importChecksFor = (row: ImportRowResult) =>
-  [importUnmappedDriverFor(row), ...row.checks, importTripClashFor(row)].filter((c): c is string => !!c)
+  [importDuplicateFor(row), importUnmappedDriverFor(row), ...row.checks, importTripClashFor(row)].filter((c): c is string => !!c)
 
 /** คนขับที่เลือกได้ในพรีวิวนำเข้า (ที่ยังทำงานอยู่): ชื่อ นามสกุล (ชื่อเล่น) */
 const importDriverChoices = computed(() =>
@@ -2105,9 +2275,9 @@ const importCheckRowCount = computed(() => importableRows.value.filter((r) => im
  *  เป็นคนกำหนดสถานะงานเอง ไม่ใช่ไฟล์ที่ import เข้ามา — เอาลอจิกนี้ออกทั้งหมด กันงานที่ import มาโดนตีความผิดเป็น
  *  "จบงานแล้ว" ทั้งที่ยังไม่ได้จัดรถเลย) */
 const confirmImport = () => {
-  if (!importableRows.value.length) return
+  if (!rowsToCreate.value.length) return
   // ตรวจก่อนนำเข้า: มีแถวที่พิกัด/เลขเที่ยวน่าสงสัย — ให้ยืนยันอีกครั้งว่าจะสร้างต่อหรือกลับไปแก้
-  const checkRows = importableRows.value.filter((r) => importChecksFor(r).length > 0)
+  const checkRows = rowsToCreate.value.filter((r) => importChecksFor(r).length > 0)
   if (checkRows.length) {
     const sample = checkRows
       .slice(0, 5)
@@ -2116,7 +2286,7 @@ const confirmImport = () => {
     const more = checkRows.length > 5 ? `\n…และอีก ${checkRows.length - 5} แถว` : ''
     if (!confirm(`มี ${checkRows.length} แถวที่ควรตรวจก่อนนำเข้า (พิกัด/ลิงก์ GPS หรือเลขเที่ยว):\n${sample}${more}\n\nสร้างงานต่อเลยไหม? (กด ยกเลิก เพื่อกลับไปแก้)`)) return
   }
-  importableRows.value.forEach((row) => {
+  rowsToCreate.value.forEach((row) => {
     // "23 + 52" ฯลฯ = หลายชนิดสินค้าในเที่ยวเดียว — ตัวแรกเป็นสินค้าหลักของ Item เดิม ตัวที่เหลือไปเป็น extraProducts
     // (แสดงแบบคอลัมน์แยกกัน ดู productColumns) ใช้จำนวนตันแยกตามชนิดจริงจาก productQtyPairs (ไม่ใช่ยอดรวมซ้ำทุกชนิด)
     const [mainPair, ...otherPairs] = row.productQtyPairs.length ? row.productQtyPairs : [{ product: row.product, qty: row.qty }]

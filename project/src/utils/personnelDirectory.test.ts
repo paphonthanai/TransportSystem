@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPersonnelRows, filterPersonnelRows, countByRole, normalizePersonName } from './personnelDirectory'
+import { buildPersonnelRows, filterPersonnelRows, countByRole, normalizePersonName, personnelStatusMismatch } from './personnelDirectory'
 import type { UserProfile } from '@/stores/users'
 import type { StaffRecord } from '@/stores/staff'
 import type { DriverRecord } from '@/stores/drivers'
@@ -94,5 +94,24 @@ describe('filterPersonnelRows', () => {
     expect(filterPersonnelRows(rows, { query: '0001' })).toHaveLength(1)
     const plateOf = (r: { driver?: { code: string } }) => (r.driver?.code === '0001' ? '73-1124 สระบุรี' : '')
     expect(filterPersonnelRows(rows, { query: '73-1124', plateOf })).toHaveLength(1)
+  })
+})
+
+describe('บัญชีคนขับผูกรหัสเก่า / สถานะขัดกัน', () => {
+  it('driverId ไม่มีในทะเบียนแต่ชื่อตรง = รวมเป็นแถวเดียวพร้อมเตือนให้ผูกใหม่ ไม่เกิดแถวซ้ำ', () => {
+    const rows = buildPersonnelRows({
+      users: [user({ id: 'u9', role: 'DRIVER', name: 'นายสมชาย ขับดี', driverId: 'old-id' })],
+      staff: [],
+      drivers: [driver({})],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].driver?.id).toBe('d1')
+    expect(rows[0].linkIssue).toContain('ไม่มีในทะเบียน')
+  })
+
+  it('ลาออกแต่บัญชียังเปิด / ทำงานอยู่แต่บัญชีถูกปิด = เตือน', () => {
+    expect(personnelStatusMismatch({ user: user({ active: true }), driver: driver({ employmentStatus: 'resigned' as never }) })).toContain('ลาออก')
+    expect(personnelStatusMismatch({ user: user({ active: false }), driver: driver({}) })).toContain('ปิด')
+    expect(personnelStatusMismatch({ user: user({ active: true }), driver: driver({}) })).toBe('')
   })
 })

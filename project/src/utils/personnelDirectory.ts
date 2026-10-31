@@ -22,6 +22,21 @@ export interface PersonnelRow {
   user?: UserProfile
   driver?: DriverRecord
   staff?: StaffRecord
+  /** บัญชีคนขับผูก driverId ที่ไม่มีในทะเบียน แต่จับคู่ทะเบียนได้จากชื่อ — ต้องผูกบัญชีใหม่ ไม่งั้นคนขับไม่เห็นงาน */
+  linkIssue?: string
+}
+
+/** คำสั่งในเมนู ⋮ ของแถว (ดู components/settings/PersonnelRowMenu.vue) */
+export type PersonnelRowAction = 'detail' | 'edit-account' | 'setup-login' | 'reset-password' | 'toggle-active' | 'remove' | 'delete-account'
+
+/** สถานะทำงานตามทะเบียน (คนขับ/เสมียน) ขัดกับสถานะบัญชี login — ว่าง = ตรงกัน */
+export function personnelStatusMismatch(row: Pick<PersonnelRow, 'user' | 'driver' | 'staff'>): string {
+  const registry = row.driver || row.staff
+  if (!row.user || !registry) return ''
+  const working = registry.employmentStatus === 'active'
+  if (working && !row.user.active) return 'บัญชี login ถูกปิดอยู่'
+  if (!working && row.user.active) return 'ลาออกแล้วแต่บัญชียังเปิดอยู่'
+  return ''
 }
 
 const PREFIXES = ['นางสาว', 'น.ส.', 'นาง', 'นาย']
@@ -58,8 +73,19 @@ export function buildPersonnelRows(input: { users: UserProfile[]; staff: StaffRe
       active: user.active,
       user,
     }
-    if (user.role === 'DRIVER' && user.driverId) {
-      const d = driverById.get(user.driverId)
+    if (user.role === 'DRIVER') {
+      let d = user.driverId ? driverById.get(user.driverId) : undefined
+      if (!d) {
+        // driverId ไม่มีในทะเบียน (ทะเบียนถูกลบแล้วเพิ่มใหม่) หรือยังไม่ได้ผูก — จับจากชื่อ ถ้าตรงพอดี 1 คนที่ยังไม่มีบัญชีอื่นผูก
+        const target = normalizePersonName(user.name)
+        const byName = input.drivers.filter((x) => x.id && !usedDrivers.has(x.id) && normalizePersonName(driverName(x)) === target)
+        if (byName.length === 1) {
+          d = byName[0]
+          row.linkIssue = user.driverId
+            ? 'บัญชีนี้ผูกกับรหัสคนขับที่ไม่มีในทะเบียนแล้ว — กด "แก้ไขบัญชี login" แล้วเลือกคนขับใหม่ ไม่งั้นคนขับไม่เห็นงานในแอป'
+            : 'บัญชีนี้ยังไม่ได้ผูกกับทะเบียนคนขับ — กด "แก้ไขบัญชี login" แล้วเลือกคนขับ'
+        }
+      }
       if (d) {
         row.driver = d
         row.code = d.code
