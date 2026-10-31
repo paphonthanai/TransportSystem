@@ -9,7 +9,37 @@
       <input v-model="period" type="month" class="input-field" />
     </div>
 
-    <div v-if="!driver" class="card-lg text-center text-muted py-10">ไม่พบข้อมูลคนขับ</div>
+    <div v-if="!driver && driversStore.loading" class="card-lg text-center text-muted py-10">กำลังโหลดข้อมูลคนขับ...</div>
+    <!-- รหัสคนขับใน URL มาจากงาน (Booking.driverId) แต่ไม่มีในทะเบียนแล้ว — ให้ผูกงานเหล่านั้นกับคนขับในทะเบียนแทน -->
+    <div v-else-if="!driver" class="card-lg space-y-3 text-sm">
+      <div class="font-semibold text-text">ไม่พบคนขับรหัสนี้ในทะเบียนพนักงานขับรถ</div>
+      <template v-if="orphanBookings.length">
+        <div class="text-muted">
+          มีงาน {{ orphanBookings.length }} งานที่ยังอ้างรหัสนี้อยู่ (ชื่อในงาน: {{ orphanNames.join(', ') || '-' }}) — มักเกิดจากทะเบียนคนขับถูกลบแล้วเพิ่มใหม่
+          จึงได้รหัสใหม่ งานเก่าเลยหาคนขับไม่เจอ และออกเอกสารรายได้ไม่ได้
+        </div>
+        <div v-if="relinkCandidates.length === 1" class="flex items-center gap-3 flex-wrap">
+          <span>
+            พบคนขับชื่อตรงกันในทะเบียน: <span class="font-semibold">{{ driversStore.fullName(relinkCandidates[0]) }}</span>
+            <span class="text-muted">(รหัสพนักงาน {{ relinkCandidates[0].code || '-' }})</span>
+          </span>
+          <button v-if="isAdmin" @click="relinkTo(relinkCandidates[0])" class="btn-primary">
+            <span class="material-symbols-rounded text-base">link</span>
+            ผูก {{ orphanBookings.length }} งานกับคนขับคนนี้
+          </button>
+          <span v-else class="text-xs text-muted">(ผูกงานได้เฉพาะผู้ดูแลระบบ)</span>
+        </div>
+        <div v-else-if="relinkCandidates.length > 1" class="text-amber-700">
+          พบคนขับชื่อตรงกันในทะเบียนมากกว่า 1 คน ({{ relinkCandidates.map((d) => driversStore.fullName(d)).join(', ') }}) — แก้ทะเบียนให้เหลือคนเดียวก่อน
+        </div>
+        <div v-else class="text-amber-700">
+          ไม่พบคนขับชื่อนี้ในทะเบียน — เพิ่มคนขับที่หน้า
+          <RouterLink to="/settings/drivers" class="text-primary underline">ตั้งค่า → พนักงานขับรถ</RouterLink> แล้วกลับมาหน้านี้อีกครั้ง
+        </div>
+      </template>
+      <div v-else class="text-muted">ไม่มีงานที่อ้างรหัสนี้ — กลับไปเลือกคนขับใหม่จากหน้าเงินเดือนหรือหน้าตั้งค่าพนักงานขับรถ</div>
+      <div v-if="relinkError" class="text-red-600">{{ relinkError }}</div>
+    </div>
 
     <template v-else>
       <div class="card-lg grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
@@ -92,6 +122,18 @@
         </div>
       </div>
 
+      <div v-if="staleBookings.length" class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg p-3 flex items-center gap-3 flex-wrap">
+        <span class="flex-1">
+          มีงานชื่อ "{{ driversStore.fullName(driver) }}" อีก {{ staleBookings.length }} งาน (ทุกเดือน) ที่ยังอ้างรหัสคนขับเก่าซึ่งไม่มีในทะเบียนแล้ว
+          — งานเหล่านี้ไม่ขึ้นในหน้านี้และออกเอกสารรายได้ไม่ได้ จนกว่าจะผูกกับคนขับคนนี้
+        </span>
+        <button v-if="isAdmin" @click="relinkStale" class="btn-primary">
+          <span class="material-symbols-rounded text-base">link</span>
+          ผูก {{ staleBookings.length }} งานกับคนขับคนนี้
+        </button>
+        <span v-else class="text-xs">(ผูกงานได้เฉพาะผู้ดูแลระบบ)</span>
+      </div>
+
       <div v-if="actionError" class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 whitespace-pre-line">{{ actionError }}</div>
 
       <div class="card-lg overflow-x-auto">
@@ -99,10 +141,45 @@
           <h3 class="font-semibold text-text">ประวัติงาน — รอบ {{ periodLabel }}</h3>
           <div v-if="selectedIds.size > 0" class="flex items-center gap-3 text-sm">
             <span class="text-muted">เลือกแล้ว {{ selectedIds.size }} งาน • รวม <span class="font-bold text-primary">{{ formatBaht(selectedIncomeTotal) }}</span></span>
-            <button @click="createDocument" class="btn-primary">
+            <button v-if="!createPanelOpen" @click="openCreatePanel" class="btn-primary">
               <span class="material-symbols-rounded text-base">receipt_long</span>
               สร้างเอกสาร
             </button>
+          </div>
+        </div>
+        <!-- ก่อนออกเอกสาร: หัก % (คิดจากรายได้จากงาน) + รายได้ส่วนเพิ่ม/หักค่าใช้จ่ายที่พิมพ์เอง — แบบเดียวกับรถร่วม -->
+        <div v-if="createPanelOpen && selectedIds.size > 0" class="mb-3 rounded-lg border border-primary/40 bg-surface-2 p-4 space-y-3 text-sm">
+          <div class="font-semibold text-text">รายการหัก % (คิดจากรายได้จากงาน {{ formatBaht(selectedIncomeTotal) }})</div>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="deductWht" class="w-4 h-4" />
+            <span class="flex-1">หักภาษี ณ ที่จ่าย {{ DRIVER_WHT_PERCENT }}%</span>
+            <span v-if="deductWht" class="tabular-nums text-red-600">-{{ formatBaht(previewPercent(DRIVER_WHT_PERCENT)) }}</span>
+          </label>
+          <div class="flex items-center gap-2 flex-wrap">
+            <input type="checkbox" v-model="deductOther" class="w-4 h-4" />
+            <span>หักอื่นๆ</span>
+            <template v-if="deductOther">
+              <input v-model="otherLabel" type="text" placeholder="ระบุรายการ" class="input-field !h-8 w-48" />
+              <input v-model.number="otherPercent" type="number" min="0" max="100" step="0.01" class="input-field !h-8 w-24 text-right" />
+              <span>%</span>
+              <span class="flex-1 text-right tabular-nums text-red-600">-{{ formatBaht(previewPercent(otherPercent || 0)) }}</span>
+            </template>
+          </div>
+          <div class="border-t border-border pt-3">
+            <IncomeAdjustmentEditor v-model="adjustments" />
+          </div>
+          <div class="flex items-center justify-between border-t border-border pt-3 flex-wrap gap-2">
+            <span class="text-muted">
+              ยอดในเอกสารจะรวมรายได้อื่นๆ/รายการหักจากหน้าเงินเดือนของรอบนี้ด้วย • ส่วนที่เพิ่มตรงนี้
+              <span class="font-semibold" :class="previewExtraNet >= 0 ? 'text-green-700' : 'text-red-600'">{{ previewExtraNet >= 0 ? '+' : '-' }}{{ formatBaht(Math.abs(previewExtraNet)) }}</span>
+            </span>
+            <div class="flex gap-2">
+              <button @click="createPanelOpen = false" class="btn-secondary !h-9">ยกเลิก</button>
+              <button @click="createDocument" :disabled="creating" class="btn-primary disabled:opacity-40">
+                <span class="material-symbols-rounded text-base">receipt_long</span>
+                ยืนยันออกเอกสาร
+              </button>
+            </div>
           </div>
         </div>
         <table class="min-w-[960px] w-full text-sm border-separate border-spacing-0">
@@ -246,11 +323,19 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
-import { useDriverPayrollDocumentsStore } from '@/stores/driverPayrollDocuments'
+import {
+  DRIVER_WHT_PERCENT,
+  percentDeductionItems,
+  useDriverPayrollDocumentsStore,
+  type DriverPayrollPercentDeduction,
+} from '@/stores/driverPayrollDocuments'
+import IncomeAdjustmentEditor from '@/components/payroll/IncomeAdjustmentEditor.vue'
+import { emptyAdjustments, sumAdjustmentLines, type IncomeAdjustments } from '@/utils/incomeAdjustments'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
 import DriverIncomeEditDialog from '@/components/booking/DriverIncomeEditDialog.vue'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
-import { driverIdentityIssue } from '@/utils/driverIdentity'
+import { bookingDriverNameOf, driverIdentityIssue, normalizeDriverName } from '@/utils/driverIdentity'
+import { useAuthStore } from '@/stores/auth'
 import type { Booking, DriverPaymentStatusValue } from '@/types'
 
 const props = defineProps<{ id: string }>()
@@ -264,6 +349,49 @@ const paymentsStore = useDriverPaymentsStore()
 const driverPayrollDocumentsStore = useDriverPayrollDocumentsStore()
 
 const driver = computed(() => driversStore.drivers.find((d) => d.id === props.id) || null)
+
+/** งานที่อ้างรหัสคนขับใน URL ซึ่งไม่มีในทะเบียน + คนขับในทะเบียนที่ชื่อตรงกับชื่อในงาน (ใช้กู้คืนการผูกงาน) */
+const orphanBookings = computed(() => (driver.value ? [] : bookingStore.bookings.filter((b) => b.driverId === props.id)))
+const orphanNames = computed(() => [...new Set(orphanBookings.value.map((b) => bookingDriverNameOf(b)).filter(Boolean))])
+const relinkCandidates = computed(() => {
+  const names = new Set(orphanNames.value.map((n) => normalizeDriverName(n)))
+  return driversStore.drivers.filter((d) => d.id && names.has(normalizeDriverName(`${d.firstName}${d.lastName}`)))
+})
+const isAdmin = computed(() => useAuthStore().role === 'ADMIN')
+const relinkError = ref('')
+const registryIds = computed(() => driversStore.drivers.map((d) => d.id).filter((id): id is string => !!id))
+
+/** งานชื่อเดียวกับคนขับคนนี้ที่อ้างรหัสคนขับซึ่งไม่มีในทะเบียน (ไม่จำกัดรอบเดือน) — เสนอให้ผูกกลับมาที่คนขับคนนี้ */
+const staleBookings = computed(() => {
+  if (!driver.value?.id || driversStore.loading) return []
+  const ids = new Set(registryIds.value)
+  const name = normalizeDriverName(`${driver.value.firstName}${driver.value.lastName}`)
+  return bookingStore.bookings.filter((b) => b.driverId && !ids.has(b.driverId) && normalizeDriverName(bookingDriverNameOf(b)) === name)
+})
+const relinkStale = () => {
+  const target = driver.value
+  if (!target?.id) return
+  if (!confirm(`ยืนยันผูกงาน ${staleBookings.value.length} งานเข้ากับ ${driversStore.fullName(target)}?`)) return
+  actionError.value = ''
+  for (const oldId of new Set(staleBookings.value.map((b) => b.driverId as string))) {
+    const result = bookingStore.relinkMissingDriverId(oldId, { id: target.id, firstName: target.firstName, lastName: target.lastName }, registryIds.value)
+    if (!result.ok) {
+      actionError.value = result.message || 'ผูกงานไม่สำเร็จ'
+      return
+    }
+  }
+}
+const relinkTo = (target: (typeof driversStore.drivers)[number]) => {
+  if (!target.id) return
+  if (!confirm(`ยืนยันผูกงาน ${orphanBookings.value.length} งานเข้ากับ ${driversStore.fullName(target)}?`)) return
+  relinkError.value = ''
+  const result = bookingStore.relinkMissingDriverId(props.id, { id: target.id, firstName: target.firstName, lastName: target.lastName }, registryIds.value)
+  if (!result.ok) {
+    relinkError.value = result.message || 'ผูกงานไม่สำเร็จ'
+    return
+  }
+  router.replace({ path: `/settings/drivers/${target.id}`, query: route.query })
+}
 const assignedVehicleLabel = computed(() => {
   if (!driver.value) return '-'
   const vehicle = vehiclesStore.vehicleForDriver(driver.value.code)
@@ -360,13 +488,40 @@ const canManageDocs = computed(() => driverPayrollDocumentsStore.canManage())
 const actionError = ref('')
 const creating = ref(false)
 
+// ตัวเลือกก่อนออกเอกสาร (ไม่ติ๊ก/ไม่เพิ่มอะไร = ออกเอกสารแบบเดิม)
+const createPanelOpen = ref(false)
+const deductWht = ref(false)
+const deductOther = ref(false)
+const otherLabel = ref('')
+const otherPercent = ref<number>(0)
+const adjustments = ref<IncomeAdjustments>(emptyAdjustments())
+const openCreatePanel = () => {
+  actionError.value = ''
+  createPanelOpen.value = true
+}
+const percentDeductions = computed<DriverPayrollPercentDeduction[]>(() => [
+  ...(deductWht.value ? [{ kind: 'WHT' as const, percent: DRIVER_WHT_PERCENT }] : []),
+  ...(deductOther.value ? [{ kind: 'OTHER' as const, percent: Number(otherPercent.value), label: otherLabel.value }] : []),
+])
+const previewPercent = (percent: number) => percentDeductionItems(selectedIncomeTotal.value, [{ kind: 'WHT', percent }])[0].amount
+/** ยอดสุทธิที่เปลี่ยนจากส่วนที่เลือก/พิมพ์ตรงนี้ (ไม่รวมรายการจากหน้าเงินเดือน) */
+const previewExtraNet = computed(
+  () =>
+    sumAdjustmentLines(adjustments.value.additions) -
+    sumAdjustmentLines(adjustments.value.deductions) -
+    percentDeductionItems(selectedIncomeTotal.value, percentDeductions.value).reduce((sum, d) => sum + d.amount, 0)
+)
+
 const createDocument = async () => {
   if (!driver.value || selectedIds.value.size === 0 || creating.value) return
   actionError.value = ''
   creating.value = true
   // DriverRecord.id เป็น optional เฉพาะ record ฟอร์มว่างที่ยังไม่บันทึก (ดู DriversView.vue) — driver ที่มาจาก
   // driversStore.drivers (โหลดจาก Firestore จริง) มี id เสมอ จึง assert ได้ปลอดภัยตรงนี้
-  const result = await driverPayrollDocumentsStore.createDriverPayrollDocument(driver.value.id!, [...selectedIds.value], period.value)
+  const result = await driverPayrollDocumentsStore.createDriverPayrollDocument(driver.value.id!, [...selectedIds.value], period.value, {
+    percentDeductions: percentDeductions.value,
+    adjustments: adjustments.value,
+  })
   creating.value = false
   if (!result.ok || !result.doc) {
     const details = (result.mismatches || []).map((m) => `• ${m.docNo}: ${m.issue}`).join('\n')
@@ -374,6 +529,7 @@ const createDocument = async () => {
     return
   }
   selectedIds.value = new Set()
+  createPanelOpen.value = false
   router.push(`/payroll/drivers/documents/${result.doc.id}`)
 }
 

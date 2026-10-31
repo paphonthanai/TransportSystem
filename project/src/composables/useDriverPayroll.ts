@@ -3,6 +3,8 @@ import { useBookingStore } from '@/stores/booking'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
+import { useDriversStore } from '@/stores/drivers'
+import { normalizeDriverName } from '@/utils/driverIdentity'
 import { exportRowsToExcel } from '@/utils/exportExcel'
 import { fuelCostOf } from '@/utils/bookingMoney'
 import type { Booking, VehicleType, DriverPaymentStatusValue } from '@/types'
@@ -41,6 +43,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
   const vehiclesStore = useVehiclesStore()
   const deductionsStore = usePayrollDeductionsStore()
   const paymentsStore = useDriverPaymentsStore()
+  const driversStore = useDriversStore()
 
   const mode = ref<'summary' | 'detail'>('summary')
   const period = ref(currentMonthValue())
@@ -66,11 +69,16 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
     return booking.driverName as string
   }
 
-  /** driverId ของคนขับกลุ่มนี้ (ถ้ามี) — ดึงตรงจาก Booking.driverId ของงานใดงานหนึ่งในกลุ่มที่มีค่านี้อยู่แล้ว ไม่ match
-   *  ชื่อกับทะเบียนคนขับ — ใช้พาไปหน้าออกเอกสารรายได้ (ต้องมี DriverRecord.id จริง) งานเก่าที่ยังไม่มี driverId (ยัง
-   *  ไม่ backfill) จะไม่มีปุ่มนี้ให้ ต้อง backfill ก่อนถึงจะออกเอกสารได้ */
-  const driverIdFor = (driverKey: string): string | undefined =>
-    bookingsInScope.value.find((b) => driverKeyFor(b) === driverKey && b.driverId)?.driverId
+  /** driverId ของคนขับกลุ่มนี้ — ใช้พาไปหน้าออกเอกสารรายได้ (ต้องมี DriverRecord.id จริง) และหาสถานะจ่ายรายเดือน */
+  const driverIdFor = (driverKey: string): string | undefined => {
+    // จับคู่จากชื่อคนขับกับทะเบียนก่อน (ชื่อตรงกันพอดี 1 คน — ไม่สนคำนำหน้า/ช่องว่าง) ไม่ขึ้นกับรหัสที่ติดมากับงาน ซึ่งอาจเป็นรหัสเก่า
+    // ที่ไม่มีในทะเบียนแล้ว (ทะเบียนถูกลบแล้วเพิ่มใหม่) — ชื่อซ้ำ/ไม่เจอในทะเบียน ค่อยใช้รหัสจากงาน โดยเลือกรหัสที่มีในทะเบียนก่อน
+    const byName = driversStore.drivers.filter((d) => d.id && normalizeDriverName(`${d.firstName}${d.lastName}`) === normalizeDriverName(driverKey))
+    if (byName.length === 1) return byName[0].id
+    const ids = [...new Set(bookingsInScope.value.filter((b) => driverKeyFor(b) === driverKey && b.driverId).map((b) => b.driverId as string))]
+    const registryIds = new Set(driversStore.drivers.map((d) => d.id))
+    return ids.find((id) => registryIds.has(id)) ?? ids[0]
+  }
 
   const bookingsInScope = computed(() =>
     bookingStore.bookings.filter(

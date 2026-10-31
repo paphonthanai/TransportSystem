@@ -58,8 +58,8 @@ describe('รายได้รถร่วม — ค่าน้ำมัน/�
     expect(doc.vehicleExpenseTotal).toBe(300)
     expect(doc.netTotal).toBe(1999.5)
     expect(doc.lines).toEqual([
-      { bookingId: a.id, tripFee: 3000, fuelCost: 1200.5, vehicleExpense: 300 },
-      { bookingId: b.id, tripFee: 2000, fuelCost: 1500, vehicleExpense: 0 },
+      { bookingId: a.id, tripFee: 3000, fuelCost: 1200.5, vehicleExpense: 300, allowance: 0 },
+      { bookingId: b.id, tripFee: 2000, fuelCost: 1500, vehicleExpense: 0, allowance: 0 },
     ])
     expect(a.vehicleIncomeDocId).toBe(doc.id)
     expect(b.fuelLiters).toBe(50)
@@ -297,5 +297,48 @@ describe('ค่าน้ำมัน/ค่าใช้จ่ายประจ
     expect(a.vendorFuelCost).toBeUndefined()
     expect(vendorFuelCostOf(a)).toBe(300)
     expect(docs.vehicleExpenseOf(a)).toBe(300)
+  })
+})
+
+describe('รายได้รถร่วม — เบี้ยเลี้ยง + รายได้ส่วนเพิ่ม/หักค่าใช้จ่ายที่พิมพ์เอง', () => {
+  it('เบี้ยเลี้ยงบวกเพิ่ม, หัก % คิดจากรายได้จากงานอย่างเดียว, รายการพิมพ์เองเข้าสุทธิ และคงอยู่เมื่อเอางานออก', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings } = await setup()
+    const a = jobOf({ allowance: 400, finalAllowance: 350 })
+    const b = jobOf({ tripFee: 2000, allowance: 200 })
+    bookings.bookings.push(a, b)
+
+    const result = await docs.createVehicleIncomeDocument('veh-1', [a.id, b.id], '2026-10', [{ kind: 'WHT', percent: 1 }], {
+      additions: [{ label: 'ค่าขึ้นเขา', amount: 500 }, { label: '', amount: 0 }],
+      deductions: [{ label: 'ค่าปรับ', amount: 120.5 }],
+    })
+
+    expect(result.ok).toBe(true)
+    const doc = result.doc!
+    expect(doc.allowanceTotal).toBe(550)
+    expect(doc.deductionTotal).toBe(50)
+    expect(doc.additions).toEqual([{ label: 'ค่าขึ้นเขา', amount: 500 }])
+    expect(doc.manualDeductions).toEqual([{ label: 'ค่าปรับ', amount: 120.5 }])
+    // 5000 − 50 + 550 + 500 − 0 − 0 − 120.5
+    expect(doc.netTotal).toBe(5879.5)
+
+    expect((await docs.removeBookingFromDocument(b.id)).ok).toBe(true)
+    const updated = docs.documents.find((d) => d.id === doc.id)!
+    expect(updated.allowanceTotal).toBe(350)
+    expect(updated.additions).toEqual([{ label: 'ค่าขึ้นเขา', amount: 500 }])
+    // 3000 − 30 + 350 + 500 − 120.5
+    expect(updated.netTotal).toBe(3699.5)
+  })
+
+  it('รายการพิมพ์เองไม่มีรายละเอียด หรือยอดไม่เกิน 0 = ไม่สร้างเอกสาร', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings } = await setup()
+    const a = jobOf()
+    bookings.bookings.push(a)
+    const noLabel = await docs.createVehicleIncomeDocument('veh-1', [a.id], '2026-10', [], { additions: [{ label: ' ', amount: 100 }], deductions: [] })
+    expect(noLabel.ok).toBe(false)
+    const negative = await docs.createVehicleIncomeDocument('veh-1', [a.id], '2026-10', [], { additions: [], deductions: [{ label: 'x', amount: -5 }] })
+    expect(negative.ok).toBe(false)
+    expect(a.vehicleIncomeDocId).toBeUndefined()
   })
 })

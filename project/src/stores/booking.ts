@@ -820,6 +820,31 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
+   * งานที่อ้างรหัสคนขับ (driverId) ที่ไม่มีในทะเบียนแล้ว (เช่น ลบทะเบียนแล้วเพิ่มใหม่ได้รหัสใหม่) — ย้ายทุกงานของรหัสเดิม
+   * ไปผูกกับคนขับในทะเบียนที่เลือก เฉพาะ ADMIN และรหัสเดิมต้องไม่มีในทะเบียนจริง (กันย้ายงานของคนขับที่ยังอยู่) ไม่แตะ
+   * ชื่อ Snapshot ในงาน (เงินเดือน/รายการหักผูกกับชื่อนั้น) ถ้างานยังไม่มี Snapshot ชื่อ เติมจากทะเบียนให้
+   */
+  function relinkMissingDriverId(
+    oldDriverId: string,
+    driver: { id: string; firstName: string; lastName: string },
+    registryIds: string[]
+  ): { ok: boolean; message?: string; count: number } {
+    if (useAuthStore().role !== 'ADMIN') return { ok: false, message: 'ผูกงานกับคนขับได้เฉพาะผู้ดูแลระบบ', count: 0 }
+    if (registryIds.includes(oldDriverId)) return { ok: false, message: 'รหัสคนขับนี้ยังมีอยู่ในทะเบียน ไม่ต้องผูกใหม่', count: 0 }
+    if (!registryIds.includes(driver.id)) return { ok: false, message: 'ไม่พบคนขับปลายทางในทะเบียน', count: 0 }
+    const targets = bookings.value.filter((b) => b.driverId === oldDriverId)
+    targets.forEach((b) => {
+      b.driverId = driver.id
+      if (!b.driverFirstName && !b.driverLastName) {
+        b.driverFirstName = driver.firstName
+        b.driverLastName = driver.lastName
+      }
+    })
+    if (targets.length) addLog(`ผูกงาน ${targets.length} งานจากรหัสคนขับที่ไม่มีในทะเบียน (${oldDriverId}) เข้ากับ ${driver.firstName} ${driver.lastName} (${driver.id})`)
+    return { ok: true, count: targets.length }
+  }
+
+  /**
    * ตั้งทะเบียนให้งานที่มีคนขับแล้วแต่ยังไม่มีทะเบียน (มีคนขับต้องรู้ทะเบียน — คนขับผูกกับรถประจำอยู่แล้ว) ตั้งเฉพาะทะเบียน
    * ไม่เปลี่ยนสถานะ และคำนวณเรทน้ำมันของงานใหม่ตามประเภทรถของทะเบียนนั้น
    */
@@ -1654,6 +1679,7 @@ export const useBookingStore = defineStore('booking', () => {
     confirmPodImage,
     setDeliveryNoteImage,
     setLoadingImage,
+    relinkMissingDriverId,
     addBookingPhoto,
     removeBookingPhoto,
     toggleTicketChecked,

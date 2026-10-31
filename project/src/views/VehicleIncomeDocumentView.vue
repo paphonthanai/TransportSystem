@@ -54,6 +54,7 @@
               <th class="border border-gray-400 px-2 py-1 text-left w-20">วันที่</th>
               <th class="border border-gray-400 px-2 py-1 text-left">รายละเอียดงาน</th>
               <th class="border border-gray-400 px-2 py-1 text-right w-20">รายได้</th>
+              <th v-if="hasAllowance" class="border border-gray-400 px-2 py-1 text-right w-20">เบี้ยเลี้ยง</th>
               <th class="border border-gray-400 px-2 py-1 text-right w-20">ค่าน้ำมัน</th>
               <th v-if="doc.lines" class="border border-gray-400 px-2 py-1 text-right w-24">ค่าใช้จ่ายประจำรถ</th>
             </tr>
@@ -65,11 +66,12 @@
               <td class="border border-gray-400 px-2 py-1">{{ formatDate(row.booking.shipDate || row.booking.completedAt) }}</td>
               <td class="border border-gray-400 px-2 py-1">{{ destinationLabel(row.booking) }}</td>
               <td class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.tripFee) }}</td>
+              <td v-if="hasAllowance" class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.allowance) }}</td>
               <td class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.fuelCost) }}</td>
               <td v-if="doc.lines" class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.vehicleExpense) }}</td>
             </tr>
             <tr v-if="rows.length === 0">
-              <td :colspan="doc.lines ? 7 : 6" class="border border-gray-400 px-2 py-4 text-center text-gray-400">ไม่มีงานในเอกสารนี้</td>
+              <td :colspan="(doc.lines ? 7 : 6) + (hasAllowance ? 1 : 0)" class="border border-gray-400 px-2 py-4 text-center text-gray-400">ไม่มีงานในเอกสารนี้</td>
             </tr>
           </tbody>
         </table>
@@ -95,6 +97,18 @@
                 <span class="text-right tabular-nums">{{ formatBaht(doc.tripIncomeTotal - (doc.deductionTotal ?? 0)) }}</span>
               </div>
             </template>
+            <div v-if="hasAllowance" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+              <span>เบี้ยเลี้ยง</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.allowanceTotal ?? 0) }}</span>
+            </div>
+            <div v-for="(a, i) in doc.additions || []" :key="`add${i}`" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+              <span>{{ a.label }}</span>
+              <span class="text-right tabular-nums">{{ formatBaht(a.amount) }}</span>
+            </div>
+            <div v-if="hasAllowance || doc.additions?.length" class="grid grid-cols-[1fr_auto] gap-x-2 font-bold border-t border-gray-300 mt-1 pt-1">
+              <span>รวมรายได้</span>
+              <span class="text-right tabular-nums">{{ formatBaht(incomeTotal) }}</span>
+            </div>
           </div>
           <div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 font-bold text-primary border-b border-gray-300 pb-1 mb-1">
@@ -109,9 +123,13 @@
               <span>ค่าใช้จ่ายประจำรถ{{ doc.lines ? '' : ' (รวม)' }}</span>
               <span class="text-right tabular-nums">{{ formatBaht(doc.vehicleExpenseTotal) }}</span>
             </div>
+            <div v-for="(d, i) in doc.manualDeductions || []" :key="`ded${i}`" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+              <span>{{ d.label }}</span>
+              <span class="text-right tabular-nums">{{ formatBaht(d.amount) }}</span>
+            </div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 font-bold border-t border-gray-300 mt-1 pt-1">
               <span>รวมค่าใช้จ่าย</span>
-              <span class="text-right tabular-nums">{{ formatBaht(doc.fuelCostTotal + doc.vehicleExpenseTotal) }}</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.fuelCostTotal + doc.vehicleExpenseTotal + (doc.manualDeductionTotal ?? 0)) }}</span>
             </div>
           </div>
         </div>
@@ -242,11 +260,18 @@ const rows = computed(() => {
     .map((b) => {
       const line = lines?.find((l) => l.bookingId === b.id)
       return line
-        ? { booking: b, tripFee: line.tripFee, fuelCost: line.fuelCost, vehicleExpense: line.vehicleExpense }
-        : { booking: b, tripFee: b.tripFee || 0, fuelCost: fuelCost(b), vehicleExpense: 0 }
+        ? { booking: b, tripFee: line.tripFee, allowance: line.allowance ?? 0, fuelCost: line.fuelCost, vehicleExpense: line.vehicleExpense }
+        : { booking: b, tripFee: b.tripFee || 0, allowance: 0, fuelCost: fuelCost(b), vehicleExpense: 0 }
     })
     .sort((a, b) => new Date(a.booking.shipDate || a.booking.completedAt || 0).getTime() - new Date(b.booking.shipDate || b.booking.completedAt || 0).getTime())
 })
+
+/** เอกสารก่อนมีเบี้ยเลี้ยงรถร่วมไม่มี allowanceTotal — ไม่แสดงคอลัมน์/บรรทัดเบี้ยเลี้ยง */
+const hasAllowance = computed(() => doc.value?.allowanceTotal !== undefined)
+/** รายได้หลังหัก % + เบี้ยเลี้ยง + รายได้ส่วนเพิ่ม */
+const incomeTotal = computed(() =>
+  doc.value ? doc.value.tripIncomeTotal - (doc.value.deductionTotal ?? 0) + (doc.value.allowanceTotal ?? 0) + (doc.value.additionTotal ?? 0) : 0
+)
 
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {
   if (!booking.items.length) return '-'

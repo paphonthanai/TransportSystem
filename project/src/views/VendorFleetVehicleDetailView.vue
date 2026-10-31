@@ -43,7 +43,7 @@
         </div>
       </div>
 
-      <div class="card-lg grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
+      <div class="card-lg grid grid-cols-2 sm:grid-cols-6 gap-4 text-sm">
         <div>
           <div class="text-xs text-muted">จำนวนงาน (รอบนี้)</div>
           <div class="font-semibold text-text">{{ rows.length }}</div>
@@ -51,6 +51,10 @@
         <div>
           <div class="text-xs text-muted">ค่าเที่ยวรวม</div>
           <div class="font-semibold text-green-600">{{ formatBaht(totalTripFee) }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-muted">เบี้ยเลี้ยง</div>
+          <div class="font-semibold text-green-600">+{{ formatBaht(totalAllowance) }}</div>
         </div>
         <div>
           <div class="text-xs text-muted">ค่าน้ำมันที่ใช้</div>
@@ -67,7 +71,7 @@
       </div>
 
       <div class="card-lg flex items-center justify-between text-sm">
-        <span class="font-semibold text-text">ยอดสุทธิ (ค่าเที่ยว − ค่าน้ำมัน − ค่าใช้จ่ายประจำรถ)</span>
+        <span class="font-semibold text-text">ยอดสุทธิ (ค่าเที่ยว + เบี้ยเลี้ยง − ค่าน้ำมัน − ค่าใช้จ่ายประจำรถ)</span>
         <span class="text-lg font-bold text-primary">{{ formatBaht(netTotal) }}</span>
       </div>
 
@@ -82,6 +86,21 @@
       <div class="card-lg overflow-x-auto">
         <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
           <h3 class="font-semibold text-text">ประวัติงาน — รอบ {{ periodLabel }}</h3>
+          <div class="flex items-center gap-2 flex-wrap w-full">
+            <div class="relative flex-1 min-w-[200px]">
+              <span class="material-symbols-rounded text-base text-muted absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
+              <input v-model="search" type="text" placeholder="ค้นหาเลขที่งาน / คนขับ / รายละเอียดงาน" class="input-field w-full !pl-8" />
+            </div>
+            <select v-model="docStatusFilter" class="input-field">
+              <option value="ALL">สถานะเอกสาร: ทั้งหมด</option>
+              <option value="NOT_ISSUED">ยังไม่ได้ออก</option>
+              <option value="ISSUED">ออกเอกสารแล้ว</option>
+            </select>
+            <button @click="toggleSelectAll" :disabled="selectableRows.length === 0" class="btn-secondary disabled:opacity-40">
+              <span class="material-symbols-rounded text-base">{{ allSelectableChecked ? 'remove_done' : 'done_all' }}</span>
+              {{ allSelectableChecked ? 'ยกเลิกเลือกทั้งหมด' : `เลือกทั้งหมด (${selectableRows.length})` }}
+            </button>
+          </div>
           <div v-if="selectedIds.size > 0" class="flex items-center gap-3 text-sm">
             <span class="text-muted">เลือกแล้ว {{ selectedIds.size }} งาน • สุทธิ <span class="font-bold text-primary">{{ formatBaht(selectedNetTotal) }}</span></span>
             <button v-if="!deductionPanelOpen" @click="openDeductionPanel" class="btn-primary">
@@ -113,10 +132,13 @@
               <span class="flex-1 text-right tabular-nums text-red-600">-{{ formatBaht(previewAmount(otherPercent || 0)) }}</span>
             </template>
           </div>
+          <div class="border-t border-border pt-3">
+            <IncomeAdjustmentEditor v-model="adjustments" />
+          </div>
           <div class="flex items-center justify-between border-t border-border pt-3 flex-wrap gap-2">
             <span class="text-muted">
-              หักรวม <span class="font-semibold text-red-600">{{ formatBaht(previewDeductionTotal) }}</span> • สุทธิ
-              <span class="font-bold text-primary">{{ formatBaht(selectedNetTotal - previewDeductionTotal) }}</span>
+              หัก % รวม <span class="font-semibold text-red-600">{{ formatBaht(previewDeductionTotal) }}</span> • สุทธิ
+              <span class="font-bold text-primary">{{ formatBaht(previewNet) }}</span>
             </span>
             <div class="flex gap-2">
               <button @click="deductionPanelOpen = false" class="btn-xs-ghost">ยกเลิก</button>
@@ -127,7 +149,7 @@
             </div>
           </div>
         </div>
-        <table class="min-w-[1080px] w-full text-sm border-separate border-spacing-0">
+        <table class="min-w-[1180px] w-full text-sm border-separate border-spacing-0">
           <thead class="bg-surface-2 text-left text-xs text-muted">
             <tr>
               <th class="px-3 py-2 w-8">
@@ -138,6 +160,7 @@
               <th class="px-3 py-2 font-semibold">คนขับ (ของงานนั้นๆ)</th>
               <th class="px-3 py-2 font-semibold">รายละเอียดงาน</th>
               <th class="px-3 py-2 font-semibold text-right">ค่าเที่ยว</th>
+              <th class="px-3 py-2 font-semibold text-right">เบี้ยเลี้ยง</th>
               <th class="px-3 py-2 font-semibold text-right">ค่าน้ำมัน</th>
               <th class="px-3 py-2 font-semibold text-right">ค่าใช้จ่ายประจำรถ</th>
               <th class="px-3 py-2 font-semibold">สถานะงาน</th>
@@ -146,7 +169,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in rows" :key="row.booking.id" class="border-t border-border hover:bg-surface-2 transition-colors">
+            <tr v-for="row in displayedRows" :key="row.booking.id" class="border-t border-border hover:bg-surface-2 transition-colors">
               <td class="px-3 py-2">
                 <input
                   v-if="!row.booking.vehicleIncomeDocId"
@@ -160,7 +183,9 @@
               <td class="px-3 py-2 text-muted">{{ formatDate(row.booking.shipDate || row.booking.completedAt) }}</td>
               <td class="px-3 py-2 text-text">{{ row.booking.driverName || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ destinationLabel(row.booking) }}</td>
-              <td v-for="field in moneyFields" :key="field" class="px-3 py-2 text-right whitespace-nowrap">
+              <template v-for="field in moneyFields" :key="field">
+              <td v-if="field === 'fuelCost'" class="px-3 py-2 text-right whitespace-nowrap text-text">{{ formatBaht(row.allowance) }}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap">
                 <div v-if="isEditing(row.booking.id, field)" class="flex items-center justify-end gap-1">
                   <input v-model.number="draft" type="number" min="0" step="0.01" class="input-field h-8 w-28 text-right text-xs" @keyup.enter="saveCell" />
                   <button @click="saveCell" class="btn-xs">บันทึก</button>
@@ -183,6 +208,7 @@
                   </div>
                 </template>
               </td>
+              </template>
               <td class="px-3 py-2">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[row.booking.status]]">{{ bookingStatusLabel[row.booking.status] }}</span>
               </td>
@@ -205,8 +231,8 @@
                 <RouterLink :to="`/job/${row.booking.id}`" class="text-primary hover:underline text-xs">ดูงาน</RouterLink>
               </td>
             </tr>
-            <tr v-if="rows.length === 0">
-              <td colspan="11" class="px-3 py-8 text-center text-muted">ยังไม่มีงานของรถคันนี้ในรอบนี้</td>
+            <tr v-if="displayedRows.length === 0">
+              <td colspan="12" class="px-3 py-8 text-center text-muted">{{ rows.length ? 'ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง' : 'ยังไม่มีงานของรถคันนี้ในรอบนี้' }}</td>
             </tr>
           </tbody>
         </table>
@@ -281,11 +307,14 @@ import {
   computeDeductions,
   useVehicleIncomeDocumentsStore,
   vendorFuelCostOf,
+  vendorAllowanceOf,
   paymentStatusOf,
   type VehicleIncomeDeductionOption,
 } from '@/stores/vehicleIncomeDocuments'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import VehicleExpensePanel from '@/components/vehicle/VehicleExpensePanel.vue'
+import IncomeAdjustmentEditor from '@/components/payroll/IncomeAdjustmentEditor.vue'
+import { emptyAdjustments, sumAdjustmentLines, type IncomeAdjustments } from '@/utils/incomeAdjustments'
 import type { Booking } from '@/types'
 
 const props = defineProps<{ vehicleId: string }>()
@@ -336,14 +365,28 @@ const rows = computed(() => {
     .filter((b) => b.status === 'DELIVERED')
     .filter((b) => b.plate === full || b.plate === vehicle.value!.plate)
     .filter((b) => inPeriod(b.shipDate || b.completedAt, period.value))
-    .map((b) => ({ booking: b, fuelCost: vendorFuelCostOf(b), vehicleExpense: vehicleIncomeDocumentsStore.vehicleExpenseOf(b) }))
+    .map((b) => ({ booking: b, allowance: vendorAllowanceOf(b), fuelCost: vendorFuelCostOf(b), vehicleExpense: vehicleIncomeDocumentsStore.vehicleExpenseOf(b) }))
     .sort((a, b) => new Date(b.booking.shipDate || b.booking.completedAt || 0).getTime() - new Date(a.booking.shipDate || a.booking.completedAt || 0).getTime())
 })
 
 const totalTripFee = computed(() => rows.value.reduce((sum, r) => sum + (r.booking.tripFee || 0), 0))
+const totalAllowance = computed(() => rows.value.reduce((sum, r) => sum + r.allowance, 0))
 const totalFuelCost = computed(() => rows.value.reduce((sum, r) => sum + r.fuelCost, 0))
 const totalVehicleExpense = computed(() => rows.value.reduce((sum, r) => sum + r.vehicleExpense, 0))
-const netTotal = computed(() => totalTripFee.value - totalFuelCost.value - totalVehicleExpense.value)
+const netTotal = computed(() => totalTripFee.value + totalAllowance.value - totalFuelCost.value - totalVehicleExpense.value)
+
+/** ค้นหา (เลขที่งาน/คนขับ/รายละเอียดงาน) + กรองสถานะเอกสาร — การ์ดสรุปด้านบนยังเป็นยอดทั้งรอบ */
+const search = ref('')
+const docStatusFilter = ref<'ALL' | 'ISSUED' | 'NOT_ISSUED'>('ALL')
+const displayedRows = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  return rows.value.filter((r) => {
+    if (docStatusFilter.value === 'ISSUED' && !r.booking.vehicleIncomeDocId) return false
+    if (docStatusFilter.value === 'NOT_ISSUED' && r.booking.vehicleIncomeDocId) return false
+    if (!q) return true
+    return [r.booking.docNo, r.booking.driverName, ...r.booking.items.map((i) => i.siteName)].some((v) => (v || '').toLowerCase().includes(q))
+  })
+})
 const manualCostCount = computed(() => rows.value.filter((r) => r.booking.vendorFuelCost !== undefined || r.booking.vendorVehicleExpense !== undefined).length)
 
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {
@@ -402,7 +445,7 @@ const saveCell = () => {
 
 /** เลือกงานเพื่อสร้างเอกสารรายได้รถ — งานที่ออกเอกสารไปแล้ว (vehicleIncomeDocId) เลือกซ้ำไม่ได้ ไม่มี checkbox ให้เลย */
 const selectedIds = ref<Set<string>>(new Set())
-const selectableRows = computed(() => rows.value.filter((r) => !r.booking.vehicleIncomeDocId))
+const selectableRows = computed(() => displayedRows.value.filter((r) => !r.booking.vehicleIncomeDocId))
 const allSelectableChecked = computed(() => selectableRows.value.length > 0 && selectableRows.value.every((r) => selectedIds.value.has(r.booking.id)))
 const toggleSelect = (id: string) => {
   if (selectedIds.value.has(id)) selectedIds.value.delete(id)
@@ -413,7 +456,7 @@ const toggleSelectAll = () => {
   selectedIds.value = allSelectableChecked.value ? new Set() : new Set(selectableRows.value.map((r) => r.booking.id))
 }
 const selectedNetTotal = computed(() =>
-  rows.value.filter((r) => selectedIds.value.has(r.booking.id)).reduce((sum, r) => sum + (r.booking.tripFee || 0) - r.fuelCost - r.vehicleExpense, 0)
+  rows.value.filter((r) => selectedIds.value.has(r.booking.id)).reduce((sum, r) => sum + (r.booking.tripFee || 0) + r.allowance - r.fuelCost - r.vehicleExpense, 0)
 )
 
 const selectedTripTotal = computed(() => rows.value.filter((r) => selectedIds.value.has(r.booking.id)).reduce((sum, r) => sum + (r.booking.tripFee || 0), 0))
@@ -436,13 +479,17 @@ const deductionOptions = computed<VehicleIncomeDeductionOption[]>(() => [
 ])
 const previewAmount = (percent: number) => computeDeductions(selectedTripTotal.value, [{ kind: 'WHT', percent }])[0].amount
 const previewDeductionTotal = computed(() => computeDeductions(selectedTripTotal.value, deductionOptions.value).reduce((sum, d) => sum + d.amount, 0))
+const adjustments = ref<IncomeAdjustments>(emptyAdjustments())
+const previewNet = computed(
+  () => selectedNetTotal.value - previewDeductionTotal.value + sumAdjustmentLines(adjustments.value.additions) - sumAdjustmentLines(adjustments.value.deductions)
+)
 
 const creating = ref(false)
 const createDocument = async () => {
   if (!vehicle.value || selectedIds.value.size === 0 || creating.value) return
   actionError.value = ''
   creating.value = true
-  const result = await vehicleIncomeDocumentsStore.createVehicleIncomeDocument(vehicle.value.id, [...selectedIds.value], period.value, deductionOptions.value)
+  const result = await vehicleIncomeDocumentsStore.createVehicleIncomeDocument(vehicle.value.id, [...selectedIds.value], period.value, deductionOptions.value, adjustments.value)
   creating.value = false
   if (!result.ok || !result.doc) {
     actionError.value = `สร้างเอกสารไม่สำเร็จ — ${result.message || 'กรุณารีเฟรชหน้านี้แล้วลองใหม่'}`
@@ -450,6 +497,7 @@ const createDocument = async () => {
   }
   selectedIds.value = new Set()
   deductionPanelOpen.value = false
+  adjustments.value = emptyAdjustments()
   router.push(`/payroll/vendor-fleet/documents/${result.doc.id}`)
 }
 

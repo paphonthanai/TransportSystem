@@ -246,7 +246,9 @@ const formatDateTime = (date: Date) => new Date(date).toLocaleString('th-TH', { 
 
 const printDoc = () => window.print()
 
-const lineLabel = (item: { type: string; label: string }) => (item.label ? `${item.type} — ${item.label}` : item.type)
+/** รายการที่พิมพ์เอง/หัก % ตอนออกเอกสาร (MANUAL/PERCENT) แสดงแค่รายละเอียด ไม่ต้องมีประเภทนำหน้า */
+const lineLabel = (item: { type: string; label: string }) =>
+  item.type === 'MANUAL' || item.type === 'PERCENT' ? item.label : item.label ? `${item.type} — ${item.label}` : item.type
 
 /** inline "แก้" สถานะจ่าย — บันทึกจ่าย/แก้วันที่จ่าย/รีเซ็ตเป็นรอจ่าย ผ่าน store (เช็คสิทธิ์ ADMIN + เขียน log ที่ store) ยอดเงินอื่นล็อกตาม snapshot */
 const canManage = computed(() => driverPayrollDocumentsStore.canManage())

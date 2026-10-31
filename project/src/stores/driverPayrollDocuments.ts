@@ -8,6 +8,7 @@ import { useDriversStore } from './drivers'
 import { useAuthStore } from './auth'
 import { driverIdentityIssue } from '@/utils/driverIdentity'
 import { driverPayrollDocumentRepository } from '@/repositories/driverPayrollDocumentRepository'
+import { adjustmentIssue, cleanAdjustmentLines, emptyAdjustments, type IncomeAdjustments } from '@/utils/incomeAdjustments'
 
 /**
  * เอกสารรายได้คนขับ — ต่างจากเดิม (DriverIncomeDocumentView.vue เวอร์ชันก่อนหน้า) ตรงที่เป็นระเบียนถาวรจริง ไม่ใช่คำนวณสด
@@ -40,6 +41,22 @@ export interface DriverPayrollLineItem {
   type: string
   label: string
   amount: number
+}
+
+/** หัก % ตอนออกเอกสารคนขับ คิดจากรายได้จากงาน (tripIncomeTotal) — label ใช้เฉพาะ OTHER */
+export type DriverPayrollPercentDeduction = { kind: 'WHT' | 'OTHER'; percent: number; label?: string }
+export const DRIVER_WHT_PERCENT = 3
+
+/** สิ่งที่ผู้ใช้เลือก/พิมพ์เองตอนออกเอกสาร: หัก % + รายได้ส่วนเพิ่ม/หักค่าใช้จ่าย (ระบุรายละเอียด/ราคาเอง) */
+export type DriverPayrollExtras = { percentDeductions?: DriverPayrollPercentDeduction[]; adjustments?: IncomeAdjustments }
+
+/** รายการหัก % เป็น DriverPayrollLineItem (type PERCENT) เช่น "หักภาษี ณ ที่จ่าย 3%" — ปัดเป็นสตางค์ */
+export function percentDeductionItems(tripIncomeTotal: number, options: DriverPayrollPercentDeduction[]): DriverPayrollLineItem[] {
+  return options.map((o) => ({
+    type: 'PERCENT',
+    label: `${o.kind === 'WHT' ? 'หักภาษี ณ ที่จ่าย' : (o.label || '').trim() || 'หักอื่นๆ'} ${o.percent}%`,
+    amount: Math.round(tripIncomeTotal * o.percent) / 100,
+  }))
 }
 
 export type ActionResult = { ok: boolean; message?: string }
@@ -123,9 +140,21 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
    * แก้ไขรายการหักภายหลัง — ต้องบันทึกเอกสารลง Firestore สำเร็จก่อน ค่อยผูกงาน (driverPayrollDocId) กันงานค้างป้าย
    * "ออกเอกสารแล้ว" ทั้งที่ไม่มีเอกสารจริง
    */
-  async function createDriverPayrollDocument(driverId: string, bookingIds: string[], period: string): Promise<CreateDriverPayrollResult> {
+  async function createDriverPayrollDocument(
+    driverId: string,
+    bookingIds: string[],
+    period: string,
+    extras: DriverPayrollExtras = {}
+  ): Promise<CreateDriverPayrollResult> {
     if (!canManage()) return { ok: false, message: 'สร้างเอกสารรายได้คนขับได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
     if (bookingIds.length === 0) return { ok: false, message: 'ยังไม่ได้เลือกงาน' }
+    const percentDeductions = extras.percentDeductions ?? []
+    const adjustments = extras.adjustments ?? emptyAdjustments()
+    if (percentDeductions.some((o) => !Number.isFinite(o.percent) || o.percent <= 0 || o.percent > 100))
+      return { ok: false, message: 'เปอร์เซ็นต์การหักต้องมากกว่า 0 และไม่เกิน 100' }
+    if (percentDeductions.some((o) => o.kind === 'OTHER' && !(o.label || '').trim())) return { ok: false, message: 'กรุณาระบุชื่อรายการหักอื่นๆ' }
+    const adjIssue = adjustmentIssue(adjustments)
+    if (adjIssue) return { ok: false, message: adjIssue }
     const bookingStore = useBookingStore()
     const driversStore = useDriversStore()
     const deductionsStore = usePayrollDeductionsStore()
@@ -145,9 +174,15 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
 
     const periodLabel = toBEPeriodLabel(period)
     const toItem = (d: { type: string; label: string; amount: number }) => ({ type: d.type, label: d.label, amount: d.amount })
-    const additionItems = deductionsStore.additionsFor(driverName, periodLabel).map(toItem)
-    const deductionItems = deductionsStore.deductionsFor(driverName, periodLabel).map(toItem)
     const tripIncomeTotal = roundMoney(targetBookings.reduce((sum, b) => sum + (b.finalAllowance ?? b.allowance ?? 0), 0))
+    // รายการจากหน้าเงินเดือน + รายการที่พิมพ์เองตอนออกเอกสาร (MANUAL) + หัก % จากรายได้จากงาน (PERCENT)
+    const manual = (l: { label: string; amount: number }) => ({ type: 'MANUAL', label: l.label, amount: l.amount })
+    const additionItems = [...deductionsStore.additionsFor(driverName, periodLabel).map(toItem), ...cleanAdjustmentLines(adjustments.additions).map(manual)]
+    const deductionItems = [
+      ...deductionsStore.deductionsFor(driverName, periodLabel).map(toItem),
+      ...percentDeductionItems(tripIncomeTotal, percentDeductions),
+      ...cleanAdjustmentLines(adjustments.deductions).map(manual),
+    ]
     const additionTotal = roundMoney(additionItems.reduce((sum, a) => sum + a.amount, 0))
     const deductionTotal = roundMoney(deductionItems.reduce((sum, d) => sum + d.amount, 0))
     const netIncome = roundMoney(tripIncomeTotal + additionTotal - deductionTotal)

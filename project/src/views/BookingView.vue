@@ -1008,6 +1008,7 @@
 
 <script setup lang="ts">
 import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
+import { compareInTransitBookings } from '@/utils/inTransitSort'
 import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -1381,7 +1382,7 @@ const inTransitBookings = computed(() => {
         (!q || matchesSearch(b, q)) &&
         matchesPrice(b)
     )
-    .sort((a, b) => new Date(b.transitStartedAt || 0).getTime() - new Date(a.transitStartedAt || 0).getTime())
+    .sort(compareInTransitBookings)
 })
 
 const productLabel = (booking: Booking) => {

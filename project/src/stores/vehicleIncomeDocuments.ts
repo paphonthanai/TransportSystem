@@ -8,6 +8,14 @@ import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
 import { useVehicleExpensesStore } from './vehicleExpenses'
 import { fuelCostOf } from '@/utils/bookingMoney'
 import { vehicleIncomeDocumentRepository } from '@/repositories/vehicleIncomeDocumentRepository'
+import {
+  adjustmentIssue,
+  cleanAdjustmentLines,
+  emptyAdjustments,
+  sumAdjustmentLines,
+  type IncomeAdjustmentLine,
+  type IncomeAdjustments,
+} from '@/utils/incomeAdjustments'
 import type { Booking } from '@/types'
 
 /**
@@ -33,6 +41,13 @@ export interface VehicleIncomeDocument {
   /** รายการหักที่เลือกตอนออกเอกสาร (ภาษี ณ ที่จ่าย/ค่าดำเนินการ/อื่นๆ) คิด % จากรายได้จากงาน (tripIncomeTotal) — เอกสารเก่าไม่มี */
   deductions?: VehicleIncomeDeduction[]
   deductionTotal?: number
+  /** เบี้ยเลี้ยงรวม (บวกเพิ่มให้รถร่วม) — เอกสารเก่าก่อนมี field นี้ไม่มี (ไม่ได้รวมเบี้ยเลี้ยง) */
+  allowanceTotal?: number
+  /** รายได้ส่วนเพิ่ม/หักค่าใช้จ่าย ที่ผู้ใช้พิมพ์เองตอนออกเอกสาร — เอกสารเก่าไม่มี */
+  additions?: IncomeAdjustmentLine[]
+  additionTotal?: number
+  manualDeductions?: IncomeAdjustmentLine[]
+  manualDeductionTotal?: number
   /** สถานะจ่ายของเอกสาร (แบบเดียวกับเอกสารรายได้คนขับ) — เอกสารเก่าก่อนมี field นี้ = รอจ่าย ดู paymentStatusOf */
   paymentStatus?: 'UNPAID' | 'PAID'
   paidDate?: Date
@@ -60,6 +75,8 @@ export interface VehicleIncomeLine {
   tripFee: number
   fuelCost: number
   vehicleExpense: number
+  /** เบี้ยเลี้ยงของงาน (finalAllowance ?? allowance) — บวกเพิ่มให้รถร่วม; เอกสารเก่าไม่มี */
+  allowance?: number
 }
 
 export type ActionResult = { ok: boolean; message?: string }
@@ -73,16 +90,41 @@ export function computeDeductions(tripIncomeTotal: number, options: VehicleIncom
   return options.map((o) => ({ kind: o.kind, label: deductionLabelOf(o), percent: o.percent, amount: roundMoney((tripIncomeTotal * o.percent) / 100) }))
 }
 
-/** ยอดรวม/สุทธิของเอกสารจาก lines + ตัวเลือกการหัก — ใช้ทั้งตอนสร้างและตอนเอางานออกจากเอกสาร */
-function totalsOf(lines: VehicleIncomeLine[], options: VehicleIncomeDeductionOption[]) {
+/**
+ * ยอดรวม/สุทธิของเอกสารจาก lines + ตัวเลือกการหัก % + รายการที่พิมพ์เอง — ใช้ทั้งตอนสร้างและตอนเอางานออกจากเอกสาร
+ * สุทธิ = รายได้จากงาน − หัก % + เบี้ยเลี้ยง + รายได้ส่วนเพิ่ม − ค่าน้ำมัน − ค่าใช้จ่ายประจำรถ − หักค่าใช้จ่าย
+ * (หัก % คิดจากรายได้จากงานอย่างเดียว) — เอกสารเก่าที่ไม่มีเบี้ยเลี้ยงใน lines ไม่ถูกเติมเบี้ยเลี้ยงย้อนหลัง
+ */
+function totalsOf(lines: VehicleIncomeLine[], options: VehicleIncomeDeductionOption[], adjustments: IncomeAdjustments = emptyAdjustments()) {
   const tripIncomeTotal = roundMoney(lines.reduce((sum, l) => sum + l.tripFee, 0))
   const fuelCostTotal = roundMoney(lines.reduce((sum, l) => sum + l.fuelCost, 0))
   const vehicleExpenseTotal = roundMoney(lines.reduce((sum, l) => sum + l.vehicleExpense, 0))
+  const hasAllowance = lines.some((l) => l.allowance !== undefined)
+  const allowanceTotal = roundMoney(lines.reduce((sum, l) => sum + (l.allowance ?? 0), 0))
   const deductions = computeDeductions(tripIncomeTotal, options)
   const deductionTotal = roundMoney(deductions.reduce((sum, d) => sum + d.amount, 0))
-  const netTotal = roundMoney(tripIncomeTotal - deductionTotal - fuelCostTotal - vehicleExpenseTotal)
-  return { tripIncomeTotal, fuelCostTotal, vehicleExpenseTotal, deductions, deductionTotal, netTotal }
+  const additions = cleanAdjustmentLines(adjustments.additions)
+  const manualDeductions = cleanAdjustmentLines(adjustments.deductions)
+  const additionTotal = sumAdjustmentLines(additions)
+  const manualDeductionTotal = sumAdjustmentLines(manualDeductions)
+  const netTotal = roundMoney(
+    tripIncomeTotal - deductionTotal + allowanceTotal + additionTotal - fuelCostTotal - vehicleExpenseTotal - manualDeductionTotal
+  )
+  return {
+    tripIncomeTotal,
+    fuelCostTotal,
+    vehicleExpenseTotal,
+    deductions,
+    deductionTotal,
+    ...(hasAllowance ? { allowanceTotal } : {}),
+    ...(additions.length ? { additions, additionTotal } : {}),
+    ...(manualDeductions.length ? { manualDeductions, manualDeductionTotal } : {}),
+    netTotal,
+  }
 }
+
+/** เบี้ยเลี้ยงต่องานของรถร่วม — ยอดหลังกระทบเพิ่ม/ลดหนี้ ถ้ามี (finalAllowance) ไม่งั้นเบี้ยเลี้ยงที่ตั้งไว้ */
+export const vendorAllowanceOf = (b: Pick<Booking, 'finalAllowance' | 'allowance'>) => roundMoney(b.finalAllowance ?? b.allowance ?? 0)
 
 /**
  * ค่าน้ำมันต่องานสำหรับรายได้รถร่วม — ระบบคำนวณให้จากลิตร × เรทของงาน ถ้าผู้ใช้แก้เองในตารางหน้ารถร่วม
@@ -141,13 +183,16 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     vehicleId: string,
     bookingIds: string[],
     period: string,
-    deductionOptions: VehicleIncomeDeductionOption[] = []
+    deductionOptions: VehicleIncomeDeductionOption[] = [],
+    adjustments: IncomeAdjustments = emptyAdjustments()
   ): Promise<ActionResult & { doc?: VehicleIncomeDocument }> {
     if (!canManage()) return { ok: false, message: 'สร้างเอกสารรายได้รถร่วมได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
     if (bookingIds.length === 0) return { ok: false, message: 'ยังไม่ได้เลือกงาน' }
     if (deductionOptions.some((o) => !Number.isFinite(o.percent) || o.percent <= 0 || o.percent > 100))
       return { ok: false, message: 'เปอร์เซ็นต์การหักต้องมากกว่า 0 และไม่เกิน 100' }
     if (deductionOptions.some((o) => o.kind === 'OTHER' && !(o.label || '').trim())) return { ok: false, message: 'กรุณาระบุชื่อรายการหักอื่นๆ' }
+    const adjIssue = adjustmentIssue(adjustments)
+    if (adjIssue) return { ok: false, message: adjIssue }
     const bookingStore = useBookingStore()
     const vehiclesStore = useVehiclesStore()
     const vehicle = vehiclesStore.vehicles.find((v) => v.id === vehicleId)
@@ -163,8 +208,9 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
       tripFee: b.tripFee || 0,
       fuelCost: vendorFuelCostOf(b),
       vehicleExpense: vehicleExpenseOf(b),
+      allowance: vendorAllowanceOf(b),
     }))
-    const totals = totalsOf(lines, deductionOptions)
+    const totals = totalsOf(lines, deductionOptions, adjustments)
 
     const registry = useDocumentNumberRegistryStore()
     const seq = registry.nextSequence('VEHICLE_INCOME')
@@ -238,7 +284,9 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
       return { bookingId: id, tripFee: b?.tripFee || 0, fuelCost: b ? vendorFuelCostOf(b) : 0, vehicleExpense: b ? vehicleExpenseOf(b) : 0 }
     })).filter((l) => l.bookingId !== bookingId)
     const options: VehicleIncomeDeductionOption[] = (doc.deductions ?? []).map((d) => ({ kind: d.kind, percent: d.percent, label: d.label }))
-    const updated: VehicleIncomeDocument = { ...doc, bookingIds: remainingIds, lines, ...totalsOf(lines, options) }
+    // รายได้ส่วนเพิ่ม/หักค่าใช้จ่ายที่พิมพ์เองเป็นยอดของทั้งเอกสาร ไม่ผูกกับงานใด — คงไว้เหมือนเดิม
+    const adjustments: IncomeAdjustments = { additions: doc.additions ?? [], deductions: doc.manualDeductions ?? [] }
+    const updated: VehicleIncomeDocument = { ...doc, bookingIds: remainingIds, lines, ...totalsOf(lines, options, adjustments) }
     const { id, ...rest } = updated
     try {
       await vehicleIncomeDocumentRepository.set(id, rest)

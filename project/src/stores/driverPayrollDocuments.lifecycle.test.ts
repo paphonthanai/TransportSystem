@@ -259,3 +259,40 @@ describe('สิทธิ์แต่ละ role — เอกสารราย
     expect(a.driverPayrollDocId).toBeUndefined()
   })
 })
+
+describe('createDriverPayrollDocument — หัก % / รายได้ส่วนเพิ่ม / หักค่าใช้จ่ายที่พิมพ์เอง', () => {
+  it('หักภาษี 3% + หักอื่นๆ % คิดจากรายได้จากงาน และรายการพิมพ์เองต่อท้ายรายการจากหน้าเงินเดือน', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings, deductions } = await setup()
+    const a = jobOf({ allowance: 1000, finalAllowance: 1000 })
+    bookings.bookings.push(a)
+    deductions.deductions.push(line('DEDUCTION', 'ประกันงาน', 100))
+
+    const result = await docs.createDriverPayrollDocument('drv-1', [a.id], '2026-10', {
+      percentDeductions: [{ kind: 'WHT', percent: 3 }, { kind: 'OTHER', percent: 2.5, label: 'ค่าบริหาร' }],
+      adjustments: { additions: [{ label: 'ค่าล่วงเวลา', amount: 300 }], deductions: [{ label: 'ค่าของเสียหาย', amount: 50 }] },
+    })
+
+    expect(result.ok).toBe(true)
+    const doc = result.doc!
+    expect(doc.additionItems).toEqual([{ type: 'MANUAL', label: 'ค่าล่วงเวลา', amount: 300 }])
+    expect(doc.deductionItems).toEqual([
+      { type: 'ประกันงาน', label: '', amount: 100 },
+      { type: 'PERCENT', label: 'หักภาษี ณ ที่จ่าย 3%', amount: 30 },
+      { type: 'PERCENT', label: 'ค่าบริหาร 2.5%', amount: 25 },
+      { type: 'MANUAL', label: 'ค่าของเสียหาย', amount: 50 },
+    ])
+    // 1000 + 300 − (100 + 30 + 25 + 50)
+    expect(doc.netIncome).toBe(1095)
+  })
+
+  it('หักอื่นๆ ไม่ระบุชื่อ / % เกิน 100 = ไม่สร้างเอกสาร', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings } = await setup()
+    const a = jobOf()
+    bookings.bookings.push(a)
+    expect((await docs.createDriverPayrollDocument('drv-1', [a.id], '2026-10', { percentDeductions: [{ kind: 'OTHER', percent: 5 }] })).ok).toBe(false)
+    expect((await docs.createDriverPayrollDocument('drv-1', [a.id], '2026-10', { percentDeductions: [{ kind: 'WHT', percent: 120 }] })).ok).toBe(false)
+    expect(a.driverPayrollDocId).toBeUndefined()
+  })
+})

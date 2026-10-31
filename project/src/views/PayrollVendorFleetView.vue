@@ -51,6 +51,7 @@
             <th class="px-4 py-3 font-semibold">ประเภท</th>
             <th class="px-4 py-3 font-semibold text-right">จำนวนงาน</th>
             <th class="px-4 py-3 font-semibold text-right">รายได้จากงาน</th>
+            <th v-if="!isCompanyFleet" class="px-4 py-3 font-semibold text-right">ค่าเบี้ยเลี้ยง</th>
             <th class="px-4 py-3 font-semibold text-right">ค่าน้ำมันที่ใช้</th>
             <th v-if="isCompanyFleet" class="px-4 py-3 font-semibold text-right">ค่าแรงคนขับ</th>
             <th class="px-4 py-3 font-semibold text-right">ค่าใช้จ่ายประจำรถ</th>
@@ -64,6 +65,7 @@
             <td class="px-4 py-3 text-muted">{{ row.vehicle.department }}</td>
             <td class="px-4 py-3 text-right text-text">{{ row.trips }}</td>
             <td class="px-4 py-3 text-right text-green-600">{{ formatBaht(row.income) }}</td>
+            <td v-if="!isCompanyFleet" class="px-4 py-3 text-right text-green-600">+{{ formatBaht(row.allowance) }}</td>
             <td class="px-4 py-3 text-right text-red-500">
               -{{ formatBaht(row.fuelCost) }}
               <RouterLink :to="`/payroll/vendor-fleet/${row.vehicle.id}`" class="edit-link ml-1" title="แก้ค่าน้ำมันต่องานที่หน้ารายละเอียดรถ"><span class="material-symbols-rounded text-sm">edit</span>แก้</RouterLink>
@@ -94,7 +96,7 @@
 import { ref, computed } from 'vue'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
-import { useVehicleIncomeDocumentsStore, vendorFuelCostOf } from '@/stores/vehicleIncomeDocuments'
+import { useVehicleIncomeDocumentsStore, vendorAllowanceOf, vendorFuelCostOf } from '@/stores/vehicleIncomeDocuments'
 import { exportRowsToExcel } from '@/utils/exportExcel'
 import { roundMoney } from '@/utils/bookingMoney'
 import type { Booking, Vehicle, VehicleType } from '@/types'
@@ -171,14 +173,16 @@ const vehicleRows = computed(() =>
     const vehicleExpense = bookings.reduce((sum, b) => sum + vehicleIncomeDocumentsStore.vehicleExpenseOf(b), 0)
     /** ค่าแรงคนขับ = เบี้ยเลี้ยงหลังกระทบยอดเพิ่ม/ลดหนี้ (สูตรเดียวกับ computeBookingMoney/เงินเดือนคนขับ) — หักเฉพาะรถบริษัท */
     const driverWage = isCompanyFleet.value ? bookings.reduce((sum, b) => sum + roundMoney(b.finalAllowance ?? b.allowance ?? 0), 0) : 0
-    const net = income - fuelTotal - driverWage - vehicleExpense
-    return { vehicle, trips, income, fuelCost: fuelTotal, driverWage, vehicleExpense, net }
+    /** รถร่วม/รถหุ้นส่วน: เบี้ยเลี้ยงบวกเพิ่มให้เจ้าของรถ (สูตรเดียวกับเอกสารรายได้รถร่วม) */
+    const allowance = isCompanyFleet.value ? 0 : bookings.reduce((sum, b) => sum + vendorAllowanceOf(b), 0)
+    const net = income + allowance - fuelTotal - driverWage - vehicleExpense
+    return { vehicle, trips, income, allowance, fuelCost: fuelTotal, driverWage, vehicleExpense, net }
   })
 )
 
 const grandTotals = computed(() =>
   vehicleRows.value.reduce(
-    (acc, r) => ({ income: acc.income + r.income, expense: acc.expense + r.fuelCost + r.driverWage + r.vehicleExpense, net: acc.net + r.net }),
+    (acc, r) => ({ income: acc.income + r.income + r.allowance, expense: acc.expense + r.fuelCost + r.driverWage + r.vehicleExpense, net: acc.net + r.net }),
     { income: 0, expense: 0, net: 0 }
   )
 )
@@ -193,6 +197,7 @@ const exportSummary = () => {
       ประเภท: r.vehicle.department,
       จำนวนงาน: r.trips,
       รายได้จากงาน: r.income,
+      ...(isCompanyFleet.value ? {} : { ค่าเบี้ยเลี้ยง: r.allowance }),
       ค่าน้ำมันที่ใช้: r.fuelCost,
       ...(isCompanyFleet.value ? { ค่าแรงคนขับ: r.driverWage } : {}),
       ค่าใช้จ่ายประจำรถ: r.vehicleExpense,
