@@ -262,21 +262,37 @@ export const useBookingStore = defineStore('booking', () => {
     remote.forEach((b) => lastKnownBookingJson.set(b.id, JSON.stringify(b)))
   }
 
-  watch(
-    bookings,
-    (val) => {
-      val.forEach((b) => {
-        const json = JSON.stringify(b)
-        if (lastKnownBookingJson.get(b.id) === json) return
-        lastKnownBookingJson.set(b.id, json)
-        const { id, ...rest } = b
-        bookingRepository.update(id, rest).catch((err) => {
-          bookingsError.value = err?.message || 'บันทึกข้อมูลงานขนส่งไป Firestore ไม่สำเร็จ'
-        })
-      })
-    },
-    { deep: true }
-  )
+  function persistIfChanged(b: Booking) {
+    const json = JSON.stringify(b)
+    if (lastKnownBookingJson.get(b.id) === json) return
+    lastKnownBookingJson.set(b.id, json)
+    const { id, ...rest } = b
+    bookingRepository.update(id, rest).catch((err) => {
+      bookingsError.value = err?.message || 'บันทึกข้อมูลงานขนส่งไป Firestore ไม่สำเร็จ'
+    })
+  }
+
+  /**
+   * deep watcher แยกต่องาน (เดิมเป็นตัวเดียวทั้ง array: แก้งานเดียว Vue ต้องไล่ตรวจทุกงาน + JSON.stringify ทุกงานทุกครั้ง
+   * ยิ่งงานเยอะยิ่งหน่วง) — ตอนนี้แก้งานไหนก็ตรวจ/บันทึกเฉพาะงานนั้น ส่วนการเพิ่ม/ลบ/แทนที่ทั้งชุด (snapshot จาก server)
+   * จับด้วย watcher รายชื่อ id แล้วสร้าง/ยกเลิก watcher ต่องานให้ตรงกับ object ปัจจุบัน
+   */
+  const bookingWatchers = new Map<string, { target: Booking; stop: () => void }>()
+  function syncBookingWatchers() {
+    const current = new Map(bookings.value.map((b) => [b.id, b]))
+    bookingWatchers.forEach((entry, id) => {
+      if (current.get(id) !== entry.target) {
+        entry.stop()
+        bookingWatchers.delete(id)
+      }
+    })
+    current.forEach((b, id) => {
+      if (bookingWatchers.has(id)) return
+      persistIfChanged(b) // งานใหม่ที่เพิ่มในเครื่อง (addBooking) — งานจาก server ตรงกับ lastKnown อยู่แล้ว ไม่บันทึกซ้ำ
+      bookingWatchers.set(id, { target: b, stop: watch(() => b, () => persistIfChanged(b), { deep: true }) })
+    })
+  }
+  watch(() => bookings.value.map((b) => b.id), syncBookingWatchers, { immediate: true })
 
   /** ไม่ auto-reseed ข้อมูลตัวอย่าง (mock) เข้า Firestore อีกต่อไป — ถ้า collection ว่าง แปลว่าว่างจริง (ล้าง mock
    *  data ทิ้งโดยตั้งใจ) ไม่ใช่ "ยังไม่เคย migrate" ต้องให้ผู้ใช้ลงงานขนส่งจริงเองผ่านหน้าสร้างงาน */
