@@ -97,7 +97,7 @@
                 <span class="text-right tabular-nums">{{ formatBaht(doc.tripIncomeTotal - (doc.deductionTotal ?? 0)) }}</span>
               </div>
             </template>
-            <div v-if="hasAllowance" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+            <div v-if="allowanceAsIncome" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
               <span>เบี้ยเลี้ยง</span>
               <span class="text-right tabular-nums">{{ formatBaht(doc.allowanceTotal ?? 0) }}</span>
             </div>
@@ -105,7 +105,7 @@
               <span>{{ a.label }}</span>
               <span class="text-right tabular-nums">{{ formatBaht(a.amount) }}</span>
             </div>
-            <div v-if="hasAllowance || doc.additions?.length" class="grid grid-cols-[1fr_auto] gap-x-2 font-bold border-t border-gray-300 mt-1 pt-1">
+            <div v-if="allowanceAsIncome || doc.additions?.length" class="grid grid-cols-[1fr_auto] gap-x-2 font-bold border-t border-gray-300 mt-1 pt-1">
               <span>รวมรายได้</span>
               <span class="text-right tabular-nums">{{ formatBaht(incomeTotal) }}</span>
             </div>
@@ -123,13 +123,17 @@
               <span>ค่าใช้จ่ายประจำรถ{{ doc.lines ? '' : ' (รวม)' }}</span>
               <span class="text-right tabular-nums">{{ formatBaht(doc.vehicleExpenseTotal) }}</span>
             </div>
+            <div v-if="allowanceAsExpense" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
+              <span>ค่าเบี้ยเลี้ยง</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.allowanceTotal ?? 0) }}</span>
+            </div>
             <div v-for="(d, i) in doc.manualDeductions || []" :key="`ded${i}`" class="grid grid-cols-[1fr_auto] gap-x-2 py-0.5">
               <span>{{ d.label }}</span>
               <span class="text-right tabular-nums">{{ formatBaht(d.amount) }}</span>
             </div>
             <div class="grid grid-cols-[1fr_auto] gap-x-2 font-bold border-t border-gray-300 mt-1 pt-1">
               <span>รวมค่าใช้จ่าย</span>
-              <span class="text-right tabular-nums">{{ formatBaht(doc.fuelCostTotal + doc.vehicleExpenseTotal + (doc.manualDeductionTotal ?? 0)) }}</span>
+              <span class="text-right tabular-nums">{{ formatBaht(doc.fuelCostTotal + doc.vehicleExpenseTotal + (doc.manualDeductionTotal ?? 0) + (allowanceAsExpense ? doc.allowanceTotal ?? 0 : 0)) }}</span>
             </div>
           </div>
         </div>
@@ -268,9 +272,14 @@ const rows = computed(() => {
 
 /** เอกสารก่อนมีเบี้ยเลี้ยงรถร่วมไม่มี allowanceTotal — ไม่แสดงคอลัมน์/บรรทัดเบี้ยเลี้ยง */
 const hasAllowance = computed(() => doc.value?.allowanceTotal !== undefined)
-/** รายได้หลังหัก % + เบี้ยเลี้ยง + รายได้ส่วนเพิ่ม */
+/** เบี้ยเลี้ยงเป็นรายจ่าย (เอกสารใหม่) หรือรายได้ (เอกสารช่วงสั้นๆ ก่อนเปลี่ยน — ยอด Snapshot คิดแบบนั้น) */
+const allowanceAsExpense = computed(() => hasAllowance.value && !!doc.value?.allowanceIsExpense)
+const allowanceAsIncome = computed(() => hasAllowance.value && !doc.value?.allowanceIsExpense)
+/** รายได้หลังหัก % + รายได้ส่วนเพิ่ม (+ เบี้ยเลี้ยง เฉพาะเอกสารแบบเดิม) */
 const incomeTotal = computed(() =>
-  doc.value ? doc.value.tripIncomeTotal - (doc.value.deductionTotal ?? 0) + (doc.value.allowanceTotal ?? 0) + (doc.value.additionTotal ?? 0) : 0
+  doc.value
+    ? doc.value.tripIncomeTotal - (doc.value.deductionTotal ?? 0) + (allowanceAsIncome.value ? doc.value.allowanceTotal ?? 0 : 0) + (doc.value.additionTotal ?? 0)
+    : 0
 )
 
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {

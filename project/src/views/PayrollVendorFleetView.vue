@@ -71,8 +71,8 @@
             <td class="px-4 py-3 text-muted">{{ row.vehicle.department }}</td>
             <td class="px-4 py-3 text-right text-text">{{ row.trips }}</td>
             <td class="px-4 py-3 text-right text-green-600">{{ formatBaht(row.income) }}</td>
-            <td v-if="!isCompanyFleet" class="px-4 py-3 text-right text-green-600">
-              +{{ formatBaht(row.allowance) }}
+            <td v-if="!isCompanyFleet" class="px-4 py-3 text-right text-red-500">
+              -{{ formatBaht(row.allowance) }}
               <RouterLink :to="{ path: `/payroll/vendor-fleet/${row.vehicle.id}`, query: { period } }" class="edit-link ml-1" title="แก้ค่าเบี้ยเลี้ยงต่องานที่หน้ารายละเอียดรถ"><span class="material-symbols-rounded text-sm">edit</span>แก้</RouterLink>
             </td>
             <td class="px-4 py-3 text-right text-red-500">
@@ -187,9 +187,9 @@ const vehicleRows = computed(() =>
     const vehicleExpense = bookings.reduce((sum, b) => sum + vehicleIncomeDocumentsStore.vehicleExpenseOf(b), 0)
     /** ค่าแรงคนขับ = เบี้ยเลี้ยงหลังกระทบยอดเพิ่ม/ลดหนี้ (สูตรเดียวกับ computeBookingMoney/เงินเดือนคนขับ) — หักเฉพาะรถบริษัท */
     const driverWage = isCompanyFleet.value ? bookings.reduce((sum, b) => sum + roundMoney(b.finalAllowance ?? b.allowance ?? 0), 0) : 0
-    /** รถร่วม/รถหุ้นส่วน: เบี้ยเลี้ยงบวกเพิ่มให้เจ้าของรถ (สูตรเดียวกับเอกสารรายได้รถร่วม) */
+    /** รถร่วม/รถหุ้นส่วน: เบี้ยเลี้ยงเป็นรายจ่ายที่หักจากรถร่วม บริษัทนำไปจ่ายคนขับ (สูตรเดียวกับเอกสารรายได้รถร่วม) */
     const allowance = isCompanyFleet.value ? 0 : bookings.reduce((sum, b) => sum + vendorAllowanceOf(b), 0)
-    const net = income + allowance - fuelTotal - driverWage - vehicleExpense
+    const net = income - allowance - fuelTotal - driverWage - vehicleExpense
     const notIssued = bookings.filter((b) => !b.vehicleIncomeDocId).length
     return { vehicle, trips, income, allowance, fuelCost: fuelTotal, driverWage, vehicleExpense, net, notIssued }
   })
@@ -205,7 +205,7 @@ const displayedRows = computed(() =>
 
 const grandTotals = computed(() =>
   vehicleRows.value.reduce(
-    (acc, r) => ({ income: acc.income + r.income + r.allowance, expense: acc.expense + r.fuelCost + r.driverWage + r.vehicleExpense, net: acc.net + r.net }),
+    (acc, r) => ({ income: acc.income + r.income, expense: acc.expense + r.allowance + r.fuelCost + r.driverWage + r.vehicleExpense, net: acc.net + r.net }),
     { income: 0, expense: 0, net: 0 }
   )
 )

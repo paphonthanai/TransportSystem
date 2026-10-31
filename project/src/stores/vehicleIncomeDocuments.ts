@@ -41,8 +41,13 @@ export interface VehicleIncomeDocument {
   /** รายการหักที่เลือกตอนออกเอกสาร (ภาษี ณ ที่จ่าย/ค่าดำเนินการ/อื่นๆ) คิด % จากรายได้จากงาน (tripIncomeTotal) — เอกสารเก่าไม่มี */
   deductions?: VehicleIncomeDeduction[]
   deductionTotal?: number
-  /** เบี้ยเลี้ยงรวม (บวกเพิ่มให้รถร่วม) — เอกสารเก่าก่อนมี field นี้ไม่มี (ไม่ได้รวมเบี้ยเลี้ยง) */
+  /** เบี้ยเลี้ยงรวม — เอกสารเก่าก่อนมี field นี้ไม่มี (ไม่ได้รวมเบี้ยเลี้ยง) */
   allowanceTotal?: number
+  /**
+   * true = เบี้ยเลี้ยงเป็นรายจ่ายที่หักจากรถร่วม (บริษัทนำไปจ่ายคนขับ) — เอกสารใหม่ทุกใบ; เอกสารที่มี allowanceTotal แต่ไม่มี
+   * field นี้ ออกช่วงสั้นๆ ที่เบี้ยเลี้ยงถูกบวกเป็นรายได้ ยอดใน Snapshot ยังคิดแบบนั้น จึงแสดงตามแบบเดิม
+   */
+  allowanceIsExpense?: boolean
   /** รายได้ส่วนเพิ่ม/หักค่าใช้จ่าย ที่ผู้ใช้พิมพ์เองตอนออกเอกสาร — เอกสารเก่าไม่มี */
   additions?: IncomeAdjustmentLine[]
   additionTotal?: number
@@ -74,7 +79,7 @@ export interface VehicleIncomeLine {
   tripFee: number
   fuelCost: number
   vehicleExpense: number
-  /** เบี้ยเลี้ยงของงาน (finalAllowance ?? allowance) — บวกเพิ่มให้รถร่วม; เอกสารเก่าไม่มี */
+  /** เบี้ยเลี้ยงของงาน (vendorAllowanceOf) — รายจ่ายที่หักจากรถร่วม; เอกสารเก่าไม่มี */
   allowance?: number
 }
 
@@ -91,10 +96,16 @@ export function computeDeductions(tripIncomeTotal: number, options: VehicleIncom
 
 /**
  * ยอดรวม/สุทธิของเอกสารจาก lines + ตัวเลือกการหัก % + รายการที่พิมพ์เอง — ใช้ทั้งตอนสร้างและตอนเอางานออกจากเอกสาร
- * สุทธิ = รายได้จากงาน − หัก % + เบี้ยเลี้ยง + รายได้ส่วนเพิ่ม − ค่าน้ำมัน − ค่าใช้จ่ายประจำรถ − หักค่าใช้จ่าย
+ * สุทธิ = รายได้จากงาน − หัก % − เบี้ยเลี้ยง (บริษัทนำไปจ่ายคนขับ) + รายได้ส่วนเพิ่ม − ค่าน้ำมัน − ค่าใช้จ่ายประจำรถ − หักค่าใช้จ่าย
  * (หัก % คิดจากรายได้จากงานอย่างเดียว) — เอกสารเก่าที่ไม่มีเบี้ยเลี้ยงใน lines ไม่ถูกเติมเบี้ยเลี้ยงย้อนหลัง
+ * allowanceIsExpense = false ใช้เฉพาะคำนวณเอกสารที่ออกช่วงเบี้ยเลี้ยงเป็นรายได้ใหม่ (ตอนเอางานออก) ให้คงแบบเดิม
  */
-function totalsOf(lines: VehicleIncomeLine[], options: VehicleIncomeDeductionOption[], adjustments: IncomeAdjustments = emptyAdjustments()) {
+function totalsOf(
+  lines: VehicleIncomeLine[],
+  options: VehicleIncomeDeductionOption[],
+  adjustments: IncomeAdjustments = emptyAdjustments(),
+  allowanceIsExpense = true
+) {
   const tripIncomeTotal = roundMoney(lines.reduce((sum, l) => sum + l.tripFee, 0))
   const fuelCostTotal = roundMoney(lines.reduce((sum, l) => sum + l.fuelCost, 0))
   const vehicleExpenseTotal = roundMoney(lines.reduce((sum, l) => sum + l.vehicleExpense, 0))
@@ -107,7 +118,7 @@ function totalsOf(lines: VehicleIncomeLine[], options: VehicleIncomeDeductionOpt
   const additionTotal = sumAdjustmentLines(additions)
   const manualDeductionTotal = sumAdjustmentLines(manualDeductions)
   const netTotal = roundMoney(
-    tripIncomeTotal - deductionTotal + allowanceTotal + additionTotal - fuelCostTotal - vehicleExpenseTotal - manualDeductionTotal
+    tripIncomeTotal - deductionTotal + (allowanceIsExpense ? -allowanceTotal : allowanceTotal) + additionTotal - fuelCostTotal - vehicleExpenseTotal - manualDeductionTotal
   )
   return {
     tripIncomeTotal,
@@ -115,7 +126,7 @@ function totalsOf(lines: VehicleIncomeLine[], options: VehicleIncomeDeductionOpt
     vehicleExpenseTotal,
     deductions,
     deductionTotal,
-    ...(hasAllowance ? { allowanceTotal } : {}),
+    ...(hasAllowance ? { allowanceTotal, ...(allowanceIsExpense ? { allowanceIsExpense: true } : {}) } : {}),
     ...(additions.length ? { additions, additionTotal } : {}),
     ...(manualDeductions.length ? { manualDeductions, manualDeductionTotal } : {}),
     netTotal,
@@ -286,7 +297,8 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     const options: VehicleIncomeDeductionOption[] = (doc.deductions ?? []).map((d) => ({ kind: d.kind, percent: d.percent, label: d.label }))
     // รายได้ส่วนเพิ่ม/หักค่าใช้จ่ายที่พิมพ์เองเป็นยอดของทั้งเอกสาร ไม่ผูกกับงานใด — คงไว้เหมือนเดิม
     const adjustments: IncomeAdjustments = { additions: doc.additions ?? [], deductions: doc.manualDeductions ?? [] }
-    const updated: VehicleIncomeDocument = { ...doc, bookingIds: remainingIds, lines, ...totalsOf(lines, options, adjustments) }
+    const keepIncomeStyle = doc.allowanceTotal !== undefined && !doc.allowanceIsExpense
+    const updated: VehicleIncomeDocument = { ...doc, bookingIds: remainingIds, lines, ...totalsOf(lines, options, adjustments, !keepIncomeStyle) }
     const { id, ...rest } = updated
     try {
       await vehicleIncomeDocumentRepository.set(id, rest)

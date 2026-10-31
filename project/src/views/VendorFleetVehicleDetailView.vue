@@ -54,7 +54,7 @@
         </div>
         <div>
           <div class="text-xs text-muted">เบี้ยเลี้ยง</div>
-          <div class="font-semibold text-green-600">+{{ formatBaht(totalAllowance) }}</div>
+          <div class="font-semibold text-red-500">-{{ formatBaht(totalAllowance) }}</div>
         </div>
         <div>
           <div class="text-xs text-muted">ค่าน้ำมันที่ใช้</div>
@@ -71,7 +71,7 @@
       </div>
 
       <div class="card-lg flex items-center justify-between text-sm">
-        <span class="font-semibold text-text">ยอดสุทธิ (ค่าเที่ยว + เบี้ยเลี้ยง − ค่าน้ำมัน − ค่าใช้จ่ายประจำรถ)</span>
+        <span class="font-semibold text-text">ยอดสุทธิ (ค่าเที่ยว − เบี้ยเลี้ยง − ค่าน้ำมัน − ค่าใช้จ่ายประจำรถ)</span>
         <span class="text-lg font-bold text-primary">{{ formatBaht(netTotal) }}</span>
       </div>
 
@@ -376,7 +376,8 @@ const totalTripFee = computed(() => rows.value.reduce((sum, r) => sum + (r.booki
 const totalAllowance = computed(() => rows.value.reduce((sum, r) => sum + r.allowance, 0))
 const totalFuelCost = computed(() => rows.value.reduce((sum, r) => sum + r.fuelCost, 0))
 const totalVehicleExpense = computed(() => rows.value.reduce((sum, r) => sum + r.vehicleExpense, 0))
-const netTotal = computed(() => totalTripFee.value + totalAllowance.value - totalFuelCost.value - totalVehicleExpense.value)
+/** เบี้ยเลี้ยงเป็นรายจ่ายของรถร่วม — บริษัทหักไว้จ่ายคนขับ */
+const netTotal = computed(() => totalTripFee.value - totalAllowance.value - totalFuelCost.value - totalVehicleExpense.value)
 
 /** ค้นหา (เลขที่งาน/คนขับ/รายละเอียดงาน) + กรองสถานะเอกสาร — การ์ดสรุปด้านบนยังเป็นยอดทั้งรอบ */
 const search = ref('')
@@ -477,7 +478,7 @@ const toggleSelectAll = () => {
   selectedIds.value = allSelectableChecked.value ? new Set() : new Set(selectableRows.value.map((r) => r.booking.id))
 }
 const selectedNetTotal = computed(() =>
-  rows.value.filter((r) => selectedIds.value.has(r.booking.id)).reduce((sum, r) => sum + (r.booking.tripFee || 0) + r.allowance - r.fuelCost - r.vehicleExpense, 0)
+  rows.value.filter((r) => selectedIds.value.has(r.booking.id)).reduce((sum, r) => sum + (r.booking.tripFee || 0) - r.allowance - r.fuelCost - r.vehicleExpense, 0)
 )
 
 const selectedTripTotal = computed(() => rows.value.filter((r) => selectedIds.value.has(r.booking.id)).reduce((sum, r) => sum + (r.booking.tripFee || 0), 0))

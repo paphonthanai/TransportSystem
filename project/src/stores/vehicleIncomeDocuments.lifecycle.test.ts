@@ -301,7 +301,7 @@ describe('ค่าน้ำมัน/ค่าใช้จ่ายประจ
 })
 
 describe('รายได้รถร่วม — เบี้ยเลี้ยง + รายได้ส่วนเพิ่ม/หักค่าใช้จ่ายที่พิมพ์เอง', () => {
-  it('เบี้ยเลี้ยงบวกเพิ่ม, หัก % คิดจากรายได้จากงานอย่างเดียว, รายการพิมพ์เองเข้าสุทธิ และคงอยู่เมื่อเอางานออก', async () => {
+  it('เบี้ยเลี้ยงเป็นรายจ่ายหักจากรถร่วม, หัก % คิดจากรายได้จากงานอย่างเดียว, รายการพิมพ์เองเข้าสุทธิ และคงอยู่เมื่อเอางานออก', async () => {
     loginAs('ADMIN')
     const { docs, bookings } = await setup()
     const a = jobOf({ allowance: 400, finalAllowance: 350 })
@@ -319,15 +319,16 @@ describe('รายได้รถร่วม — เบี้ยเลี้�
     expect(doc.deductionTotal).toBe(50)
     expect(doc.additions).toEqual([{ label: 'ค่าขึ้นเขา', amount: 500 }])
     expect(doc.manualDeductions).toEqual([{ label: 'ค่าปรับ', amount: 120.5 }])
-    // 5000 − 50 + 550 + 500 − 0 − 0 − 120.5
-    expect(doc.netTotal).toBe(5879.5)
+    expect(doc.allowanceIsExpense).toBe(true)
+    // 5000 − 50 − 550 + 500 − 0 − 0 − 120.5
+    expect(doc.netTotal).toBe(4779.5)
 
     expect((await docs.removeBookingFromDocument(b.id)).ok).toBe(true)
     const updated = docs.documents.find((d) => d.id === doc.id)!
     expect(updated.allowanceTotal).toBe(350)
     expect(updated.additions).toEqual([{ label: 'ค่าขึ้นเขา', amount: 500 }])
-    // 3000 − 30 + 350 + 500 − 120.5
-    expect(updated.netTotal).toBe(3699.5)
+    // 3000 − 30 − 350 + 500 − 120.5
+    expect(updated.netTotal).toBe(2999.5)
   })
 
   it('รายการพิมพ์เองไม่มีรายละเอียด หรือยอดไม่เกิน 0 = ไม่สร้างเอกสาร', async () => {
