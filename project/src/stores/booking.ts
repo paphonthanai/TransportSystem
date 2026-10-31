@@ -302,27 +302,40 @@ export const useBookingStore = defineStore('booking', () => {
     }
     const loadingStore = useLoadingStore()
     const loadingToken = loadingStore.begin() // แถบ "กำลังโหลด" ด้านบนจอ (ดู components/shared/RouteProgressBar.vue)
+    // listener ตัวเดียวทำทั้งโหลดครั้งแรกและ realtime — snapshot แรก (จากแคชในเครื่องถ้ามี) = โหลดเสร็จ
     try {
-      const remote = await bookingRepository.getAll(driverId)
-      if (seq === fetchSeq) applyRemoteBookings(remote)
+      await new Promise<void>((resolve, reject) => {
+        let settled = false
+        const unsubscribe = bookingRepository.subscribe(
+          (remote) => {
+            if (seq === fetchSeq) {
+              bookingsError.value = null
+              applyRemoteBookings(remote)
+            }
+            if (!settled) {
+              settled = true
+              resolve()
+            }
+          },
+          (err) => {
+            if (settled) {
+              if (seq === fetchSeq) bookingsError.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ'
+            } else {
+              settled = true
+              reject(err)
+            }
+          },
+          driverId
+        )
+        if (seq === fetchSeq) unsubscribeBookings = unsubscribe
+        else unsubscribe()
+      })
     } catch (err: any) {
       if (seq === fetchSeq) bookingsError.value = err?.message || 'โหลดข้อมูลงานขนส่งจาก Firestore ไม่สำเร็จ'
     } finally {
       loadingStore.end(loadingToken)
       if (seq === fetchSeq) bookingsLoading.value = false
     }
-    if (seq !== fetchSeq) return
-    unsubscribeBookings = bookingRepository.subscribe(
-      (remote) => {
-        if (seq !== fetchSeq) return
-        bookingsError.value = null
-        applyRemoteBookings(remote)
-      },
-      (err) => {
-        if (seq === fetchSeq) bookingsError.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ'
-      },
-      driverId
-    )
   }
 
   fetchBookings()

@@ -1139,7 +1139,8 @@ import {
   type ImportRowResult,
 } from '@/utils/importRowParser'
 import { compareByTrip, resolveTripNumber, nextTripSequence, validateTripSequences } from '@/utils/tripSequence'
-import * as XLSX from 'xlsx'
+/** ไลบรารี xlsx (~400 KB) โหลดตอนกด import/ดาวน์โหลดเทมเพลตเท่านั้น ไม่ให้หน้า Booking ช้าตั้งแต่เปิด */
+const loadXlsx = () => import('xlsx')
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 import { useImportDraftStore } from '@/stores/importDraft'
 import SearchableSelect, { type SearchableOption } from '@/components/booking/SearchableSelect.vue'
@@ -1980,6 +1981,7 @@ const handleReconcileFile = async (e: Event) => {
   const file = input.files?.[0]
   if (!file) return
   reconcileFileName.value = file.name
+  const XLSX = await loadXlsx()
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, { type: 'array' })
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -2098,7 +2100,7 @@ const IMPORT_COLUMN_ORDER = [
 
 /** สร้างไฟล์ตัวอย่างคอลัมน์ตรงกับชีทงานจริงที่ใช้อยู่ทุกคอลัมน์ (รวมคอลัมน์ที่ไม่ได้ใช้จริงด้วย ดู IMPORT_COLUMN_ORDER)
  *  ไม่มีแถวหัวเรื่อง/วันที่ส่งงาน — ถ้าอยากได้แบบมีวันที่ ให้เพิ่มแถวนั้นเองเหนือแถวหัวคอลัมน์นี้ (ระบบรองรับทั้ง 2 แบบ) */
-const downloadImportTemplate = () => {
+const downloadImportTemplate = async () => {
   const sampleRow = [
     1,
     '',
@@ -2121,6 +2123,7 @@ const downloadImportTemplate = () => {
     '',
     '',
   ]
+  const XLSX = await loadXlsx()
   const worksheet = XLSX.utils.aoa_to_sheet([IMPORT_COLUMN_ORDER, sampleRow])
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1')
@@ -2136,6 +2139,7 @@ const handleImportFile = async (e: Event) => {
   const file = input.files?.[0]
   if (!file) return
   importFileName.value = file.name
+  const XLSX = await loadXlsx()
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, { type: 'array' })
   const sheet = workbook.Sheets[workbook.SheetNames[0]]

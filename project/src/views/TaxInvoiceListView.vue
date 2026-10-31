@@ -195,7 +195,6 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
 import { salesDocumentStatusClass, salesDocumentStatusLabel, salesDocumentTypeLabel } from '@/utils/salesDocumentStatus'
-import { exportDocumentsAsPdf } from '@/utils/exportDocumentsPdf'
 import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 
@@ -430,6 +429,8 @@ const downloadSelectedPdf = async () => {
   exporting.value = true
   exportProgress.value = { done: 0, total: docs.length }
   try {
+    // ตัวทำ PDF (~850 KB รวม html2canvas) โหลดตอนกดส่งออกเท่านั้น
+    const { exportDocumentsAsPdf } = await import('@/utils/exportDocumentsPdf')
     await exportDocumentsAsPdf(docs, mergeIntoOneFile.value ? 'merged' : 'separate', `ใบแจ้งหนี้-${Date.now()}.pdf`, (done, total) => {
       exportProgress.value = { done, total }
     })

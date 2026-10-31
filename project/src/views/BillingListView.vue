@@ -182,7 +182,6 @@ import { useCustomerStore } from '@/stores/customers'
 import { useDocumentPrefillStore, type DocumentPrefillPayload } from '@/stores/documentPrefill'
 import { salesDocumentStatusClass, salesDocumentStatusLabel, salesDocumentTypeLabel } from '@/utils/salesDocumentStatus'
 import { categoryFeedLabel } from '@/utils/bookingStatus'
-import { exportDocumentsAsPdf } from '@/utils/exportDocumentsPdf'
 import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import type { Booking } from '@/types'
 
@@ -486,6 +485,8 @@ const downloadSelectedPdf = async () => {
   exporting.value = true
   exportProgress.value = { done: 0, total: docs.length }
   try {
+    // ตัวทำ PDF (~850 KB รวม html2canvas) โหลดตอนกดส่งออกเท่านั้น
+    const { exportDocumentsAsPdf } = await import('@/utils/exportDocumentsPdf')
     await exportDocumentsAsPdf(docs, mergeIntoOneFile.value ? 'merged' : 'separate', `ใบวางบิล-${Date.now()}.pdf`, (done, total) => {
       exportProgress.value = { done, total }
     })

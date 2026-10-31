@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
-import { connectFirestoreEmulator, initializeFirestore } from 'firebase/firestore'
+import { connectFirestoreEmulator, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore'
 import { connectStorageEmulator, getStorage } from 'firebase/storage'
 
 // Replace with your Firebase config
@@ -20,7 +20,12 @@ const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 // experimentalAutoDetectLongPolling: เครือข่ายมือถือ/Safari (iOS) บางแห่งบล็อกการเชื่อมต่อแบบ streaming (WebChannel) ทำให้ Firestore
 // ไม่ส่งข้อมูลมาเลยทั้งที่ไม่มี error (แอปคนขับเห็น "ไม่มีงาน") — ให้ SDK ตรวจเจอแล้วสลับไปใช้ long polling เองอัตโนมัติ
-export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true })
+// localCache: เก็บข้อมูล Firestore ไว้ใน IndexedDB ของเครื่อง — เปิดเว็บครั้งถัดไปแสดงข้อมูลจากเครื่องทันที แล้วดึงเฉพาะส่วนที่เปลี่ยน
+// จาก server (ไม่ต้องโหลดทั้ง collection ใหม่ทุกครั้ง) ใช้ได้หลายแท็บพร้อมกัน — เบราว์เซอร์ที่ใช้ IndexedDB ไม่ได้ SDK ใช้แคชในหน่วยความจำแทน
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+})
 export const storage = getStorage(app)
 
 /** ใช้ตรวจว่าตอนนี้ควรต่อ Emulator หรือไม่ — ที่อื่น (เช่น secondary app สำหรับสร้างบัญชีพนักงานใน stores/auth.ts)

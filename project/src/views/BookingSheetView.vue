@@ -156,7 +156,6 @@
 import { JOB_TYPE_CODE, JOB_TYPE_OPTIONS } from '@/utils/jobType'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import * as XLSX from 'xlsx'
 import type { BookingCategory } from '@/types'
 import { useDriversStore } from '@/stores/drivers'
 import { useVehiclesStore } from '@/stores/vehicles'
@@ -405,8 +404,9 @@ const titleRow = () => {
   return `ตารางงานจัดงาน${props.fleet === 'cements' ? 'ปูน' : 'เซรามิก'} ส่งวันที่ ${d}-${m}-${be2}`
 }
 
-const exportExcel = () => {
+const exportExcel = async () => {
   if (!filledRows.value.length) return
+  const XLSX = await import('xlsx') // โหลดตอนกดเท่านั้น (ไลบรารีใหญ่)
   const header = [IMPORT_HEADER_MARKER, ...baseColumns.map((c) => c.key), ...customColumns.value]
   const body = filledRows.value.map((row, i) => [
     i + 1,

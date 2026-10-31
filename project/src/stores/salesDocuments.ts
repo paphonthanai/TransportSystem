@@ -1,5 +1,6 @@
 ﻿import { defineStore } from 'pinia'
 import { trackLoading } from '@/stores/loading'
+import { firstSnapshot } from '@/utils/firstSnapshot'
 import { ref, watch } from 'vue'
 import { useDocumentSettingsStore, type PriceDisplay } from './documentSettings'
 import { useBookingStore } from './booking'
@@ -459,21 +460,39 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   async function fetchAll() {
     loading.value = true
     error.value = null
+    // listener ตัวเดียวต่อ collection ทำทั้งโหลดครั้งแรกและ realtime (เดิมอ่านทั้ง collection 2 รอบ) — snapshot แรก = โหลดเสร็จ
     try {
-      const [docs, docItems] = await Promise.all([salesDocumentRepository.getAll(), salesDocumentItemRepository.getAll()])
-      applyRemoteDocuments(docs)
-      applyRemoteItems(docItems)
+      await Promise.all([
+        firstSnapshot((next, fail) =>
+          salesDocumentRepository.subscribe(
+            (docs) => {
+              applyRemoteDocuments(docs)
+              next()
+            },
+            (err) => {
+              error.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ (เอกสาร)'
+              fail(err)
+            }
+          )
+        ),
+        firstSnapshot((next, fail) =>
+          salesDocumentItemRepository.subscribe(
+            (docItems) => {
+              applyRemoteItems(docItems)
+              next()
+            },
+            (err) => {
+              error.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ (รายการเอกสาร)'
+              fail(err)
+            }
+          )
+        ),
+      ])
     } catch (err: any) {
       error.value = err?.message || 'โหลดเอกสารจาก Firestore ไม่สำเร็จ'
     } finally {
       loading.value = false
     }
-    salesDocumentRepository.subscribe(applyRemoteDocuments, (err) => {
-      error.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ (เอกสาร)'
-    })
-    salesDocumentItemRepository.subscribe(applyRemoteItems, (err) => {
-      error.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ (รายการเอกสาร)'
-    })
   }
 
   trackLoading(fetchAll())

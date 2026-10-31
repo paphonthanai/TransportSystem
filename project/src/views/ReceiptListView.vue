@@ -218,7 +218,6 @@ import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } 
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
-import { exportDocumentsAsPdf } from '@/utils/exportDocumentsPdf'
 import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 
 const router = useRouter()
@@ -428,6 +427,8 @@ const downloadSelectedPdf = async () => {
   exporting.value = true
   exportProgress.value = { done: 0, total: docs.length }
   try {
+    // ตัวทำ PDF (~850 KB รวม html2canvas) โหลดตอนกดส่งออกเท่านั้น
+    const { exportDocumentsAsPdf } = await import('@/utils/exportDocumentsPdf')
     await exportDocumentsAsPdf(docs, mergeIntoOneFile.value ? 'merged' : 'separate', `ใบเสร็จ-${Date.now()}.pdf`, (done, total) => {
       exportProgress.value = { done, total }
     })

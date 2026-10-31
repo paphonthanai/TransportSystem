@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { trackLoading } from '@/stores/loading'
+import { firstSnapshot } from '@/utils/firstSnapshot'
 import { ref } from 'vue'
 import { useBookingStore } from './booking'
 import { useVehiclesStore } from './vehicles'
@@ -157,19 +158,25 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
   async function fetchAll() {
     loading.value = true
     error.value = null
+    // listener ตัวเดียวทำทั้งโหลดครั้งแรกและ realtime (เดิมอ่านทั้ง collection 2 รอบ) — snapshot แรก = โหลดเสร็จ
     try {
-      documents.value = await vehicleIncomeDocumentRepository.getAll()
+      await firstSnapshot((next, fail) =>
+        vehicleIncomeDocumentRepository.subscribe(
+          (docs) => {
+            documents.value = docs
+            next()
+          },
+          (err) => {
+            error.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ (เอกสารรายได้รถร่วม)'
+            fail(err)
+          }
+        )
+      )
     } catch (err: any) {
       error.value = err?.message || 'โหลดเอกสารรายได้รถร่วมจาก Firestore ไม่สำเร็จ'
     } finally {
       loading.value = false
     }
-    vehicleIncomeDocumentRepository.subscribe(
-      (docs) => (documents.value = docs),
-      (err) => {
-        error.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ (เอกสารรายได้รถร่วม)'
-      }
-    )
   }
   trackLoading(fetchAll())
 

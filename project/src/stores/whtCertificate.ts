@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { trackLoading } from '@/stores/loading'
+import { firstSnapshot } from '@/utils/firstSnapshot'
 import { ref } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
@@ -17,21 +18,25 @@ export const useWHTCertificateStore = defineStore('whtCertificate', () => {
   async function fetchCertificates() {
     loading.value = true
     error.value = null
+    // listener ตัวเดียวทำทั้งโหลดครั้งแรกและ realtime (เดิมอ่านทั้ง collection 2 รอบ) — snapshot แรก = โหลดเสร็จ
     try {
-      certificates.value = await whtCertificateRepository.getAll()
+      await firstSnapshot((next, fail) =>
+        whtCertificateRepository.subscribe(
+          (docs) => {
+            certificates.value = docs
+            next()
+          },
+          (err) => {
+            error.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ'
+            fail(err)
+          }
+        )
+      )
     } catch (err: any) {
       error.value = err?.message || 'โหลดหนังสือรับรองหัก ณ ที่จ่ายจาก Firestore ไม่สำเร็จ'
     } finally {
       loading.value = false
     }
-    whtCertificateRepository.subscribe(
-      (remote) => {
-        certificates.value = remote
-      },
-      (err) => {
-        error.value = err?.message || 'เชื่อมต่อ realtime กับ Firestore ไม่สำเร็จ'
-      }
-    )
   }
 
   trackLoading(fetchCertificates())
