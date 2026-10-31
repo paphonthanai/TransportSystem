@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useBookingStore } from './booking'
 import { useAuthStore } from './auth'
 import { useVehiclesStore } from './vehicles'
-import { useVehicleIncomeDocumentsStore, vendorFuelCostOf } from './vehicleIncomeDocuments'
+import { useVehicleIncomeDocumentsStore, vendorAllowanceOf, vendorFuelCostOf } from './vehicleIncomeDocuments'
 import { useVehicleExpensesStore } from './vehicleExpenses'
 import { vehicleIncomeDocumentRepository } from '@/repositories/vehicleIncomeDocumentRepository'
 import { makeBooking } from '../../tests/fixtures/booking'
@@ -340,5 +340,25 @@ describe('รายได้รถร่วม — เบี้ยเลี้�
     const negative = await docs.createVehicleIncomeDocument('veh-1', [a.id], '2026-10', [], { additions: [], deductions: [{ label: 'x', amount: -5 }] })
     expect(negative.ok).toBe(false)
     expect(a.vehicleIncomeDocId).toBeUndefined()
+  })
+})
+
+describe('รายได้รถร่วม — แก้ค่าเบี้ยเลี้ยงเองในหน้ารถร่วม', () => {
+  it('ค่าที่แก้เองทับเบี้ยเลี้ยงของงาน เข้าเอกสาร และ null = กลับไปใช้ของงาน โดยไม่แตะเบี้ยเลี้ยงคนขับ', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings } = await setup()
+    const a = jobOf({ allowance: 400 })
+    bookings.bookings.push(a)
+
+    expect(docs.updateVendorCosts(a.id, { allowance: 650 }).ok).toBe(true)
+    expect(vendorAllowanceOf(a)).toBe(650)
+    expect(a.allowance).toBe(400)
+    expect(docs.updateVendorCosts(a.id, { allowance: null }).ok).toBe(true)
+    expect(vendorAllowanceOf(a)).toBe(400)
+
+    docs.updateVendorCosts(a.id, { allowance: 500 })
+    const doc = (await docs.createVehicleIncomeDocument('veh-1', [a.id], '2026-10')).doc!
+    expect(doc.allowanceTotal).toBe(500)
+    expect(docs.updateVendorCosts(a.id, { allowance: 1 }).ok).toBe(false)
   })
 })

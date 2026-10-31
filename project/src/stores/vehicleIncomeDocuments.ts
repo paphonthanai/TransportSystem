@@ -66,7 +66,6 @@ export interface VehicleIncomeDeduction {
 /** ตัวเลือกการหักที่ผู้ใช้ติ๊กก่อนออกเอกสาร — label ใช้เฉพาะ OTHER (ที่เหลือใช้ชื่อมาตรฐาน) */
 export type VehicleIncomeDeductionOption = { kind: VehicleIncomeDeductionKind; percent: number; label?: string }
 
-export const DEFAULT_DEDUCTION_PERCENT: Record<Exclude<VehicleIncomeDeductionKind, 'OTHER'>, number> = { WHT: 1, SERVICE: 10 }
 const deductionLabelOf = (o: VehicleIncomeDeductionOption) =>
   o.kind === 'WHT' ? 'หักภาษี ณ ที่จ่าย' : o.kind === 'SERVICE' ? 'หักค่าดำเนินการ' : (o.label || '').trim() || 'หักอื่นๆ'
 
@@ -123,8 +122,9 @@ function totalsOf(lines: VehicleIncomeLine[], options: VehicleIncomeDeductionOpt
   }
 }
 
-/** เบี้ยเลี้ยงต่องานของรถร่วม — ยอดหลังกระทบเพิ่ม/ลดหนี้ ถ้ามี (finalAllowance) ไม่งั้นเบี้ยเลี้ยงที่ตั้งไว้ */
-export const vendorAllowanceOf = (b: Pick<Booking, 'finalAllowance' | 'allowance'>) => roundMoney(b.finalAllowance ?? b.allowance ?? 0)
+/** เบี้ยเลี้ยงต่องานของรถร่วม — ค่าที่แก้เองในหน้ารถร่วม (vendorAllowance) ถ้ามี ไม่งั้นเบี้ยเลี้ยงของงาน (หลังเพิ่ม/ลดหนี้ ถ้ามี) */
+export const vendorAllowanceOf = (b: Pick<Booking, 'vendorAllowance' | 'finalAllowance' | 'allowance'>) =>
+  b.vendorAllowance ?? roundMoney(b.finalAllowance ?? b.allowance ?? 0)
 
 /**
  * ค่าน้ำมันต่องานสำหรับรายได้รถร่วม — ระบบคำนวณให้จากลิตร × เรทของงาน ถ้าผู้ใช้แก้เองในตารางหน้ารถร่วม
@@ -389,13 +389,16 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
    * แก้ค่าน้ำมัน/ค่าใช้จ่ายประจำรถต่องาน (บาท, ไม่ติดลบ) — ไม่แตะลิตร/เรทน้ำมันของงาน ส่ง null = ล้างค่าที่แก้เอง กลับไปใช้
    * ค่าที่ระบบคำนวณอัตโนมัติ
    */
-  function updateVendorCosts(bookingId: string, data: { fuelCost?: number | null; vehicleExpense?: number | null }): ActionResult {
+  function updateVendorCosts(
+    bookingId: string,
+    data: { fuelCost?: number | null; vehicleExpense?: number | null; allowance?: number | null }
+  ): ActionResult {
     const bookingStore = useBookingStore()
     const booking = bookingStore.bookings.find((b) => b.id === bookingId)
     if (!booking) return { ok: false, message: 'ไม่พบงาน' }
     const blocked = vendorCostEditBlockedReason(booking)
     if (blocked) return { ok: false, message: blocked }
-    const values = [data.fuelCost, data.vehicleExpense].filter((v) => v !== undefined && v !== null) as number[]
+    const values = [data.fuelCost, data.vehicleExpense, data.allowance].filter((v) => v !== undefined && v !== null) as number[]
     if (values.some((v) => !Number.isFinite(v) || v < 0)) return { ok: false, message: 'จำนวนเงินต้องเป็นตัวเลขไม่ติดลบ' }
     const changes: string[] = []
     if (data.fuelCost !== undefined) {
@@ -407,6 +410,11 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
       const before = vehicleExpenseOf(booking)
       booking.vendorVehicleExpense = data.vehicleExpense === null ? undefined : roundMoney(data.vehicleExpense)
       changes.push(`ค่าใช้จ่ายประจำรถ ${before} → ${vehicleExpenseOf(booking)}${data.vehicleExpense === null ? ' (กลับไปเฉลี่ยอัตโนมัติ)' : ''}`)
+    }
+    if (data.allowance !== undefined) {
+      const before = vendorAllowanceOf(booking)
+      booking.vendorAllowance = data.allowance === null ? undefined : roundMoney(data.allowance)
+      changes.push(`เบี้ยเลี้ยง ${before} → ${vendorAllowanceOf(booking)}${data.allowance === null ? ' (กลับไปใช้เบี้ยเลี้ยงของงาน)' : ''}`)
     }
     if (changes.length) bookingStore.addLog(`แก้ยอดรถร่วม ${booking.docNo}: ${changes.join(', ')} บาท`, { bookingId: booking.id })
     return { ok: true }

@@ -275,6 +275,8 @@ export interface Booking {
   vendorFuelCost?: number
   /** ค่าใช้จ่ายประจำรถ (บาท) ที่ผู้ใช้กรอกเองต่องานในหน้ารถร่วม — แทนยอดสะสมจาก vehicleExpenses ตอนออกเอกสาร */
   vendorVehicleExpense?: number
+  /** เบี้ยเลี้ยง (บาท) ที่ผู้ใช้แก้เองในหน้ารถร่วม — ไม่มีค่า = ใช้เบี้ยเลี้ยงของงาน (finalAllowance ?? allowance) ไม่แตะเบี้ยเลี้ยงคนขับ */
+  vendorAllowance?: number
   /** สถานะตรวจสอบ POD ของออฟฟิศ (ดู PodReviewStatus) — ไม่มีค่า = ไม่ผ่านขั้นตอนนี้ (งานที่ออฟฟิศจบเอง) หรือยังไม่จบงาน */
   podReviewStatus?: PodReviewStatus
   /** เหตุผลที่ออฟฟิศ REJECTED (ถ้ามี) ให้คนขับเห็นว่าต้องแก้อะไร */

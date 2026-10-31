@@ -150,11 +150,15 @@
         <!-- ก่อนออกเอกสาร: หัก % (คิดจากรายได้จากงาน) + รายได้ส่วนเพิ่ม/หักค่าใช้จ่ายที่พิมพ์เอง — แบบเดียวกับรถร่วม -->
         <div v-if="createPanelOpen && selectedIds.size > 0" class="mb-3 rounded-lg border border-primary/40 bg-surface-2 p-4 space-y-3 text-sm">
           <div class="font-semibold text-text">รายการหัก % (คิดจากรายได้จากงาน {{ formatBaht(selectedIncomeTotal) }})</div>
-          <label class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <input type="checkbox" v-model="deductWht" class="w-4 h-4" />
-            <span class="flex-1">หักภาษี ณ ที่จ่าย {{ DRIVER_WHT_PERCENT }}%</span>
-            <span v-if="deductWht" class="tabular-nums text-red-600">-{{ formatBaht(previewPercent(DRIVER_WHT_PERCENT)) }}</span>
-          </label>
+            <span>หักภาษี ณ ที่จ่าย</span>
+            <template v-if="deductWht">
+              <input v-model.number="whtPercent" type="number" min="0" max="100" step="0.01" placeholder="%" class="input-field !h-8 w-24 text-right" />
+              <span>%</span>
+              <span class="flex-1 text-right tabular-nums text-red-600">-{{ formatBaht(previewPercent(whtPercent || 0)) }}</span>
+            </template>
+          </div>
           <div class="flex items-center gap-2 flex-wrap">
             <input type="checkbox" v-model="deductOther" class="w-4 h-4" />
             <span>หักอื่นๆ</span>
@@ -324,7 +328,6 @@ import { useBookingStore } from '@/stores/booking'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import {
-  DRIVER_WHT_PERCENT,
   percentDeductionItems,
   useDriverPayrollDocumentsStore,
   type DriverPayrollPercentDeduction,
@@ -492,6 +495,8 @@ const creating = ref(false)
 const createPanelOpen = ref(false)
 const deductWht = ref(false)
 const deductOther = ref(false)
+/** % หักภาษีให้ผู้ใช้กรอกเองทุกครั้ง (ไม่มีค่าตั้งต้น) */
+const whtPercent = ref<number | undefined>()
 const otherLabel = ref('')
 const otherPercent = ref<number>(0)
 const adjustments = ref<IncomeAdjustments>(emptyAdjustments())
@@ -500,7 +505,7 @@ const openCreatePanel = () => {
   createPanelOpen.value = true
 }
 const percentDeductions = computed<DriverPayrollPercentDeduction[]>(() => [
-  ...(deductWht.value ? [{ kind: 'WHT' as const, percent: DRIVER_WHT_PERCENT }] : []),
+  ...(deductWht.value ? [{ kind: 'WHT' as const, percent: Number(whtPercent.value) }] : []),
   ...(deductOther.value ? [{ kind: 'OTHER' as const, percent: Number(otherPercent.value), label: otherLabel.value }] : []),
 ])
 const previewPercent = (percent: number) => percentDeductionItems(selectedIncomeTotal.value, [{ kind: 'WHT', percent }])[0].amount

@@ -18,6 +18,11 @@
         </button>
       </div>
       <input v-model="period" type="month" class="input-field" />
+      <select v-model="docStatusFilter" class="input-field" title="สถานะเอกสารรายได้ของงานในรอบนี้">
+        <option value="ALL">สถานะเอกสาร: ทั้งหมด</option>
+        <option value="NOT_ISSUED">ยังไม่ได้ออก</option>
+        <option value="ISSUED">ออกเอกสารแล้ว</option>
+      </select>
       <button @click="exportSummary" class="btn-secondary ml-auto">
         <span class="material-symbols-rounded text-base">download</span>
         นำออกเป็น Excel
@@ -56,16 +61,20 @@
             <th v-if="isCompanyFleet" class="px-4 py-3 font-semibold text-right">ค่าแรงคนขับ</th>
             <th class="px-4 py-3 font-semibold text-right">ค่าใช้จ่ายประจำรถ</th>
             <th class="px-4 py-3 font-semibold text-right">ยอดสุทธิ</th>
+            <th class="px-4 py-3 font-semibold">สถานะเอกสาร</th>
             <th class="px-4 py-3 font-semibold"></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in vehicleRows" :key="row.vehicle.id" class="border-t border-border hover:bg-surface-2 transition-colors">
+          <tr v-for="row in displayedRows" :key="row.vehicle.id" class="border-t border-border hover:bg-surface-2 transition-colors">
             <td class="px-4 py-3 font-semibold text-text">{{ vehiclesStore.fullPlate(row.vehicle) }}</td>
             <td class="px-4 py-3 text-muted">{{ row.vehicle.department }}</td>
             <td class="px-4 py-3 text-right text-text">{{ row.trips }}</td>
             <td class="px-4 py-3 text-right text-green-600">{{ formatBaht(row.income) }}</td>
-            <td v-if="!isCompanyFleet" class="px-4 py-3 text-right text-green-600">+{{ formatBaht(row.allowance) }}</td>
+            <td v-if="!isCompanyFleet" class="px-4 py-3 text-right text-green-600">
+              +{{ formatBaht(row.allowance) }}
+              <RouterLink :to="{ path: `/payroll/vendor-fleet/${row.vehicle.id}`, query: { period } }" class="edit-link ml-1" title="แก้ค่าเบี้ยเลี้ยงต่องานที่หน้ารายละเอียดรถ"><span class="material-symbols-rounded text-sm">edit</span>แก้</RouterLink>
+            </td>
             <td class="px-4 py-3 text-right text-red-500">
               -{{ formatBaht(row.fuelCost) }}
               <RouterLink :to="`/payroll/vendor-fleet/${row.vehicle.id}`" class="edit-link ml-1" title="แก้ค่าน้ำมันต่องานที่หน้ารายละเอียดรถ"><span class="material-symbols-rounded text-sm">edit</span>แก้</RouterLink>
@@ -76,6 +85,11 @@
               <RouterLink :to="`/payroll/vendor-fleet/${row.vehicle.id}`" class="edit-link ml-1" title="แก้ค่าใช้จ่ายประจำรถต่องานที่หน้ารายละเอียดรถ"><span class="material-symbols-rounded text-sm">edit</span>แก้</RouterLink>
             </td>
             <td class="px-4 py-3 text-right font-bold text-text">{{ formatBaht(row.net) }}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              <span v-if="row.trips === 0" class="text-xs text-muted">-</span>
+              <span v-else-if="row.notIssued === 0" class="text-xs font-semibold px-2 py-1 rounded-full bg-orange-100 text-orange-700">ออกเอกสารแล้ว</span>
+              <span v-else class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">ยังไม่ได้ออก {{ row.notIssued }} งาน</span>
+            </td>
             <td class="px-4 py-3 text-right">
               <RouterLink :to="{ path: `/payroll/vendor-fleet/${row.vehicle.id}`, query: { period } }" class="btn-sm" title="เลือกงาน/สร้างเอกสารรายได้">
                 <span class="material-symbols-rounded text-sm">receipt_long</span>
@@ -83,8 +97,8 @@
               </RouterLink>
             </td>
           </tr>
-          <tr v-if="vehicleRows.length === 0">
-            <td :colspan="isCompanyFleet ? 9 : 8" class="px-4 py-8 text-center text-muted">{{ isCompanyFleet ? 'ยังไม่มีรถบริษัท' : 'ยังไม่มีรถร่วมในหมวดที่เลือก' }}</td>
+          <tr v-if="displayedRows.length === 0">
+            <td :colspan="10" class="px-4 py-8 text-center text-muted">{{ isCompanyFleet ? 'ยังไม่มีรถบริษัท' : 'ยังไม่มีรถร่วมในหมวดที่เลือก' }}</td>
           </tr>
         </tbody>
       </table>
@@ -176,8 +190,17 @@ const vehicleRows = computed(() =>
     /** รถร่วม/รถหุ้นส่วน: เบี้ยเลี้ยงบวกเพิ่มให้เจ้าของรถ (สูตรเดียวกับเอกสารรายได้รถร่วม) */
     const allowance = isCompanyFleet.value ? 0 : bookings.reduce((sum, b) => sum + vendorAllowanceOf(b), 0)
     const net = income + allowance - fuelTotal - driverWage - vehicleExpense
-    return { vehicle, trips, income, allowance, fuelCost: fuelTotal, driverWage, vehicleExpense, net }
+    const notIssued = bookings.filter((b) => !b.vehicleIncomeDocId).length
+    return { vehicle, trips, income, allowance, fuelCost: fuelTotal, driverWage, vehicleExpense, net, notIssued }
   })
+)
+
+/** กรองตามสถานะเอกสารรายได้ของงานในรอบนี้ — ยังไม่ได้ออก = มีงานที่ยังไม่ออกเอกสารอย่างน้อย 1 งาน, ออกแล้ว = ออกครบทุกงาน */
+const docStatusFilter = ref<'ALL' | 'ISSUED' | 'NOT_ISSUED'>('ALL')
+const displayedRows = computed(() =>
+  vehicleRows.value.filter((r) =>
+    docStatusFilter.value === 'NOT_ISSUED' ? r.notIssued > 0 : docStatusFilter.value === 'ISSUED' ? r.trips > 0 && r.notIssued === 0 : true
+  )
 )
 
 const grandTotals = computed(() =>

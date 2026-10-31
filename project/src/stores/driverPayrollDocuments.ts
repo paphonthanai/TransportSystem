@@ -45,7 +45,6 @@ export interface DriverPayrollLineItem {
 
 /** หัก % ตอนออกเอกสารคนขับ คิดจากรายได้จากงาน (tripIncomeTotal) — label ใช้เฉพาะ OTHER */
 export type DriverPayrollPercentDeduction = { kind: 'WHT' | 'OTHER'; percent: number; label?: string }
-export const DRIVER_WHT_PERCENT = 3
 
 /** สิ่งที่ผู้ใช้เลือก/พิมพ์เองตอนออกเอกสาร: หัก % + รายได้ส่วนเพิ่ม/หักค่าใช้จ่าย (ระบุรายละเอียด/ราคาเอง) */
 export type DriverPayrollExtras = { percentDeductions?: DriverPayrollPercentDeduction[]; adjustments?: IncomeAdjustments }

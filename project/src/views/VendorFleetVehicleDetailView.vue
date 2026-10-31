@@ -92,7 +92,6 @@
               <input v-model="search" type="text" placeholder="ค้นหาเลขที่งาน / คนขับ / รายละเอียดงาน" class="input-field w-full !pl-8" />
             </div>
             <select v-model="docStatusFilter" class="input-field">
-              <option value="ALL">สถานะเอกสาร: ทั้งหมด</option>
               <option value="NOT_ISSUED">ยังไม่ได้ออก</option>
               <option value="ISSUED">ออกเอกสารแล้ว</option>
             </select>
@@ -112,16 +111,24 @@
         <!-- เลือกรายการหักก่อนออกเอกสาร — คิด % จากรายได้จากงาน (ยอดจริง) ของงานที่เลือก -->
         <div v-if="deductionPanelOpen && selectedIds.size > 0" class="mb-3 rounded-lg border border-primary/40 bg-surface-2 p-4 space-y-3 text-sm">
           <div class="font-semibold text-text">รายการหัก (คิดจากรายได้จากงาน {{ formatBaht(selectedTripTotal) }})</div>
-          <label class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <input type="checkbox" v-model="deductWht" class="w-4 h-4" />
-            <span class="flex-1">หักภาษี ณ ที่จ่าย 1%</span>
-            <span v-if="deductWht" class="tabular-nums text-red-600">-{{ formatBaht(previewAmount(DEFAULT_DEDUCTION_PERCENT.WHT)) }}</span>
-          </label>
-          <label class="flex items-center gap-2">
+            <span>หักภาษี ณ ที่จ่าย</span>
+            <template v-if="deductWht">
+              <input v-model.number="whtPercent" type="number" min="0" max="100" step="0.01" placeholder="%" class="input-field !h-8 w-24 text-right" />
+              <span>%</span>
+              <span class="flex-1 text-right tabular-nums text-red-600">-{{ formatBaht(previewAmount(whtPercent || 0)) }}</span>
+            </template>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
             <input type="checkbox" v-model="deductService" class="w-4 h-4" />
-            <span class="flex-1">หักค่าดำเนินการ 10%</span>
-            <span v-if="deductService" class="tabular-nums text-red-600">-{{ formatBaht(previewAmount(DEFAULT_DEDUCTION_PERCENT.SERVICE)) }}</span>
-          </label>
+            <span>หักค่าดำเนินการ</span>
+            <template v-if="deductService">
+              <input v-model.number="servicePercent" type="number" min="0" max="100" step="0.01" placeholder="%" class="input-field !h-8 w-24 text-right" />
+              <span>%</span>
+              <span class="flex-1 text-right tabular-nums text-red-600">-{{ formatBaht(previewAmount(servicePercent || 0)) }}</span>
+            </template>
+          </div>
           <div class="flex items-center gap-2 flex-wrap">
             <input type="checkbox" v-model="deductOther" class="w-4 h-4" />
             <span>หักอื่นๆ</span>
@@ -183,9 +190,7 @@
               <td class="px-3 py-2 text-muted">{{ formatDate(row.booking.shipDate || row.booking.completedAt) }}</td>
               <td class="px-3 py-2 text-text">{{ row.booking.driverName || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ destinationLabel(row.booking) }}</td>
-              <template v-for="field in moneyFields" :key="field">
-              <td v-if="field === 'fuelCost'" class="px-3 py-2 text-right whitespace-nowrap text-text">{{ formatBaht(row.allowance) }}</td>
-              <td class="px-3 py-2 text-right whitespace-nowrap">
+              <td v-for="field in moneyFields" :key="field" class="px-3 py-2 text-right whitespace-nowrap">
                 <div v-if="isEditing(row.booking.id, field)" class="flex items-center justify-end gap-1">
                   <input v-model.number="draft" type="number" min="0" step="0.01" class="input-field h-8 w-28 text-right text-xs" @keyup.enter="saveCell" />
                   <button @click="saveCell" class="btn-xs">บันทึก</button>
@@ -204,11 +209,10 @@
                       แก้เอง
                       <button v-if="!cellBlockedReason(row.booking, field)" @click="resetCell(row.booking, field)" class="edit-link" title="กลับไปใช้ค่าที่ระบบคำนวณ">คำนวณใหม่</button>
                     </template>
-                    <template v-else>อัตโนมัติ</template>
+                    <template v-else>{{ field === 'allowance' ? 'ตามงาน' : 'อัตโนมัติ' }}</template>
                   </div>
                 </template>
               </td>
-              </template>
               <td class="px-3 py-2">
                 <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[row.booking.status]]">{{ bookingStatusLabel[row.booking.status] }}</span>
               </td>
@@ -303,7 +307,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useDriversStore } from '@/stores/drivers'
 import { isMultiPricing, useBookingStore } from '@/stores/booking'
 import {
-  DEFAULT_DEDUCTION_PERCENT,
   computeDeductions,
   useVehicleIncomeDocumentsStore,
   vendorFuelCostOf,
@@ -377,7 +380,7 @@ const netTotal = computed(() => totalTripFee.value + totalAllowance.value - tota
 
 /** ค้นหา (เลขที่งาน/คนขับ/รายละเอียดงาน) + กรองสถานะเอกสาร — การ์ดสรุปด้านบนยังเป็นยอดทั้งรอบ */
 const search = ref('')
-const docStatusFilter = ref<'ALL' | 'ISSUED' | 'NOT_ISSUED'>('ALL')
+const docStatusFilter = ref<'ISSUED' | 'NOT_ISSUED'>('NOT_ISSUED')
 const displayedRows = computed(() => {
   const q = search.value.trim().toLowerCase()
   return rows.value.filter((r) => {
@@ -387,7 +390,11 @@ const displayedRows = computed(() => {
     return [r.booking.docNo, r.booking.driverName, ...r.booking.items.map((i) => i.siteName)].some((v) => (v || '').toLowerCase().includes(q))
   })
 })
-const manualCostCount = computed(() => rows.value.filter((r) => r.booking.vendorFuelCost !== undefined || r.booking.vendorVehicleExpense !== undefined).length)
+const manualCostCount = computed(
+  () =>
+    rows.value.filter((r) => r.booking.vendorFuelCost !== undefined || r.booking.vendorVehicleExpense !== undefined || r.booking.vendorAllowance !== undefined)
+      .length
+)
 
 const destinationLabel = (booking: { items: { siteName: string }[] }) => {
   if (!booking.items.length) return '-'
@@ -399,19 +406,33 @@ const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH',
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
 /** inline "แก้" ในตาราง — ค่าเที่ยวผ่าน updateBookingPrice (กฎเดิม + ล็อกเมื่อออกเอกสารรายได้รถแล้ว), ค่าน้ำมัน/ค่าใช้จ่ายประจำรถผ่าน updateVendorCosts */
-type MoneyField = 'tripFee' | 'fuelCost' | 'vehicleExpense'
-const moneyFields: MoneyField[] = ['tripFee', 'fuelCost', 'vehicleExpense']
-const fieldLabel: Record<MoneyField, string> = { tripFee: 'ค่าเที่ยว', fuelCost: 'ค่าน้ำมัน', vehicleExpense: 'ค่าใช้จ่ายประจำรถ' }
+type MoneyField = 'tripFee' | 'allowance' | 'fuelCost' | 'vehicleExpense'
+const moneyFields: MoneyField[] = ['tripFee', 'allowance', 'fuelCost', 'vehicleExpense']
+const fieldLabel: Record<MoneyField, string> = { tripFee: 'ค่าเที่ยว', allowance: 'ค่าเบี้ยเลี้ยง', fuelCost: 'ค่าน้ำมัน', vehicleExpense: 'ค่าใช้จ่ายประจำรถ' }
+/** ช่องที่แก้ผ่าน updateVendorCosts (แก้เอง/คำนวณใหม่ได้) */
+const VENDOR_COST_KEY: Record<Exclude<MoneyField, 'tripFee'>, 'fuelCost' | 'vehicleExpense' | 'allowance'> = {
+  allowance: 'allowance',
+  fuelCost: 'fuelCost',
+  vehicleExpense: 'vehicleExpense',
+}
 const editingCell = ref<{ bookingId: string; field: MoneyField } | null>(null)
 const draft = ref<number>(0)
 const actionError = ref('')
 
 const cellValue = (b: Booking, field: MoneyField) =>
-  field === 'tripFee' ? b.tripFee || 0 : field === 'fuelCost' ? vendorFuelCostOf(b) : vehicleIncomeDocumentsStore.vehicleExpenseOf(b)
-const isManual = (b: Booking, field: MoneyField) => (field === 'fuelCost' ? b.vendorFuelCost !== undefined : b.vendorVehicleExpense !== undefined)
+  field === 'tripFee'
+    ? b.tripFee || 0
+    : field === 'allowance'
+      ? vendorAllowanceOf(b)
+      : field === 'fuelCost'
+        ? vendorFuelCostOf(b)
+        : vehicleIncomeDocumentsStore.vehicleExpenseOf(b)
+const isManual = (b: Booking, field: MoneyField) =>
+  field === 'allowance' ? b.vendorAllowance !== undefined : field === 'fuelCost' ? b.vendorFuelCost !== undefined : b.vendorVehicleExpense !== undefined
 const resetCell = (b: Booking, field: MoneyField) => {
+  if (field === 'tripFee') return
   actionError.value = ''
-  const result = vehicleIncomeDocumentsStore.updateVendorCosts(b.id, field === 'fuelCost' ? { fuelCost: null } : { vehicleExpense: null })
+  const result = vehicleIncomeDocumentsStore.updateVendorCosts(b.id, { [VENDOR_COST_KEY[field]]: null })
   if (!result.ok) actionError.value = result.message || 'บันทึกไม่สำเร็จ'
 }
 const cellBlockedReason = (b: Booking, field: MoneyField) => {
@@ -435,7 +456,7 @@ const saveCell = () => {
       ? Number.isFinite(value) && value >= 0
         ? bookingStore.updateBookingPrice(bookingId, { tripFee: value, agreedPrice: value })
         : { ok: false, message: 'ค่าเที่ยวต้องเป็นตัวเลขไม่ติดลบ' }
-      : vehicleIncomeDocumentsStore.updateVendorCosts(bookingId, field === 'fuelCost' ? { fuelCost: value } : { vehicleExpense: value })
+      : vehicleIncomeDocumentsStore.updateVendorCosts(bookingId, { [VENDOR_COST_KEY[field]]: value })
   if (!result.ok) {
     actionError.value = result.message || 'บันทึกไม่สำเร็จ'
     return
@@ -465,6 +486,9 @@ const selectedTripTotal = computed(() => rows.value.filter((r) => selectedIds.va
 const deductionPanelOpen = ref(false)
 const deductWht = ref(false)
 const deductService = ref(false)
+/** % หักภาษี/ค่าดำเนินการ ให้ผู้ใช้กรอกเองทุกครั้ง (ไม่มีค่าตั้งต้น) */
+const whtPercent = ref<number | undefined>()
+const servicePercent = ref<number | undefined>()
 const deductOther = ref(false)
 const otherLabel = ref('')
 const otherPercent = ref<number>(0)
@@ -473,8 +497,8 @@ const openDeductionPanel = () => {
   deductionPanelOpen.value = true
 }
 const deductionOptions = computed<VehicleIncomeDeductionOption[]>(() => [
-  ...(deductWht.value ? [{ kind: 'WHT' as const, percent: DEFAULT_DEDUCTION_PERCENT.WHT }] : []),
-  ...(deductService.value ? [{ kind: 'SERVICE' as const, percent: DEFAULT_DEDUCTION_PERCENT.SERVICE }] : []),
+  ...(deductWht.value ? [{ kind: 'WHT' as const, percent: Number(whtPercent.value) }] : []),
+  ...(deductService.value ? [{ kind: 'SERVICE' as const, percent: Number(servicePercent.value) }] : []),
   ...(deductOther.value ? [{ kind: 'OTHER' as const, percent: Number(otherPercent.value), label: otherLabel.value }] : []),
 ])
 const previewAmount = (percent: number) => computeDeductions(selectedTripTotal.value, [{ kind: 'WHT', percent }])[0].amount
