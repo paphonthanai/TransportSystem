@@ -1,12 +1,12 @@
 import type { Booking, BookingStatus } from '@/types'
 
-/** ลำดับสถานะของตาราง "งานที่กำลังขนส่ง": ส่งของเสร็จสิ้น → กำลังส่งของ → คนขับตอบรับแล้ว (สถานะอื่นไปท้ายสุด) */
+/** ลำดับสถานะของตาราง "งานที่กำลังขนส่ง": ส่งของเสร็จสิ้น → กำลังส่งของ → คนขับตอบรับแล้ว → รอคนขับตอบรับ (สถานะอื่นไปท้ายสุด) */
 const IN_TRANSIT_STATUS_RANK: Partial<Record<BookingStatus, number>> = {
   DELIVERED: 0,
   DELIVERING: 1,
   IN_TRANSIT: 1,
   ACCEPTED: 2,
-  ASSIGNED: 2,
+  ASSIGNED: 3,
 }
 
 const dayValue = (date?: Date) => {

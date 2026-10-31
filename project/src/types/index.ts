@@ -297,6 +297,8 @@ export interface Booking {
   batchId?: string
   createdAt: Date
   dispatchedAt?: Date
+  /** เวลาที่คนขับกด "ตอบรับงาน" ในแอปคนขับ (ASSIGNED -> ACCEPTED) */
+  acceptedAt?: Date
   /** เที่ยวที่ (1, 2, 3…) ของคนขับ/รถนี้ในวันขนส่งเดียวกัน — ตั้งจากไฟล์ import/หน้าจัดเที่ยว/ตอนจัดรถ ไม่ผูกกับลำดับที่กดจ่ายงาน
    *  (แอปคนขับโชว์ปุ่มยืนยันที่เที่ยวต่ำสุดก่อน) undefined = งานเก่า/ยังไม่ระบุ → fallback ลำดับเวลาจ่ายงานเดิม ดู utils/tripSequence.ts */
   tripSequence?: number

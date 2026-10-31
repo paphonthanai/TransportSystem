@@ -26,18 +26,32 @@ describe('pickupJobItem', () => {
   })
 })
 
-describe('dispatchBooking — ตัดขั้น ASSIGNED/รอคนขับตอบรับออกแล้ว', () => {
-  it('จัดรถจาก WAITING_DISPATCH ไปที่ ACCEPTED ตรงๆ ไม่ผ่าน ASSIGNED', () => {
+describe('dispatchBooking — จัดรถแล้วรอคนขับตอบรับ (ASSIGNED)', () => {
+  it('จัดรถจาก WAITING_DISPATCH ไปที่ ASSIGNED แล้วคนขับกดตอบรับ -> ACCEPTED', () => {
     const store = useBookingStore()
     const booking = makeBooking({ status: 'WAITING_DISPATCH' })
     store.bookings.push(booking)
 
     store.dispatchBooking(booking.id, '70-8821 สระบุรี', { driverName: 'คนขับทดสอบ' })
 
-    expect(booking.status).toBe('ACCEPTED')
+    expect(booking.status).toBe('ASSIGNED')
     expect(booking.plate).toBe('70-8821 สระบุรี')
     expect(booking.driverName).toBe('คนขับทดสอบ')
     expect(booking.dispatchedAt).toBeInstanceOf(Date)
+
+    store.acceptDispatch(booking.id)
+    expect(booking.status).toBe('ACCEPTED')
+    expect(booking.acceptedAt).toBeInstanceOf(Date)
+  })
+
+  it('เปลี่ยนคนขับหลังคนเดิมตอบรับแล้ว (ยังไม่เริ่มขนส่ง) = กลับไปรอคนขับใหม่ตอบรับ; คนขับเดิมแค่เปลี่ยนรถ = คงสถานะ', () => {
+    const store = useBookingStore()
+    const booking = makeBooking({ status: 'ACCEPTED', plate: 'เก่า-1', driverId: 'drv-a', driverName: 'คนขับเอ' })
+    store.bookings.push(booking)
+    store.dispatchBooking(booking.id, 'ใหม่-2', { driverId: 'drv-a', driverName: 'คนขับเอ' })
+    expect(booking.status).toBe('ACCEPTED')
+    store.dispatchBooking(booking.id, 'ใหม่-2', { driverId: 'drv-b', driverName: 'คนขับบี' })
+    expect(booking.status).toBe('ASSIGNED')
   })
 
   it('declineDispatch (ปุ่ม "ยกเลิกจ่ายงาน") ใช้ได้ตอน ACCEPTED เพราะเป็นระยะแรกสุดหลังจัดรถแล้วตอนนี้', () => {
@@ -52,7 +66,7 @@ describe('dispatchBooking — ตัดขั้น ASSIGNED/รอคนขั�
     expect(booking.driverName).toBeUndefined()
   })
 
-  it('declineDispatch ยังรองรับ ASSIGNED เผื่อมีข้อมูลเก่าค้างอยู่ (backward-compat)', () => {
+  it('declineDispatch ใช้ได้ตอน ASSIGNED (รอคนขับตอบรับ)', () => {
     const store = useBookingStore()
     const booking = makeBooking({ status: 'ASSIGNED', plate: '70-8821 สระบุรี', driverName: 'คนขับทดสอบ' })
     store.bookings.push(booking)

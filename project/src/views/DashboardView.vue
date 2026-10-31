@@ -461,7 +461,7 @@ const invoicesThisMonth = computed(() => {
 const todayLabel = new Date().toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
 // ---------- สถานะงานตอนนี้ ----------
-const IN_TRANSIT_STATUSES = ['ACCEPTED', 'FUEL_RECEIVED', 'LOADING', 'LOADED', 'IN_TRANSIT', 'DELIVERING']
+const IN_TRANSIT_STATUSES = ['ASSIGNED', 'ACCEPTED', 'FUEL_RECEIVED', 'LOADING', 'LOADED', 'IN_TRANSIT', 'DELIVERING']
 const waitingDispatchCount = computed(() => bookingStore.bookings.filter((b) => b.status === 'WAITING_DISPATCH').length)
 const inTransitCount = computed(() => bookingStore.bookings.filter((b) => IN_TRANSIT_STATUSES.includes(b.status)).length)
 const podReviewCount = computed(() => bookingStore.bookings.filter((b) => b.podReviewStatus === 'PENDING_REVIEW').length)

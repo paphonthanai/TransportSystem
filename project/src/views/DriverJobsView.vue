@@ -139,8 +139,17 @@
                ACCEPTED จะโชว์น้ำมัน+สินค้า/จำนวน แล้วบังคับถ่ายรูปขึ้นสินค้าก่อนไปขั้นต่อไป (ดู DriverJobDetailView.vue)
                — "แสดงรายละเอียด" เปิด card ดูข้อมูลแบบไม่นำทางออกจากหน้ารายการ -->
           <div class="flex gap-2 mt-3 pt-3 border-t border-border" @click.stop>
+            <!-- งานที่เพิ่งจัดรถ (ASSIGNED) — คนขับต้องกดตอบรับก่อน ออฟฟิศถึงเห็นสถานะ "คนขับตอบรับแล้ว" -->
             <button
-              v-if="job.id === latestAcceptedJob?.id || (DRIVER_CAN_PICK_TRIP && job.status === 'ACCEPTED')"
+              v-if="job.status === 'ASSIGNED'"
+              @click="bookingStore.acceptDispatch(job.id)"
+              class="flex-1 h-10 rounded-lg bg-green-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-green-700"
+            >
+              <span class="material-symbols-rounded text-base">thumb_up</span>
+              ตอบรับงาน
+            </button>
+            <button
+              v-else-if="job.id === latestAcceptedJob?.id || (DRIVER_CAN_PICK_TRIP && job.status === 'ACCEPTED')"
               @click="router.push(`/driver-app/job/${job.id}`)"
               class="flex-1 h-10 rounded-lg bg-teal-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-teal-700"
             >

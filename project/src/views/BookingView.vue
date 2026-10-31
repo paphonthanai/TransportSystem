@@ -136,13 +136,13 @@
           </div>
           <div class="p-6 space-y-4 text-sm">
             <div class="text-xs text-muted">
-              เกณฑ์: เลขที่งานซ้ำกัน หรือวันที่ลงงาน + ลูกค้า + เลขที่ PO + คนขับ/รถ + หน้างาน + สินค้า/จำนวน เหมือนกันทุกอย่าง —
+              เกณฑ์: เลข PO ลูกค้า (เลขชิพเม้น) ซ้ำกันในลูกค้าเดียวกัน หรือเลขที่งานซ้ำกัน — งานที่ไม่มีเลข PO ลูกค้าไม่ถูกตรวจ —
               งานแรก (สร้างก่อน) น่าจะเป็นต้นฉบับ ลบได้เฉพาะผู้ดูแลระบบ
             </div>
             <div v-if="!activeDuplicateGroups.length" class="text-center text-muted py-6">ไม่มีงานที่อาจซ้ำแล้ว</div>
             <div v-for="group in activeDuplicateGroups" :key="duplicateGroupKey(group)" class="rounded-lg border border-border">
               <div class="flex items-center justify-between gap-2 px-3 py-2 bg-surface-2 rounded-t-lg">
-                <span class="font-semibold">{{ group.reason === 'SAME_DOC_NO' ? `เลขที่งานซ้ำ: ${group.bookings[0].docNo}` : `เนื้อหาเหมือนกัน: ${group.bookings[0].customer} · ${destinationLabel(group.bookings[0])}` }}</span>
+                <span class="font-semibold">{{ group.reason === 'SAME_DOC_NO' ? `เลขที่งานซ้ำ: ${group.bookings[0].docNo}` : `เลข PO ลูกค้าซ้ำ: ${group.bookings[0].reference} · ${group.bookings[0].customer}` }}</span>
                 <button @click="dismissDuplicateGroup(group)" class="btn-sm">ไม่ใช่งานซ้ำ</button>
               </div>
               <table class="w-full text-xs">
@@ -168,6 +168,21 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- งานที่จัดคนขับแล้วแต่ไม่มีรหัสคนขับที่ตรงทะเบียน — แอปคนขับดึงงานด้วยรหัสคนขับ งานพวกนี้จึงไม่ขึ้นในแอป -->
+    <div v-if="unlinkedDriverJobs.length" class="rounded-lg border border-red-200 bg-red-50 text-red-800 text-sm p-3 flex items-start gap-3 flex-wrap">
+      <span class="material-symbols-rounded">phonelink_off</span>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold">มี {{ unlinkedDriverJobs.length }} งานที่ไม่ขึ้นในแอปคนขับ (ไม่มีรหัสคนขับที่ตรงกับทะเบียน)</div>
+        <div class="text-xs mt-1 break-words">
+          <span v-for="p in unlinkedDriverJobs" :key="p.booking.id" class="mr-3 inline-block">
+            {{ p.booking.docNo }} · {{ p.booking.driverName }}
+            <span v-if="!p.driver" class="font-semibold">(ไม่พบชื่อในทะเบียน — จัดรถใหม่ แล้วเลือกคนขับจากรายชื่อ)</span>
+          </span>
+        </div>
+      </div>
+      <button v-if="canLinkDrivers && unlinkedDriverJobs.some((p) => p.driver)" @click="linkUnlinkedDrivers" class="btn-sm">ผูกรหัสคนขับให้งานเหล่านี้</button>
+    </div>
 
     <!-- In-progress Table -->
     <div>
@@ -1109,7 +1124,7 @@ import DriverJobDetailsContent from '@/components/booking/DriverJobDetailsConten
 import { compareInTransitBookings } from '@/utils/inTransitSort'
 import { tripNumberChoices as tripNumberChoicesFor } from '@/utils/driverDayTrips'
 import { normalizeDriverName } from '@/utils/driverIdentity'
-import { bookingFingerprint, duplicateGroupKey, findDuplicateGroups, fingerprintOf, type DuplicateGroup } from '@/utils/bookingDuplicates'
+import { bookingShipmentKey, duplicateGroupKey, findDuplicateGroups, shipmentKey, type DuplicateGroup } from '@/utils/bookingDuplicates'
 import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -1178,7 +1193,24 @@ const isAdmin = computed(() => authStore.role === 'ADMIN')
 const canSelectDelete = computed(() => authStore.role === 'ADMIN' || authStore.role === 'STAFF')
 
 /** หาคนขับจากชื่อเต็ม รองรับทั้งแบบมีคำนำหน้าและไม่มี (เดิมเคยอยู่ใน driversStore.findDriverByVehicle) */
-const findDriverByName = (name: string) => driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
+const findDriverByName = (name: string) => {
+  const exact = driversStore.drivers.find((d) => driversStore.fullName(d) === name || `${d.firstName} ${d.lastName}` === name)
+  if (exact) return exact
+  // ชื่อมีช่องว่างซ้อน/คำนำหน้าต่างจากทะเบียน — ใช้ได้เฉพาะเมื่อตรงกันคนเดียว (กันผูกผิดคน)
+  const key = normalizeDriverName(name)
+  const loose = key ? driversStore.drivers.filter((d) => normalizeDriverName(`${d.firstName}${d.lastName}`) === key) : []
+  return loose.length === 1 ? loose[0] : undefined
+}
+
+/** งานที่จัดคนขับแล้วแต่ไม่ขึ้นในแอปคนขับ (ไม่มีรหัสคนขับ/รหัสไม่อยู่ในทะเบียน) ของ Fleet นี้ */
+const unlinkedDriverJobs = computed(() =>
+  bookingStore.bookingsMissingDriverLink(driversStore.drivers).filter((p) => p.booking.category === props.fleet)
+)
+const canLinkDrivers = computed(() => authStore.role === 'ADMIN' || authStore.role === 'DISPATCHER')
+const linkUnlinkedDrivers = () => {
+  const result = bookingStore.linkMissingDriverIds(driversStore.drivers)
+  if (!result.ok) alert(result.message)
+}
 
 /** ต่อ matchDriverForImport (จาก importRowParser.ts) เข้ากับ driversStore/vehiclesStore จริง แล้วคืนแค่ {id, fullName}
  *  ให้ parseImportRow ใช้ต่อ — แยกโมดูล parser ออกไม่ให้ผูกกับ Pinia store ตรงๆ จะได้เทสแยกได้จริงโดยไม่ต้อง mock store */
@@ -1471,6 +1503,7 @@ const inProgressBookings = computed(() => {
     .filter(
       (b) =>
         b.status !== 'DELIVERED' &&
+        b.status !== 'ASSIGNED' &&
         b.status !== 'ACCEPTED' &&
         b.status !== 'IN_TRANSIT' &&
         b.status !== 'DELIVERING' &&
@@ -1496,7 +1529,7 @@ const inTransitBookings = computed(() => {
         // สุดท้ายจริง — ดู confirmJobCompletion) ต้องยังโชว์อยู่ในตารางนี้ต่อ ไม่ใช่หายไปทันที (ครอบคลุมทั้ง PENDING_REVIEW
         // และ APPROVED-แต่ยังไม่กดยืนยันจบงาน) งานที่ออฟฟิศปิดเอง (podReviewStatus undefined) ไม่เข้าเงื่อนไขนี้ หายไป
         // ทันทีเหมือนเดิม — ให้ตรงกับ isBookingConfirmedForBilling ใน utils/bookingStatus.ts พอดี
-        ((b.status === 'ACCEPTED' || b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') ||
+        ((b.status === 'ASSIGNED' || b.status === 'ACCEPTED' || b.status === 'IN_TRANSIT' || b.status === 'DELIVERING') ||
           (b.status === 'DELIVERED' && !!b.podReviewStatus && !b.completionConfirmedAt)) &&
         (issueFilter.value !== 'pod' || b.podReviewStatus === 'PENDING_REVIEW') &&
         (!q || matchesSearch(b, q)) &&
@@ -2216,35 +2249,24 @@ const importTripClashFor = (row: ImportRowResult) => {
 /** ชื่อเล่นใน Excel ที่ยังไม่ได้ map เป็นคนขับ (ผู้ใช้ยังไม่ได้เลือก) — ต้องตรวจก่อนสร้างงาน */
 const importUnmappedDriverFor = (row: ImportRowResult) =>
   row.driverNickname && !row.driverName ? `ชื่อเล่น "${row.driverNickname}" ยังไม่ได้ map เป็นคนขับ — เลือกคนขับในคอลัมน์ พขร. ก่อน ไม่งั้นงานจะไม่มีคนขับ` : undefined
-/** แถวที่เนื้อหาเหมือนงานที่มีอยู่แล้ว (หรือแถวก่อนหน้าในไฟล์เดียวกัน) — ค่าเริ่มต้นข้ามไม่สร้าง กันงานซ้ำจากการ import ไฟล์เดิม */
-const importFingerprint = (row: ImportRowResult) =>
-  fingerprintOf({
-    category: props.fleet,
-    date: importShipDate.value,
-    customer: row.customer,
-    reference: row.docRef,
-    driver: row.driverName || row.plate,
-    sites: [
-      {
-        siteName: row.siteName,
-        district: row.district,
-        province: row.province,
-        products: row.productQtyPairs.length ? row.productQtyPairs : [{ product: row.product, qty: row.qty }],
-      },
-    ],
-  })
-const existingFingerprints = computed(() => {
+const importShipmentKey = (row: ImportRowResult) => shipmentKey(row.customer, row.docRef)
+/** เลขชิพเม้นที่มีอยู่แล้วใน Fleet นี้ → เลขที่งาน (ตรวจซ้ำตอน import) */
+const existingShipments = computed(() => {
   const map = new Map<string, string>()
-  fleetBookings.value.forEach((b) => map.set(bookingFingerprint(b), b.docNo))
+  fleetBookings.value.forEach((b) => {
+    const key = bookingShipmentKey(b)
+    if (key) map.set(key, b.docNo)
+  })
   return map
 })
+/** แถวที่เลขชิพเม้นซ้ำกับงานที่มีอยู่แล้ว (หรือแถวก่อนหน้าในไฟล์เดียวกัน) — ค่าเริ่มต้นข้ามไม่สร้าง แถวไม่มีเลขชิพเม้นไม่ตรวจ */
 const importDuplicateFor = (row: ImportRowResult): string | undefined => {
-  if (!importShipDate.value) return undefined
-  const fp = importFingerprint(row)
-  const docNo = existingFingerprints.value.get(fp)
-  if (docNo) return `อาจซ้ำกับงาน ${docNo} ที่มีอยู่แล้ว (วัน/ลูกค้า/PO/คนขับ/หน้างาน/สินค้าเหมือนกัน)`
-  const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importFingerprint(r) === fp)
-  return earlier ? `ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้` : undefined
+  const key = importShipmentKey(row)
+  if (!key) return undefined
+  const docNo = existingShipments.value.get(key)
+  if (docNo) return `เลข PO ลูกค้า ${row.docRef} ซ้ำกับงาน ${docNo} ที่มีอยู่แล้ว`
+  const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importShipmentKey(r) === key)
+  return earlier ? `เลข PO ลูกค้า ${row.docRef} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้` : undefined
 }
 /** แถวที่เลือก "ข้าม" (ค่าเริ่มต้น = ข้ามแถวที่อาจซ้ำ) */
 const importSkip = ref<Record<number, boolean>>({})

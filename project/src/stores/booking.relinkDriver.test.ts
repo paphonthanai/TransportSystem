@@ -53,3 +53,34 @@ describe('relinkMissingDriverId — ผูกงานจากรหัสค�
     expect(a.driverId).toBe('drv-old')
   })
 })
+
+describe('linkMissingDriverIds — งานที่ไม่ขึ้นในแอปคนขับ (ไม่มีรหัสคนขับ/รหัสไม่อยู่ในทะเบียน)', () => {
+  const registry = [target, { id: 'drv-x', firstName: 'สมชาย', lastName: 'ใจดี' }]
+
+  it('ผูกเฉพาะงานที่จัดรถแล้วยังไม่จบ และชื่อตรงทะเบียนคนเดียว (ไม่สนช่องว่าง/คำนำหน้า)', () => {
+    loginAs('DISPATCHER')
+    const store = useBookingStore()
+    const noId = makeBooking({ status: 'ASSIGNED', driverName: 'นายแสง  ตั้งภูมิ' })
+    const staleId = makeBooking({ status: 'ACCEPTED', driverId: 'drv-gone', driverName: 'สมชาย ใจดี' })
+    const unknown = makeBooking({ status: 'ASSIGNED', driverName: 'ไม่มี ในทะเบียน' })
+    const done = makeBooking({ status: 'DELIVERED', driverName: 'แสง ตั้งภูมิ' })
+    const ok = makeBooking({ status: 'ASSIGNED', driverId: 'drv-x', driverName: 'สมชาย ใจดี' })
+    store.bookings.push(noId, staleId, unknown, done, ok)
+
+    expect(store.bookingsMissingDriverLink(registry).map((p) => p.booking.id).sort()).toEqual([noId.id, staleId.id, unknown.id].sort())
+    expect(store.linkMissingDriverIds(registry)).toEqual({ ok: true, count: 2 })
+    expect(noId.driverId).toBe('drv-new')
+    expect(staleId.driverId).toBe('drv-x')
+    expect(unknown.driverId).toBeUndefined()
+    expect(done.driverId).toBeUndefined()
+  })
+
+  it('เสมียน (STAFF) ผูกไม่ได้', () => {
+    loginAs('STAFF')
+    const store = useBookingStore()
+    const b = makeBooking({ status: 'ASSIGNED', driverName: 'แสง ตั้งภูมิ' })
+    store.bookings.push(b)
+    expect(store.linkMissingDriverIds(registry).ok).toBe(false)
+    expect(b.driverId).toBeUndefined()
+  })
+})

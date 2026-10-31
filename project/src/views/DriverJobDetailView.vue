@@ -209,7 +209,15 @@
            ก่อนเท่านั้น — ดู canStartTransit) ปุ่ม "เริ่มรับสินค้า" ของ flow เก่า (FUEL_RECEIVED) ยังคงไว้ให้งานที่ค้างอยู่
            ก่อนเปลี่ยนแปลงเท่านั้น -->
       <button
-        v-if="job.status === 'FUEL_RECEIVED'"
+        v-if="job.status === 'ASSIGNED'"
+        @click="bookingStore.acceptDispatch(job.id)"
+        class="w-full h-12 rounded-lg bg-green-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 active:bg-green-700"
+      >
+        <span class="material-symbols-rounded text-xl">thumb_up</span>
+        ตอบรับงาน
+      </button>
+      <button
+        v-else-if="job.status === 'FUEL_RECEIVED'"
         @click="bookingStore.startLoading(job.id)"
         class="w-full h-12 rounded-lg bg-teal-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 active:bg-teal-700"
       >

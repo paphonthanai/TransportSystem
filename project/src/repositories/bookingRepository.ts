@@ -18,6 +18,7 @@ const BOOKING_DATE_FIELDS = [
   'loadingDate',
   'createdAt',
   'dispatchedAt',
+  'acceptedAt',
   'fuelReceivedAt',
   'transitStartedAt',
   'goodsReceivedAt',

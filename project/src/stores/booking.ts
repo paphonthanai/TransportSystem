@@ -11,9 +11,10 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useDriverPaymentsStore } from '@/stores/driverPayments'
 import { useDriverPayrollDocumentsStore } from '@/stores/driverPayrollDocuments'
 import { isBookingPaidToDriver, monthlyPaidCheck, payrollPeriodLabelOf } from '@/utils/driverPaid'
-import { driverTripNumber } from '@/utils/driverDayTrips'
+import { driverTripNumber, isSameDriver } from '@/utils/driverDayTrips'
 import { validTripNumber } from '@/utils/tripSequence'
 import { pruneResolvedNote } from '@/utils/bookingNote'
+import { normalizeDriverName } from '@/utils/driverIdentity'
 import { bookingRepository } from '@/repositories/bookingRepository'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import type { Booking, BookingCategory, BookingPhotoListField, BookingStatus, DebtAdjustment, BillingBatch, LogEntry, JobItem, PricingMode } from '@/types'
@@ -877,6 +878,36 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   /**
+   * งานที่จัดคนขับแล้วยังไม่จบ แต่ driverId ว่าง/ไม่อยู่ในทะเบียน — แอปคนขับดึงงานด้วย driverId (ตาม Firestore Rules)
+   * งานพวกนี้จึงไม่ขึ้นในแอปคนขับเลย คืนคู่ (งาน, คนขับที่ชื่อตรงกันคนเดียวในทะเบียน) ที่ผูกได้
+   */
+  function bookingsMissingDriverLink(registry: { id?: string; firstName: string; lastName: string }[]) {
+    const drivers = registry.filter((d): d is { id: string; firstName: string; lastName: string } => !!d.id)
+    const ids = new Set(drivers.map((d) => d.id))
+    return bookings.value
+      .filter((b) => b.status !== 'WAITING_DISPATCH' && b.status !== 'DELIVERED' && b.driverName && (!b.driverId || !ids.has(b.driverId)))
+      .map((booking) => {
+        const name = normalizeDriverName(booking.driverName)
+        const matches = drivers.filter((d) => normalizeDriverName(`${d.firstName}${d.lastName}`) === name)
+        return { booking, driver: matches.length === 1 ? matches[0] : undefined }
+      })
+  }
+
+  /** ผูก driverId ให้งานจาก bookingsMissingDriverLink ที่จับคู่ชื่อได้ — ADMIN/DISPATCHER */
+  function linkMissingDriverIds(drivers: { id?: string; firstName: string; lastName: string }[]): { ok: boolean; message?: string; count: number } {
+    const role = useAuthStore().role
+    if (role !== 'ADMIN' && role !== 'DISPATCHER') return { ok: false, message: 'ผูกงานกับคนขับได้เฉพาะผู้ดูแลระบบ/ผู้จัดรถ', count: 0 }
+    const pairs = bookingsMissingDriverLink(drivers).filter((p) => p.driver)
+    pairs.forEach(({ booking, driver }) => {
+      booking.driverId = driver!.id
+      booking.driverFirstName = driver!.firstName
+      booking.driverLastName = driver!.lastName
+    })
+    if (pairs.length) addLog(`ผูกรหัสคนขับให้งานที่ยังไม่ขึ้นในแอปคนขับ ${pairs.length} งาน`)
+    return { ok: true, count: pairs.length }
+  }
+
+  /**
    * ตั้งทะเบียนให้งานที่มีคนขับแล้วแต่ยังไม่มีทะเบียน (มีคนขับต้องรู้ทะเบียน — คนขับผูกกับรถประจำอยู่แล้ว) ตั้งเฉพาะทะเบียน
    * ไม่เปลี่ยนสถานะ และคำนวณเรทน้ำมันของงานใหม่ตามประเภทรถของทะเบียนนั้น
    */
@@ -917,6 +948,7 @@ export const useBookingStore = defineStore('booking', () => {
   ) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return
+    const previousDriver = { driverId: booking.driverId, driverName: booking.driverName }
     booking.plate = plate
     if (extra?.tripSequence !== undefined) booking.tripSequence = extra.tripSequence
     if (extra?.driverName) {
@@ -940,12 +972,14 @@ export const useBookingStore = defineStore('booking', () => {
       // (Phase E.1 Test 8 — ดู confirmRemainingPickup ที่ถูกลบไปแล้ว) ตัดขั้นยืนยันแยกนี้ออกตามที่ตกลง เพราะตอนนี้
       // การส่งของแต่ละจุดบังคับถ่ายรูปสินค้าตอนลงอยู่แล้ว (ดู deliverJobItem) ถือเป็นการยืนยันที่แน่นหนากว่าปุ่มกดเฉยๆ
       // เปลี่ยนรถระหว่างทางจึงแค่เปลี่ยน plate/driverName แล้วส่งต่อได้ทันที ไม่ต้องยืนยันซ้ำ ไม่แตะ pickupStatus เลย
+      // เปลี่ยนคนขับตอนคนเดิมตอบรับแล้วแต่ยังไม่เริ่มขนส่ง — คนขับใหม่ต้องกดตอบรับเองอีกครั้ง
+      if (booking.status === 'ACCEPTED' && extra?.driverName && !isSameDriver(previousDriver, booking)) booking.status = 'ASSIGNED'
       addLog(`เปลี่ยนรถ/คนขับ ${booking.docNo} เป็นทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''}`, { bookingId: booking.id })
       return
     }
-    // ตัดขั้น "รอคนขับตอบรับ" (ASSIGNED) ออกตามที่ตกลง — จัดรถแล้วถือว่ารับงานทันที ไม่ต้องรอกดรับในแอปคนขับอีกต่อไป
-    // (เดิม ASSIGNED -> ACCEPTED ต้องรอคนขับกดตอบรับเอง หรือให้ office กด "รับงานแทน" ผ่าน acceptDispatch)
-    booking.status = 'ACCEPTED'
+    // จัดรถแล้วรอคนขับกด "ตอบรับงาน" ในแอปคนขับ (ASSIGNED -> ACCEPTED ผ่าน acceptDispatch) — กลับมาใช้ขั้นนี้ตามที่ผู้ใช้ขอ
+    // (เคยตัดออกให้จัดรถ = รับงานทันที ทำให้สถานะขึ้น "คนขับตอบรับแล้ว" ทั้งที่คนขับยังไม่ได้กด)
+    booking.status = 'ASSIGNED'
     booking.dispatchedAt = new Date()
     addLog(`จ่ายงาน ${booking.docNo} ทะเบียน ${plate}${booking.driverName ? ' คนขับ ' + booking.driverName : ''}`, { bookingId: booking.id })
   }
@@ -1008,11 +1042,12 @@ export const useBookingStore = defineStore('booking', () => {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking || booking.status !== 'ASSIGNED') return
     booking.status = 'ACCEPTED'
+    booking.acceptedAt = new Date()
     addLog(`คนขับตอบรับงาน ${booking.docNo}`, { bookingId: booking.id })
   }
 
-  /** ยกเลิกการจ่ายงาน (office กด "ยกเลิก" ใน BookingActionMenu) กลับไปรอจัดคนขับใหม่ทันที — ใช้ได้ตอน ACCEPTED
-   *  (ระยะแรกสุดหลังจัดรถ ตัดขั้น ASSIGNED/รอตอบรับออกไปแล้ว) ยังรองรับ ASSIGNED ไว้เผื่อมีข้อมูลเก่าค้างอยู่ */
+  /** ยกเลิกการจ่ายงาน (office กด "ยกเลิก" ใน BookingActionMenu) กลับไปรอจัดคนขับใหม่ทันที — ใช้ได้ตอน ASSIGNED (รอคนขับตอบรับ)
+   *  และ ACCEPTED (ตอบรับแล้วแต่ยังไม่เริ่มขนส่ง) */
   function declineDispatch(id: string) {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking || (booking.status !== 'ASSIGNED' && booking.status !== 'ACCEPTED')) return
@@ -1025,6 +1060,7 @@ export const useBookingStore = defineStore('booking', () => {
     booking.driverFirstName = undefined
     booking.driverLastName = undefined
     booking.dispatchedAt = undefined
+    booking.acceptedAt = undefined
     addLog(`คนขับไม่รับงาน ${booking.docNo} รอจัดคนขับใหม่ (ถอนออกจากรอบบิล)`, { bookingId: booking.id })
   }
 
@@ -1706,6 +1742,8 @@ export const useBookingStore = defineStore('booking', () => {
     setDeliveryNoteImage,
     setLoadingImage,
     relinkMissingDriverId,
+    bookingsMissingDriverLink,
+    linkMissingDriverIds,
     addBookingPhoto,
     removeBookingPhoto,
     toggleTicketChecked,

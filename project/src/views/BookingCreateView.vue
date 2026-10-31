@@ -526,14 +526,7 @@ watch(
   (name) => {
     const customer = customerStore.customers.find((c) => c.name === name)
     header.value.contactId = customer?.id ? contactStore.primaryContactFor(customer.id)?.id : undefined
-    // เติม PO ลูกค้าจากงานล่าสุดของลูกค้ารายนี้ให้อัตโนมัติ — เฉพาะตอนช่องยังว่างอยู่เท่านั้น (ไม่ทับค่าที่ผู้ใช้
-    // พิมพ์เองหรือพิมพ์ค้างไว้จากก่อนเปลี่ยนลูกค้า) แก้ไขเองได้เสมอหลังเติมแล้ว
-    if (!header.value.reference && name) {
-      const latestBooking = [...bookingStore.bookings]
-        .filter((b) => b.customer === name && b.reference)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
-      if (latestBooking?.reference) header.value.reference = latestBooking.reference
-    }
+    // ไม่เติม PO ลูกค้าจากงานล่าสุดแล้ว — เลข PO ลูกค้าคือเลขชิพเม้นเที่ยวละเลข ใช้ตรวจงานซ้ำ (ดู bookingDuplicates)
   },
   { immediate: true }
 )
