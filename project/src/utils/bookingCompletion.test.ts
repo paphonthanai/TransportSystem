@@ -65,14 +65,16 @@ describe('bookingCompletionIssues', () => {
     expect(codes({ ...complete, fuelRate: 0 })).toEqual(['fuelRate'])
   })
 
-  it('เพดานลิตร 200 ยอมให้ถึงลิตรมาตรฐานของปลายทางถ้าสูงกว่า', () => {
-    expect(maxFuelLitersFor(undefined)).toBe(200)
-    expect(maxFuelLitersFor(78)).toBe(200)
-    expect(maxFuelLitersFor(230)).toBe(230)
+  it('เพดานลิตร 300 ยอมให้ถึงลิตรมาตรฐานของปลายทางถ้าสูงกว่า', () => {
+    expect(maxFuelLitersFor(undefined)).toBe(300)
+    expect(maxFuelLitersFor(78)).toBe(300)
+    expect(maxFuelLitersFor(230)).toBe(300)
+    expect(maxFuelLitersFor(320)).toBe(320)
     expect(codes({ ...complete, fuelLiters: 46242 })).toEqual(['fuelCap'])
-    expect(codes({ ...complete, fuelLiters: 200 })).toEqual([])
-    expect(codes({ ...complete, fuelLiters: 220 }, { standardFuelLiters: 230 })).toEqual([])
-    expect(codes({ ...complete, fuelLiters: 231 }, { standardFuelLiters: 230 })).toEqual(['fuelCap'])
+    expect(codes({ ...complete, fuelLiters: 300 })).toEqual([])
+    expect(codes({ ...complete, fuelLiters: 301 })).toEqual(['fuelCap'])
+    expect(codes({ ...complete, fuelLiters: 320 }, { standardFuelLiters: 330 })).toEqual([])
+    expect(codes({ ...complete, fuelLiters: 331 }, { standardFuelLiters: 330 })).toEqual(['fuelCap'])
   })
 
   it('ช่องน้ำมันจาก Excel อ่านไม่ได้ต้องแก้ลิตรก่อน (หรือติ๊กไม่เติม)', () => {

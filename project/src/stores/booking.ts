@@ -135,7 +135,7 @@ export const useBookingStore = defineStore('booking', () => {
    */
   function resolveFuelLiters(requested: number | undefined, items: JobItem[], pricingMode: PricingMode | undefined): number {
     const standard = fuelRateStore.standardFuelLiters(items, pricingMode)
-    // เพดานลิตรต่อเที่ยว: ไม่เกิน 200 (หรือลิตรมาตรฐานของปลายทางถ้าสูงกว่า) — ค่าที่ผิดปกติ (เช่นพิมพ์เลขเกิน) ถูกตัดลงมา
+    // เพดานลิตรต่อเที่ยว: ไม่เกิน 300 (หรือลิตรมาตรฐานของปลายทางถ้าสูงกว่า) — ค่าที่ผิดปกติ (เช่นพิมพ์เลขเกิน) ถูกตัดลงมา
     return Math.min(Math.max(requested ?? standard, 0), maxFuelLitersFor(standard))
   }
 

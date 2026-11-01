@@ -96,7 +96,7 @@ describe('completeJob — ข้อมูลไม่ครบจบงานไ
   })
 })
 
-describe('เพดานลิตรน้ำมัน 200 (ยอมให้ถึงลิตรมาตรฐานของปลายทางถ้าสูงกว่า)', () => {
+describe('เพดานลิตรน้ำมัน 300 (ยอมให้ถึงลิตรมาตรฐานของปลายทางถ้าสูงกว่า)', () => {
   it('updateBookingFull ตัดลิตรที่เกินเพดานลงมา', () => {
     const store = useBookingStore()
     const b = makeBooking({ ...ready })
@@ -104,20 +104,20 @@ describe('เพดานลิตรน้ำมัน 200 (ยอมให้�
 
     store.updateBookingFull(b.id, { fuelLiters: 46242 })
 
-    expect(b.fuelLiters).toBe(200)
+    expect(b.fuelLiters).toBe(300)
   })
 
-  it('ปลายทางที่ลิตรมาตรฐานสูงกว่า 200 (เช่น เชียงใหม่ 230) ใช้ได้ถึงค่ามาตรฐาน', () => {
+  it('ปลายทางที่ลิตรมาตรฐานสูงกว่า 300 (เช่น 330) ใช้ได้ถึงค่ามาตรฐาน', () => {
     const fuel = useFuelRateStore()
-    fuel.settings.rates = [{ province: 'เชียงใหม่', district: 'พาเลท 3 จุด', liters: 230 }]
+    fuel.settings.rates = [{ province: 'เชียงใหม่', district: 'พาเลท 3 จุด', liters: 330 }]
     const store = useBookingStore()
     const b = makeBooking({ ...ready, items: [makeJobItem({ province: 'เชียงใหม่', district: 'พาเลท 3 จุด' })] })
     store.bookings.push(b)
 
-    store.updateBookingFull(b.id, { fuelLiters: 225 })
-    expect(b.fuelLiters).toBe(225)
+    store.updateBookingFull(b.id, { fuelLiters: 325 })
+    expect(b.fuelLiters).toBe(325)
     store.updateBookingFull(b.id, { fuelLiters: 500 })
-    expect(b.fuelLiters).toBe(230)
+    expect(b.fuelLiters).toBe(330)
   })
 
   it('ติ๊กไม่เติมน้ำมันในหน้าแก้ไข = ลิตร 0 และยกเลิกการติ๊กเมื่อใส่ลิตรใหม่', () => {

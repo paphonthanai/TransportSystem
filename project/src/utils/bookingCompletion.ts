@@ -2,9 +2,9 @@ import type { Booking } from '@/types'
 
 /** เพดานลิตรน้ำมันต่อเที่ยวขั้นต่ำ — เกินนี้ถือว่าผิดปกติ ยกเว้นปลายทางที่ลิตรมาตรฐานสูงกว่านี้ (เช่นเชียงใหม่ 220/230 ล.)
  *  ซึ่งยอมให้ถึงค่ามาตรฐานของปลายทางนั้น */
-export const MIN_FUEL_LITERS_CAP = 200
+export const MIN_FUEL_LITERS_CAP = 300
 
-/** ลิตรสูงสุดที่รับได้ของงานนี้ = มากกว่าระหว่าง 200 กับลิตรมาตรฐานของปลายทาง */
+/** ลิตรสูงสุดที่รับได้ของงานนี้ = มากกว่าระหว่าง 300 กับลิตรมาตรฐานของปลายทาง */
 export const maxFuelLitersFor = (standardFuelLiters?: number | null) => Math.max(MIN_FUEL_LITERS_CAP, standardFuelLiters || 0)
 
 export type CompletionIssueCode = 'plate' | 'driver' | 'tripFee' | 'odometer' | 'fuelLiters' | 'fuelRate' | 'fuelCap' | 'fuelUnreadable'
