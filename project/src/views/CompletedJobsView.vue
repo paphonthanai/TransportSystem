@@ -8,7 +8,7 @@
           <input
             v-model="filters.search"
             type="text"
-            placeholder="ค้นหาเลขที่เอกสาร, PO, ลูกค้า, ทะเบียนรถ..."
+            placeholder="ค้นหาเลขชิพเม้นลูกค้า, เลขที่เอกสาร, ลูกค้า, ทะเบียนรถ..."
             class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
           />
         </div>
@@ -86,7 +86,7 @@
                 <th class="px-4 py-3 w-8">
                   <input type="checkbox" :checked="allVisibleSelected" @change="toggleSelectAll" />
                 </th>
-                <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted whitespace-nowrap">เลขชิพเม้นลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">กองรถ</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ปลายทาง</th>
@@ -101,7 +101,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="booking in completedBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+              <tr v-for="booking in pagedRows" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
                 <td class="px-4 py-3">
                   <input
                     type="checkbox"
@@ -109,7 +109,10 @@
                     @change="(e) => (selected[booking.id] = (e.target as HTMLInputElement).checked)"
                   />
                 </td>
-                <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <div class="font-bold text-primary font-mono text-xs">{{ customerShipmentNo(booking) || '-' }}</div>
+                  <div class="text-[11px] text-muted">{{ booking.docNo }}</div>
+                </td>
                 <td class="px-4 py-3">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', booking.category === 'cements' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700']">
                     {{ booking.category === 'cements' ? 'Cements' : 'Ceramics' }}
@@ -217,6 +220,7 @@
           </table>
         </div>
       </div>
+      <TablePagination v-model:page="page" v-model:per-page="perPage" :total="completedBookings.length" />
     </div>
 
     <!-- POD Preview -->
@@ -243,6 +247,9 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedRows } from '@/composables/usePagedRows'
+import { customerShipmentNo } from '@/utils/customerShipment'
 import { useCompletedJobs, useCompletedJobsFilters, completedJobPriceOf, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
@@ -299,6 +306,9 @@ const {
   formatShortDate,
 } = useCompletedJobs(filters)
 
+const { page, perPage, pagedRows } = usePagedRows(completedBookings)
+watch(filters, () => (page.value = 1), { deep: true })
+
 const hasActiveDateOrPicks = computed(
   () =>
     !!(
@@ -351,10 +361,11 @@ const resetBooking = (booking: Booking) => {
 // แล้วลบทีเดียว กันต้องกดยืนยัน popup ทีละรายการเวลามีของค้างต้องเคลียร์เยอะๆ (เช่น ข้อมูลทดสอบจาก import ผิดพลาด)
 const selected = ref<Record<string, boolean>>({})
 const selectedIds = computed(() => Object.keys(selected.value).filter((id) => selected.value[id]))
-const allVisibleSelected = computed(() => completedBookings.value.length > 0 && completedBookings.value.every((b) => selected.value[b.id]))
+// ติ๊กทั้งหมด = เฉพาะแถวในหน้าที่เห็นอยู่ กันลบถาวรโดนงานหน้าอื่นที่มองไม่เห็น
+const allVisibleSelected = computed(() => pagedRows.value.length > 0 && pagedRows.value.every((b) => selected.value[b.id]))
 const toggleSelectAll = () => {
   const next = !allVisibleSelected.value
-  completedBookings.value.forEach((b) => {
+  pagedRows.value.forEach((b) => {
     selected.value[b.id] = next
   })
 }

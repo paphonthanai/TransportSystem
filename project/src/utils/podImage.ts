@@ -45,6 +45,43 @@ function loadImage(file: File): Promise<HTMLImageElement> {
 }
 
 /**
+ * ย่อ/บีบรูปเป็นไฟล์ JPEG สำหรับอัปโหลดขึ้น Storage — ไม่แปลงผ่าน Base64 (ก้อนข้อความใหญ่กว่าไฟล์จริงและค้างในหน่วยความจำ
+ * ซึ่งทำให้เบราว์เซอร์บนมือถือสเปกต่ำปิดหน้าเว็บทิ้งได้) และคืนหน่วยความจำของ canvas/รูปต้นฉบับทันทีที่ใช้เสร็จ
+ */
+export async function compressImageToBlob(file: File, options?: { maxDimension?: number; maxBytes?: number }): Promise<Blob> {
+  const maxDimension = options?.maxDimension ?? POD_MAX_DIMENSION
+  const maxBytes = options?.maxBytes ?? MAX_POD_BASE64_BYTES
+
+  const img = await loadImage(file)
+  const { width, height } = fitDimensions(img.naturalWidth || img.width, img.naturalHeight || img.height, maxDimension)
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  try {
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('เบราว์เซอร์นี้ไม่รองรับการประมวลผลรูปภาพ')
+    ctx.drawImage(img, 0, 0, width, height)
+    img.src = ''
+
+    const encode = (q: number) =>
+      new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('ประมวลผลรูปภาพไม่สำเร็จ กรุณาถ่ายรูปใหม่'))), 'image/jpeg', q)
+      )
+    let quality = DEFAULT_QUALITY
+    let blob = await encode(quality)
+    while (blob.size > maxBytes && quality > MIN_QUALITY) {
+      quality = Math.max(MIN_QUALITY, quality - QUALITY_STEP)
+      blob = await encode(quality)
+    }
+    if (blob.size > maxBytes) throw new Error('ไฟล์รูปภาพมีขนาดใหญ่เกินไปแม้บีบอัดแล้ว กรุณาถ่ายรูปใหม่ในความละเอียดที่ต่ำลง')
+    return blob
+  } finally {
+    canvas.width = 0
+    canvas.height = 0
+  }
+}
+
+/**
  * เลือกรูป POD → Resize ให้ไม่เกิน POD_MAX_DIMENSION → Compress เป็น JPEG ลดคุณภาพทีละขั้นจนกว่าขนาด Base64 จะอยู่
  * ในเพดาน MAX_POD_BASE64_BYTES → คืน Data URL พร้อมบันทึกลง Firestore ตรงๆ (ไม่มี Storage/network call ใดๆ)
  */

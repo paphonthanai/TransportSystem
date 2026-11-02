@@ -136,13 +136,13 @@
           </div>
           <div class="p-6 space-y-4 text-sm">
             <div class="text-xs text-muted">
-              เกณฑ์: เลข PO ลูกค้า (เลขชิพเม้น) ซ้ำกันในลูกค้าเดียวกัน หรือเลขที่งานซ้ำกัน — งานที่ไม่มีเลข PO ลูกค้าไม่ถูกตรวจ —
+              เกณฑ์: เลขชิพเม้นลูกค้าซ้ำกันในลูกค้าเดียวกัน — งานที่ไม่มีเลขชิพเม้นลูกค้าไม่ถูกตรวจ —
               งานแรก (สร้างก่อน) น่าจะเป็นต้นฉบับ ลบได้เฉพาะผู้ดูแลระบบ
             </div>
             <div v-if="!activeDuplicateGroups.length" class="text-center text-muted py-6">ไม่มีงานที่อาจซ้ำแล้ว</div>
             <div v-for="group in activeDuplicateGroups" :key="duplicateGroupKey(group)" class="rounded-lg border border-border">
               <div class="flex items-center justify-between gap-2 px-3 py-2 bg-surface-2 rounded-t-lg">
-                <span class="font-semibold">{{ group.reason === 'SAME_DOC_NO' ? `เลขที่งานซ้ำ: ${group.bookings[0].docNo}` : `เลข PO ลูกค้าซ้ำ: ${group.bookings[0].reference} · ${group.bookings[0].customer}` }}</span>
+                <span class="font-semibold">เลขชิพเม้นลูกค้าซ้ำ: {{ customerShipmentNo(group.bookings[0]) }} · {{ group.bookings[0].customer }}</span>
                 <button @click="dismissDuplicateGroup(group)" class="btn-sm">ไม่ใช่งานซ้ำ</button>
               </div>
               <table class="w-full text-xs">
@@ -219,6 +219,7 @@
               <th class="text-left px-3 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
               <th class="text-center px-3 py-3 font-semibold text-muted">เช็คตั๋ว</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">ลูกค้า</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted whitespace-nowrap">เลขชิพเม้นลูกค้า</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">วันที่ลงงาน</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">เวลา</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานที่ส่ง</th>
@@ -287,6 +288,7 @@
                   {{ customerRecordFor(booking)?.code || booking.customer }}
                 </span>
               </td>
+              <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ customerShipmentNo(booking) || '-' }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-3 py-3 text-text">
@@ -341,7 +343,7 @@
               </td>
             </tr>
             <tr v-if="inProgressBookings.length === 0">
-              <td :colspan="canSelectDelete ? 14 : 13" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
+              <td :colspan="canSelectDelete ? 15 : 14" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
             </tr>
           </tbody>
         </table>
@@ -367,6 +369,7 @@
               <th class="text-left px-3 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
               <th class="text-center px-3 py-3 font-semibold text-muted">เช็คตั๋ว</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">ลูกค้า</th>
+              <th class="text-left px-3 py-3 font-semibold text-muted whitespace-nowrap">เลขชิพเม้นลูกค้า</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">วันที่ลงงาน</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">เวลา</th>
               <th class="text-left px-3 py-3 font-semibold text-muted">สถานที่ส่ง</th>
@@ -460,6 +463,7 @@
                   {{ customerRecordFor(booking)?.code || booking.customer }}
                 </span>
               </td>
+              <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ customerShipmentNo(booking) || '-' }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-3 py-3 text-text">
@@ -478,7 +482,7 @@
               </td>
             </tr>
             <tr v-if="inTransitBookings.length === 0">
-              <td colspan="13" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
+              <td colspan="14" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
             </tr>
           </tbody>
         </table>
@@ -1130,6 +1134,7 @@ import DriverJobDetailsContent from '@/components/booking/DriverJobDetailsConten
 import { compareInTransitBookings } from '@/utils/inTransitSort'
 import { tripNumberChoices as tripNumberChoicesFor } from '@/utils/driverDayTrips'
 import { normalizeDriverName } from '@/utils/driverIdentity'
+import { customerShipmentNo } from '@/utils/customerShipment'
 import { bookingShipmentKey, duplicateGroupKey, findDuplicateGroups, shipmentKey, type DuplicateGroup } from '@/utils/bookingDuplicates'
 import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
@@ -2275,9 +2280,9 @@ const importDuplicateFor = (row: ImportRowResult): string | undefined => {
   const key = importShipmentKey(row)
   if (!key) return undefined
   const docNo = existingShipments.value.get(key)
-  if (docNo) return `เลข PO ลูกค้า ${row.docRef} ซ้ำกับงาน ${docNo} ที่มีอยู่แล้ว`
+  if (docNo) return `เลขชิพเม้นลูกค้า ${row.docRef} ซ้ำกับงาน ${docNo} ที่มีอยู่แล้ว`
   const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importShipmentKey(r) === key)
-  return earlier ? `เลข PO ลูกค้า ${row.docRef} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้` : undefined
+  return earlier ? `เลขชิพเม้นลูกค้า ${row.docRef} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้` : undefined
 }
 /** แถวที่เลือก "ข้าม" (ค่าเริ่มต้น = ข้ามแถวที่อาจซ้ำ) */
 const importSkip = ref<Record<number, boolean>>({})
