@@ -149,7 +149,7 @@
                 <tbody>
                   <tr v-for="(b, idx) in group.bookings" :key="b.id" class="border-t border-border">
                     <td class="px-3 py-2 font-mono whitespace-nowrap">
-                      <RouterLink :to="`/job/${b.id}`" class="text-primary hover:underline">{{ b.docNo }}</RouterLink>
+                      <RouterLink :to="`/job/${b.id}`" class="text-primary hover:underline">{{ customerShipmentNo(b) }}</RouterLink>
                       <span v-if="idx === 0" class="ml-1 text-[10px] font-semibold text-green-700">(สร้างก่อน)</span>
                     </td>
                     <td class="px-3 py-2 whitespace-nowrap">{{ formatShortDate(b.loadingDate) }} {{ b.loadingTime || '' }}</td>
