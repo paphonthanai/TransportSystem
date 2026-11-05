@@ -319,6 +319,9 @@ export interface DocumentNumberReuseCheck {
   previousDocumentId?: string
 }
 
+/** รายละเอียดหัวใบวางบิลที่ createBillingFromBookings สรุปให้เอง — ตรงรูปแบบนี้ถึงจะอัปเดตตามงานที่เพิ่ม/เอาออก */
+const AUTO_BILLING_DESCRIPTION = /^รายการขนส่งสินค้าห้วงระหว่างวันที่ .+ จำนวน \d+ เที่ยว$/
+
 export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   const documents = ref<SalesDocument[]>([])
   const items = ref<SalesDocumentItem[]>([])
@@ -1456,11 +1459,52 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return billing
   }
 
-  /** แก้ไขใบวางบิล (เฉพาะตอนยังไม่ออกใบแจ้งหนี้ — สถานะ BILLING_PENDING) แทนที่ field เอกสาร + รายการทั้งหมด ไม่เปลี่ยนสถานะ/bookingIds
-   *  เลขที่แก้ได้ (ตรวจเลขซ้ำก่อนเสมอ ไม่นับเลขเดิมของเอกสารตัวเองเป็นเลขซ้ำ) */
+  /**
+   * งานที่เปลี่ยนไปตอนแก้ไขใบวางบิล — added = งานใหม่ที่ติ๊กเพิ่ม (data.bookingIds ที่ยังไม่อยู่ในใบ) เงื่อนไขเดียวกับตอนสร้าง
+   * (ลูกค้าเดียวกัน, Feed เดียวกับงานเดิมในใบ, ยังไม่ถูก claim, สถานะวางบิลได้, ยืนยันจบงานแล้ว) ไม่ผ่านคืน null
+   * removed = งานเดิมที่แถวของมันถูกลบออกจากตาราง จับจากเลขใบขนส่ง (deliveryNo) ของแถวเดิม — คืนงานให้วางบิลใบอื่นได้
+   * งานเดิมที่ไม่มีแถวผูกเลขไว้ (เอกสารเก่า) ไม่ถูกปล่อย และงานที่ออกใบกำกับภาษีแล้วไม่ถูกปล่อย
+   */
+  function billingBookingChanges(doc: SalesDocument, data: ManualDocumentFormData): { added: Booking[]; removed: Booking[]; linked: Booking[] } | null {
+    const bookingStore = useBookingStore()
+    const billingRuleStore = useBillingRuleStore()
+    const findBooking = (bid: string) => bookingStore.bookings.find((b) => b.id === bid)
+    const linked = doc.bookingIds.map(findBooking).filter((b): b is Booking => !!b)
+    const previousNos = new Set(itemsForDocument(doc.id).map((i) => i.deliveryNo).filter(Boolean))
+    const remainingNos = new Set(data.items.map((i) => i.deliveryNo).filter(Boolean))
+    const removed = linked.filter((b) => previousNos.has(b.docNo) && !remainingNos.has(b.docNo) && !b.taxInvoiceDocId && b.billingNoteDocId === doc.id)
+    const addedIds = (data.bookingIds || []).filter((bid) => !doc.bookingIds.includes(bid))
+    const added = addedIds.map(findBooking)
+    if (added.some((b) => !b)) return null
+    const addedBookings = added as Booking[]
+    const category = linked.filter((b) => !removed.includes(b))[0]?.category ?? addedBookings[0]?.category
+    const eligible = addedBookings.every(
+      (b) => b.customer === data.customer && b.category === category && billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId && isBookingConfirmedForBilling(b)
+    )
+    return eligible ? { added: addedBookings, removed, linked } : null
+  }
+
+  /** ปรับหัวเอกสารที่ระบบสรุปจากงาน (ห้วงวันที่/จำนวนเที่ยว/เอกสารอ้างอิง) ให้ตรงกับงานชุดใหม่ — ข้อความที่ผู้ใช้พิมพ์เองไม่ถูกแตะ */
+  function refreshBillingSummary(doc: SalesDocument, previous: Booking[], next: Booking[]) {
+    if (doc.reference === previous.map(bookingReferenceDoc).join(', ')) doc.reference = next.map(bookingReferenceDoc).join(', ')
+    const times = next.map((b) => new Date(b.shipDate || b.loadingDate || b.createdAt).getTime())
+    if (!times.length) return
+    const dateFrom = new Date(Math.min(...times))
+    const dateTo = new Date(Math.max(...times))
+    if (doc.dateFrom) doc.dateFrom = dateFrom
+    if (doc.dateTo) doc.dateTo = dateTo
+    if (doc.description && AUTO_BILLING_DESCRIPTION.test(doc.description)) {
+      doc.description = `รายการขนส่งสินค้าห้วงระหว่างวันที่ ${shortDateLabel(dateFrom)} - ${shortDateLabel(dateTo)} จำนวน ${next.length} เที่ยว`
+    }
+  }
+
+  /** แก้ไขใบวางบิล (เฉพาะตอนยังไม่ออกใบแจ้งหนี้ — สถานะ BILLING_PENDING) แทนที่ field เอกสาร + รายการทั้งหมด ไม่เปลี่ยนสถานะ
+   *  ติ๊กเพิ่มงานใหม่/ลบแถวงานเดิมได้ (ดู billingBookingChanges) เลขที่แก้ได้ (ตรวจเลขซ้ำก่อนเสมอ ไม่นับเลขเดิมของเอกสารตัวเองเป็นเลขซ้ำ) */
   function updateBillingManual(id: string, data: ManualDocumentFormData): SalesDocument | null {
     const doc = documents.value.find((d) => d.id === id && d.type === 'BILLING')
     if (!doc || doc.status !== 'BILLING_PENDING') return null
+    const bookingChanges = billingBookingChanges(doc, data)
+    if (!bookingChanges) return null
     const manualNumber = data.number?.trim()
     /** กติกาปัจจุบัน: ไม่ block ตามประวัติการเคยใช้ ตรวจแค่ว่ามี Active Document อื่นถือเลขนี้อยู่หรือไม่ (ยกเว้นเลขเดิม
      *  ของเอกสารตัวเอง) ไม่สร้าง Document ID ใหม่ใดๆ ในนี้ (แก้ไข doc เดิม in-place ตามเดิมทุกประการ) */
@@ -1498,7 +1542,23 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     Object.assign(doc, resolveContactSnapshot(data.customer, data.contactId))
     items.value = items.value.filter((i) => i.documentId !== id)
     addItemsToDocument(id, data.items)
-    useBookingStore().addLog('แก้ไขเอกสาร ' + doc.number, { docId: doc.id })
+    const { added, removed, linked } = bookingChanges
+    if (added.length || removed.length) {
+      const next = [...linked.filter((b) => !removed.includes(b)), ...added]
+      const unresolvedIds = doc.bookingIds.filter((bid) => !linked.some((b) => b.id === bid))
+      doc.bookingIds = [...unresolvedIds, ...next.map((b) => b.id)]
+      added.forEach((b) => {
+        b.billingNoteDocId = doc.id
+      })
+      removed.forEach((b) => {
+        b.billingNoteDocId = undefined
+      })
+      refreshBillingSummary(doc, linked, next)
+    }
+    useBookingStore().addLog(
+      'แก้ไขเอกสาร ' + doc.number + (added.length ? ` เพิ่มงาน ${added.length} งาน` : '') + (removed.length ? ` เอางานออก ${removed.length} งาน` : ''),
+      { docId: doc.id }
+    )
     return doc
   }
 

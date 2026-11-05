@@ -17,7 +17,7 @@
           {{ opt.label }}
         </button>
       </div>
-      <input v-model="period" type="month" class="input-field" />
+      <PayrollRangePicker v-model="range" />
       <select v-model="docStatusFilter" class="input-field" title="สถานะเอกสารรายได้ของงานในรอบนี้">
         <option value="ALL">สถานะเอกสาร: ทั้งหมด</option>
         <option value="NOT_ISSUED">ยังไม่ได้ออก</option>
@@ -73,7 +73,7 @@
             <td class="px-4 py-3 text-right text-green-600">{{ formatBaht(row.income) }}</td>
             <td v-if="!isCompanyFleet" class="px-4 py-3 text-right text-red-500">
               -{{ formatBaht(row.allowance) }}
-              <RouterLink :to="{ path: `/payroll/vendor-fleet/${row.vehicle.id}`, query: { period } }" class="edit-link ml-1" title="แก้ค่าเบี้ยเลี้ยงต่องานที่หน้ารายละเอียดรถ"><span class="material-symbols-rounded text-sm">edit</span>แก้</RouterLink>
+              <RouterLink :to="{ path: `/payroll/vendor-fleet/${row.vehicle.id}`, query: { from: range.from, to: range.to } }" class="edit-link ml-1" title="แก้ค่าเบี้ยเลี้ยงต่องานที่หน้ารายละเอียดรถ"><span class="material-symbols-rounded text-sm">edit</span>แก้</RouterLink>
             </td>
             <td class="px-4 py-3 text-right text-red-500">
               -{{ formatBaht(row.fuelCost) }}
@@ -91,7 +91,7 @@
               <span v-else class="text-xs font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">ยังไม่ได้ออก {{ row.notIssued }} งาน</span>
             </td>
             <td class="px-4 py-3 text-right">
-              <RouterLink :to="{ path: `/payroll/vendor-fleet/${row.vehicle.id}`, query: { period } }" class="btn-sm" title="เลือกงาน/สร้างเอกสารรายได้">
+              <RouterLink :to="{ path: `/payroll/vendor-fleet/${row.vehicle.id}`, query: { from: range.from, to: range.to } }" class="btn-sm" title="เลือกงาน/สร้างเอกสารรายได้">
                 <span class="material-symbols-rounded text-sm">receipt_long</span>
                 เลือกงาน/สร้างเอกสาร
               </RouterLink>
@@ -112,6 +112,8 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { useBookingStore } from '@/stores/booking'
 import { useVehicleIncomeDocumentsStore, vendorAllowanceOf, vendorFuelCostOf } from '@/stores/vehicleIncomeDocuments'
 import { exportRowsToExcel } from '@/utils/exportExcel'
+import PayrollRangePicker from '@/components/payroll/PayrollRangePicker.vue'
+import { currentMonthRange, inPayrollRange, payrollRangeFileKey } from '@/utils/payrollRange'
 import { roundMoney } from '@/utils/bookingMoney'
 import type { Booking, Vehicle, VehicleType } from '@/types'
 import { vehicleGroupOf, type VehicleGroup } from '@/utils/vehicleType'
@@ -154,17 +156,7 @@ const vehicleIncomeDocumentsStore = useVehicleIncomeDocumentsStore()
 
 const vendorFleetVehicles = computed(() => vehiclesStore.vehicles.filter((v) => departmentFilter(v.department)))
 
-function currentMonthValue(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-function inPeriod(date: Date | undefined, monthValue: string): boolean {
-  if (!date) return false
-  const d = new Date(date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthValue
-}
-
-const period = ref(currentMonthValue())
+const range = ref(currentMonthRange())
 
 /** ค่าน้ำมัน (ลิตร × เรท) และค่าใช้จ่ายประจำรถ (เฉลี่ยต่องานจากยอดเดือน) ระบบคำนวณให้ แก้ทับได้ต่องานในหน้ารายละเอียดรถ
  *  — ให้ตรงกับ VendorFleetVehicleDetailView.vue และเอกสารรายได้รถร่วม */
@@ -174,7 +166,7 @@ const fuelCost = (booking: Booking) => vendorFuelCostOf(booking)
 const bookingsForVehicle = (vehicle: Vehicle) => {
   const full = vehiclesStore.fullPlate(vehicle)
   return bookingStore.bookings.filter(
-    (b) => b.status === 'DELIVERED' && (b.plate === full || b.plate === vehicle.plate) && inPeriod(b.shipDate || b.completedAt, period.value)
+    (b) => b.status === 'DELIVERED' && (b.plate === full || b.plate === vehicle.plate) && inPayrollRange(b.shipDate || b.completedAt, range.value)
   )
 }
 
@@ -214,7 +206,7 @@ const formatBaht = (value: number) => `฿${(value || 0).toLocaleString('th-TH',
 
 const exportSummary = () => {
   exportRowsToExcel(
-    `${isCompanyFleet.value ? 'รถบริษัท' : 'รถร่วม'}-สรุป-${period.value}`,
+    `${isCompanyFleet.value ? 'รถบริษัท' : 'รถร่วม'}-สรุป-${payrollRangeFileKey(range.value)}`,
     vehicleRows.value.map((r) => ({
       ทะเบียนรถ: vehiclesStore.fullPlate(r.vehicle),
       ประเภท: r.vehicle.department,

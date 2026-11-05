@@ -17,6 +17,7 @@ import {
   type IncomeAdjustmentLine,
   type IncomeAdjustments,
 } from '@/utils/incomeAdjustments'
+import { wholeMonthOf, type PayrollRange } from '@/utils/payrollRange'
 import type { Booking } from '@/types'
 
 /**
@@ -32,6 +33,9 @@ export interface VehicleIncomeDocument {
   plate: string
   /** รอบเดือน ค.ศ. "YYYY-MM" ของงานที่เลือก (ใช้แสดงผล ไม่ใช่ตัวกรองข้อมูล เพราะข้อมูลอิง bookingIds ตรงๆ อยู่แล้ว) */
   period: string
+  /** ช่วงวันที่เลือกตอนออกเอกสาร "YYYY-MM-DD" — มีเฉพาะเอกสารที่ไม่ได้ออกเต็มเดือน */
+  periodFrom?: string
+  periodTo?: string
   bookingIds: string[]
   tripIncomeTotal: number
   fuelCostTotal: number
@@ -202,7 +206,8 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     bookingIds: string[],
     period: string,
     deductionOptions: VehicleIncomeDeductionOption[] = [],
-    adjustments: IncomeAdjustments = emptyAdjustments()
+    adjustments: IncomeAdjustments = emptyAdjustments(),
+    range?: PayrollRange
   ): Promise<ActionResult & { doc?: VehicleIncomeDocument }> {
     if (!canManage()) return { ok: false, message: 'สร้างเอกสารรายได้รถร่วมได้เฉพาะผู้ดูแลระบบหรือฝ่ายบัญชี' }
     if (bookingIds.length === 0) return { ok: false, message: 'ยังไม่ได้เลือกงาน' }
@@ -239,6 +244,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
       vehicleId,
       plate: full,
       period,
+      ...(range && !wholeMonthOf(range) ? { periodFrom: range.from, periodTo: range.to } : {}),
       bookingIds: targetBookings.map((b) => b.id),
       ...totals,
       lines,

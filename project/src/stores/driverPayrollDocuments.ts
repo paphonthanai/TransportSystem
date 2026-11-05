@@ -10,6 +10,7 @@ import { useAuthStore } from './auth'
 import { driverIdentityIssue } from '@/utils/driverIdentity'
 import { driverPayrollDocumentRepository } from '@/repositories/driverPayrollDocumentRepository'
 import { adjustmentIssue, cleanAdjustmentLines, emptyAdjustments, type IncomeAdjustments } from '@/utils/incomeAdjustments'
+import { wholeMonthOf, type PayrollRange } from '@/utils/payrollRange'
 
 /**
  * เอกสารรายได้คนขับ — ต่างจากเดิม (DriverIncomeDocumentView.vue เวอร์ชันก่อนหน้า) ตรงที่เป็นระเบียนถาวรจริง ไม่ใช่คำนวณสด
@@ -25,6 +26,9 @@ export interface DriverPayrollDocument {
   driverName: string
   /** รอบเดือน ค.ศ. "YYYY-MM" ของงานที่เลือก (ใช้แสดงผล ไม่ใช่ตัวกรองข้อมูล เพราะข้อมูลอิง bookingIds ตรงๆ อยู่แล้ว) */
   period: string
+  /** ช่วงวันที่เลือกตอนออกเอกสาร "YYYY-MM-DD" — มีเฉพาะเอกสารที่ไม่ได้ออกเต็มเดือน */
+  periodFrom?: string
+  periodTo?: string
   bookingIds: string[]
   tripIncomeTotal: number
   additionTotal: number
@@ -48,7 +52,7 @@ export interface DriverPayrollLineItem {
 export type DriverPayrollPercentDeduction = { kind: 'WHT' | 'OTHER'; percent: number; label?: string }
 
 /** สิ่งที่ผู้ใช้เลือก/พิมพ์เองตอนออกเอกสาร: หัก % + รายได้ส่วนเพิ่ม/หักค่าใช้จ่าย (ระบุรายละเอียด/ราคาเอง) */
-export type DriverPayrollExtras = { percentDeductions?: DriverPayrollPercentDeduction[]; adjustments?: IncomeAdjustments }
+export type DriverPayrollExtras = { percentDeductions?: DriverPayrollPercentDeduction[]; adjustments?: IncomeAdjustments; range?: PayrollRange }
 
 /** รายการหัก % เป็น DriverPayrollLineItem (type PERCENT) เช่น "หักภาษี ณ ที่จ่าย 3%" — ปัดเป็นสตางค์ */
 export function percentDeductionItems(tripIncomeTotal: number, options: DriverPayrollPercentDeduction[]): DriverPayrollLineItem[] {
@@ -183,9 +187,12 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
     const tripIncomeTotal = roundMoney(targetBookings.reduce((sum, b) => sum + (b.finalAllowance ?? b.allowance ?? 0), 0))
     // รายการจากหน้าเงินเดือน + รายการที่พิมพ์เองตอนออกเอกสาร (MANUAL) + หัก % จากรายได้จากงาน (PERCENT)
     const manual = (l: { label: string; amount: number }) => ({ type: 'MANUAL', label: l.label, amount: l.amount })
-    const additionItems = [...deductionsStore.additionsFor(driverName, periodLabel).map(toItem), ...cleanAdjustmentLines(adjustments.additions).map(manual)]
+    // ออกเป็นช่วงวัน = Snapshot เฉพาะรายการที่วันที่อยู่ในช่วง ตัดหลายรอบในเดือนเดียวแล้วไม่หักซ้ำ
+    const additionLines = extras.range ? deductionsStore.additionsInRange(driverName, extras.range) : deductionsStore.additionsFor(driverName, periodLabel)
+    const deductionLines = extras.range ? deductionsStore.deductionsInRange(driverName, extras.range) : deductionsStore.deductionsFor(driverName, periodLabel)
+    const additionItems = [...additionLines.map(toItem), ...cleanAdjustmentLines(adjustments.additions).map(manual)]
     const deductionItems = [
-      ...deductionsStore.deductionsFor(driverName, periodLabel).map(toItem),
+      ...deductionLines.map(toItem),
       ...percentDeductionItems(tripIncomeTotal, percentDeductions),
       ...cleanAdjustmentLines(adjustments.deductions).map(manual),
     ]
@@ -202,6 +209,7 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
       driverId,
       driverName,
       period,
+      ...(extras.range && !wholeMonthOf(extras.range) ? { periodFrom: extras.range.from, periodTo: extras.range.to } : {}),
       bookingIds: targetBookings.map((b) => b.id),
       tripIncomeTotal,
       additionTotal,

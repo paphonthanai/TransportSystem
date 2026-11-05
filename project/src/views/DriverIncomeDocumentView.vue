@@ -27,7 +27,7 @@
           </div>
           <div class="text-right">
             <div class="text-sm">
-              ประจำเดือน <span class="font-bold">{{ periodThaiLabel }}</span>
+              {{ doc?.periodFrom ? 'รอบวันที่' : 'ประจำเดือน' }} <span class="font-bold">{{ periodThaiLabel }}</span>
             </div>
           </div>
         </div>
@@ -191,6 +191,7 @@
 </template>
 
 <script setup lang="ts">
+import { documentPeriodLabel } from '@/utils/payrollRange'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDriversStore } from '@/stores/drivers'
@@ -217,13 +218,7 @@ const authStore = useAuthStore()
 const doc = computed(() => driverPayrollDocumentsStore.documents.find((d) => d.id === props.docId) || null)
 const driver = computed(() => (doc.value ? driversStore.drivers.find((d) => d.id === doc.value!.driverId) : undefined))
 
-const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
-const periodThaiLabel = computed(() => {
-  if (!doc.value) return '-'
-  const [y, m] = doc.value.period.split('-')
-  const monthIndex = Number(m) - 1
-  return `${thaiMonths[monthIndex] || m} ${Number(y) + 543}`
-})
+const periodThaiLabel = computed(() => (doc.value ? documentPeriodLabel(doc.value) : '-'))
 
 const rows = computed(() => {
   if (!doc.value) return []

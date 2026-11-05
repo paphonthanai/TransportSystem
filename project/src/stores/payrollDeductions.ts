@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { payrollDeductionRepository } from '@/repositories/payrollDeductionRepository'
 import type { PayrollDeduction } from '@/types'
 import { normalizeDriverName } from '@/utils/driverIdentity'
+import { payrollLineInRange, type PayrollRange } from '@/utils/payrollRange'
 
 export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => {
   const deductions = ref<PayrollDeduction[]>([])
@@ -40,7 +41,7 @@ export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => 
     return deduction
   }
 
-  async function updateDeduction(id: string, data: Partial<Pick<PayrollDeduction, 'type' | 'label' | 'amount' | 'date' | 'kind'>>) {
+  async function updateDeduction(id: string, data: Partial<Pick<PayrollDeduction, 'type' | 'label' | 'amount' | 'date' | 'kind' | 'periodLabel'>>) {
     await payrollDeductionRepository.update(id, data)
     const existing = deductions.value.find((d) => d.id === id)
     if (existing) Object.assign(existing, data)
@@ -66,6 +67,14 @@ export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => 
   const additionsFor = (driverName: string, periodLabel: string) =>
     deductions.value.filter((d) => sameDriver(d.driverName, driverName) && d.periodLabel === periodLabel && d.kind === 'ADDITION')
 
+  /** รายการหักของคนขับในช่วงวันที่เลือก — นับตามวันที่รายการ (ดู payrollLineDateKey) */
+  const deductionsInRange = (driverName: string, range: PayrollRange) =>
+    deductions.value.filter((d) => sameDriver(d.driverName, driverName) && d.kind !== 'ADDITION' && payrollLineInRange(d, range))
+
+  /** รายได้อื่นๆ ของคนขับในช่วงวันที่เลือก — นับตามวันที่รายการ */
+  const additionsInRange = (driverName: string, range: PayrollRange) =>
+    deductions.value.filter((d) => sameDriver(d.driverName, driverName) && d.kind === 'ADDITION' && payrollLineInRange(d, range))
+
   return {
     deductions,
     loading,
@@ -75,5 +84,7 @@ export const usePayrollDeductionsStore = defineStore('payrollDeductions', () => 
     deleteDeduction,
     deductionsFor,
     additionsFor,
+    deductionsInRange,
+    additionsInRange,
   }
 })

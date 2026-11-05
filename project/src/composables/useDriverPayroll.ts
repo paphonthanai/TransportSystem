@@ -7,26 +7,8 @@ import { useDriversStore } from '@/stores/drivers'
 import { normalizeDriverName } from '@/utils/driverIdentity'
 import { exportRowsToExcel } from '@/utils/exportExcel'
 import { fuelCostOf } from '@/utils/bookingMoney'
+import { currentMonthRange, inPayrollRange, payrollRangeFileKey, payrollRangeMonth, toBEPeriodLabel, wholeMonthOf } from '@/utils/payrollRange'
 import type { Booking, VehicleType, DriverPaymentStatusValue } from '@/types'
-
-function currentMonthValue(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-/** แปลง "YYYY-MM" (ค.ศ.) เป็นรอบบัญชี พ.ศ. เช่น "2026-08" -> "2569-08" ใช้เป็น key จับคู่กับ PayrollDeduction.periodLabel */
-function toBEPeriodLabel(monthValue: string): string {
-  const [y, m] = monthValue.split('-')
-  return `${Number(y) + 543}-${m}`
-}
-
-function inPeriod(booking: Booking, monthValue: string): boolean {
-  const date = booking.shipDate || booking.completedAt
-  if (!date) return false
-  const d = new Date(date)
-  const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-  return value === monthValue
-}
 
 function destinationLabel(booking: Booking): string {
   if (!booking.items.length) return '-'
@@ -36,7 +18,7 @@ function destinationLabel(booking: Booking): string {
 
 /**
  * รวม logic เงินเดือนคนขับที่ใช้ร่วมกันทั้งหน้า "พนักงานขับรถ" (รถบริษัท) และหน้า "รถร่วม" (รถร่วมใน/นอก/หุ้นส่วน)
- * แยกกันแค่ departmentFilter — ทุกอย่างอื่นเหมือนกันเป๊ะ (โหมดสรุป/รายเที่ยว, รอบเดือน, รายการหัก, Export Excel)
+ * แยกกันแค่ departmentFilter — ทุกอย่างอื่นเหมือนกันเป๊ะ (โหมดสรุป/รายเที่ยว, ช่วงวันที่, รายการหัก, Export Excel)
  */
 export function useDriverPayroll(departmentFilter: (department: VehicleType | undefined) => boolean, exportPrefix: string) {
   const bookingStore = useBookingStore()
@@ -46,10 +28,12 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
   const driversStore = useDriversStore()
 
   const mode = ref<'summary' | 'detail'>('summary')
-  const period = ref(currentMonthValue())
+  const range = ref(currentMonthRange())
   const selectedDriver = ref('')
 
-  const periodLabel = computed(() => toBEPeriodLabel(period.value))
+  const periodLabel = computed(() => toBEPeriodLabel(payrollRangeMonth(range.value)))
+  /** สถานะจ่ายรายเดือนล็อกงานทั้งเดือน จึงตั้งได้เฉพาะตอนดูเต็มเดือน — ตัดรอบเป็นช่วงวันให้จ่ายที่เอกสารรายได้แทน */
+  const isWholeMonth = computed(() => !!wholeMonthOf(range.value))
 
   const categoryFor = (booking: Booking): VehicleType | undefined =>
     booking.plate ? vehiclesStore.findByFullPlate(booking.plate)?.department : undefined
@@ -82,7 +66,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
 
   const bookingsInScope = computed(() =>
     bookingStore.bookings.filter(
-      (b) => b.status === 'DELIVERED' && b.driverName && departmentFilter(categoryFor(b)) && inPeriod(b, period.value)
+      (b) => b.status === 'DELIVERED' && b.driverName && departmentFilter(categoryFor(b)) && inPayrollRange(b.shipDate || b.completedAt, range.value)
     )
   )
 
@@ -104,8 +88,8 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
       byDriver.set(driver, entry)
     })
     return Array.from(byDriver.entries()).map(([driver, data]) => {
-      const additionTotal = deductionsStore.additionsFor(driver, periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
-      const deductionTotal = deductionsStore.deductionsFor(driver, periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
+      const additionTotal = deductionsStore.additionsInRange(driver, range.value).reduce((sum, d) => sum + d.amount, 0)
+      const deductionTotal = deductionsStore.deductionsInRange(driver, range.value).reduce((sum, d) => sum + d.amount, 0)
       const paymentStatus = paymentsStore.statusFor(driver, periodLabel.value, driverIdFor(driver))
       return { driver, ...data, additionTotal, deductionTotal, finalNet: data.netIncome + additionTotal - deductionTotal, paymentStatus }
     })
@@ -135,7 +119,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
 
   function exportSummary() {
     exportRowsToExcel(
-      `${exportPrefix}-สรุป-${period.value}`,
+      `${exportPrefix}-สรุป-${payrollRangeFileKey(range.value)}`,
       summaryRows.value.map((r) => ({
         คนขับ: r.driver,
         จำนวนเที่ยว: r.trips,
@@ -151,7 +135,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
 
   function exportDetail() {
     exportRowsToExcel(
-      `${exportPrefix}-รายเที่ยว-${period.value}`,
+      `${exportPrefix}-รายเที่ยว-${payrollRangeFileKey(range.value)}`,
       detailRows.value.map((r) => ({
         วันที่ส่งงาน: formatDate(r.shipDate),
         เลขชิพเม้นท์: r.shipmentNo,
@@ -165,7 +149,8 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
 
   return {
     mode,
-    period,
+    range,
+    isWholeMonth,
     periodLabel,
     selectedDriver,
     driverOptions,

@@ -87,6 +87,36 @@ describe('createDriverPayrollDocument', () => {
     expect((await driverPayrollDocumentRepository.getAll()).map((d) => d.id)).toContain(doc.id)
   })
 
+  it('ออกเอกสารเป็นช่วงวัน: รายการหักเข้าเฉพาะรอบที่วันที่อยู่ในช่วง ตัด 2 รอบแล้วไม่หักซ้ำ และเก็บช่วงวันไว้บนเอกสาร', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings, deductions } = await setup()
+    const a = jobOf({ shipDate: new Date(2026, 9, 5) })
+    const b = jobOf({ shipDate: new Date(2026, 9, 20) })
+    bookings.bookings.push(a, b)
+    deductions.deductions.push({ ...line('DEDUCTION', 'ประกันงาน', 300), date: new Date(2026, 9, 3) }, { ...line('DEDUCTION', 'ผ่อนชำระ', 100), date: new Date(2026, 9, 18) })
+
+    const first = await docs.createDriverPayrollDocument('drv-1', [a.id], '2026-10', { range: { from: '2026-10-01', to: '2026-10-15' } })
+    const second = await docs.createDriverPayrollDocument('drv-1', [b.id], '2026-10', { range: { from: '2026-10-16', to: '2026-10-31' } })
+
+    expect(first.doc?.deductionTotal).toBe(300)
+    expect(second.doc?.deductionTotal).toBe(100)
+    expect(first.doc?.periodFrom).toBe('2026-10-01')
+    expect(second.doc?.periodTo).toBe('2026-10-31')
+  })
+
+  it('ออกเอกสารเต็มเดือน: รวมรายการทั้งเดือนเหมือนเดิม ไม่เก็บช่วงวัน', async () => {
+    loginAs('ADMIN')
+    const { docs, bookings, deductions } = await setup()
+    const a = jobOf()
+    bookings.bookings.push(a)
+    deductions.deductions.push({ ...line('DEDUCTION', 'ประกันงาน', 300), date: new Date(2026, 9, 3) }, { ...line('DEDUCTION', 'ผ่อนชำระ', 100), date: new Date(2026, 9, 18) })
+
+    const result = await docs.createDriverPayrollDocument('drv-1', [a.id], '2026-10', { range: { from: '2026-10-01', to: '2026-10-31' } })
+
+    expect(result.doc?.deductionTotal).toBe(400)
+    expect(result.doc?.periodFrom).toBeUndefined()
+  })
+
   it('ชื่อคนขับในงานไม่ตรงกับทะเบียน = ไม่สร้างเอกสาร คืนรายละเอียดที่ไม่ตรง และไม่ผูกงาน', async () => {
     loginAs('ADMIN')
     const { docs, bookings } = await setup()

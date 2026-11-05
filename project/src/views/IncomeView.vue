@@ -10,7 +10,7 @@
         <button @click="mode = 'summary'" :class="['tab-btn', mode === 'summary' && 'tab-btn-active']">สรุปทั้งหมด</button>
         <button @click="mode = 'detail'" :class="['tab-btn', mode === 'detail' && 'tab-btn-active']">รายเที่ยว</button>
       </div>
-      <input v-model="period" type="month" class="input-field" />
+      <PayrollRangePicker v-model="range" />
       <select v-if="mode === 'detail'" v-model="selectedDriver" class="input-field">
         <option value="">ทุกคน</option>
         <option v-for="d in driverOptions" :key="d" :value="d">{{ d }}</option>
@@ -62,7 +62,9 @@
             </td>
             <td class="px-4 py-3 text-right font-bold text-text cursor-pointer" @click="selectDriverDetail(row.driver)">{{ formatBaht(row.finalNet) }}</td>
             <td class="px-4 py-3">
+              <span v-if="!isWholeMonth" class="text-xs text-muted" title="สถานะจ่ายรายเดือนมีผลกับงานทั้งเดือน ตั้งได้เมื่อเลือกเต็มเดือน">จ่ายที่เอกสารรายได้</span>
               <select
+                v-else
                 :value="row.paymentStatus"
                 :disabled="!canEditPayroll"
                 @change="changePaymentStatus(row.driver, ($event.target as HTMLSelectElement).value as 'UNPAID' | 'PAID')"
@@ -75,7 +77,7 @@
             <td class="px-4 py-3 text-right">
               <button
                 v-if="driverIdFor(row.driver)"
-                @click="router.push({ path: `/settings/drivers/${driverIdFor(row.driver)}`, query: { period } })"
+                @click="router.push({ path: `/settings/drivers/${driverIdFor(row.driver)}`, query: { from: range.from, to: range.to } })"
                 class="btn-sm"
                 title="เลือกงาน/สร้างเอกสารรายได้"
               >
@@ -118,14 +120,14 @@
       </table>
     </div>
 
-    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" kind="ADDITION" :readonly="!canEditPayroll" />
-    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" kind="DEDUCTION" :readonly="!canEditPayroll" />
+    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" :range="range" kind="ADDITION" :readonly="!canEditPayroll" />
+    <PayrollDeductionPanel :driver-name="selectedDriver" :period-label="periodLabel" :range="range" kind="DEDUCTION" :readonly="!canEditPayroll" />
 
     <!-- "แก้" ในตารางสรุป — เปิดรายการรายได้อื่นๆ/รายการหักของคนขับคนนั้นตรงนี้เลย ยอดในตารางคำนวณจากรายการเหล่านี้ทันที -->
     <Teleport to="body" v-if="lineEditTarget">
       <div @click="lineEditTarget = null" class="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
         <div @click.stop class="w-full max-w-2xl max-h-[85vh] overflow-y-auto space-y-3">
-          <PayrollDeductionPanel :driver-name="lineEditTarget.driver" :period-label="periodLabel" :kind="lineEditTarget.kind" :readonly="!canEditPayroll" />
+          <PayrollDeductionPanel :driver-name="lineEditTarget.driver" :period-label="periodLabel" :range="range" :kind="lineEditTarget.kind" :readonly="!canEditPayroll" />
           <div class="flex justify-end">
             <button @click="lineEditTarget = null" class="btn-secondary">ปิด</button>
           </div>
@@ -140,11 +142,12 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDriverPayroll } from '@/composables/useDriverPayroll'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
+import PayrollRangePicker from '@/components/payroll/PayrollRangePicker.vue'
 
 /** พนักงานขับรถเป็นเจ้าของข้อมูลรายได้คนขับทั้งหมด ไม่ว่าจะขับรถบริษัทหรือรถร่วม/รถหุ้นส่วน — ไม่กรองตามประเภทรถ
  *  (ต่างจากเดิมที่กรองเฉพาะ 'รถบริษัท' ทำให้รายได้คนขับรถร่วมไปโผล่ปนอยู่ในหน้า "เงินเดือน · รถร่วม" แทน ซึ่งหน้านั้น
  *  ควรมีแต่ข้อมูลของ "รถ" เท่านั้น ดู PayrollVendorFleetView.vue) */
-const { mode, period, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, driverIdFor, formatDate, formatBaht, exportSummary, exportDetail, setPaymentStatus, canEditPayroll } =
+const { mode, range, isWholeMonth, periodLabel, selectedDriver, driverOptions, summaryRows, detailRows, driverIdFor, formatDate, formatBaht, exportSummary, exportDetail, setPaymentStatus, canEditPayroll } =
   useDriverPayroll(() => true, 'พขร')
 
 const router = useRouter()

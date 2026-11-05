@@ -24,7 +24,7 @@
           <input v-model="draft.type" :placeholder="isAddition ? 'ประเภท/รายการ เช่น ค่าล่วงเวลา, โบนัส' : 'ประเภท/รายการ เช่น หักภาษี ณ ที่จ่าย'" class="input-field h-9 text-xs sm:col-span-2" />
           <input v-model="draft.label" placeholder="รายละเอียด (ไม่บังคับ)" class="input-field h-9 text-xs sm:col-span-2" />
           <input v-model.number="draft.amount" type="number" placeholder="จำนวนเงิน" class="input-field h-9 text-xs" />
-          <input v-model="draft.date" type="date" class="input-field h-9 text-xs" />
+          <input v-model="draft.date" type="date" :min="isPartialRange ? range?.from : undefined" :max="isPartialRange ? range?.to : undefined" class="input-field h-9 text-xs" />
         </div>
         <div class="flex items-center gap-2 justify-end">
           <button @click="closeForm" class="btn-sm">ยกเลิก</button>
@@ -75,6 +75,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed } from 'vue'
 import { usePayrollDeductionsStore } from '@/stores/payrollDeductions'
+import { inPayrollRange, toBEPeriodLabel, wholeMonthOf, type PayrollRange } from '@/utils/payrollRange'
 import type { PayrollDeduction, PayrollLineKind } from '@/types'
 
 /**
@@ -85,14 +86,22 @@ import type { PayrollDeduction, PayrollLineKind } from '@/types'
  * Income/Driver Income/Fuel Cost — ยังคง Reuse store/repository/collection เดิมทั้งหมด ไม่มีการสร้างใหม่
  */
 /** readonly = ดูอย่างเดียว (เช่นฝ่ายบัญชี — Firestore Rules ให้เขียน payrollDeductions ได้เฉพาะ ADMIN) */
-const props = withDefaults(defineProps<{ driverName: string; periodLabel: string; kind?: PayrollLineKind; readonly?: boolean }>(), { kind: 'DEDUCTION', readonly: false })
+const props = withDefaults(defineProps<{ driverName: string; periodLabel: string; range?: PayrollRange; kind?: PayrollLineKind; readonly?: boolean }>(), { kind: 'DEDUCTION', readonly: false })
+
+/** ดูเป็นช่วงวัน (ไม่ใช่เต็มเดือน) — รายการต้องลงวันที่ในช่วงนี้ และผูกรอบบัญชีตามเดือนของวันที่รายการ ไม่งั้นจะหลุดจากช่วงที่ดูอยู่ */
+const isPartialRange = computed(() => !!props.range && !wholeMonthOf(props.range))
+const periodLabelFor = (date: string) => (isPartialRange.value && date ? toBEPeriodLabel(date.slice(0, 7)) : props.periodLabel)
 
 const isAddition = computed(() => props.kind === 'ADDITION')
 
 const deductionsStore = usePayrollDeductionsStore()
 
+const linesInScope = () => {
+  if (props.range) return isAddition.value ? deductionsStore.additionsInRange(props.driverName, props.range) : deductionsStore.deductionsInRange(props.driverName, props.range)
+  return isAddition.value ? deductionsStore.additionsFor(props.driverName, props.periodLabel) : deductionsStore.deductionsFor(props.driverName, props.periodLabel)
+}
 const rows = computed(() =>
-  [...(isAddition.value ? deductionsStore.additionsFor(props.driverName, props.periodLabel) : deductionsStore.deductionsFor(props.driverName, props.periodLabel))].sort(
+  [...linesInScope()].sort(
     (a, b) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
   )
 )
@@ -100,9 +109,10 @@ const rows = computed(() =>
 const total = computed(() => rows.value.reduce((sum, d) => sum + d.amount, 0))
 
 const todayValue = () => new Date().toISOString().slice(0, 10)
+const defaultDate = () => (props.range && isPartialRange.value && !inPayrollRange(todayValue(), props.range) ? props.range.from : todayValue())
 
 type Draft = { type: string; label: string; amount: number | undefined; date: string }
-const emptyDraft = (): Draft => ({ type: '', label: '', amount: undefined, date: todayValue() })
+const emptyDraft = (): Draft => ({ type: '', label: '', amount: undefined, date: defaultDate() })
 
 const draft = reactive<Draft>(emptyDraft())
 const formOpen = ref(false)
@@ -129,11 +139,17 @@ const startEdit = (row: PayrollDeduction) => {
 const save = () => {
   if (!draft.type || !draft.amount) return
   if (editingId.value) {
-    deductionsStore.updateDeduction(editingId.value, { type: draft.type, label: draft.label, amount: draft.amount, date: draft.date ? new Date(draft.date) : undefined })
+    deductionsStore.updateDeduction(editingId.value, {
+      type: draft.type,
+      label: draft.label,
+      amount: draft.amount,
+      date: draft.date ? new Date(draft.date) : undefined,
+      ...(isPartialRange.value && draft.date ? { periodLabel: periodLabelFor(draft.date) } : {}),
+    })
   } else {
     deductionsStore.addDeduction({
       driverName: props.driverName,
-      periodLabel: props.periodLabel,
+      periodLabel: periodLabelFor(draft.date),
       type: draft.type,
       label: draft.label,
       amount: draft.amount,

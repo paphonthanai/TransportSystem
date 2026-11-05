@@ -6,7 +6,7 @@
         กลับ
       </button>
       <h2 class="text-lg font-bold text-text flex-1">{{ vehicle ? vehiclesStore.fullPlate(vehicle) : 'รายละเอียดรถร่วม' }}</h2>
-      <input v-model="period" type="month" class="input-field" />
+      <PayrollRangePicker v-model="range" />
     </div>
 
     <div v-if="!vehicle" class="card-lg text-center text-muted py-10">ไม่พบข้อมูลรถคันนี้</div>
@@ -85,7 +85,7 @@
 
       <div class="card-lg overflow-x-auto">
         <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <h3 class="font-semibold text-text">ประวัติงาน — รอบ {{ periodLabel }}</h3>
+          <h3 class="font-semibold text-text">ประวัติงาน — รอบ {{ rangeLabel }}</h3>
           <div class="flex items-center gap-2 flex-wrap w-full">
             <div class="relative flex-1 min-w-[200px]">
               <span class="material-symbols-rounded text-base text-muted absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
@@ -258,7 +258,7 @@
           <tbody>
             <tr v-for="doc in issuedDocuments" :key="doc.id" class="border-t border-border hover:bg-surface-2 transition-colors">
               <td class="px-3 py-2 font-mono text-primary font-semibold">{{ doc.number }}</td>
-              <td class="px-3 py-2 text-muted">{{ doc.period }}</td>
+              <td class="px-3 py-2 text-muted">{{ documentPeriodLabel(doc) }}</td>
               <td class="px-3 py-2 text-right text-text">{{ doc.bookingIds.length }}</td>
               <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(doc.netTotal) }}</td>
               <td class="px-3 py-2">
@@ -317,6 +317,8 @@ import {
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import VehicleExpensePanel from '@/components/vehicle/VehicleExpensePanel.vue'
 import IncomeAdjustmentEditor from '@/components/payroll/IncomeAdjustmentEditor.vue'
+import PayrollRangePicker from '@/components/payroll/PayrollRangePicker.vue'
+import { documentPeriodLabel, inPayrollRange, payrollRangeFromQuery, payrollRangeLabel, payrollRangeMonth } from '@/utils/payrollRange'
 import { emptyAdjustments, sumAdjustmentLines, type IncomeAdjustments } from '@/utils/incomeAdjustments'
 import type { Booking } from '@/types'
 
@@ -338,23 +340,9 @@ const currentDriverLabel = computed(() => {
   return driver ? driversStore.fullName(driver) : code
 })
 
-function currentMonthValue(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-function toBEPeriodLabel(monthValue: string): string {
-  const [y, m] = monthValue.split('-')
-  return `${Number(y) + 543}-${m}`
-}
-function inPeriod(date: Date | undefined, monthValue: string): boolean {
-  if (!date) return false
-  const d = new Date(date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthValue
-}
-
-/** รอบเดือนเริ่มต้นมาจาก query ?period=YYYY-MM ถ้ามี (เข้ามาจากหน้า /payroll/vendor-fleet ที่เลือกรอบไว้แล้ว) เหมือนหน้าคนขับ */
-const period = ref(typeof route.query.period === 'string' ? route.query.period : currentMonthValue())
-const periodLabel = computed(() => toBEPeriodLabel(period.value))
+/** ช่วงวันเริ่มต้นมาจาก query ?from&to ถ้ามี (เข้ามาจากหน้า /payroll/vendor-fleet ที่เลือกช่วงไว้แล้ว) เหมือนหน้าคนขับ */
+const range = ref(payrollRangeFromQuery(route.query))
+const rangeLabel = computed(() => payrollRangeLabel(range.value))
 
 /**
  * Trace ตรงจาก Booking.plate -> ทะเบียนรถคันนี้ (เก็บไว้ ณ ตอนจ่ายงานจริง) ไม่ผ่านคนขับปัจจุบันของรถเลย จึงยังเห็นงาน
@@ -367,7 +355,7 @@ const rows = computed(() => {
   return bookingStore.bookings
     .filter((b) => b.status === 'DELIVERED')
     .filter((b) => b.plate === full || b.plate === vehicle.value!.plate)
-    .filter((b) => inPeriod(b.shipDate || b.completedAt, period.value))
+    .filter((b) => inPayrollRange(b.shipDate || b.completedAt, range.value))
     .map((b) => ({ booking: b, allowance: vendorAllowanceOf(b), fuelCost: vendorFuelCostOf(b), vehicleExpense: vehicleIncomeDocumentsStore.vehicleExpenseOf(b) }))
     .sort((a, b) => new Date(b.booking.shipDate || b.booking.completedAt || 0).getTime() - new Date(a.booking.shipDate || a.booking.completedAt || 0).getTime())
 })
@@ -514,7 +502,7 @@ const createDocument = async () => {
   if (!vehicle.value || selectedIds.value.size === 0 || creating.value) return
   actionError.value = ''
   creating.value = true
-  const result = await vehicleIncomeDocumentsStore.createVehicleIncomeDocument(vehicle.value.id, [...selectedIds.value], period.value, deductionOptions.value, adjustments.value)
+  const result = await vehicleIncomeDocumentsStore.createVehicleIncomeDocument(vehicle.value.id, [...selectedIds.value], payrollRangeMonth(range.value), deductionOptions.value, adjustments.value, range.value)
   creating.value = false
   if (!result.ok || !result.doc) {
     actionError.value = `สร้างเอกสารไม่สำเร็จ — ${result.message || 'กรุณารีเฟรชหน้านี้แล้วลองใหม่'}`

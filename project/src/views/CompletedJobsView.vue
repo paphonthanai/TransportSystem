@@ -63,18 +63,24 @@
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div class="font-bold text-text">งานที่เสร็จสิ้นทั้งหมด ({{ completedBookings.length }})</div>
         <div class="flex items-center gap-2 flex-wrap">
+          <div class="flex items-center gap-1">
+            <span class="text-xs text-muted">เลือก</span>
+            <input v-model.number="pickCount" type="number" min="1" step="1" class="input-field !h-8 w-24 text-right" />
+            <button @click="selectFirstN" :disabled="completedBookings.length === 0 || !(pickCount >= 1)" class="btn-sm disabled:opacity-50" title="ติ๊กงานแรกตามลำดับในตาราง แทนที่ที่เลือกไว้เดิม">งานแรก</button>
+            <button v-if="selectedTargets.length > 0" @click="clearSelection" class="btn-sm">ล้างที่เลือก</button>
+          </div>
           <button @click="exportToExcel" :disabled="completedBookings.length === 0" class="btn-sm !border-green-200 !bg-green-50 !text-green-700 disabled:opacity-50">
             <span class="material-symbols-rounded text-base">download</span>
-            {{ selectedIds.length > 0 ? `นำออก Excel ที่เลือกไว้ (${selectedIds.length})` : `นำออก Excel ทั้งหมดที่กรอง (${completedBookings.length})` }}
+            {{ selectedTargets.length > 0 ? `นำออก Excel ที่เลือกไว้ (${selectedTargets.length})` : `นำออก Excel ทั้งหมดที่กรอง (${completedBookings.length})` }}
           </button>
           <button
-            v-if="isAdmin && selectedIds.length > 0"
+            v-if="isAdmin && selectedTargets.length > 0"
             @click="bulkDeleteSelected"
             :disabled="bulkDeleting"
             class="btn-sm !border-red-200 !bg-red-50 !text-red-700 disabled:opacity-50"
           >
             <span class="material-symbols-rounded text-base">delete_forever</span>
-            ลบถาวรที่เลือกไว้ ({{ selectedIds.length }})
+            ลบถาวรที่เลือกไว้ ({{ selectedTargets.length }})
           </button>
         </div>
       </div>
@@ -350,7 +356,8 @@ const resetBooking = (booking: Booking) => {
 // (ต่างจาก BookingView.vue's BookingActionMenu ที่มีปุ่มลบถาวรต่อแถวอยู่แล้ว) เพิ่ม checkbox ต่อแถวไว้เลือกได้หลายอัน
 // แล้วลบทีเดียว กันต้องกดยืนยัน popup ทีละรายการเวลามีของค้างต้องเคลียร์เยอะๆ (เช่น ข้อมูลทดสอบจาก import ผิดพลาด)
 const selected = ref<Record<string, boolean>>({})
-const selectedIds = computed(() => Object.keys(selected.value).filter((id) => selected.value[id]))
+/** งานที่ติ๊กและยังอยู่ในตัวกรองปัจจุบัน — ตัวเลขบนปุ่มตรงกับจำนวนที่นำออก/ลบจริง แม้เปลี่ยนตัวกรองหลังติ๊กไว้ */
+const selectedTargets = computed(() => completedBookings.value.filter((b) => selected.value[b.id]))
 const allVisibleSelected = computed(() => completedBookings.value.length > 0 && completedBookings.value.every((b) => selected.value[b.id]))
 const toggleSelectAll = () => {
   const next = !allVisibleSelected.value
@@ -359,9 +366,19 @@ const toggleSelectAll = () => {
   })
 }
 
+/** ติ๊กงาน N แรกตามลำดับในตาราง (ตามตัวกรองปัจจุบัน) แทนที่ที่เลือกไว้เดิม ติ๊กเพิ่ม/เอาออกทีละงานต่อได้ */
+const pickCount = ref(1000)
+const selectFirstN = () => {
+  if (!(pickCount.value >= 1)) return
+  selected.value = Object.fromEntries(completedBookings.value.slice(0, Math.floor(pickCount.value)).map((b) => [b.id, true]))
+}
+const clearSelection = () => {
+  selected.value = {}
+}
+
 /** นำออกเฉพาะรายการที่ติ๊กเลือก ถ้าไม่ได้เลือกเลยจะนำออกทั้งหมดที่ผ่านตัวกรองอยู่ ณ ตอนนี้ — ลูกค้าใช้ชื่อเต็มเสมอ (ไม่ใช่ชื่อย่อ) */
 const exportToExcel = () => {
-  const targets = selectedIds.value.length > 0 ? completedBookings.value.filter((b) => selected.value[b.id]) : completedBookings.value
+  const targets = selectedTargets.value.length > 0 ? selectedTargets.value : completedBookings.value
   if (!targets.length) return
   exportRowsToExcel(`งานเสร็จสิ้น_${new Date().toISOString().slice(0, 10)}`, targets.map(buildExportRow), 'งานเสร็จสิ้น')
 }
@@ -369,7 +386,7 @@ const exportToExcel = () => {
 const bulkDeleting = ref(false)
 const bulkDeleteSelected = async () => {
   if (!isAdmin.value || bulkDeleting.value) return
-  const targets = completedBookings.value.filter((b) => selected.value[b.id])
+  const targets = selectedTargets.value
   if (!targets.length) return
 
   const preview = targets.slice(0, 20).map((b) => `- ${b.docNo} (${b.customer || '-'})`).join('\n')

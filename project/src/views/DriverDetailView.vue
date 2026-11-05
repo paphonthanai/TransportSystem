@@ -6,7 +6,7 @@
         กลับ
       </button>
       <h2 class="text-lg font-bold text-text flex-1">{{ driver ? driversStore.fullName(driver) : 'รายละเอียดพนักงานขับรถ' }}</h2>
-      <input v-model="period" type="month" class="input-field" />
+      <PayrollRangePicker v-model="range" />
     </div>
 
     <div v-if="!driver && driversStore.loading" class="card-lg text-center text-muted py-10">กำลังโหลดข้อมูลคนขับ...</div>
@@ -86,7 +86,9 @@
         </div>
         <div>
           <div class="text-xs text-muted mb-1">สถานะการจ่ายเงิน (รอบนี้)</div>
+          <div v-if="!isWholeMonth" class="text-xs text-muted">จ่ายที่เอกสารรายได้ (สถานะรายเดือนตั้งได้เมื่อเลือกเต็มเดือน)</div>
           <select
+            v-else
             :value="paymentStatus"
             :disabled="!paymentsStore.canEdit()"
             @change="setPaymentStatus(($event.target as HTMLSelectElement).value as 'UNPAID' | 'PAID')"
@@ -95,7 +97,7 @@
             <option value="UNPAID">ยังไม่จ่าย</option>
             <option value="PAID">จ่ายแล้ว</option>
           </select>
-          <div v-if="!paymentsStore.canEdit()" class="text-[11px] text-muted mt-1">(ตั้งได้เฉพาะผู้ดูแลระบบ)</div>
+          <div v-if="isWholeMonth && !paymentsStore.canEdit()" class="text-[11px] text-muted mt-1">(ตั้งได้เฉพาะผู้ดูแลระบบ)</div>
         </div>
       </div>
 
@@ -138,7 +140,7 @@
 
       <div class="card-lg overflow-x-auto">
         <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <h3 class="font-semibold text-text">ประวัติงาน — รอบ {{ periodLabel }}</h3>
+          <h3 class="font-semibold text-text">ประวัติงาน — รอบ {{ rangeLabel }}</h3>
           <div v-if="selectedIds.size > 0" class="flex items-center gap-3 text-sm">
             <span class="text-muted">เลือกแล้ว {{ selectedIds.size }} งาน • รวม <span class="font-bold text-primary">{{ formatBaht(selectedIncomeTotal) }}</span></span>
             <button v-if="!createPanelOpen" @click="openCreatePanel" class="btn-primary">
@@ -278,7 +280,7 @@
           <tbody>
             <tr v-for="doc in issuedDocuments" :key="doc.id" class="border-t border-border hover:bg-surface-2 transition-colors">
               <td class="px-3 py-2 font-mono text-primary font-semibold">{{ doc.number }}</td>
-              <td class="px-3 py-2 text-muted">{{ doc.period }}</td>
+              <td class="px-3 py-2 text-muted">{{ documentPeriodLabel(doc) }}</td>
               <td class="px-3 py-2 text-right text-text">{{ doc.bookingIds.length }}</td>
               <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(doc.netIncome) }}</td>
               <td class="px-3 py-2">
@@ -311,8 +313,8 @@
         </table>
       </div>
 
-      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" kind="ADDITION" :readonly="!paymentsStore.canEdit()" />
-      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" kind="DEDUCTION" :readonly="!paymentsStore.canEdit()" />
+      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" :range="range" kind="ADDITION" :readonly="!paymentsStore.canEdit()" />
+      <PayrollDeductionPanel :driver-name="driversStore.fullName(driver)" :period-label="periodLabel" :range="range" kind="DEDUCTION" :readonly="!paymentsStore.canEdit()" />
     </template>
 
     <DriverIncomeEditDialog :booking="incomeEditTarget" @close="incomeEditTarget = null" />
@@ -335,6 +337,8 @@ import {
 import IncomeAdjustmentEditor from '@/components/payroll/IncomeAdjustmentEditor.vue'
 import { emptyAdjustments, sumAdjustmentLines, type IncomeAdjustments } from '@/utils/incomeAdjustments'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
+import PayrollRangePicker from '@/components/payroll/PayrollRangePicker.vue'
+import { documentPeriodLabel, inPayrollRange, payrollRangeFromQuery, payrollRangeLabel, payrollRangeMonth, toBEPeriodLabel, wholeMonthOf } from '@/utils/payrollRange'
 import DriverIncomeEditDialog from '@/components/booking/DriverIncomeEditDialog.vue'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import { bookingDriverNameOf, driverIdentityIssue, normalizeDriverName } from '@/utils/driverIdentity'
@@ -401,23 +405,12 @@ const assignedVehicleLabel = computed(() => {
   return vehicle ? vehiclesStore.fullPlate(vehicle) : '-'
 })
 
-function currentMonthValue(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-function toBEPeriodLabel(monthValue: string): string {
-  const [y, m] = monthValue.split('-')
-  return `${Number(y) + 543}-${m}`
-}
-function inPeriod(date: Date | undefined, monthValue: string): boolean {
-  if (!date) return false
-  const d = new Date(date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthValue
-}
-
-/** รอบเดือนเริ่มต้นมาจาก query ?period=YYYY-MM ถ้ามี (เช่น เข้ามาจากหน้า /payroll/drivers ที่เลือกรอบไว้แล้ว) ไม่งั้น fallback เป็นเดือนปัจจุบัน */
-const period = ref(typeof route.query.period === 'string' ? route.query.period : currentMonthValue())
+/** ช่วงวันเริ่มต้นมาจาก query ?from&to ถ้ามี (เช่น เข้ามาจากหน้า /payroll/drivers ที่เลือกช่วงไว้แล้ว) ไม่งั้น fallback เป็นเดือนปัจจุบัน */
+const range = ref(payrollRangeFromQuery(route.query))
+const period = computed(() => payrollRangeMonth(range.value))
 const periodLabel = computed(() => toBEPeriodLabel(period.value))
+const rangeLabel = computed(() => payrollRangeLabel(range.value))
+const isWholeMonth = computed(() => !!wholeMonthOf(range.value))
 
 /**
  * จับคู่งานกับคนขับคนนี้: ใช้ driverId ก่อนถ้ามี (แม่นยำกว่า ไม่พลาดเรื่องรูปแบบชื่อ) ถ้าไม่มีค่อย fallback ไปเทียบ
@@ -429,7 +422,7 @@ const rows = computed(() => {
   return bookingStore.bookings
     .filter((b) => b.status === 'DELIVERED')
     .filter((b) => (driver.value!.id ? b.driverId === driver.value!.id || (!b.driverId && b.driverName === fullName) : b.driverName === fullName))
-    .filter((b) => inPeriod(b.shipDate || b.completedAt, period.value))
+    .filter((b) => inPayrollRange(b.shipDate || b.completedAt, range.value))
     .map((b) => ({ booking: b, income: b.finalAllowance ?? b.allowance ?? 0, identityIssue: driverIdentityIssue(b, driver.value!, fullName) }))
     .sort((a, b) => new Date(b.booking.shipDate || b.booking.completedAt || 0).getTime() - new Date(a.booking.shipDate || a.booking.completedAt || 0).getTime())
 })
@@ -441,11 +434,11 @@ const totalTripFee = computed(() => countedRows.value.reduce((sum, r) => sum + (
 const totalIncome = computed(() => countedRows.value.reduce((sum, r) => sum + r.income, 0))
 const deductionTotal = computed(() => {
   if (!driver.value) return 0
-  return deductionsStore.deductionsFor(driversStore.fullName(driver.value), periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
+  return deductionsStore.deductionsInRange(driversStore.fullName(driver.value), range.value).reduce((sum, d) => sum + d.amount, 0)
 })
 const additionTotal = computed(() => {
   if (!driver.value) return 0
-  return deductionsStore.additionsFor(driversStore.fullName(driver.value), periodLabel.value).reduce((sum, d) => sum + d.amount, 0)
+  return deductionsStore.additionsInRange(driversStore.fullName(driver.value), range.value).reduce((sum, d) => sum + d.amount, 0)
 })
 
 /** สถานะจ่ายรายได้คนขับของรอบนี้ — คนละเรื่องกับสถานะงาน (bookingStatusLabel ด้านบนในตาราง) โดยเจตนา ไม่แตะกันเลย */
@@ -526,6 +519,7 @@ const createDocument = async () => {
   const result = await driverPayrollDocumentsStore.createDriverPayrollDocument(driver.value.id!, [...selectedIds.value], period.value, {
     percentDeductions: percentDeductions.value,
     adjustments: adjustments.value,
+    range: range.value,
   })
   creating.value = false
   if (!result.ok || !result.doc) {

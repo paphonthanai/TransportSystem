@@ -225,10 +225,25 @@
             </tbody>
           </table>
         </div>
-        <button @click="addRow" class="btn-sm">
-          <span class="material-symbols-rounded text-base">add</span>
-          เพิ่มแถวรายการ
-        </button>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button @click="addRow" class="btn-sm">
+            <span class="material-symbols-rounded text-base">add</span>
+            เพิ่มแถวรายการ
+          </button>
+          <button v-if="canAddBookings" @click="addBookingsOpen = true" class="btn-sm">
+            <span class="material-symbols-rounded text-base">playlist_add</span>
+            ติ๊กเพิ่มงานขนส่ง
+          </button>
+          <span v-if="editingLinkedBookings.some((b) => b.taxInvoiceDocId)" class="text-xs text-muted">มีงานออกใบกำกับภาษีแล้ว เพิ่มงานเข้าใบนี้ไม่ได้</span>
+        </div>
+        <BillingAddBookingsModal
+          v-if="addBookingsOpen"
+          :customer="customerName"
+          :category="billingCategory"
+          :bookings="addableBookings"
+          @add="onAddBookings"
+          @close="addBookingsOpen = false"
+        />
       </div>
 
       <!-- Signature / notes / attachment + totals -->
@@ -347,6 +362,7 @@ import ShareDocumentModal from '@/components/shared/ShareDocumentModal.vue'
 import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
 import ContactPickerField from '@/components/shared/ContactPickerField.vue'
 import TaxRateCell from '@/components/shared/TaxRateCell.vue'
+import BillingAddBookingsModal from '@/components/billing/BillingAddBookingsModal.vue'
 import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
 import type { Booking } from '@/types'
 
@@ -578,6 +594,28 @@ onMounted(() => {
   onCustomerChange()
   bookings.forEach(addBookingRow)
 })
+
+/** ติ๊กเพิ่มงานเข้าใบวางบิลที่สร้างแล้ว — ทำได้จนกว่างานในใบจะเริ่มออกใบกำกับภาษี งานใหม่ต้องลูกค้า/ประเภทงานเดียวกับใบนี้ (store เช็คซ้ำตอนบันทึก) */
+const addBookingsOpen = ref(false)
+const editingLinkedBookings = computed(() => (editingDoc?.bookingIds || []).map((id) => bookingStore.bookings.find((b) => b.id === id)).filter((b): b is Booking => !!b))
+const canAddBookings = computed(() => !!editingDoc && editingDoc.status === 'BILLING_PENDING' && !editingLinkedBookings.value.some((b) => b.taxInvoiceDocId))
+const billingCategory = computed(() => {
+  const pickedId = rows.value.find((r) => r.bookingId)?.bookingId
+  return editingLinkedBookings.value[0]?.category ?? bookingStore.bookings.find((b) => b.id === pickedId)?.category
+})
+const addableBookings = computed(() =>
+  bookingStore.bookings.filter((b) => b.customer === customerName.value.trim() && isBookingBillable(b) && !alreadyPickedBookingIds.value.has(b.id))
+)
+const onAddBookings = (bookings: Booking[]) => {
+  // แถวใหม่ใช้อัตราหัก ณ ที่จ่ายเดียวกับแถวเดิมถ้าทุกแถวเท่ากัน / ยอดหักที่โหลดมาจากเอกสารเดิม (ไม่ได้แก้เอง) คำนวณใหม่จากแถวชุดใหม่
+  const whtRates = [...new Set(rows.value.map((r) => r.whtRate))]
+  const followComputedWht = whtOverride.value !== null && Math.round(whtOverride.value * 100) === Math.round(whtComputed.value * 100)
+  const firstNewRow = rows.value.length
+  bookings.forEach(addBookingRow)
+  if (whtRates.length === 1) rows.value.slice(firstNewRow).forEach((r) => (r.whtRate = whtRates[0]))
+  if (followComputedWht) whtOverride.value = null
+  addBookingsOpen.value = false
+}
 
 const allRowsTaxed = computed(() => rows.value.length > 0 && rows.value.every((r) => !!r.vatRate))
 const toggleAllTax = (event: Event) => {

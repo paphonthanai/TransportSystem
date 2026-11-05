@@ -139,6 +139,7 @@
                     v-if="doc.status === 'BILLING_PENDING'"
                     @click="router.push(`/billing-notes/manual/${doc.id}/edit`)"
                     class="w-8 h-8 rounded-lg border border-border bg-surface flex items-center justify-center hover:bg-surface-2"
+                    title="แก้ไข / ติ๊กเพิ่มงานขนส่ง"
                   >
                     <span class="material-symbols-rounded text-base">edit</span>
                   </button>
