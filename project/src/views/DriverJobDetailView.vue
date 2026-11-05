@@ -245,16 +245,20 @@
 
     <!-- Deliver Item with POD — bottom sheet -->
     <Teleport to="body" v-if="deliverTarget && job">
-      <div @click="closeDeliverItem" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-end justify-center">
-        <div @click.stop class="w-full bg-white rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+      <!-- ไม่ปิดเมื่อแตะพื้นหลัง — กันแตะพลาดตอนเพิ่งกลับมาจากกล้องแล้วขั้นตอนหาย ปิดได้จากปุ่ม X/ยกเลิกเท่านั้น -->
+      <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-end justify-center">
+        <div class="w-full bg-white rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
           <div class="w-10 h-1.5 bg-border rounded-full mx-auto mt-3 mb-1"></div>
           <div class="flex items-center justify-between px-5 py-3 border-b border-border">
-            <div class="font-bold text-text text-lg truncate">ส่งของจุดนี้ {{ deliverTarget!.siteName }}</div>
+            <div class="min-w-0">
+              <div class="text-xs font-semibold text-primary">ขั้นที่ {{ deliverStep === 'goods' ? 1 : 2 }}/2 — {{ deliverStep === 'goods' ? 'ถ่ายรูปสินค้า' : 'ถ่ายรูปเอกสาร' }}</div>
+              <div class="font-bold text-text text-lg truncate">{{ deliverTarget!.siteName }}</div>
+            </div>
             <button @click="closeDeliverItem" class="w-11 h-11 -mr-2 flex-shrink-0 rounded-lg hover:bg-surface-2 flex items-center justify-center">
               <span class="material-symbols-rounded text-xl">close</span>
             </button>
           </div>
-          <div class="p-5 space-y-4">
+          <div v-if="deliverStep === 'goods'" class="p-5 space-y-4">
             <div>
               <!-- แสดงชื่อผู้ติดต่อหน้างานที่ออฟฟิศกรอกไว้ล่วงหน้าเท่านั้น (JobItem.siteContactName) — คนขับแก้ไขไม่ได้
                    ตาม Requirement เดิมคนขับพิมพ์ชื่อผู้รับเองทุกครั้ง เปลี่ยนเป็นแสดงให้ดู/รู้จักแทน -->
@@ -264,7 +268,6 @@
               </div>
             </div>
             <PhotoPicker label="รูปสินค้าตอนลง (บังคับ)" :preview="goodsPhotoUrl" :busy="photoBusy === 'goods'" :error="photoError.goods" @file="(f) => onDeliveryPhoto('goods', f)" />
-            <PhotoPicker label="รูปใบส่งของ (ไม่บังคับ)" :preview="notePhotoUrl" :busy="photoBusy === 'note'" :error="photoError.note" @file="(f) => onDeliveryPhoto('note', f)" />
             <div>
               <div class="text-sm font-semibold text-text mb-1.5">รูปเพิ่มเติม (ไม่บังคับ สูงสุด {{ MAX_PHOTOS_PER_LIST }} รูป)</div>
               <div v-if="extraPhotoUrls.length" class="grid grid-cols-3 gap-2 mb-2">
@@ -283,18 +286,40 @@
               <div v-if="photoError.extra" class="text-xs text-red-600 mt-1">{{ photoError.extra }}</div>
             </div>
             <div class="text-sm text-muted">
-              ต้องถ่ายรูปสินค้าตอนลงก่อนถึงจะยืนยันส่งของได้ — รูปใบส่งของไม่บังคับ ไม่ได้ถ่ายออฟฟิศแนบให้ทีหลังได้จากหน้ารายละเอียดงาน
+              ถ่ายรูปสินค้าตอนลง แล้วกดยืนยัน จากนั้นจึงถ่ายรูปเอกสารเป็นขั้นถัดไป
             </div>
           </div>
+          <div v-else class="p-5 space-y-4">
+            <div class="text-sm font-semibold text-green-700 bg-green-50 rounded-lg px-3 py-2.5 flex items-center gap-1.5">
+              <span class="material-symbols-rounded text-xl">check_circle</span>
+              บันทึกรูปสินค้าแล้ว
+            </div>
+            <PhotoPicker label="รูปเอกสาร / ใบส่งของ (ไม่บังคับ)" :preview="notePhotoUrl" :busy="photoBusy === 'note'" :error="photoError.note" @file="(f) => onDeliveryPhoto('note', f)" />
+            <div v-if="isLastDeliveryStop">
+              <label class="block text-xs font-semibold text-muted mb-1">เลขไมล์สิ้นสุด (กม.) <span class="text-[10px] font-normal text-muted">(ไม่บังคับ)</span></label>
+              <input v-model.number="finishOdometerAfter" type="number" placeholder="0" class="w-full h-12 px-3 rounded-lg border border-border text-base" />
+            </div>
+            <div class="text-sm text-muted">ถ่ายไม่ได้หรือไม่มีเอกสาร กดต่อได้เลย ออฟฟิศแนบให้ทีหลังได้จากหน้ารายละเอียดงาน</div>
+          </div>
           <div class="flex gap-3 px-5 py-4 border-t border-border">
-            <button @click="closeDeliverItem" class="flex-1 h-12 rounded-lg border border-border text-base font-medium text-text">ยกเลิก</button>
+            <button @click="closeDeliverItem" class="flex-1 h-12 rounded-lg border border-border text-base font-medium text-text">{{ deliverStep === 'goods' ? 'ยกเลิก' : 'ไว้ก่อน' }}</button>
             <button
-              @click="confirmDeliverItem"
+              v-if="deliverStep === 'goods'"
+              @click="confirmGoodsPhoto"
               :disabled="!!photoBusy || !goodsPhotoUrl"
               class="flex-[2] h-12 rounded-lg bg-green-600 text-white text-base font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span class="material-symbols-rounded text-xl">task_alt</span>
-              ยืนยันส่งของจุดนี้
+              ยืนยันรูปสินค้า
+            </button>
+            <button
+              v-else
+              @click="confirmNoteStep"
+              :disabled="!!photoBusy"
+              class="flex-[2] h-12 rounded-lg bg-primary text-white text-base font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span class="material-symbols-rounded text-xl">{{ isLastDeliveryStop ? 'flag_circle' : 'arrow_forward' }}</span>
+              {{ isLastDeliveryStop ? 'จบงาน' : 'ไปจุดส่งถัดไป' }}
             </button>
           </div>
         </div>
@@ -360,6 +385,7 @@ import { deliveryProgress, pickupProgress } from '@/utils/deliveryProgress'
 import { bookingTitle } from '@/utils/bookingTitle'
 import { parseGpsInput } from '@/utils/gps'
 import { uploadJobPhoto, photoPaths, MAX_PHOTOS_PER_LIST } from '@/utils/photoUpload'
+import { clearDeliveryDraft, loadDeliveryDraft, saveDeliveryDraft } from '@/utils/deliveryDraft'
 import PhotoPicker from '@/components/driver/PhotoPicker.vue'
 import SiteContactActions from '@/components/driver/SiteContactActions.vue'
 
@@ -451,9 +477,11 @@ const destinationLabel = (b: Booking) => {
   return b.items.length > 1 ? `${first} +${b.items.length - 1} ที่อื่น` : first
 }
 
-// --- Deliver a single JobItem (stop) — บันทึกผู้รับจาก siteContactName ที่ออฟฟิศกรอกไว้ล่วงหน้า (คนขับแก้ไขไม่ได้
-//     ดู Requirement) ไม่บังคับ POD (แนบทีหลังได้ ดู JobDocumentView.vue) ---
+// --- Deliver a single JobItem (stop) แบ่ง 2 ขั้น: 1) ถ่ายรูปสินค้า กดยืนยัน = บันทึกการส่งของจุดนี้ทันที (บังคับรูปสินค้า)
+//     2) ถ่ายรูปเอกสาร (ไม่บังคับ ออฟฟิศแนบแทนได้ ดู JobDocumentView.vue) แล้วกดไปจุดถัดไป/จบงาน
+//     ผู้รับใช้ siteContactName ที่ออฟฟิศกรอกไว้ล่วงหน้า (คนขับแก้ไขไม่ได้ ดู Requirement) ---
 const deliverTarget = ref<JobItem | null>(null)
+const deliverStep = ref<'goods' | 'note'>('goods')
 
 /** บัญชีคนขับเขียนได้เฉพาะโซน driver-uploads/ — ผู้ดูแลที่เปิดหน้านี้แทนคนขับใช้โซน office-uploads/ (ดู storage.rules) */
 const photoActor = computed<'driver' | 'office'>(() => (isDriverRole.value ? 'driver' : 'office'))
@@ -465,13 +493,27 @@ const photoError = ref<{ goods: string; note: string; extra: string }>({ goods: 
 
 const openDeliverItem = (item: JobItem) => {
   deliverTarget.value = item
+  deliverStep.value = 'goods'
   goodsPhotoUrl.value = undefined
   notePhotoUrl.value = undefined
   extraPhotoUrls.value = []
   photoError.value = { goods: '', note: '', extra: '' }
+  rememberDelivery()
 }
 
-/** อัปโหลดทันทีที่ถ่ายเสร็จ (เก็บแค่ URL) กดยืนยันส่งของแล้วค่อยบันทึกลงงานพร้อมกัน — อัปโหลดล้มเหลวไม่บล็อกการส่งของ */
+/** จำขั้นตอน/รูปที่อัปโหลดแล้วไว้ในเครื่องทุกครั้งที่เปลี่ยน — มือถืออาจปิดหน้าเว็บทิ้งระหว่างเปิดกล้อง (ดู utils/deliveryDraft.ts) */
+const rememberDelivery = () => {
+  if (!job.value || !deliverTarget.value) return
+  saveDeliveryDraft(job.value.id, {
+    itemId: deliverTarget.value.id,
+    step: deliverStep.value,
+    goodsUrl: goodsPhotoUrl.value,
+    noteUrl: notePhotoUrl.value,
+    extraUrls: extraPhotoUrls.value,
+  })
+}
+
+/** อัปโหลดทันทีที่ถ่ายเสร็จ รูปสินค้าบันทึกลงงานตอนกดยืนยัน ส่วนรูปเอกสารบันทึกทันที (จุดนี้ส่งแล้วตั้งแต่ขั้นแรก) */
 const onDeliveryPhoto = async (kind: 'goods' | 'note', file: File) => {
   if (!job.value || !deliverTarget.value) return
   photoBusy.value = kind
@@ -479,8 +521,13 @@ const onDeliveryPhoto = async (kind: 'goods' | 'note', file: File) => {
   try {
     const path = kind === 'goods' ? photoPaths.delivery(job.value.id, deliverTarget.value.id, photoActor.value) : photoPaths.deliveryNote(job.value.id, deliverTarget.value.id, photoActor.value)
     const url = await uploadJobPhoto(path, file)
-    if (kind === 'goods') goodsPhotoUrl.value = url
-    else notePhotoUrl.value = url
+    if (kind === 'goods') {
+      goodsPhotoUrl.value = url
+    } else {
+      notePhotoUrl.value = url
+      bookingStore.setDeliveryNoteImage(job.value.id, deliverTarget.value.id, url)
+    }
+    rememberDelivery()
   } catch (err: any) {
     photoError.value = { ...photoError.value, [kind]: err?.message || 'อัปโหลดรูปไม่สำเร็จ ลองใหม่ หรือข้ามไปให้ออฟฟิศแนบให้ทีหลัง' }
   } finally {
@@ -501,6 +548,7 @@ const onExtraDeliveryPhotos = async (e: Event) => {
     for (const file of files) {
       const url = await uploadJobPhoto(photoPaths.deliveryExtra(job.value.id, deliverTarget.value.id, photoActor.value), file)
       extraPhotoUrls.value = [...extraPhotoUrls.value, url]
+      rememberDelivery()
     }
   } catch (err: any) {
     photoError.value = { ...photoError.value, extra: err?.message || 'อัปโหลดรูปไม่สำเร็จ ลองใหม่' }
@@ -510,6 +558,7 @@ const onExtraDeliveryPhotos = async (e: Event) => {
 }
 const removeExtraPhoto = (url: string) => {
   extraPhotoUrls.value = extraPhotoUrls.value.filter((u) => u !== url)
+  rememberDelivery()
 }
 
 const loadingPhotoBusy = ref(false)
@@ -529,13 +578,36 @@ const onLoadingPhoto = async (file: File) => {
 }
 
 const closeDeliverItem = () => {
+  if (job.value) clearDeliveryDraft(job.value.id)
   deliverTarget.value = null
 }
 
-const confirmDeliverItem = () => {
+/** ขั้น 1: บันทึกการส่งของจุดนี้ทันที (รูปสินค้าไม่หายแม้ขั้นถัดไปมีปัญหา) แล้วไปขั้นถ่ายรูปเอกสาร */
+const confirmGoodsPhoto = () => {
   if (!job.value || !deliverTarget.value) return
-  bookingStore.deliverJobItem(job.value.id, deliverTarget.value.id, goodsPhotoUrl.value, deliverTarget.value.siteContactName || '-', notePhotoUrl.value, extraPhotoUrls.value)
+  bookingStore.deliverJobItem(job.value.id, deliverTarget.value.id, goodsPhotoUrl.value, deliverTarget.value.siteContactName || '-', undefined, extraPhotoUrls.value)
+  deliverStep.value = 'note'
+  finishOdometerAfter.value = job.value.odometerAfter || 0
+  rememberDelivery()
+}
+
+/** จุดที่กำลังทำเป็นจุดสุดท้าย (ส่งครบทุกจุดแล้ว) — ปุ่มขั้น 2 เป็น "จบงาน" */
+const isLastDeliveryStop = computed(() => !!job.value && !nextDelivery(job.value))
+
+/** ขั้น 2: จุดสุดท้าย = จบงานเลย / ยังเหลือจุดอื่น = ปิดกลับไปทำจุดถัดไป */
+const confirmNoteStep = () => {
+  const current = job.value
+  if (!current) return
+  const isLast = isLastDeliveryStop.value
   closeDeliverItem()
+  if (!isLast) return
+  // ข้อมูลเก่าบางจุดไม่มีรูป POD จบงานไม่ได้ — เปิดหน้ายืนยันจบงานที่บอกว่าขาดจุดไหน
+  if (current.items.some((i) => !i.podImage)) {
+    openFinishJob(current)
+    return
+  }
+  bookingStore.finishDriverJob(current.id, finishOdometerAfter.value || undefined)
+  router.push('/driver-app')
 }
 
 // --- Finish driver job (DELIVERING -> DELIVERED) หลังส่งของครบทุกรายการแล้ว บันทึกเลขไมล์สิ้นสุดที่จุดนี้ ---
@@ -560,4 +632,31 @@ const confirmFinishJob = () => {
   closeFinishJob()
   router.push('/driver-app')
 }
+
+/** หน้าเว็บถูกโหลดใหม่ระหว่างส่งของ — เปิดขั้นตอนเดิมต่อพร้อมรูปที่อัปโหลดไว้แล้ว (ทำครั้งเดียวเมื่อข้อมูลงานมาถึง)
+ *  จุดนั้นไม่อยู่ในสถานะเดิมแล้ว (เช่นออฟฟิศจบงานให้) = ทิ้ง draft */
+let deliveryRestored = false
+watch(
+  job,
+  (current) => {
+    if (!current || deliveryRestored) return
+    deliveryRestored = true
+    const draft = loadDeliveryDraft(current.id)
+    if (!draft) return
+    const item = current.items.find((i) => i.id === draft.itemId)
+    const delivered = item?.deliveryStatus === 'DELIVERED'
+    const active = current.status === 'IN_TRANSIT' || current.status === 'DELIVERING'
+    if (!item || !active || delivered !== (draft.step === 'note')) {
+      clearDeliveryDraft(current.id)
+      return
+    }
+    deliverTarget.value = item
+    deliverStep.value = draft.step
+    goodsPhotoUrl.value = draft.goodsUrl
+    notePhotoUrl.value = draft.noteUrl
+    extraPhotoUrls.value = draft.extraUrls
+    finishOdometerAfter.value = current.odometerAfter || 0
+  },
+  { immediate: true }
+)
 </script>

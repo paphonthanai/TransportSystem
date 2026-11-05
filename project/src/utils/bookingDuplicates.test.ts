@@ -19,7 +19,6 @@ describe('findDuplicateGroups — ตรวจซ้ำด้วยเลข PO 
     const b = job({ docNo: 'B', createdAt: new Date(2026, 9, 5, 10), driverName: 'อื่น', reference: ' sh-001 ', loadingDate: new Date(2026, 9, 6) })
     const groups = findDuplicateGroups([b, a])
     expect(groups).toHaveLength(1)
-    expect(groups[0].reason).toBe('SAME_SHIPMENT')
     expect(groups[0].bookings.map((x) => x.docNo)).toEqual(['A', 'B'])
   })
 
@@ -33,9 +32,12 @@ describe('findDuplicateGroups — ตรวจซ้ำด้วยเลข PO 
     expect(findDuplicateGroups([job({ docNo: 'A' }), job({ docNo: 'B', customer: 'บจก. บี' })])).toHaveLength(0)
   })
 
-  it('เลขที่งานซ้ำ = กลุ่มเดียว (ไม่นับกลุ่มชิพเม้นซ้ำอีก)', () => {
-    const groups = findDuplicateGroups([job({ docNo: 'X' }), job({ docNo: 'X' })])
-    expect(groups.map((g) => g.reason)).toEqual(['SAME_DOC_NO'])
+  it('เลขที่เอกสารซ้ำแต่เลขชิพเม้นต่างกัน = ไม่ใช่งานซ้ำ (ไม่ใช้เลขที่เอกสารเป็นเกณฑ์)', () => {
+    expect(findDuplicateGroups([job({ docNo: 'X' }), job({ docNo: 'X', reference: 'SH-002' })])).toHaveLength(0)
+  })
+
+  it('งานที่กรอกไว้แค่ช่องเลขชิพเม้น (shipmentNo) ถูกตรวจซ้ำกับเลขเดียวกันด้วย', () => {
+    expect(findDuplicateGroups([job({ docNo: 'A' }), job({ docNo: 'B', reference: undefined, shipmentNo: 'SH-001' })])).toHaveLength(1)
   })
 
   it('key ของแถว import ตรงกับงานที่มีเลขชิพเม้นเดียวกัน (ไม่สนช่องว่าง/ตัวพิมพ์)', () => {

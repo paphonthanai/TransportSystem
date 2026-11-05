@@ -4,6 +4,8 @@ import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { computeBookingMoney } from '@/utils/bookingMoney'
 import { isBookingConfirmedForBilling } from '@/utils/bookingStatus'
+import { matchesBookingSearch } from '@/utils/bookingSearch'
+import { customerShipmentNo } from '@/utils/customerShipment'
 import type { Booking, BookingCategory } from '@/types'
 
 /** สถานะเอกสารทั้ง 3 ประเภท (billingNoteDocId/taxInvoiceDocId/receiptDocId) เป็นอิสระต่อกันโดยเจตนา ไม่ใช่ enum เดียวแบบ
@@ -57,16 +59,8 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
   const salesDocumentsStore = useSalesDocumentsStore()
   const vehiclesStore = useVehiclesStore()
 
-  const matchesSearch = (b: Booking, q: string) =>
-    b.docNo.toLowerCase().includes(q) ||
-    (b.po || '').toLowerCase().includes(q) ||
-    b.customer.toLowerCase().includes(q) ||
-    (b.plate || '').toLowerCase().includes(q) ||
-    b.items.some((i) => i.siteName.toLowerCase().includes(q) || i.district.toLowerCase().includes(q))
-
   const completedBookings = computed(() => {
     const f = filters.value
-    const q = f.search.trim().toLowerCase()
     const from = f.dateFrom ? new Date(f.dateFrom) : null
     const to = f.dateTo ? new Date(f.dateTo) : null
     return bookingStore.bookings
@@ -76,7 +70,7 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
       // ปิดเอง (podReviewStatus undefined) ไม่ต้องรอ โผล่ที่นี่ทันทีเหมือนเดิม
       .filter((b) => isBookingConfirmedForBilling(b))
       .filter((b) => !f.fleet || b.category === f.fleet)
-      .filter((b) => !q || matchesSearch(b, q))
+      .filter((b) => matchesBookingSearch(b, f.search))
       .filter((b) => !f.customer || b.customer === f.customer)
       .filter((b) => !f.driverName || b.driverName === f.driverName)
       .filter((b) => {
@@ -169,6 +163,7 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     const money = moneyForBooking(b)
     const dateLabel = (d?: Date) => (d ? new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '')
     return {
+      เลขชิพเม้นลูกค้า: customerShipmentNo(b),
       เลขที่เอกสาร: b.docNo,
       'เลข PO': b.po || '',
       กองรถ: b.category === 'cements' ? 'Cements' : 'Ceramics',

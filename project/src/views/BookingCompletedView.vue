@@ -7,7 +7,7 @@
         <input
           v-model="filters.search"
           type="text"
-          placeholder="ค้นหาเลขที่เอกสาร, PO, ลูกค้า, ทะเบียนรถ..."
+          placeholder="ค้นหาเลขชิพเม้นลูกค้า, เลขที่เอกสาร, ลูกค้า, ทะเบียนรถ..."
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
@@ -35,7 +35,7 @@
           <table class="w-full text-sm">
             <thead class="bg-surface-2 border-b border-border">
               <tr>
-                <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted whitespace-nowrap">เลขชิพเม้นลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ปลายทาง</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">{{ isCements ? 'ชนิดปูน' : 'สินค้า' }}</th>
@@ -48,8 +48,11 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="booking in completedBookings" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
-                <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
+              <tr v-for="booking in pagedRows" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <div class="font-bold text-primary font-mono text-xs">{{ customerShipmentNo(booking) || '-' }}</div>
+                  <div class="text-[11px] text-muted">{{ booking.docNo }}</div>
+                </td>
                 <td class="px-4 py-3 text-text">
                   <span class="inline-flex items-center gap-1.5" :title="booking.customer">
                     <span
@@ -104,6 +107,7 @@
           </table>
         </div>
       </div>
+      <TablePagination v-model:page="page" v-model:per-page="perPage" :total="completedBookings.length" />
     </div>
   </div>
 </template>
@@ -118,6 +122,9 @@ import { priceCellText } from '@/utils/priceDisplay'
 import { useCustomerStore } from '@/stores/customers'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
+import TablePagination from '@/components/TablePagination.vue'
+import { usePagedRows } from '@/composables/usePagedRows'
+import { customerShipmentNo } from '@/utils/customerShipment'
 import { exportRowsToExcel } from '@/utils/exportExcel'
 
 const props = defineProps<{ fleet: BookingCategory }>()
@@ -140,6 +147,9 @@ watch(
 )
 
 const { completedBookings, productLabel, destinationLabel, weightQtyLabel, documentsForBooking, buildExportRow, formatBaht, formatShortDate } = useCompletedJobs(filters)
+
+const { page, perPage, pagedRows } = usePagedRows(completedBookings)
+watch(filters, () => (page.value = 1), { deep: true })
 
 const clearFilters = () => {
   filters.value.price = ''
