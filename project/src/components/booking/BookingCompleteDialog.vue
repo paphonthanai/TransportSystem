@@ -4,7 +4,7 @@
       <div @click.stop class="w-full max-w-lg bg-surface rounded-2xl shadow-2xl animate-slide max-h-full overflow-y-auto">
         <div class="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
-            <div class="font-bold text-text">จบงาน {{ booking.docNo }}</div>
+            <div class="font-bold text-text">จบงาน {{ bookingRefNo(booking) }}</div>
             <div class="text-xs text-muted">เพิ่ม/ลดหนี้ กระทบยอดกับค่าแรงคนขับในเที่ยวนี้</div>
           </div>
           <button @click="$emit('close')" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
@@ -92,6 +92,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { computed, ref, watch } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useFuelRateStore } from '@/stores/fuelRates'

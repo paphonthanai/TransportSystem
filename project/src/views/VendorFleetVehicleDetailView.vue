@@ -162,7 +162,7 @@
               <th class="px-3 py-2 w-8">
                 <input type="checkbox" :checked="allSelectableChecked" :disabled="selectableRows.length === 0" @change="toggleSelectAll" class="w-4 h-4" />
               </th>
-              <th class="px-3 py-2 font-semibold">เลขที่งาน</th>
+              <th class="px-3 py-2 font-semibold">เลข PO ลูกค้า</th>
               <th class="px-3 py-2 font-semibold">วันที่</th>
               <th class="px-3 py-2 font-semibold">คนขับ (ของงานนั้นๆ)</th>
               <th class="px-3 py-2 font-semibold">รายละเอียดงาน</th>
@@ -186,7 +186,7 @@
                   class="w-4 h-4"
                 />
               </td>
-              <td class="px-3 py-2 font-mono text-text">{{ row.booking.docNo }}</td>
+              <td class="px-3 py-2 font-mono text-text">{{ bookingRefNo(row.booking) }}</td>
               <td class="px-3 py-2 text-muted">{{ formatDate(row.booking.shipDate || row.booking.completedAt) }}</td>
               <td class="px-3 py-2 text-text">{{ row.booking.driverName || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ destinationLabel(row.booking) }}</td>
@@ -300,6 +300,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useVehiclesStore } from '@/stores/vehicles'
@@ -376,7 +377,7 @@ const displayedRows = computed(() => {
     if (docStatusFilter.value === 'ISSUED' && !r.booking.vehicleIncomeDocId) return false
     if (docStatusFilter.value === 'NOT_ISSUED' && r.booking.vehicleIncomeDocId) return false
     if (!q) return true
-    return [r.booking.docNo, r.booking.driverName, ...r.booking.items.map((i) => i.siteName)].some((v) => (v || '').toLowerCase().includes(q))
+    return [bookingRefNo(r.booking), r.booking.docNo, r.booking.driverName, ...r.booking.items.map((i) => i.siteName)].some((v) => (v || '').toLowerCase().includes(q))
   })
 })
 const manualCostCount = computed(
@@ -525,8 +526,8 @@ const resetIssued = async (booking: Booking) => {
   const doc = vehicleIncomeDocumentsStore.documents.find((d) => d.id === booking.vehicleIncomeDocId)
   const lastJob = (doc?.bookingIds.length ?? 0) <= 1
   const msg = lastJob
-    ? `งาน ${booking.docNo} เป็นงานสุดท้ายในเอกสาร ${doc?.number ?? ''} — รีเซ็ตแล้วเอกสารจะถูกยกเลิกทั้งใบ ยืนยัน?`
-    : `ยืนยันเอางาน ${booking.docNo} ออกจากเอกสาร ${doc?.number ?? ''}? ยอดในเอกสารจะคำนวณใหม่จากงานที่เหลือ และงานนี้จะกลับมาแก้ยอด/ออกเอกสารใหม่ได้`
+    ? `งาน ${bookingRefNo(booking)} เป็นงานสุดท้ายในเอกสาร ${doc?.number ?? ''} — รีเซ็ตแล้วเอกสารจะถูกยกเลิกทั้งใบ ยืนยัน?`
+    : `ยืนยันเอางาน ${bookingRefNo(booking)} ออกจากเอกสาร ${doc?.number ?? ''}? ยอดในเอกสารจะคำนวณใหม่จากงานที่เหลือ และงานนี้จะกลับมาแก้ยอด/ออกเอกสารใหม่ได้`
   if (!confirm(msg)) return
   actionError.value = ''
   const result = await vehicleIncomeDocumentsStore.removeBookingFromDocument(booking.id)
@@ -546,7 +547,7 @@ const resetDocPayment = (docId: string, number: string) => {
   runDocAction(() => vehicleIncomeDocumentsStore.resetPayment(docId))
 }
 const releaseOrphan = (booking: Booking) => {
-  if (!confirm(`งาน ${booking.docNo} ติดป้าย "ออกเอกสารแล้ว" แต่ไม่พบเอกสารในระบบ — ยืนยันปลดล็อกให้เลือกออกเอกสารใหม่ได้?`)) return
+  if (!confirm(`งาน ${bookingRefNo(booking)} ติดป้าย "ออกเอกสารแล้ว" แต่ไม่พบเอกสารในระบบ — ยืนยันปลดล็อกให้เลือกออกเอกสารใหม่ได้?`)) return
   actionError.value = ''
   const result = vehicleIncomeDocumentsStore.releaseOrphanedBooking(booking.id)
   if (!result.ok) actionError.value = result.message || 'ปลดล็อกไม่สำเร็จ'

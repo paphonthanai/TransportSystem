@@ -7,6 +7,7 @@ import { useDriversStore } from '@/stores/drivers'
 import { normalizeDriverName } from '@/utils/driverIdentity'
 import { exportRowsToExcel } from '@/utils/exportExcel'
 import { fuelCostOf } from '@/utils/bookingMoney'
+import { bookingRefNo } from '@/utils/customerShipment'
 import { currentMonthRange, inPayrollRange, payrollRangeFileKey, payrollRangeMonth, toBEPeriodLabel, wholeMonthOf } from '@/utils/payrollRange'
 import type { Booking, VehicleType, DriverPaymentStatusValue } from '@/types'
 
@@ -105,7 +106,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
       .filter((b) => !selectedDriver.value || driverKeyFor(b) === selectedDriver.value)
       .map((b) => ({
         shipDate: b.shipDate || b.completedAt,
-        shipmentNo: b.shipmentNo || b.docNo,
+        shipmentNo: bookingRefNo(b),
         siteName: destinationLabel(b),
         driverName: driverKeyFor(b),
         driverIncome: b.finalAllowance ?? b.allowance ?? 0,
@@ -138,7 +139,7 @@ export function useDriverPayroll(departmentFilter: (department: VehicleType | un
       `${exportPrefix}-รายเที่ยว-${payrollRangeFileKey(range.value)}`,
       detailRows.value.map((r) => ({
         วันที่ส่งงาน: formatDate(r.shipDate),
-        เลขชิพเม้นท์: r.shipmentNo,
+        'เลข PO ลูกค้า': r.shipmentNo,
         ชื่อหน้างาน: r.siteName,
         คนขับ: r.driverName,
         รายได้คนขับ: r.driverIncome,

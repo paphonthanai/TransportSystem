@@ -72,7 +72,7 @@
             <thead class="bg-surface-2 border-b border-border">
               <tr>
                 <th class="px-3 py-2 w-8"></th>
-                <th class="text-left px-4 py-3 font-semibold text-muted">เลขที่เอกสาร</th>
+                <th class="text-left px-4 py-3 font-semibold text-muted">เลข PO ลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">สถานะงาน</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ความพร้อมวางบิล</th>
@@ -94,7 +94,7 @@
                     class="w-4 h-4 disabled:opacity-40 disabled:cursor-not-allowed"
                   />
                 </td>
-                <td class="px-4 py-3 font-bold text-primary">{{ booking.docNo }}</td>
+                <td class="px-4 py-3 font-bold text-primary">{{ bookingRefNo(booking) }}</td>
                 <td class="px-4 py-3 text-text">
                   <span class="inline-flex items-center gap-1.5" :title="booking.customer">
                     <span
@@ -188,7 +188,7 @@
                     class="w-4 h-4"
                   />
                 </th>
-                <th class="text-left px-3 py-2 font-semibold text-muted">เลขที่เอกสาร</th>
+                <th class="text-left px-3 py-2 font-semibold text-muted">เลข PO ลูกค้า</th>
                 <th class="text-left px-3 py-2 font-semibold text-muted">หน้างาน</th>
                 <th class="text-left px-3 py-2 font-semibold text-muted">สถานะงาน</th>
                 <th class="text-left px-3 py-2 font-semibold text-muted">POD</th>
@@ -210,7 +210,7 @@
                     class="w-4 h-4"
                   />
                 </td>
-                <td class="px-3 py-2 font-bold text-primary">{{ booking.docNo }}</td>
+                <td class="px-3 py-2 font-bold text-primary">{{ bookingRefNo(booking) }}</td>
                 <td class="px-3 py-2 font-semibold text-text">{{ destinationLabel(booking) }}</td>
                 <td class="px-3 py-2">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', bookingStatusClass[booking.status]]">
@@ -407,7 +407,7 @@
       <div @click="extraTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
         <div @click.stop class="w-full max-w-sm bg-surface rounded-2xl shadow-2xl">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="font-bold text-text">เพิ่มค่า extra: {{ extraTarget.docNo }}</div>
+            <div class="font-bold text-text">เพิ่มค่า extra: {{ bookingRefNo(extraTarget) }}</div>
             <button @click="extraTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
@@ -482,7 +482,7 @@
                   <tr v-for="(booking, idx) in selectedBookings" :key="booking.id" class="border-b border-border last:border-0">
                     <td class="px-3 py-2 text-text">{{ idx + 1 }}</td>
                     <td class="px-3 py-2 text-text">
-                      <div class="font-semibold">{{ booking.docNo }} · {{ destinationLabel(booking) }}</div>
+                      <div class="font-semibold">{{ bookingRefNo(booking) }} · {{ destinationLabel(booking) }}</div>
                       <div class="text-xs text-muted">{{ formatDate(booking.completedAt) }}</div>
                     </td>
                     <td class="px-3 py-2 text-right text-text">1</td>
@@ -577,6 +577,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -751,7 +752,7 @@ const openCreateInvoice = () => {
   invoiceForm.value = {
     customer: selectedBatch.value.customer || selectedBookings.value[0].customer,
     creditDays: 30,
-    reference: selectedBookings.value.map((b) => b.docNo).join(', '),
+    reference: selectedBookings.value.map((b) => bookingRefNo(b)).join(', '),
   }
   showCreateInvoice.value = true
 }

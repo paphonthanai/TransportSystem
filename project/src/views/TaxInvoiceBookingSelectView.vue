@@ -2,11 +2,13 @@
   <div class="space-y-4 pb-10">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div>
-        <h2 class="text-lg font-bold text-text">เลือกงานขนส่งเพื่อออกใบแจ้งหนี้รวม</h2>
-        <div class="text-xs text-muted mt-0.5">เลือกลูกค้าและงานขนส่ง แล้วนำข้อมูลไปแสดงในหน้าสร้างใบแจ้งหนี้</div>
+        <h2 class="text-lg font-bold text-text">{{ sourceBilling ? `ออกใบแจ้งหนี้จากใบวางบิล ${sourceBilling.number}` : 'เลือกงานขนส่งเพื่อออกใบแจ้งหนี้รวม' }}</h2>
+        <div class="text-xs text-muted mt-0.5">
+          {{ sourceBilling ? 'เลือกงานของใบวางบิลนี้ไว้ให้แล้ว เลือกงานเพิ่มหรือเอาออกได้ แล้วกดถัดไปเพื่อตรวจสอบก่อนสร้างใบแจ้งหนี้' : 'เลือกลูกค้าและงานขนส่ง แล้วนำข้อมูลไปแสดงในหน้าสร้างใบแจ้งหนี้' }}
+        </div>
       </div>
       <div class="flex items-center gap-2">
-        <button @click="router.push('/tax-invoices')" class="btn-secondary">ยกเลิก</button>
+        <button @click="router.push(sourceBilling ? '/billing-notes' : '/tax-invoices')" class="btn-secondary">ยกเลิก</button>
         <button @click="goToForm" :disabled="pickerSelectedIds.size === 0" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
           <span class="material-symbols-rounded text-base">arrow_forward</span>
           ถัดไป ({{ pickerSelectedIds.size }})
@@ -18,14 +20,14 @@
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl">
         <div>
           <label class="field-label">ลูกค้า</label>
-          <select v-model="customerName" class="input-field w-full">
+          <select v-model="customerName" :disabled="!!sourceBilling" class="input-field w-full disabled:opacity-60">
             <option value="">เลือกลูกค้า...</option>
             <option v-for="c in eligibleCustomers" :key="c" :value="c">{{ c }}</option>
           </select>
         </div>
         <div>
           <label class="field-label">ประเภทงาน (Feed)</label>
-          <select v-model="bookingCategory" :disabled="!customerName.trim()" class="input-field w-full disabled:opacity-40">
+          <select v-model="bookingCategory" :disabled="!customerName.trim() || !!sourceBilling" class="input-field w-full disabled:opacity-40">
             <option value="">เลือกประเภทงาน...</option>
             <option v-for="c in bookingCategories" :key="c" :value="c">{{ categoryFeedLabel[c] }}</option>
           </select>
@@ -80,7 +82,10 @@
               <td class="px-3 py-2">
                 <input type="checkbox" :checked="pickerSelectedIds.has(b.id)" @change="toggleBooking(b.id)" class="w-4 h-4" />
               </td>
-              <td class="px-3 py-2 text-muted">{{ idx + 1 }}</td>
+              <td class="px-3 py-2 text-muted whitespace-nowrap">
+                {{ idx + 1 }}
+                <span v-if="sourceBilling && b.billingNoteDocId === sourceBilling.id" class="ml-1 text-[10px] font-semibold text-primary">ในใบวางบิล</span>
+              </td>
               <td class="px-3 py-2 text-text">{{ bookingDescription(b) }}</td>
               <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ bookingProducts(b) }}</td>
@@ -111,10 +116,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
-import { categoryFeedLabel, billingDateOf, billingMonthKey, billingMonthLabel } from '@/utils/bookingStatus'
+import { useSalesDocumentsStore } from '@/stores/salesDocuments'
+import { useDocumentPrefillStore } from '@/stores/documentPrefill'
+import { buildPrefillFromBilling, unclaimedBillingGroups } from '@/utils/billingPrefill'
+import { categoryFeedLabel, billingDateOf, billingMonthKey, billingMonthLabel, isBookingConfirmedForBilling } from '@/utils/bookingStatus'
 import { matchesSearchFields } from '@/utils/searchFields'
 import type { Booking, BookingCategory } from '@/types'
 
@@ -122,14 +130,32 @@ const router = useRouter()
 const bookingStore = useBookingStore()
 const documentSettingsStore = useDocumentSettingsStore()
 
+const route = useRoute()
+const salesDocumentsStore = useSalesDocumentsStore()
+const documentPrefillStore = useDocumentPrefillStore()
+
+/** มาจากปุ่มสถานะ "สร้างใบกำกับภาษี" ของใบวางบิล (?billingId=) — ลูกค้า/ประเภทงานล็อกตามใบวางบิล เลือกงานของใบวางบิลไว้ให้
+ *  เลือกงานเพิ่มได้เฉพาะงานที่ยังไม่อยู่ในใบวางบิลอื่น และยืนยันการจบงานแล้ว (เงื่อนไขเดียวกับที่สโตร์เช็คตอนบันทึก) */
+const sourceBilling = (() => {
+  const id = typeof route.query.billingId === 'string' ? route.query.billingId : ''
+  const doc = id ? salesDocumentsStore.documents.find((d) => d.id === id && d.type === 'BILLING') : undefined
+  return doc && doc.status === 'BILLING_PENDING' ? doc : undefined
+})()
+const sourceGroup = sourceBilling ? unclaimedBillingGroups(sourceBilling, bookingStore.bookings)[0] : undefined
+
 /** เงื่อนไขเดียวกับ createTaxInvoiceFromBookings/createTaxInvoiceManual (claim ทางตรง) ทุกประการ */
-const isBookingBillable = (b: Booking) => b.status === 'DELIVERED' && !b.taxInvoiceDocId
+const isBookingBillable = (b: Booking) => {
+  if (b.status !== 'DELIVERED' || b.taxInvoiceDocId) return false
+  if (!sourceBilling) return true
+  if (b.billingNoteDocId === sourceBilling.id) return true
+  return !b.billingNoteDocId && isBookingConfirmedForBilling(b)
+}
 
 const eligibleCustomers = computed(() => [...new Set(bookingStore.bookings.filter(isBookingBillable).map((b) => b.customer))].sort())
 
-const customerName = ref('')
-const bookingCategory = ref<BookingCategory | ''>('')
-const pickerSelectedIds = ref<Set<string>>(new Set())
+const customerName = ref(sourceGroup ? sourceBilling!.customer : '')
+const bookingCategory = ref<BookingCategory | ''>(sourceGroup?.category || '')
+const pickerSelectedIds = ref<Set<string>>(new Set(sourceGroup?.bookingIds || []))
 
 /** กรองตามเดือนที่ส่งของสำเร็จ (รองรับลูกค้าที่วางบิลรายเดือน) — ว่าง = ทุกเดือน เปลี่ยนเดือน/ลูกค้าแล้วล้างงานที่เลือกไว้นอกเดือนนั้นทิ้ง */
 const searchText = ref('')
@@ -237,7 +263,17 @@ const formatBaht = (value: number) => `${documentSettingsStore.settings.currency
 
 const goToForm = () => {
   if (pickerSelectedIds.value.size === 0) return
-  router.push({ path: '/tax-invoices/new', query: { bookingIds: [...pickerSelectedIds.value].join(',') } })
+  const selected = [...pickerSelectedIds.value]
+  const fromBilling = sourceBilling ? selected.filter((id) => bookingStore.bookings.find((b) => b.id === id)?.billingNoteDocId === sourceBilling.id) : []
+  // ไม่ได้เลือกงานของใบวางบิลเลยสักงาน = ไม่ผูกกับใบวางบิล ออกเป็นใบแจ้งหนี้จากงานขนส่งตามปกติ
+  if (!sourceBilling || fromBilling.length === 0) {
+    router.push({ path: '/tax-invoices/new', query: { bookingIds: selected.join(',') } })
+    return
+  }
+  // รายการของงานในใบวางบิลใช้ของใบวางบิลเดิม (ราคา/คำอธิบายที่แก้ไว้) งานที่เลือกเพิ่มให้หน้าสร้างใบแจ้งหนี้สร้างแถวจากงานนั้นเอง
+  const extra = selected.filter((id) => !fromBilling.includes(id))
+  documentPrefillStore.setPrefill(buildPrefillFromBilling(sourceBilling, salesDocumentsStore.itemsForDocument(sourceBilling.id), bookingStore.bookings, fromBilling, selected))
+  router.push({ path: '/tax-invoices/new', query: extra.length ? { extraBookingIds: extra.join(',') } : {} })
 }
 </script>
 

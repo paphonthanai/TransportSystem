@@ -50,7 +50,7 @@
           <thead class="bg-gray-100">
             <tr>
               <th class="border border-gray-400 px-2 py-1 text-left w-8">#</th>
-              <th class="border border-gray-400 px-2 py-1 text-left w-24">เลขที่งาน</th>
+              <th class="border border-gray-400 px-2 py-1 text-left w-24">เลข PO ลูกค้า</th>
               <th class="border border-gray-400 px-2 py-1 text-left w-20">วันที่</th>
               <th class="border border-gray-400 px-2 py-1 text-left">รายละเอียดงาน</th>
               <th class="border border-gray-400 px-2 py-1 text-right w-20">รายได้</th>
@@ -62,7 +62,7 @@
           <tbody>
             <tr v-for="(row, idx) in rows" :key="row.booking.id">
               <td class="border border-gray-400 px-2 py-1">{{ idx + 1 }}</td>
-              <td class="border border-gray-400 px-2 py-1 font-mono">{{ row.booking.docNo }}</td>
+              <td class="border border-gray-400 px-2 py-1 font-mono">{{ bookingRefNo(row.booking) }}</td>
               <td class="border border-gray-400 px-2 py-1">{{ formatDate(row.booking.shipDate || row.booking.completedAt) }}</td>
               <td class="border border-gray-400 px-2 py-1">{{ destinationLabel(row.booking) }}</td>
               <td class="border border-gray-400 px-2 py-1 text-right tabular-nums">{{ formatBaht(row.tripFee) }}</td>
@@ -214,6 +214,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { documentPeriodLabel } from '@/utils/payrollRange'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'

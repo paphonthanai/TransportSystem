@@ -51,7 +51,6 @@
               <tr v-for="booking in pagedRows" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
                 <td class="px-4 py-3 whitespace-nowrap">
                   <div class="font-bold text-primary font-mono text-xs">{{ customerShipmentNo(booking) || '-' }}</div>
-                  <div class="text-[11px] text-muted">{{ booking.docNo }}</div>
                 </td>
                 <td class="px-4 py-3 text-text">
                   <span class="inline-flex items-center gap-1.5" :title="booking.customer">

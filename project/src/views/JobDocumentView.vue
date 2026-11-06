@@ -78,10 +78,6 @@
             <div class="text-xs text-gray-500 mb-3">{{ docTitleEn }}</div>
             <div class="doc-meta-box text-left text-xs w-64">
               <div class="flex justify-between gap-4">
-                <span class="text-gray-500">เลขที่เอกสาร</span>
-                <span class="font-semibold">{{ booking.docNo }}</span>
-              </div>
-              <div class="flex justify-between gap-4">
                 <span class="text-gray-500">เลขที่ PO ลูกค้า</span>
                 <span class="font-semibold text-right max-w-[60%] truncate">{{ booking.reference || '-' }}</span>
               </div>
@@ -204,10 +200,6 @@
           <div class="text-muted">เลขประจำตัวผู้เสียภาษี: {{ customer.taxId || '-' }}</div>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-          <div>
-            <div class="text-muted text-xs">เลขที่เอกสาร</div>
-            <div class="font-semibold text-text">{{ booking.docNo }}</div>
-          </div>
           <div>
             <div class="text-muted text-xs">เลขที่ PO ลูกค้า</div>
             <template v-if="refEditing === 'reference'">
@@ -619,6 +611,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { jobTypeCode } from '@/utils/jobType'
 import { loadingTimeOf } from '@/utils/loadingTime'
 import { ref, computed } from 'vue'
@@ -659,7 +652,7 @@ const booking = computed(() => bookingStore.bookings.find((b) => b.id === route.
 // ---- รูป: กดขยาย/ดาวน์โหลด ----
 const lightbox = ref<{ src: string; title: string; filename?: string } | null>(null)
 const openImage = (src: string, title: string) => {
-  const docNo = booking.value?.docNo || ''
+  const docNo = booking.value ? bookingRefNo(booking.value) : ''
   lightbox.value = { src, title: docNo ? `${docNo} · ${title}` : title, filename: `${docNo || 'งาน'} ${title}` }
 }
 
@@ -788,8 +781,8 @@ const approvePod = () => {
   const b = booking.value
   if (!b) return
   const question = canReviewLegacyPod.value
-    ? `ยืนยันว่ารูป POD ของงาน ${b.docNo} ตรงกับข้อมูลในระบบ?`
-    : `ยืนยันว่ารูป POD ของงาน ${b.docNo} ตรงกับข้อมูลในระบบ และจบงาน? หลังยืนยันจะนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`
+    ? `ยืนยันว่ารูป POD ของงาน ${bookingRefNo(b)} ตรงกับข้อมูลในระบบ?`
+    : `ยืนยันว่ารูป POD ของงาน ${bookingRefNo(b)} ตรงกับข้อมูลในระบบ และจบงาน? หลังยืนยันจะนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`
   if (!confirm(question)) return
   // งานที่ออฟฟิศปิดเองและยังไม่เคยตรวจ POD: ยืนยัน POD อย่างเดียว (งานถือว่ายืนยันจบงานแล้ว ไม่กระทบการวางบิล)
   if (canReviewLegacyPod.value) {
@@ -815,7 +808,7 @@ const backToBooking = (bookingId: string) => {
 const confirmCompletion = () => {
   const b = booking.value
   if (!b) return
-  if (!confirm(`ยืนยันการจบงาน ${b.docNo}? หลังยืนยันจะสามารถนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
+  if (!confirm(`ยืนยันการจบงาน ${bookingRefNo(b)}? หลังยืนยันจะสามารถนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
   const result = bookingStore.confirmJobCompletion(b.id)
   if (!result.ok && result.issues.length) alert(`จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}`)
   if (result.ok) backToBooking(b.id)

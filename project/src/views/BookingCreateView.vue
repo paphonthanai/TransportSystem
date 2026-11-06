@@ -306,6 +306,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -383,7 +384,7 @@ const driverOptionLabel = (name: string) => {
   const activeBooking = activeBookingForDriver(name)
   if (!activeBooking) return `${label} — ว่าง`
   const tripNo = driverTripNumberForBooking(activeBooking)
-  return `${label} — กำลังวิ่งเที่ยวที่ ${tripNo} (${activeBooking.docNo})`
+  return `${label} — กำลังวิ่งเที่ยวที่ ${tripNo} (${bookingRefNo(activeBooking)})`
 }
 
 /**

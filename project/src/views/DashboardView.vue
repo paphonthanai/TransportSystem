@@ -402,6 +402,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { ref, computed, watch } from 'vue'
 import DashboardLineChart from '@/components/DashboardLineChart.vue'
 import DashboardBarChart from '@/components/DashboardBarChart.vue'
@@ -586,7 +587,7 @@ const attentionItems = computed(() => {
 
   // 2) งานไม่มีคนขับ / ไม่มีทะเบียน — แยกคนละเรื่อง ลิงก์ไปกลุ่มนั้นของหน้าตรวจข้อมูลคนขับ (กรองให้แล้ว)
   const docList = (jobs: typeof bs) => {
-    const ids = [...new Set(jobs.map((b) => b.docNo))]
+    const ids = [...new Set(jobs.map((b) => bookingRefNo(b)))]
     return ids.length <= 3 ? ` (${ids.join(', ')})` : ''
   }
   const noDriverJobs = bs.filter((b) => !b.driverName)

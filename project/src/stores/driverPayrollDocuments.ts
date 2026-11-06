@@ -11,6 +11,7 @@ import { driverIdentityIssue } from '@/utils/driverIdentity'
 import { driverPayrollDocumentRepository } from '@/repositories/driverPayrollDocumentRepository'
 import { adjustmentIssue, cleanAdjustmentLines, emptyAdjustments, type IncomeAdjustments } from '@/utils/incomeAdjustments'
 import { wholeMonthOf, type PayrollRange } from '@/utils/payrollRange'
+import { bookingRefNo } from '@/utils/customerShipment'
 
 /**
  * เอกสารรายได้คนขับ — ต่างจากเดิม (DriverIncomeDocumentView.vue เวอร์ชันก่อนหน้า) ตรงที่เป็นระเบียนถาวรจริง ไม่ใช่คำนวณสด
@@ -176,7 +177,7 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
     const targetBookings = bookingStore.bookings.filter((b) => bookingIds.includes(b.id))
     if (targetBookings.length !== bookingIds.length) return { ok: false, message: 'ไม่พบงานบางรายการ กรุณารีเฟรชหน้านี้แล้วลองใหม่' }
     const notEligible = targetBookings.filter((b) => b.status !== 'DELIVERED' || b.driverPayrollDocId)
-    if (notEligible.length) return { ok: false, message: `งาน ${notEligible.map((b) => b.docNo).join(', ')} ยังไม่จบหรือออกเอกสารไปแล้ว` }
+    if (notEligible.length) return { ok: false, message: `งาน ${notEligible.map((b) => bookingRefNo(b)).join(', ')} ยังไม่จบหรือออกเอกสารไปแล้ว` }
     const mismatches = targetBookings
       .map((b) => ({ bookingId: b.id, docNo: b.docNo, issue: driverIdentityIssue(b, driver, driverName) }))
       .filter((m) => m.issue)
@@ -307,7 +308,7 @@ export const useDriverPayrollDocumentsStore = defineStore('driverPayrollDocument
     if (!isOrphanedBooking(booking)) return { ok: false, message: 'งานนี้มีเอกสารรายได้คนขับอยู่จริง (หรือยังโหลดเอกสารไม่สำเร็จ) ปลดล็อกไม่ได้' }
     const missingId = booking.driverPayrollDocId
     booking.driverPayrollDocId = undefined
-    bookingStore.addLog(`ปลดล็อกงาน ${booking.docNo} จากเอกสารรายได้คนขับที่ไม่พบ (${missingId})`, { bookingId: booking.id })
+    bookingStore.addLog(`ปลดล็อกงาน ${bookingRefNo(booking)} จากเอกสารรายได้คนขับที่ไม่พบ (${missingId})`, { bookingId: booking.id })
     return { ok: true }
   }
 

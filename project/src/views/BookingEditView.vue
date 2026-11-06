@@ -10,7 +10,7 @@
         <span class="material-symbols-rounded">arrow_back</span>
       </button>
       <div>
-        <div class="font-bold text-text text-lg">แก้ไขงาน {{ target.docNo }}</div>
+        <div class="font-bold text-text text-lg">แก้ไขงาน {{ bookingRefNo(target) }}</div>
       </div>
     </div>
 
@@ -286,6 +286,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'

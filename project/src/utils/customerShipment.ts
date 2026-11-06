@@ -5,3 +5,6 @@ import type { Booking } from '@/types'
  * เก็บอยู่ที่ Booking.reference (ช่อง "เลขที่ PO ลูกค้า" / คอลัมน์ "เลขที่เอกสาร" ตอน import) งานที่กรอกไว้แค่ช่อง "เลขชิพเม้น" ใช้ shipmentNo แทน
  */
 export const customerShipmentNo = (b: Pick<Booking, 'reference' | 'shipmentNo'>) => b.reference?.trim() || b.shipmentNo?.trim() || ''
+
+/** เลขที่ใช้แสดงแทนงาน 1 งานทุกหน้า = เลข PO ลูกค้า (ชิพเม้น) — งานที่ไม่มีเลข PO ใช้เลขที่เอกสารของระบบแทน ไม่ให้ช่องว่าง */
+export const bookingRefNo = (b: Pick<Booking, 'reference' | 'shipmentNo' | 'docNo'>) => customerShipmentNo(b) || b.docNo

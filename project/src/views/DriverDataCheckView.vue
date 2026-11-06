@@ -52,7 +52,7 @@
         <table class="w-full text-sm min-w-[720px]">
           <thead class="text-xs text-muted text-left bg-surface-2">
             <tr>
-              <th class="px-3 py-2 font-semibold">เลขที่งาน</th>
+              <th class="px-3 py-2 font-semibold">เลข PO ลูกค้า</th>
               <th class="px-3 py-2 font-semibold">ลูกค้า / ทะเบียน</th>
               <th class="px-3 py-2 font-semibold">ชื่อคนขับในงาน</th>
               <th class="px-3 py-2 font-semibold">ที่ควรเป็น (ทะเบียนคนขับ)</th>
@@ -61,7 +61,7 @@
           </thead>
           <tbody>
             <tr v-for="row in group.rows.slice(0, limit[group.key] || PAGE)" :key="row.booking.id" class="border-t border-border">
-              <td class="px-3 py-2 font-semibold text-text whitespace-nowrap">{{ row.booking.docNo }}</td>
+              <td class="px-3 py-2 font-semibold text-text whitespace-nowrap">{{ bookingRefNo(row.booking) }}</td>
               <td class="px-3 py-2 text-text">
                 <div>{{ row.booking.customer }}</div>
                 <div class="text-xs text-muted">{{ row.booking.plate || 'ไม่มีทะเบียน' }}</div>
@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type { Booking } from '@/types'
@@ -239,7 +240,7 @@ const applyRow = (row: Row) => {
 
 const syncOne = (row: Row) => {
   applyRow(row)
-  message.value = `ซิงก์งาน ${row.booking.docNo} แล้ว`
+  message.value = `ซิงก์งาน ${bookingRefNo(row.booking)} แล้ว`
 }
 
 const syncAll = async (group: Group) => {

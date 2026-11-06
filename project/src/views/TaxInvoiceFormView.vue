@@ -564,7 +564,18 @@ const addBookingRow = (b: Booking) => {
 }
 
 onMounted(() => {
-  if (prefill || editingDoc) return
+  if (editingDoc) return
+  // จากใบวางบิล + เลือกงานเพิ่มในหน้าเลือกงาน: รายการของใบวางบิลมากับ prefill แล้ว เติมแถวเฉพาะงานที่เพิ่มเข้ามา
+  if (prefill) {
+    if (prefill.sourceType !== 'BILLING' || typeof route.query.extraBookingIds !== 'string') return
+    route.query.extraBookingIds
+      .split(',')
+      .filter(Boolean)
+      .map((id) => bookingStore.bookings.find((b) => b.id === id))
+      .filter((b): b is Booking => !!b && isBookingBillable(b) && !alreadyPickedBookingIds.value.has(b.id))
+      .forEach(addBookingRow)
+    return
+  }
   const bookingIds = typeof route.query.bookingIds === 'string' ? route.query.bookingIds.split(',').filter(Boolean) : []
   if (bookingIds.length === 0) return
   const bookings = bookingIds.map((id) => bookingStore.bookings.find((b) => b.id === id)).filter((b): b is Booking => !!b && isBookingBillable(b))

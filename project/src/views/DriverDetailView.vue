@@ -111,7 +111,7 @@
           พบ {{ conflictRows.length }} งานที่ข้อมูลคนขับไม่ตรงกับทะเบียน — ไม่นำมารวมยอดด้านบนและเลือกออกเอกสารไม่ได้ จนกว่าจะแก้ข้อมูลในงานให้ตรง
         </div>
         <div v-for="row in conflictRows" :key="row.booking.id" class="text-xs">
-          <RouterLink :to="`/job/${row.booking.id}`" class="font-mono underline">{{ row.booking.docNo }}</RouterLink>: {{ row.identityIssue }}
+          <RouterLink :to="`/job/${row.booking.id}`" class="font-mono underline">{{ bookingRefNo(row.booking) }}</RouterLink>: {{ row.identityIssue }}
         </div>
       </div>
 
@@ -120,7 +120,7 @@
           พบ {{ paymentConflictRows.length }} งานที่สถานะจ่ายรายเดือนบันทึกไว้ไม่ตรงกับข้อมูลคนขับในงาน — ระบบไม่เปลี่ยนสถานะ/ไม่ปลดล็อกให้อัตโนมัติ กรุณาตรวจสอบ
         </div>
         <div v-for="row in paymentConflictRows" :key="row.booking.id" class="text-xs">
-          <RouterLink :to="`/job/${row.booking.id}`" class="font-mono underline">{{ row.booking.docNo }}</RouterLink>: {{ row.paymentConflict }}
+          <RouterLink :to="`/job/${row.booking.id}`" class="font-mono underline">{{ bookingRefNo(row.booking) }}</RouterLink>: {{ row.paymentConflict }}
         </div>
       </div>
 
@@ -194,7 +194,7 @@
               <th class="px-3 py-2 w-8">
                 <input type="checkbox" :checked="allSelectableChecked" :disabled="selectableRows.length === 0" @change="toggleSelectAll" class="w-4 h-4" />
               </th>
-              <th class="px-3 py-2 font-semibold">เลขที่งาน</th>
+              <th class="px-3 py-2 font-semibold">เลข PO ลูกค้า</th>
               <th class="px-3 py-2 font-semibold">วันที่</th>
               <th class="px-3 py-2 font-semibold">รถ</th>
               <th class="px-3 py-2 font-semibold">รายละเอียดงาน</th>
@@ -217,7 +217,7 @@
                   class="w-4 h-4"
                 />
               </td>
-              <td class="px-3 py-2 font-mono text-text">{{ row.booking.docNo }}</td>
+              <td class="px-3 py-2 font-mono text-text">{{ bookingRefNo(row.booking) }}</td>
               <td class="px-3 py-2 text-muted">{{ formatDate(row.booking.shipDate || row.booking.completedAt) }}</td>
               <td class="px-3 py-2 text-muted">{{ row.booking.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ destinationLabel(row.booking) }}</td>
@@ -322,6 +322,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDriversStore } from '@/stores/drivers'
@@ -551,7 +552,7 @@ const resetDoc = (docId: string, number: string) => {
   runAction(() => driverPayrollDocumentsStore.resetPayment(docId))
 }
 const releaseOrphan = (booking: Booking) => {
-  if (!confirm(`งาน ${booking.docNo} ติดป้าย "ออกเอกสารแล้ว" แต่ไม่พบเอกสารในระบบ — ยืนยันปลดล็อกให้เลือกออกเอกสารใหม่ได้?`)) return
+  if (!confirm(`งาน ${bookingRefNo(booking)} ติดป้าย "ออกเอกสารแล้ว" แต่ไม่พบเอกสารในระบบ — ยืนยันปลดล็อกให้เลือกออกเอกสารใหม่ได้?`)) return
   runAction(() => driverPayrollDocumentsStore.releaseOrphanedBooking(booking.id))
 }
 

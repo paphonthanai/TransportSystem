@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { productRepository } from '@/repositories/productRepository'
 import { stockMovementRepository } from '@/repositories/stockMovementRepository'
 import type { Booking, JobItem } from '@/types'
+import { bookingRefNo } from '@/utils/customerShipment'
 
 export interface Product {
   id: string
@@ -109,7 +110,7 @@ export const useInventoryStore = defineStore('inventory', () => {
         result.unmatched.push(item.product)
         return
       }
-      addMovement({ productId: product.id, type: 'out', qty: item.qty, refBookingId: booking.id, note: `รับสินค้าที่ต้นทาง ${booking.docNo}` })
+      addMovement({ productId: product.id, type: 'out', qty: item.qty, refBookingId: booking.id, note: `รับสินค้าที่ต้นทาง ${bookingRefNo(booking)}` })
       result.matched.push(`${product.name} ${item.qty} ${product.unit}`)
     })
     return result
@@ -127,7 +128,7 @@ export const useInventoryStore = defineStore('inventory', () => {
         result.unmatched.push(item.product)
         return
       }
-      addMovement({ productId: product.id, type: 'in', qty: item.qty, refBookingId: booking.id, note: `คืนสต๊อกจากการ Reset สถานะงาน ${booking.docNo}` })
+      addMovement({ productId: product.id, type: 'in', qty: item.qty, refBookingId: booking.id, note: `คืนสต๊อกจากการ Reset สถานะงาน ${bookingRefNo(booking)}` })
       result.matched.push(`${product.name} ${item.qty} ${product.unit}`)
     })
     return result

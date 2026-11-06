@@ -44,7 +44,7 @@
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="ค้นหาเลขที่งาน, PO, ชิพเม้น, ลูกค้า, หน้างาน, ทะเบียน, คนขับ, เบอร์โทร..."
+          placeholder="ค้นหาเลข PO ลูกค้า, ลูกค้า, หน้างาน, ทะเบียน, คนขับ, เบอร์โทร..."
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
@@ -70,7 +70,7 @@
     <div v-if="selectedBooking" class="card-lg border-primary/40 space-y-3">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <div class="text-xs font-semibold text-muted">งานที่เลือก {{ selectedBooking.docNo }}</div>
+          <div class="text-xs font-semibold text-muted">งานที่เลือก {{ bookingRefNo(selectedBooking) }}</div>
           <div class="font-bold text-text truncate">{{ dispatchTitle(selectedBooking) }}</div>
         </div>
         <button @click="selectedBookingId = null" class="w-8 h-8 shrink-0 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
@@ -176,7 +176,7 @@
         <div class="font-semibold">มี {{ unlinkedDriverJobs.length }} งานที่ไม่ขึ้นในแอปคนขับ (ไม่มีรหัสคนขับที่ตรงกับทะเบียน)</div>
         <div class="text-xs mt-1 break-words">
           <span v-for="p in unlinkedDriverJobs" :key="p.booking.id" class="mr-3 inline-block">
-            {{ p.booking.docNo }} · {{ p.booking.driverName }}
+            {{ bookingRefNo(p.booking) }} · {{ p.booking.driverName }}
             <span v-if="!p.driver" class="font-semibold">(ไม่พบชื่อในทะเบียน — จัดรถใหม่ แล้วเลือกคนขับจากรายชื่อ)</span>
           </span>
         </div>
@@ -193,8 +193,9 @@
     <!-- In-progress Table -->
     <div>
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <div class="font-bold text-text">
-          งานที่กำลังดำเนินการ ({{ inProgressBookings.length }})
+        <div class="font-bold text-text flex items-center gap-2 flex-wrap">
+          งานที่กำลังดำเนินการ ({{ inProgressTable.rows.value.length }})
+          <button v-if="inProgressTable.hasFilters.value" type="button" @click="inProgressTable.clearFilters()" class="btn-sm font-normal">ล้างตัวกรองคอลัมน์</button>
         </div>
         <button
           v-if="canSelectDelete && selectedInProgressIds.length > 0"
@@ -214,25 +215,25 @@
               <th v-if="canSelectDelete" class="px-3 py-3 w-8">
                 <input type="checkbox" :checked="allInProgressSelected" @change="toggleSelectAllInProgress" />
               </th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">เที่ยวที่</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">พขร.</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
-              <th class="text-center px-3 py-3 font-semibold text-muted">เช็คตั๋ว</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">ลูกค้า</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted whitespace-nowrap">เลขชิพเม้นลูกค้า</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">วันที่ลงงาน</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">เวลา</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">สถานที่ส่ง</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
-              <th class="text-right px-3 py-3 font-semibold text-muted">ค่าเที่ยว</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">สถานะขนส่ง</th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="trip" label="เที่ยวที่" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="driver" label="พขร." /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="plate" label="คอนเฟิร์ม" /></th>
+              <th class="text-center px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="ticket" label="เช็คตั๋ว" align="center" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="customer" label="ลูกค้า" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="shipment" label="เลขชิพเม้นลูกค้า" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="loadingDate" label="วันที่ลงงาน" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="loadingTime" label="เวลา" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="site" label="สถานที่ส่ง" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="district" label="อำเภอ/จังหวัด" /></th>
+              <th class="text-right px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="tripFee" label="ค่าเที่ยว" align="right" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="status" label="สถานะขนส่ง" /></th>
               <th class="px-3 py-3"></th>
               <th class="text-left px-3 py-3 font-semibold text-muted">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="booking in inProgressBookings"
+              v-for="booking in inProgressTable.rows.value"
               :key="booking.id"
               :style="customerRowStyle(booking)"
               :id="`booking-row-${booking.id}`"
@@ -342,7 +343,7 @@
                 </div>
               </td>
             </tr>
-            <tr v-if="inProgressBookings.length === 0">
+            <tr v-if="inProgressTable.rows.value.length === 0">
               <td :colspan="canSelectDelete ? 15 : 14" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
             </tr>
           </tbody>
@@ -353,33 +354,34 @@
 
     <!-- In-transit Table -->
     <div>
-      <div class="font-bold text-text mb-3">
-        งานที่กำลังขนส่ง ({{ inTransitBookings.length }})
+      <div class="font-bold text-text mb-3 flex items-center gap-2 flex-wrap">
+        งานที่กำลังขนส่ง ({{ inTransitTable.rows.value.length }})
+        <button v-if="inTransitTable.hasFilters.value" type="button" @click="inTransitTable.clearFilters()" class="btn-sm font-normal">ล้างตัวกรองคอลัมน์</button>
       </div>
       <div class="card-lg overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-surface-2 border-b border-border">
             <tr>
-              <th class="text-left px-3 py-3 font-semibold text-muted">สถานะขนส่ง</th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="status" label="สถานะขนส่ง" /></th>
               <th class="px-3 py-3"></th>
               <th class="text-left px-3 py-3 font-semibold text-muted">การจัดการ</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">เที่ยวที่</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">พขร.</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">คอนเฟิร์ม</th>
-              <th class="text-center px-3 py-3 font-semibold text-muted">เช็คตั๋ว</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">ลูกค้า</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted whitespace-nowrap">เลขชิพเม้นลูกค้า</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">วันที่ลงงาน</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">เวลา</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">สถานที่ส่ง</th>
-              <th class="text-left px-3 py-3 font-semibold text-muted">อำเภอ/จังหวัด</th>
-              <th class="text-right px-3 py-3 font-semibold text-muted">ค่าเที่ยว</th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="trip" label="เที่ยวที่" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="driver" label="พขร." /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="plate" label="คอนเฟิร์ม" /></th>
+              <th class="text-center px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="ticket" label="เช็คตั๋ว" align="center" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="customer" label="ลูกค้า" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="shipment" label="เลขชิพเม้นลูกค้า" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="loadingDate" label="วันที่ลงงาน" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="loadingTime" label="เวลา" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="site" label="สถานที่ส่ง" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="district" label="อำเภอ/จังหวัด" /></th>
+              <th class="text-right px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="tripFee" label="ค่าเที่ยว" align="right" /></th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="booking in inTransitBookings"
+              v-for="booking in inTransitTable.rows.value"
               :key="booking.id"
               :style="customerRowStyle(booking)"
               :id="`booking-row-${booking.id}`"
@@ -481,7 +483,7 @@
                 <span v-else class="text-xs font-semibold text-amber-700">ยังไม่ระบุราคา</span>
               </td>
             </tr>
-            <tr v-if="inTransitBookings.length === 0">
+            <tr v-if="inTransitTable.rows.value.length === 0">
               <td colspan="14" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
             </tr>
           </tbody>
@@ -827,7 +829,7 @@
       <div @click="noteTarget = null" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6 animate-fade">
         <div @click.stop class="w-full max-w-md bg-surface rounded-2xl shadow-2xl animate-slide">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <div class="font-bold text-text">หมายเหตุ {{ noteTarget.docNo }}</div>
+            <div class="font-bold text-text">หมายเหตุ {{ bookingRefNo(noteTarget) }}</div>
             <button @click="noteTarget = null" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
               <span class="material-symbols-rounded">close</span>
             </button>
@@ -1134,7 +1136,9 @@ import DriverJobDetailsContent from '@/components/booking/DriverJobDetailsConten
 import { compareInTransitBookings } from '@/utils/inTransitSort'
 import { tripNumberChoices as tripNumberChoicesFor } from '@/utils/driverDayTrips'
 import { normalizeDriverName } from '@/utils/driverIdentity'
-import { customerShipmentNo } from '@/utils/customerShipment'
+import { bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
+import ColumnHeader from '@/components/ColumnHeader.vue'
+import { useTableColumns, type TableColumn } from '@/composables/useTableColumns'
 import { bookingShipmentKey, duplicateGroupKey, findDuplicateGroups, shipmentKey, type DuplicateGroup } from '@/utils/bookingDuplicates'
 import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
@@ -1871,8 +1875,8 @@ const deleteBooking = async (booking: Booking) => {
 
   const confirmMessage =
     refs.length === 0
-      ? `⚠️ ลบ Booking ถาวร\n\nBooking: ${booking.docNo}\nลูกค้า: ${booking.customer}\n\nการลบเป็นการลบถาวร ไม่สามารถกู้คืนได้`
-      : `⚠️ ลบ Booking ถาวร\n\nBooking: ${booking.docNo}\nลูกค้า: ${booking.customer}\n\nพบเอกสารที่เกี่ยวข้อง ${refs.length} รายการ:\n` +
+      ? `⚠️ ลบ Booking ถาวร\n\nBooking: ${bookingRefNo(booking)}\nลูกค้า: ${booking.customer}\n\nการลบเป็นการลบถาวร ไม่สามารถกู้คืนได้`
+      : `⚠️ ลบ Booking ถาวร\n\nBooking: ${bookingRefNo(booking)}\nลูกค้า: ${booking.customer}\n\nพบเอกสารที่เกี่ยวข้อง ${refs.length} รายการ:\n` +
         refs.map((d) => `- ${d.number} (${d.type})`).join('\n') +
         `\n\nการดำเนินการนี้จะ:\n- ลบ Booking\n- ลบเอกสารที่อ้างอิง Booking\n- ลบรายการสินค้าในเอกสารที่เกี่ยวข้อง\n\nข้อมูลทั้งหมดจะถูกลบถาวรและไม่สามารถกู้คืนได้`
 
@@ -1886,8 +1890,27 @@ const deleteBooking = async (booking: Booking) => {
   // ลบสำเร็จจริงแล้วเท่านั้นถึงจะคืนสต๊อกที่ตัดไปแล้ว (ถ้ามีรายการที่กดรับสินค้าไปแล้ว) — reuse ของเดิมทุกประการ
   const pickedItems = booking.items.filter((i) => i.pickupStatus === 'PICKED_UP')
   if (pickedItems.length) inventoryStore.reverseDeliveryMovement(booking, pickedItems)
-  alert(`ลบงาน ${booking.docNo} ถาวรสำเร็จแล้ว`)
+  alert(`ลบงาน ${bookingRefNo(booking)} ถาวรสำเร็จแล้ว`)
 }
+
+// คอลัมน์ที่เรียง/กรองได้ของ 2 ตารางงาน — label ต้องตรงกับที่แสดงในตาราง ไม่เลือกการเรียง = คงลำดับเริ่มต้นของแต่ละตาราง
+const bookingStatusOrder = Object.keys(bookingStatusLabel)
+const bookingTableColumns: TableColumn<Booking>[] = [
+  { key: 'trip', label: (b) => (b.tripSequence ? String(b.tripSequence) : ''), sortValue: (b) => b.tripSequence || undefined },
+  { key: 'driver', label: (b) => b.driverName || '' },
+  { key: 'plate', label: (b) => b.plate || '' },
+  { key: 'ticket', label: (b) => (b.ticketChecked ? 'เช็คแล้ว' : 'ยังไม่เช็ค') },
+  { key: 'customer', label: (b) => customerRecordFor(b)?.code || b.customer || '' },
+  { key: 'shipment', label: (b) => customerShipmentNo(b) },
+  { key: 'loadingDate', label: (b) => (b.loadingDate ? formatShortDate(b.loadingDate) : ''), sortValue: (b) => (b.loadingDate ? new Date(b.loadingDate).getTime() : undefined) },
+  { key: 'loadingTime', label: (b) => b.loadingTime || '' },
+  { key: 'site', label: (b) => destinationLabel(b) },
+  { key: 'district', label: (b) => districtProvinceLabel(b) },
+  { key: 'tripFee', label: (b) => (b.tripFee > 0 ? formatBaht(b.tripFee) : 'ยังไม่ระบุราคา'), sortValue: (b) => (b.tripFee > 0 ? b.tripFee : undefined) },
+  { key: 'status', label: (b) => bookingStatusLabel[b.status], sortValue: (b) => bookingStatusOrder.indexOf(b.status) },
+]
+const inProgressTable = useTableColumns(inProgressBookings, bookingTableColumns)
+const inTransitTable = useTableColumns(inTransitBookings, bookingTableColumns)
 
 // --- เลือกหลายรายการ + ลบถาวรพร้อมกัน (เฉพาะ ADMIN) — เหมือน CompletedJobsView.vue's selected/bulkDeleteSelected
 // ทุกประการ แต่แยกตัวแปร/ฟังก์ชันเป็นชุดของตัวเอง (selectedInProgress/bulkDeleteSelectedInProgress) เพราะทำงานกับ
@@ -1895,11 +1918,11 @@ const deleteBooking = async (booking: Booking) => {
 const selectedInProgress = ref<Record<string, boolean>>({})
 const selectedInProgressIds = computed(() => Object.keys(selectedInProgress.value).filter((id) => selectedInProgress.value[id]))
 const allInProgressSelected = computed(
-  () => inProgressBookings.value.length > 0 && inProgressBookings.value.every((b) => selectedInProgress.value[b.id])
+  () => inProgressTable.rows.value.length > 0 && inProgressTable.rows.value.every((b) => selectedInProgress.value[b.id])
 )
 const toggleSelectAllInProgress = () => {
   const next = !allInProgressSelected.value
-  inProgressBookings.value.forEach((b) => {
+  inProgressTable.rows.value.forEach((b) => {
     selectedInProgress.value[b.id] = next
   })
 }
@@ -1907,15 +1930,15 @@ const toggleSelectAllInProgress = () => {
 const bulkDeletingInProgress = ref(false)
 const bulkDeleteSelectedInProgress = async () => {
   if (!canSelectDelete.value || bulkDeletingInProgress.value) return
-  const selected = inProgressBookings.value.filter((b) => selectedInProgress.value[b.id])
+  const selected = inProgressTable.rows.value.filter((b) => selectedInProgress.value[b.id])
   const targets = selected.filter((b) => bookingStore.canDeleteBooking(b).ok)
   const skipped = selected.filter((b) => !bookingStore.canDeleteBooking(b).ok)
   if (skipped.length) {
-    alert(`งานต่อไปนี้ลบไม่ได้ (วางบิลแล้ว/มีเอกสารวางบิลอ้างอิง) จะถูกข้าม:\n${skipped.map((b) => '- ' + b.docNo).join('\n')}`)
+    alert(`งานต่อไปนี้ลบไม่ได้ (วางบิลแล้ว/มีเอกสารวางบิลอ้างอิง) จะถูกข้าม:\n${skipped.map((b) => '- ' + bookingRefNo(b)).join('\n')}`)
   }
   if (!targets.length) return
 
-  const preview = targets.slice(0, 20).map((b) => `- ${b.docNo} (${b.customer || '-'})`).join('\n')
+  const preview = targets.slice(0, 20).map((b) => `- ${bookingRefNo(b)} (${b.customer || '-'})`).join('\n')
   const more = targets.length > 20 ? `\n...และอีก ${targets.length - 20} รายการ` : ''
   const confirmed = confirm(
     `⚠️ ลบ Booking ถาวร ${targets.length} รายการ\n\n${preview}${more}\n\nการลบเป็นการลบถาวร ไม่สามารถกู้คืนได้ (รวมเอกสารที่อ้างอิงทุกรายการด้วย)`
@@ -1933,7 +1956,7 @@ const bulkDeleteSelectedInProgress = async () => {
       const pickedItems = booking.items.filter((i) => i.pickupStatus === 'PICKED_UP')
       if (pickedItems.length) inventoryStore.reverseDeliveryMovement(booking, pickedItems)
     } else {
-      failed.push(`${booking.docNo}: ${result.message || 'ไม่ทราบสาเหตุ'}`)
+      failed.push(`${bookingRefNo(booking)}: ${result.message || 'ไม่ทราบสาเหตุ'}`)
     }
   }
   bulkDeletingInProgress.value = false
@@ -1959,7 +1982,7 @@ const confirmBlockedReason = (booking: Booking) =>
   describeCompletionIssues(bookingCompletionIssues(booking, { standardFuelLiters: standardFuelOf(booking), tripNumber: bookingStore.tripNumberOf(booking) }))
 
 const onCancelDispatch = (booking: Booking) => {
-  if (!confirm(`ยกเลิกการจ่ายงาน ${booking.docNo} และคืนกลับไปที่ตารางจองงาน?`)) return
+  if (!confirm(`ยกเลิกการจ่ายงาน ${bookingRefNo(booking)} และคืนกลับไปที่ตารางจองงาน?`)) return
   bookingStore.declineDispatch(booking.id)
 }
 
@@ -1970,7 +1993,7 @@ const onCancelDispatch = (booking: Booking) => {
  *  คนขับทำใหม่ */
 /** ยืนยัน POD = ยืนยันการจบงานด้วยในคลิกเดียว (ดู bookingStore.approvePodAndConfirmCompletion) */
 const approvePod = (booking: Booking) => {
-  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${booking.docNo} ตรงกับข้อมูลในระบบ และจบงาน? หลังยืนยันจะนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
+  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${bookingRefNo(booking)} ตรงกับข้อมูลในระบบ และจบงาน? หลังยืนยันจะนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
   const result = bookingStore.approvePodAndConfirmCompletion(booking.id)
   if (!result.ok && result.issues.length) alert(`ยืนยัน POD/จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}`)
 }
@@ -1978,7 +2001,7 @@ const approvePod = (booking: Booking) => {
 /** เสมียนกดยืนยันการจบงาน — ขั้นตอนสุดท้ายจริงก่อนนำไปวางบิล แยกจากการตรวจสอบ POD ด้านบนโดยเจตนา (ดู
  *  bookingStore.confirmJobCompletion ใน stores/booking.ts) จบงานแล้วจะไปโผล่ที่หน้า "งานเสร็จสิ้น" แทน */
 const onConfirmJobCompletion = (booking: Booking) => {
-  if (!confirm(`ยืนยันการจบงาน ${booking.docNo}? หลังยืนยันจะสามารถนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
+  if (!confirm(`ยืนยันการจบงาน ${bookingRefNo(booking)}? หลังยืนยันจะสามารถนำไปวางบิลได้ และงานจะย้ายไปหน้า "งานเสร็จสิ้น"`)) return
   const result = bookingStore.confirmJobCompletion(booking.id)
   if (!result.ok && result.issues.length) alert(`จบงานไม่ได้ ข้อมูลยังไม่ครบ:\n- ${result.issues.map((i) => i.message).join('\n- ')}`)
 }
@@ -2072,7 +2095,7 @@ const reconcileBreakdownLabel: Record<keyof ReconcileMatchBreakdown, string> = {
 const reconcileCandidateLabel = (booking: Booking) => {
   const product = booking.items[0]?.product || '-'
   const date = booking.loadingDate ? formatShortDate(booking.loadingDate) : 'ไม่มีวันที่'
-  return `${booking.docNo} · ${booking.customer} · ${booking.plate || 'ไม่มีทะเบียน'} · ${product} · ${date}`
+  return `${bookingRefNo(booking)} · ${booking.customer} · ${booking.plate || 'ไม่มีทะเบียน'} · ${product} · ${date}`
 }
 
 const reconcilePreview = computed(() =>
@@ -2113,7 +2136,7 @@ const confirmReconcile = () => {
         if (p.field === 'จำนวนตัน') patch.itemQty = p.to
       })
       const applied = bookingStore.applyImportReconciliation(booking.id, patch)
-      if (applied.length) details.push(`- ${booking.docNo}: ${applied.join(', ')}`)
+      if (applied.length) details.push(`- ${bookingRefNo(booking)}: ${applied.join(', ')}`)
     })
     alert(details.length ? `ซ่อมข้อมูลให้ ${details.length} งานแล้ว:\n${details.join('\n')}` : 'ไม่พบงานที่จับคู่ได้และมีข้อมูลว่าง/0 ให้ซ่อม')
     closeReconcileModal()
@@ -2259,7 +2282,7 @@ const importWarningRowCount = computed(() => importableRows.value.filter((r) => 
 const importTripClashFor = (row: ImportRowResult) => {
   if (!row.driverName || row.tripSequence === undefined) return undefined
   const clash = driverBookingsForDay(row.driverName, importShipDate.value ?? new Date()).find((b) => b.tripSequence === row.tripSequence)
-  return clash ? `เที่ยวที่ ${row.tripSequence} ของ ${row.driverName} ซ้ำกับงาน ${clash.docNo} ที่มีอยู่แล้วในวันนั้น — แก้เลขเที่ยวในพรีวิว` : undefined
+  return clash ? `เที่ยวที่ ${row.tripSequence} ของ ${row.driverName} ซ้ำกับงาน ${bookingRefNo(clash)} ที่มีอยู่แล้วในวันนั้น — แก้เลขเที่ยวในพรีวิว` : undefined
 }
 /** ข้อควรตรวจก่อนนำเข้าของแถว: พิกัด/ลิงก์ GPS, เลขเที่ยวอ่านไม่ได้ (row.checks) + เลขเที่ยวชนงานเดิมของวัน — ไม่ถูกแปะลง note ของงาน */
 /** ชื่อเล่นใน Excel ที่ยังไม่ได้ map เป็นคนขับ (ผู้ใช้ยังไม่ได้เลือก) — ต้องตรวจก่อนสร้างงาน */
@@ -2271,7 +2294,7 @@ const existingShipments = computed(() => {
   const map = new Map<string, string>()
   fleetBookings.value.forEach((b) => {
     const key = bookingShipmentKey(b)
-    if (key) map.set(key, b.docNo)
+    if (key) map.set(key, bookingRefNo(b))
   })
   return map
 })
@@ -2280,7 +2303,7 @@ const importDuplicateFor = (row: ImportRowResult): string | undefined => {
   const key = importShipmentKey(row)
   if (!key) return undefined
   const docNo = existingShipments.value.get(key)
-  if (docNo) return `เลขชิพเม้นลูกค้า ${row.docRef} ซ้ำกับงาน ${docNo} ที่มีอยู่แล้ว`
+  if (docNo) return `เลขชิพเม้นลูกค้า ${row.docRef} มีงานนี้อยู่แล้วในระบบ (${docNo})`
   const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importShipmentKey(r) === key)
   return earlier ? `เลขชิพเม้นลูกค้า ${row.docRef} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้` : undefined
 }

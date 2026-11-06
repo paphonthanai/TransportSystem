@@ -1,4 +1,5 @@
 import type { Booking } from '@/types'
+import { bookingRefNo } from '@/utils/customerShipment'
 
 /**
  * ชื่องานที่อ่านแล้วเข้าใจได้ทันที (ชื่อลูกค้า · หน้างาน · สินค้า) แทนเลขที่เอกสาร (docNo) ที่ไม่สื่อความหมายอะไรเลย
@@ -8,5 +9,5 @@ import type { Booking } from '@/types'
 export function bookingTitle(booking: Booking): string {
   const first = booking.items[0]
   const parts = [booking.customer, first?.siteName, first?.product].filter(Boolean)
-  return parts.length ? parts.join(' · ') : booking.docNo
+  return parts.length ? parts.join(' · ') : bookingRefNo(booking)
 }

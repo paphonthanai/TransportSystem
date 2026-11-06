@@ -182,6 +182,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { matchesSearchFields } from '@/utils/searchFields'
 import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -329,7 +330,7 @@ const hasActiveBillingDoc = (booking: Booking) =>
  * "ออกใบวางบิล" (CREATE_BILLING ด้านล่าง) หรือไปสร้างแบบรวมที่หน้าใบวางบิลเองแยกต่างหาก */
 const onStatusSelect = (booking: Booking, action: string) => {
   if (action === 'COMPLETE') {
-    if (!confirm(`ยืนยันจบงาน ${booking.docNo}?`)) return
+    if (!confirm(`ยืนยันจบงาน ${bookingRefNo(booking)}?`)) return
     const result = bookingStore.completeJob(booking.id, [], undefined)
     // ข้อมูลไม่ครบ (ไม่มีเลขไมล์/ลิตรน้ำมัน/ทะเบียน ฯลฯ) จบงานทางลัดนี้ไม่ได้ ให้ไปจบที่หน้ารายการงานขนส่งที่กรอกข้อมูลเพิ่มได้
     if (!result.ok && result.issues.length) {
@@ -353,13 +354,13 @@ const onStatusSelect = (booking: Booking, action: string) => {
     if (booking.status === 'DELIVERED') {
       if (
         !confirm(
-          `ยืนยัน Reset สถานะงาน ${booking.docNo} จาก "${bookingStatusLabel.DELIVERED}" กลับไปเป็น "${bookingStatusLabel.DELIVERING}"?\n\nข้อมูลการส่งของที่เกิดขึ้นจริงแล้ว (รูป POD/ชื่อผู้รับ/เวลาส่ง) จะไม่ถูกลบ และเอกสารวางบิล/ใบแจ้งหนี้/ใบเสร็จที่ผูกกับงานนี้ (ถ้ามี) จะไม่ถูกแตะต้องเลย — ต้องไปยกเลิก/แก้ไขจากหน้าเอกสารนั้นโดยตรงถ้าต้องการ`
+          `ยืนยัน Reset สถานะงาน ${bookingRefNo(booking)} จาก "${bookingStatusLabel.DELIVERED}" กลับไปเป็น "${bookingStatusLabel.DELIVERING}"?\n\nข้อมูลการส่งของที่เกิดขึ้นจริงแล้ว (รูป POD/ชื่อผู้รับ/เวลาส่ง) จะไม่ถูกลบ และเอกสารวางบิล/ใบแจ้งหนี้/ใบเสร็จที่ผูกกับงานนี้ (ถ้ามี) จะไม่ถูกแตะต้องเลย — ต้องไปยกเลิก/แก้ไขจากหน้าเอกสารนั้นโดยตรงถ้าต้องการ`
         )
       )
         return
     } else {
       const stockWarning = booking.status === 'LOADED' ? ' (สต๊อกที่ตัดไปจากการรับสินค้าจะถูกคืนกลับ)' : ''
-      if (!confirm(`ยืนยัน Reset สถานะงาน ${booking.docNo} กลับไปขั้นก่อนหน้า?${stockWarning}`)) return
+      if (!confirm(`ยืนยัน Reset สถานะงาน ${bookingRefNo(booking)} กลับไปขั้นก่อนหน้า?${stockWarning}`)) return
     }
     const result = bookingStore.resetBookingStatus(booking.id)
     if (!result.ok && result.message) alert(result.message)

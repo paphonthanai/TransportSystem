@@ -17,7 +17,7 @@
       </select>
       <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface border border-border flex-1 min-w-[200px] max-w-sm">
         <span class="material-symbols-rounded text-muted text-lg">search</span>
-        <input v-model="search" type="text" placeholder="ค้นหา ชื่อคนขับ หน้างาน เลขชิพเม้นท์..." class="border-0 outline-0 bg-transparent text-sm text-text w-full" />
+        <input v-model="search" type="text" placeholder="ค้นหา ชื่อคนขับ หน้างาน เลข PO ลูกค้า..." class="border-0 outline-0 bg-transparent text-sm text-text w-full" />
       </div>
       <button @click="mode === 'summary' ? exportSummary() : exportDetail()" class="btn-secondary ml-auto">
         <span class="material-symbols-rounded text-base">download</span>
@@ -99,7 +99,7 @@
         <thead class="bg-surface-2 text-left text-xs text-muted">
           <tr>
             <th class="px-4 py-3 font-semibold">วันที่ส่งงาน</th>
-            <th class="px-4 py-3 font-semibold">เลขชิพเม้นท์</th>
+            <th class="px-4 py-3 font-semibold">เลข PO ลูกค้า</th>
             <th class="px-4 py-3 font-semibold">ชื่อหน้างาน</th>
             <th class="px-4 py-3 font-semibold">คนขับ</th>
             <th class="px-4 py-3 font-semibold text-right">รายได้คนขับ</th>

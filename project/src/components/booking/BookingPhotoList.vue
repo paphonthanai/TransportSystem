@@ -7,7 +7,7 @@
           :alt="`รูป ${i + 1}`"
           class="w-full h-24 object-cover rounded-lg border border-border bg-white cursor-zoom-in"
           title="กดเพื่อขยาย"
-          @click="lightbox = { src: url, title: `${booking.docNo} · ${title} ${i + 1}`, filename: `${booking.docNo} ${title} ${i + 1}` }"
+          @click="lightbox = { src: url, title: `${bookingRefNo(booking)} · ${title} ${i + 1}`, filename: `${bookingRefNo(booking)} ${title} ${i + 1}` }"
         />
         <button
           v-if="editable"
@@ -37,6 +37,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingRefNo } from '@/utils/customerShipment'
 import { computed, ref } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { uploadJobPhoto, photoPaths, MAX_PHOTOS_PER_LIST, type PhotoActor } from '@/utils/photoUpload'

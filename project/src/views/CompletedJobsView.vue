@@ -8,7 +8,7 @@
           <input
             v-model="filters.search"
             type="text"
-            placeholder="ค้นหาเลขชิพเม้นลูกค้า, เลขที่เอกสาร, ลูกค้า, ทะเบียนรถ..."
+            placeholder="ค้นหาเลข PO ลูกค้า, ลูกค้า, ทะเบียนรถ..."
             class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
           />
         </div>
@@ -117,7 +117,6 @@
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">
                   <div class="font-bold text-primary font-mono text-xs">{{ customerShipmentNo(booking) || '-' }}</div>
-                  <div class="text-[11px] text-muted">{{ booking.docNo }}</div>
                 </td>
                 <td class="px-4 py-3">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', booking.category === 'cements' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700']">
@@ -255,7 +254,7 @@ import { useRoute, useRouter } from 'vue-router'
 import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
 import TablePagination from '@/components/TablePagination.vue'
 import { usePagedRows } from '@/composables/usePagedRows'
-import { customerShipmentNo } from '@/utils/customerShipment'
+import { bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
 import { useCompletedJobs, useCompletedJobsFilters, completedJobPriceOf, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
@@ -336,7 +335,7 @@ const clearFilters = () => {
 }
 
 const approveLegacyPod = (booking: Booking) => {
-  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${booking.docNo} ตรงกับข้อมูลในระบบ? (กด "รูป" เพื่อดูรูปก่อนได้)`)) return
+  if (!confirm(`ยืนยันว่ารูป POD ของงาน ${bookingRefNo(booking)} ตรงกับข้อมูลในระบบ? (กด "รูป" เพื่อดูรูปก่อนได้)`)) return
   bookingStore.approveLegacyPod(booking.id)
 }
 
@@ -346,7 +345,7 @@ const hasMissingPod = (booking: Booking) => !firstPodImage(booking)
 const podPreview = ref<{ docNo: string; photos: { label: string; url: string }[] } | null>(null)
 const openPod = (booking: Booking) => {
   const photos = bookingPhotos(booking)
-  podPreview.value = photos.length ? { docNo: booking.docNo, photos } : null
+  podPreview.value = photos.length ? { docNo: bookingRefNo(booking), photos } : null
 }
 
 /** งานที่หน้านี้แสดงเป็น DELIVERED เสมอ — Reset ถอยกลับไปเป็น DELIVERING หนึ่งขั้น (reuse bookingStore.resetBookingStatus
@@ -355,7 +354,7 @@ const openPod = (booking: Booking) => {
  *  ไม่ลบข้อมูลการส่งของจริง (POD/ผู้รับ/เวลา) หรือแตะเอกสารขายที่ผูกอยู่เลย ตาม resetBookingStatus เดิมทุกประการ */
 const resetBooking = (booking: Booking) => {
   const confirmed = confirm(
-    `ยืนยัน Reset สถานะงาน ${booking.docNo} จาก "${bookingStatusLabel.DELIVERED}" กลับไปเป็น "${bookingStatusLabel.DELIVERING}" เพื่อแก้ไข?\n\nข้อมูลการส่งของที่เกิดขึ้นจริงแล้ว (รูป POD/ชื่อผู้รับ/เวลาส่ง) จะไม่ถูกลบ และเอกสารวางบิล/ใบแจ้งหนี้/ใบเสร็จที่ผูกกับงานนี้ (ถ้ามี) จะไม่ถูกแตะต้องเลย — ต้องไปยกเลิก/แก้ไขจากหน้าเอกสารนั้นโดยตรงถ้าต้องการ\n\nหลัง Reset งานนี้จะย้ายไปแสดงที่หน้า "ตารางขนส่ง" แทน`
+    `ยืนยัน Reset สถานะงาน ${bookingRefNo(booking)} จาก "${bookingStatusLabel.DELIVERED}" กลับไปเป็น "${bookingStatusLabel.DELIVERING}" เพื่อแก้ไข?\n\nข้อมูลการส่งของที่เกิดขึ้นจริงแล้ว (รูป POD/ชื่อผู้รับ/เวลาส่ง) จะไม่ถูกลบ และเอกสารวางบิล/ใบแจ้งหนี้/ใบเสร็จที่ผูกกับงานนี้ (ถ้ามี) จะไม่ถูกแตะต้องเลย — ต้องไปยกเลิก/แก้ไขจากหน้าเอกสารนั้นโดยตรงถ้าต้องการ\n\nหลัง Reset งานนี้จะย้ายไปแสดงที่หน้า "ตารางขนส่ง" แทน`
   )
   if (!confirmed) return
   const result = bookingStore.resetBookingStatus(booking.id)
@@ -400,7 +399,7 @@ const bulkDeleteSelected = async () => {
   const targets = selectedTargets.value
   if (!targets.length) return
 
-  const preview = targets.slice(0, 20).map((b) => `- ${b.docNo} (${b.customer || '-'})`).join('\n')
+  const preview = targets.slice(0, 20).map((b) => `- ${bookingRefNo(b)} (${b.customer || '-'})`).join('\n')
   const more = targets.length > 20 ? `\n...และอีก ${targets.length - 20} รายการ` : ''
   const confirmed = confirm(
     `⚠️ ลบ Booking ถาวร ${targets.length} รายการ\n\n${preview}${more}\n\nการลบเป็นการลบถาวร ไม่สามารถกู้คืนได้ (รวมเอกสารที่อ้างอิงทุกรายการด้วย)`
@@ -416,7 +415,7 @@ const bulkDeleteSelected = async () => {
       ok++
       delete selected.value[booking.id]
     } else {
-      failed.push(`${booking.docNo}: ${result.message || 'ไม่ทราบสาเหตุ'}`)
+      failed.push(`${bookingRefNo(booking)}: ${result.message || 'ไม่ทราบสาเหตุ'}`)
     }
   }
   bulkDeleting.value = false

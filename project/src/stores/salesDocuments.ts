@@ -1602,6 +1602,12 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       const targetBookingIds = data.bookingIds && data.bookingIds.length ? data.bookingIds : billing.bookingIds
       const linkedBookings = targetBookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid))
       if (linkedBookings.some((b) => !b || b.taxInvoiceDocId)) return null
+      /** งานที่เลือกเพิ่มนอกใบวางบิล (หน้าเลือกงาน TaxInvoiceBookingSelectView.vue) ต้องผ่านเงื่อนไขเดียวกับการออกใบแจ้งหนี้จากงานตรง
+       *  ลูกค้าเดียวกับใบวางบิล ประเภทงานเดียวกันทั้งใบ ยืนยันการจบงานแล้ว และไม่อยู่ในใบวางบิลอื่น */
+      const bookings = linkedBookings as Booking[]
+      const extras = bookings.filter((b) => !billing.bookingIds.includes(b.id))
+      if (bookings.some((b) => b.category !== bookings[0].category)) return null
+      if (extras.some((b) => b.customer !== billing.customer || b.status !== 'DELIVERED' || !!b.billingNoteDocId || !isBookingConfirmedForBilling(b))) return null
     }
     if (!isDirectBookingClaimEligibleForTaxInvoice(data)) return null
     const manualNumber = data.number?.trim()

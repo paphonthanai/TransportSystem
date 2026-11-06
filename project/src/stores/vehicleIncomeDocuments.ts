@@ -19,6 +19,7 @@ import {
 } from '@/utils/incomeAdjustments'
 import { wholeMonthOf, type PayrollRange } from '@/utils/payrollRange'
 import type { Booking } from '@/types'
+import { bookingRefNo } from '@/utils/customerShipment'
 
 /**
  * เอกสารรายได้รถร่วม — คู่กับ DriverPayrollDocument (stores/driverPayrollDocuments.ts) แต่ผูกกับ "รถ" ไม่ใช่ "คนขับ":
@@ -224,7 +225,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     const targetBookings = bookingStore.bookings.filter((b) => bookingIds.includes(b.id))
     if (targetBookings.length !== bookingIds.length) return { ok: false, message: 'ไม่พบงานบางรายการ กรุณารีเฟรชหน้านี้แล้วลองใหม่' }
     const notEligible = targetBookings.filter((b) => b.status !== 'DELIVERED' || (b.plate !== full && b.plate !== vehicle.plate) || b.vehicleIncomeDocId)
-    if (notEligible.length) return { ok: false, message: `งาน ${notEligible.map((b) => b.docNo).join(', ')} ไม่ใช่งานที่จบแล้วของรถคันนี้ หรือออกเอกสารไปแล้ว` }
+    if (notEligible.length) return { ok: false, message: `งาน ${notEligible.map((b) => bookingRefNo(b)).join(', ')} ไม่ใช่งานที่จบแล้วของรถคันนี้ หรือออกเอกสารไปแล้ว` }
 
     const lines: VehicleIncomeLine[] = targetBookings.map((b) => ({
       bookingId: b.id,
@@ -320,7 +321,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     }
     documents.value = documents.value.map((d) => (d.id === id ? updated : d))
     booking.vehicleIncomeDocId = undefined
-    bookingStore.addLog(`เอางาน ${booking.docNo} ออกจากเอกสาร ${doc.number} (สุทธิ ${doc.netTotal} → ${updated.netTotal} บาท)`, { docId: id, bookingId })
+    bookingStore.addLog(`เอางาน ${bookingRefNo(booking)} ออกจากเอกสาร ${doc.number} (สุทธิ ${doc.netTotal} → ${updated.netTotal} บาท)`, { docId: id, bookingId })
     return { ok: true }
   }
 
@@ -441,7 +442,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
       booking.vendorAllowance = data.allowance === null ? undefined : roundMoney(data.allowance)
       changes.push(`เบี้ยเลี้ยง ${before} → ${vendorAllowanceOf(booking)}${data.allowance === null ? ' (กลับไปใช้เบี้ยเลี้ยงของงาน)' : ''}`)
     }
-    if (changes.length) bookingStore.addLog(`แก้ยอดรถร่วม ${booking.docNo}: ${changes.join(', ')} บาท`, { bookingId: booking.id })
+    if (changes.length) bookingStore.addLog(`แก้ยอดรถร่วม ${bookingRefNo(booking)}: ${changes.join(', ')} บาท`, { bookingId: booking.id })
     return { ok: true }
   }
 
@@ -459,7 +460,7 @@ export const useVehicleIncomeDocumentsStore = defineStore('vehicleIncomeDocument
     if (!isOrphanedBooking(booking)) return { ok: false, message: 'งานนี้มีเอกสารรายได้รถร่วมอยู่จริง (หรือยังโหลดเอกสารไม่สำเร็จ) ปลดล็อกไม่ได้' }
     const missingId = booking.vehicleIncomeDocId
     booking.vehicleIncomeDocId = undefined
-    bookingStore.addLog(`ปลดล็อกงาน ${booking.docNo} จากเอกสารรายได้รถร่วมที่ไม่พบ (${missingId})`, { bookingId: booking.id })
+    bookingStore.addLog(`ปลดล็อกงาน ${bookingRefNo(booking)} จากเอกสารรายได้รถร่วมที่ไม่พบ (${missingId})`, { bookingId: booking.id })
     return { ok: true }
   }
 
