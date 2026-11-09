@@ -19,8 +19,7 @@
           <img v-if="documentSettingsStore.settings.company.logo" :src="documentSettingsStore.settings.company.logo" class="w-14 h-14 object-contain flex-shrink-0" />
           <div>
             <div class="text-lg font-bold">{{ documentSettingsStore.settings.company.name }}</div>
-            <div class="text-xs leading-relaxed max-w-xs">{{ documentSettingsStore.settings.company.address }}</div>
-            <div class="text-xs">เลขประจำตัวผู้เสียภาษี: {{ documentSettingsStore.settings.company.taxId }}</div>
+            <CompanyInfoLines />
           </div>
         </div>
         <div class="text-right">
@@ -109,6 +108,7 @@
 </template>
 
 <script setup lang="ts">
+import CompanyInfoLines from '@/components/documents/CompanyInfoLines.vue'
 import { bookingRefNo } from '@/utils/customerShipment'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

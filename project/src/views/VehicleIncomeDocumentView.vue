@@ -22,7 +22,7 @@
             <div>
               <div class="text-base font-bold">{{ documentSettingsStore.settings.company.name }}</div>
               <div class="text-sm font-semibold text-primary">เอกสารรายได้รถร่วม/รถหุ้นส่วน</div>
-              <div v-if="documentSettingsStore.settings.company.phone" class="text-xs text-gray-600">โทร. {{ documentSettingsStore.settings.company.phone }}</div>
+              <CompanyInfoLines />
             </div>
           </div>
           <div class="text-right">
@@ -214,6 +214,7 @@
 </template>
 
 <script setup lang="ts">
+import CompanyInfoLines from '@/components/documents/CompanyInfoLines.vue'
 import { bookingRefNo } from '@/utils/customerShipment'
 import { documentPeriodLabel } from '@/utils/payrollRange'
 import { computed, ref } from 'vue'

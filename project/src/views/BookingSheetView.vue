@@ -204,6 +204,8 @@ const baseColumns: SheetColumn[] = [
   { key: IMPORT_HEADERS.driverName, label: 'พขร. (ชื่อเล่น)' },
   { key: IMPORT_HEADERS.plate, label: 'ทะเบียนรถ (คอนเฟิร์ม)' },
   { key: IMPORT_HEADERS.docRef, label: 'เลขที่เอกสาร' },
+  { key: IMPORT_HEADERS.shipmentNo, label: 'เลขชิพเม้น/รับนาม' },
+  { key: IMPORT_HEADERS.ticketNo, label: 'เลขตั๋ว' },
   { key: IMPORT_HEADERS.customer, label: 'ลูกค้า (รหัส/ชื่อ)' },
   { key: IMPORT_HEADERS.ticketChecked, label: 'เช็คตั๋ว', narrow: true },
   { key: IMPORT_HEADERS.time, label: 'เวลา', narrow: true },

@@ -1,3 +1,4 @@
+import { bookingProductNames } from '@/utils/bookingProducts'
 import { computed, ref, type Ref } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
@@ -5,7 +6,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { computeBookingMoney } from '@/utils/bookingMoney'
 import { isBookingConfirmedForBilling } from '@/utils/bookingStatus'
 import { matchesBookingSearch } from '@/utils/bookingSearch'
-import { customerShipmentNo } from '@/utils/customerShipment'
+import { bookingDocNo, customerShipmentNo } from '@/utils/customerShipment'
 import type { Booking, BookingCategory } from '@/types'
 
 /** สถานะเอกสารทั้ง 3 ประเภท (billingNoteDocId/taxInvoiceDocId/receiptDocId) เป็นอิสระต่อกันโดยเจตนา ไม่ใช่ enum เดียวแบบ
@@ -111,7 +112,7 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
   })
 
   const productLabel = (booking: Booking) => {
-    const names = [...new Set(booking.items.map((i) => i.product).filter(Boolean))]
+    const names = bookingProductNames(booking)
     return names.length ? names.join(', ') : '-'
   }
 
@@ -164,7 +165,8 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     const dateLabel = (d?: Date) => (d ? new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '')
     return {
       เลขชิพเม้นลูกค้า: customerShipmentNo(b),
-      เลขที่เอกสาร: b.docNo,
+      เลขที่เอกสาร: bookingDocNo(b),
+      เลขตั๋ว: b.ticketNo || '',
       'เลข PO': b.po || '',
       กองรถ: b.category === 'cements' ? 'Cements' : 'Ceramics',
       ลูกค้า: b.customer,

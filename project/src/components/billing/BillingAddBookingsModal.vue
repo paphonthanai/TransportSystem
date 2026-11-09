@@ -76,6 +76,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductsText } from '@/utils/bookingProducts'
 import { computed, ref, watch } from 'vue'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { billingDateOf, billingMonthKey, billingMonthLabel, categoryFeedLabel } from '@/utils/bookingStatus'
@@ -101,7 +102,7 @@ const formatBaht = (value: number) => `${documentSettingsStore.settings.currency
 const describe = (b: Booking) => {
   if (!b.items.length) return '-'
   const destination = b.items.length > 1 ? `${b.items[0].siteName} +${b.items.length - 1} ที่อื่น` : b.items[0].siteName
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products ? `${destination} — ${products}` : destination
 }
 const dateText = (b: Booking) => {

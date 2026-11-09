@@ -117,6 +117,7 @@
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">
                   <div class="font-bold text-primary font-mono text-xs">{{ customerShipmentNo(booking) || '-' }}</div>
+                  <div class="text-[11px] text-muted font-mono">เอกสาร {{ bookingDocNo(booking) }}<template v-if="booking.ticketNo"> · ตั๋ว {{ booking.ticketNo }}</template></div>
                 </td>
                 <td class="px-4 py-3">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', booking.category === 'cements' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700']">
@@ -254,7 +255,7 @@ import { useRoute, useRouter } from 'vue-router'
 import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
 import TablePagination from '@/components/TablePagination.vue'
 import { usePagedRows } from '@/composables/usePagedRows'
-import { bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
+import { bookingDocNo, bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
 import { useCompletedJobs, useCompletedJobsFilters, completedJobPriceOf, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'

@@ -1,4 +1,5 @@
-﻿import { defineStore } from 'pinia'
+﻿import { bookingProductsText } from '@/utils/bookingProducts'
+import { defineStore } from 'pinia'
 import { trackLoading } from '@/stores/loading'
 import { firstSnapshot } from '@/utils/firstSnapshot'
 import { ref, watch } from 'vue'
@@ -1903,7 +1904,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function tripDescription(b: Booking): string {
     if (!b.items.length) return '-'
     const dest = b.items.length > 1 ? `${b.items[0].siteName} +${b.items.length - 1} ที่อื่น` : b.items[0].siteName
-    const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+    const products = bookingProductsText(b)
     return products ? `${dest} — ${products}` : dest
   }
 
@@ -1952,10 +1953,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const sameCategory = targetBookings.every((b) => b.category === targetBookings[0].category)
     /** เช็คเฉพาะว่า "ยังไม่เคยอยู่ในใบวางบิลรวมอื่น" (billingNoteDocId) เท่านั้น — เป็นอิสระจาก taxInvoiceDocId/receiptDocId โดยเจตนา
      *  งานเดียวกันอยู่ในใบแจ้งหนี้รวม/ใบเสร็จรวมอื่นพร้อมกันได้ (Booking → Billing / Booking → Tax Invoice / Booking → Receipt แยกเส้นทางกัน)
-     *  สถานะที่วางบิลได้: DELIVERED/IN_TRANSIT บังคับเสมอ (MANDATORY_BILLING_STATUSES) ส่วนสถานะอื่นเปิดเพิ่มได้จากหน้า
-     *  "เงื่อนไขวางบิล" (ดู billingRuleStore.isStatusBillable) — ครอบคลุมทั้งงานปกติที่ยังไม่ถึงปลายทาง, งาน Reset กลับมา
-     *  ที่ IN_TRANSIT, และงาน partial delivery (บาง item ยัง PENDING) เพราะการออกใบวางบิลไม่แตะ/ไม่ต้องพึ่งข้อมูลระดับ
-     *  item เลย (ดู bookingBillingRow/tripDescription ด้านล่าง — อ่านแค่ tripFee/extraCharges/discount ระดับ booking เท่านั้น) */
+     *  สถานะที่วางบิลได้: เฉพาะงานที่กดจบงานแล้ว DELIVERED (MANDATORY_BILLING_STATUSES ดู billingRuleStore.isStatusBillable)
+     *  — เดิมงาน IN_TRANSIT ที่ยังไม่จบงานก็วางบิลได้ ยกเลิกตามที่ลูกค้าขอ */
     const allEligible = targetBookings.every((b) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId)
     /** งานที่ยังไม่ "ยืนยันการจบงาน" (ขั้นตอนสุดท้ายจริงที่เสมียนกดแยกต่างหากจากการตรวจสอบ POD) ห้ามออกใบวางบิลได้ —
      *  ดู isBookingConfirmedForBilling ใน utils/bookingStatus.ts: งานที่ไม่เคยผ่านขั้นตรวจสอบ POD เลย (ออฟฟิศปิดงานเอง)

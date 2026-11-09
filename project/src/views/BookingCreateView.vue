@@ -144,6 +144,14 @@
           <input v-model="header.reference" placeholder="เลขที่ PO/เอกสารอ้างอิงของลูกค้าเอง" class="input-field w-full" />
         </div>
         <div>
+          <label class="field-label">เลขที่เอกสาร</label>
+          <input v-model="header.customerDocNo" placeholder="เว้นว่าง = ใช้เลขที่ระบบรันให้" class="input-field w-full" />
+        </div>
+        <div>
+          <label class="field-label">เลขตั๋ว</label>
+          <input v-model="header.ticketNo" class="input-field w-full" />
+        </div>
+        <div>
           <label class="field-label">รายละเอียด</label>
           <input v-model="header.description" class="input-field w-full" />
         </div>
@@ -412,6 +420,8 @@ const defaultHeader = () => ({
   plate: '',
   driverName: '',
   shipmentNo: '',
+  customerDocNo: '',
+  ticketNo: '',
   route: (prefill.route as string) || '',
   origin: (prefill.origin as string) || '',
   reference: '',
@@ -680,6 +690,8 @@ const saveAllItems = () => {
     returnDate,
     createdAt,
     shipmentNo: header.value.shipmentNo || undefined,
+    customerDocNo: header.value.customerDocNo.trim() || undefined,
+    ticketNo: header.value.ticketNo.trim() || undefined,
     route: header.value.route || undefined,
     origin: header.value.origin || undefined,
     reference: header.value.reference || undefined,

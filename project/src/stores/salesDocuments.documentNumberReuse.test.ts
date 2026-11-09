@@ -134,7 +134,7 @@ describe('Phase 4: Document Number Reuse', () => {
     salesDocs.cancelBillingNote(original.id)
     await flush()
 
-    const booking = makeBooking({ customer: 'ลูกค้า A', status: 'IN_TRANSIT' })
+    const booking = makeBooking({ customer: 'ลูกค้า A', status: 'DELIVERED' })
     bookingStore.bookings.push(booking)
     const reused = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem, number: original.number, bookingIds: [booking.id] })!
 

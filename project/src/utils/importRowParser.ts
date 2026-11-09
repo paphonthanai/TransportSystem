@@ -27,6 +27,11 @@ export const IMPORT_HEADERS = {
   driverName: 'พขร.',
   plate: 'คอนเฟิร์ม',
   docRef: 'เลขที่เอกสาร',
+  /** เลขชิพเม้น/รับนาม (เช่น SH20261105-0925) — ไฟล์ที่มีคอลัมน์นี้ คอลัมน์ "เลขที่เอกสาร" เป็นเลขที่เอกสารของลูกค้า (I-...)
+   *  แยกกัน ชื่อหัวคอลัมน์สะกดต่างกันได้ (ชิพ/ชิป/เม้น/เม้นท์/shipment/รับนาม — ดู resolveImportColumns) */
+  shipmentNo: 'เลขชิปเม้นท์/รับนาม',
+  /** เลขตั๋ว — ไม่บังคับ */
+  ticketNo: 'เลขตั๋ว',
   customer: 'บมจ./บจก./ร้าน/หจก.',
   ticketChecked: 'เช็คตั๋ว',
   time: 'time',
@@ -96,11 +101,13 @@ export const normalizeHeader = (s: unknown) =>
 
 const MAP_LINK_KEYWORDS = ['gps', 'googlemap', 'ลิงก', 'แผนที่', 'พิกัด', 'location']
 const TRIP_NO_HEADERS = ['เที่ยวที่', 'เที่ยว', 'ลำดับเที่ยว', 'trip', 'tripno'].map(normalizeHeader)
+const SHIPMENT_KEYWORDS = ['ชิป', 'ชิพ', 'shipment', 'รับนาม']
+const TICKET_HEADERS = ['เลขตั๋ว', 'เลขที่ตั๋ว', 'หมายเลขตั๋ว', 'ticket', 'ticketno'].map(normalizeHeader)
 
 /** หาชื่อคอลัมน์จริงในไฟล์ของคอลัมน์ลิงก์ GPS / เที่ยวที่ — ชื่อตรงเป๊ะมาก่อน แล้วค่อยเทียบแบบหลวม (ไม่ชนกับหัวคอลัมน์ที่ระบบรู้จักอื่น) */
-export function resolveImportColumns(headers: string[]): { mapLink?: string; tripNo?: string } {
+export function resolveImportColumns(headers: string[]): { mapLink?: string; tripNo?: string; shipmentNo?: string; ticketNo?: string } {
   const known = new Set(Object.values(IMPORT_HEADERS).map(normalizeHeader))
-  const out: { mapLink?: string; tripNo?: string } = {}
+  const out: { mapLink?: string; tripNo?: string; shipmentNo?: string; ticketNo?: string } = {}
   const exactMap = headers.find((h) => h === IMPORT_HEADERS.mapLink)
   const exactTrip = headers.find((h) => h === IMPORT_HEADERS.tripNo)
   out.mapLink = exactMap ?? headers.find((h) => {
@@ -108,6 +115,13 @@ export function resolveImportColumns(headers: string[]): { mapLink?: string; tri
     return n && (n === normalizeHeader(IMPORT_HEADERS.mapLink) || (!known.has(n) && MAP_LINK_KEYWORDS.some((k) => n.includes(k))))
   })
   out.tripNo = exactTrip ?? headers.find((h) => TRIP_NO_HEADERS.includes(normalizeHeader(h)))
+  out.shipmentNo =
+    headers.find((h) => h === IMPORT_HEADERS.shipmentNo) ??
+    headers.find((h) => {
+      const n = normalizeHeader(h)
+      return n !== normalizeHeader(IMPORT_HEADERS.docRef) && SHIPMENT_KEYWORDS.some((k) => n.includes(normalizeHeader(k)))
+    })
+  out.ticketNo = headers.find((h) => h === IMPORT_HEADERS.ticketNo) ?? headers.find((h) => TICKET_HEADERS.includes(normalizeHeader(h)))
   return out
 }
 
@@ -117,9 +131,29 @@ export function withColumnAliases(raw: Record<string, unknown>): Record<string, 
   const out = { ...raw }
   if (cols.mapLink && cols.mapLink !== IMPORT_HEADERS.mapLink && !str0(out[IMPORT_HEADERS.mapLink])) out[IMPORT_HEADERS.mapLink] = raw[cols.mapLink]
   if (cols.tripNo && cols.tripNo !== IMPORT_HEADERS.tripNo && !str0(out[IMPORT_HEADERS.tripNo])) out[IMPORT_HEADERS.tripNo] = raw[cols.tripNo]
+  if (cols.shipmentNo && cols.shipmentNo !== IMPORT_HEADERS.shipmentNo && !str0(out[IMPORT_HEADERS.shipmentNo])) out[IMPORT_HEADERS.shipmentNo] = raw[cols.shipmentNo]
+  if (cols.ticketNo && cols.ticketNo !== IMPORT_HEADERS.ticketNo && !str0(out[IMPORT_HEADERS.ticketNo])) out[IMPORT_HEADERS.ticketNo] = raw[cols.ticketNo]
   return out
 }
 const str0 = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())
+
+/**
+ * แยกเลขที่เอกสารของลูกค้า (I-...) กับเลขชิพเม้น/รับนาม (SH...) ออกจากกัน
+ *  - ไฟล์มีคอลัมน์ชิพเม้นแยก (shipmentCell ไม่ใช่ undefined): "เลขที่เอกสาร" = เลขที่เอกสาร, คอลัมน์ชิพเม้น = เลขชิพเม้น
+ *  - ไม่มีคอลัมน์ชิพเม้น แต่ช่อง "เลขที่เอกสาร" มี 2 เลขขึ้นไป (เช่น "I-1740147164 SH20261107-0804" / ขึ้นบรรทัดใหม่):
+ *    เลขแรก = เลขที่เอกสาร ที่เหลือ = เลขชิพเม้น
+ *  - ไม่มีคอลัมน์ชิพเม้นและมีเลขเดียว: เป็นเลขชิพเม้นเหมือนเดิม (ไฟล์แบบเก่า — ตรวจงานซ้ำด้วยเลขนี้ต่อได้)
+ */
+export function splitDocumentRefs(docCell: string, shipmentCell: string | undefined): { customerDocNo: string; shipmentNo: string } {
+  const clean = (v: string) => v.replace(/^["'\s]+|["'\s]+$/g, '').replace(/\s+/g, ' ').trim()
+  const doc = clean(docCell)
+  const shipment = shipmentCell === undefined ? undefined : clean(shipmentCell)
+  if (shipment) return { customerDocNo: doc, shipmentNo: shipment }
+  const tokens = doc.split(' ').filter(Boolean)
+  // แยกเฉพาะตอนทุกส่วนเป็นรหัสที่มีตัวเลข (ข้อความเช่น "M1196511 = คอนสมิกซ์" ไม่ใช่ 2 เลข ไม่แยก)
+  if (tokens.length >= 2 && tokens.every((t) => /\d/.test(t))) return { customerDocNo: tokens[0], shipmentNo: tokens.slice(1).join(' ') }
+  return shipment === undefined ? { customerDocNo: '', shipmentNo: doc } : { customerDocNo: doc, shipmentNo: '' }
+}
 
 /** อ่านเลขเที่ยวจากเซลล์ "เที่ยวที่" — "1", 2, "เที่ยว 2", "เที่ยวที่2", "T1" → ตัวเลขตัวแรก (ต้อง 1-4 วันละไม่เกิน 4 เที่ยว) ไม่มี/อ่านไม่ได้/เกิน = undefined */
 export function parseTripNumber(raw: unknown): number | undefined {
@@ -159,7 +193,13 @@ export interface ImportRowResult {
   driverFirstName?: string
   driverLastName?: string
   plate: string
+  /** ค่าดิบในช่อง "เลขที่เอกสาร" */
   docRef: string
+  /** เลขที่เอกสารของลูกค้า (I-...) ว่าง = ไม่มี (ดู splitDocumentRefs) */
+  customerDocNo: string
+  /** เลขชิพเม้น/รับนาม — เก็บที่ Booking.reference ใช้ตรวจงานซ้ำ */
+  shipmentNo: string
+  ticketNo: string
   customer: string
   ticketChecked: boolean
   time: string
@@ -376,6 +416,8 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
   const driverName = str(raw[IMPORT_HEADERS.driverName])
   const plateRaw = str(raw[IMPORT_HEADERS.plate])
   const docRef = str(raw[IMPORT_HEADERS.docRef])
+  const { customerDocNo, shipmentNo } = splitDocumentRefs(docRef, IMPORT_HEADERS.shipmentNo in raw ? str(raw[IMPORT_HEADERS.shipmentNo]) : undefined)
+  const ticketNo = str(raw[IMPORT_HEADERS.ticketNo]).replace(/\s+/g, ' ')
   const customerRaw = str(raw[IMPORT_HEADERS.customer])
   // คอลัมน์ "time" ในไฟล์จริงมักมีข้อความอื่นปนมากับเวลา (เช่น "ย้ำ!! ตราประทับ") — แยกเวลาไว้ใช้เป็น loadingTime
   // จริงๆ ส่วนข้อความที่เหลือไปต่อแถวหมายเหตุแทนที่จะทิ้ง
@@ -511,6 +553,9 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
     driverLastName: matchedDriver?.lastName,
     plate: plate || matchedDriver?.plate || '',
     docRef,
+    customerDocNo,
+    shipmentNo,
+    ticketNo,
     customer,
     ticketChecked: !!str(raw[IMPORT_HEADERS.ticketChecked]),
     time,

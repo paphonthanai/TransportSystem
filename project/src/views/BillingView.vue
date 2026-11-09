@@ -577,6 +577,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductNames } from '@/utils/bookingProducts'
 import { bookingRefNo } from '@/utils/customerShipment'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -637,7 +638,7 @@ const confirmAddToBatch = () => {
 }
 
 const productLabel = (booking: Booking) => {
-  const names = [...new Set(booking.items.map((i) => i.product).filter(Boolean))]
+  const names = bookingProductNames(booking)
   return names.length ? names.join(', ') : '-'
 }
 

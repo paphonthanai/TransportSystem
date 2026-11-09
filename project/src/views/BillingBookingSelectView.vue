@@ -115,6 +115,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductsText } from '@/utils/bookingProducts'
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -130,7 +131,7 @@ const documentSettingsStore = useDocumentSettingsStore()
 const billingRuleStore = useBillingRuleStore()
 
 /** เงื่อนไขเดียวกับ createBillingFromBookings/createBillingManual (claim ทางตรง) ทุกประการ — สถานะงานอ่านจาก
- *  billingRuleStore.isStatusBillable (DELIVERED/IN_TRANSIT บังคับเสมอ + สถานะอื่นที่แอดมินเปิดเพิ่มจาก "เงื่อนไขวางบิล")
+ *  billingRuleStore.isStatusBillable (เฉพาะงานที่จบงานแล้ว DELIVERED)
  *  ต้อง "ยืนยันการจบงาน" แล้วด้วย (ดู isBookingConfirmedForBilling) ไม่งั้นเลือกได้ในหน้านี้แต่ไปพังตอนกดสร้างจริงที่
  *  createBillingFromBookings */
 const isBookingBillable = (b: Booking) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId && isBookingConfirmedForBilling(b)
@@ -227,13 +228,13 @@ const bookingDestination = (b: Booking) => {
 }
 const bookingDescription = (b: Booking) => {
   const dest = bookingDestination(b)
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products ? `${dest} — ${products}` : dest
 }
 /** ชนิดปูน (Phase 3 — PM-requested column) — ข้อมูลเดียวกับที่ผสมอยู่ใน bookingDescription ด้านบนอยู่แล้ว
  *  (b.items[].product) แค่แยกออกมาเป็นคอลัมน์ของตัวเอง ไม่มี field/schema ใหม่ */
 const bookingProducts = (b: Booking) => {
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products || '-'
 }
 const bookingTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)

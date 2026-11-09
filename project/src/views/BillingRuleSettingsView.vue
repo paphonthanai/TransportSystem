@@ -8,20 +8,14 @@
     <div class="card-lg">
       <div class="font-bold text-text mb-3">สถานะงานที่วางบิลได้</div>
       <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-        <label v-for="status in allStatuses" :key="status" class="flex items-center gap-2 text-sm text-text" :class="isMandatory(status) ? 'opacity-70' : 'cursor-pointer'">
-          <input
-            type="checkbox"
-            :checked="isStatusAllowed(status)"
-            :disabled="isMandatory(status)"
-            @change="toggleStatus(status)"
-            class="w-4 h-4"
-          />
+        <label v-for="status in allStatuses" :key="status" class="flex items-center gap-2 text-sm text-text opacity-70">
+          <input type="checkbox" :checked="isMandatory(status)" disabled class="w-4 h-4" />
           {{ bookingStatusLabel[status] }}
           <span v-if="isMandatory(status)" class="text-xs text-muted">(บังคับของระบบ แก้ไม่ได้)</span>
         </label>
       </div>
       <div class="text-xs text-muted mt-2">
-        "ส่งของสำเร็จ" และ "อยู่ระหว่างขนส่ง" เป็นเงื่อนไขบังคับของระบบวางบิลจริง ปิดไม่ได้ — เลือกเพิ่มสถานะอื่นได้ตามต้องการ
+        วางบิลได้เฉพาะงานที่กดจบงานแล้ว (ส่งของสำเร็จ) เท่านั้น งานที่ยังไม่จบงานจะไม่ขึ้นให้เลือกตอนวางบิล
       </div>
     </div>
 
@@ -69,15 +63,6 @@ const allStatuses = Object.keys(bookingStatusLabel) as BookingStatus[]
 
 const isMandatory = (status: BookingStatus) => MANDATORY_BILLING_STATUSES.includes(status)
 
-const isStatusAllowed = (status: BookingStatus) => isMandatory(status) || billingRuleStore.rule.allowedJobStatus.includes(status)
-
-const toggleStatus = (status: BookingStatus) => {
-  if (isMandatory(status)) return
-  const list = billingRuleStore.rule.allowedJobStatus
-  const idx = list.indexOf(status)
-  if (idx === -1) list.push(status)
-  else list.splice(idx, 1)
-}
 </script>
 
 <style scoped>

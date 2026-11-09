@@ -573,6 +573,8 @@ export const useBookingStore = defineStore('booking', () => {
       loadingTime?: string
       returnDate?: Date
       shipmentNo?: string
+      customerDocNo?: string
+      ticketNo?: string
       route?: string
       origin?: string
       reference?: string
@@ -605,6 +607,8 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.loadingTime !== undefined) booking.loadingTime = data.loadingTime || undefined
     if (data.returnDate !== undefined) booking.returnDate = data.returnDate
     if (data.shipmentNo !== undefined) booking.shipmentNo = data.shipmentNo || undefined
+    if (data.customerDocNo !== undefined) booking.customerDocNo = data.customerDocNo.trim() || undefined
+    if (data.ticketNo !== undefined) booking.ticketNo = data.ticketNo.trim() || undefined
     if (data.route !== undefined) booking.route = data.route || undefined
     if (data.origin !== undefined) booking.origin = data.origin || undefined
     if (data.reference !== undefined) booking.reference = data.reference || undefined
@@ -752,7 +756,10 @@ export const useBookingStore = defineStore('booking', () => {
    * แก้เลขที่ PO ลูกค้า / เลขชิพเม้น จากหน้ารายละเอียดงาน (ทุกสถานะ) — สิทธิ์เดียวกับหน้าแก้ไขงาน (ADMIN/จัดรถ/เสมียน)
    * และเสมียนแก้ไม่ได้เมื่องานถูกนำไปวางบิลแล้ว (เอกสารเก็บเลขอ้างอิงไว้ตอนออก) ค่าว่าง = ล้างค่า
    */
-  function updateBookingRefs(id: string, data: { reference?: string; shipmentNo?: string }): { ok: boolean; message?: string } {
+  function updateBookingRefs(
+    id: string,
+    data: { reference?: string; shipmentNo?: string; customerDocNo?: string; ticketNo?: string }
+  ): { ok: boolean; message?: string } {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return { ok: false, message: 'ไม่พบงาน' }
     const role = useAuthStore().role
@@ -767,6 +774,14 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.shipmentNo !== undefined) {
       booking.shipmentNo = data.shipmentNo.trim() || undefined
       changes.push(`ชิพเม้น ${booking.shipmentNo || '-'}`)
+    }
+    if (data.customerDocNo !== undefined) {
+      booking.customerDocNo = data.customerDocNo.trim() || undefined
+      changes.push(`เลขที่เอกสาร ${booking.customerDocNo || '-'}`)
+    }
+    if (data.ticketNo !== undefined) {
+      booking.ticketNo = data.ticketNo.trim() || undefined
+      changes.push(`เลขตั๋ว ${booking.ticketNo || '-'}`)
     }
     addLog(`แก้ไขเลขอ้างอิง ${bookingRefNo(booking)}: ${changes.join(', ')}`, { bookingId: booking.id })
     return { ok: true }

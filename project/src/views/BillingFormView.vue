@@ -344,6 +344,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductsText } from '@/utils/bookingProducts'
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentItem, type DocumentNumberReuseCheck } from '@/stores/salesDocuments'
@@ -550,7 +551,7 @@ const bookingPickerDestination = (b: Booking) => {
 const bookingPickerTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)
 const bookingPickerDescription = (b: Booking) => {
   const dest = bookingPickerDestination(b)
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products ? `${dest} — ${products}` : dest
 }
 

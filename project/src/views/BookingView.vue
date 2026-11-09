@@ -221,6 +221,8 @@
               <th class="text-center px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="ticket" label="เช็คตั๋ว" align="center" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="customer" label="ลูกค้า" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="shipment" label="เลขชิพเม้นลูกค้า" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="customerDocNo" label="เลขที่เอกสาร" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="ticketNo" label="เลขตั๋ว" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="loadingDate" label="วันที่ลงงาน" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="loadingTime" label="เวลา" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="site" label="สถานที่ส่ง" /></th>
@@ -290,6 +292,8 @@
                 </span>
               </td>
               <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ customerShipmentNo(booking) || '-' }}</td>
+              <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ bookingDocNo(booking) }}</td>
+              <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ booking.ticketNo || '-' }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-3 py-3 text-text">
@@ -344,7 +348,7 @@
               </td>
             </tr>
             <tr v-if="inProgressTable.rows.value.length === 0">
-              <td :colspan="canSelectDelete ? 15 : 14" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
+              <td :colspan="canSelectDelete ? 17 : 16" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
             </tr>
           </tbody>
         </table>
@@ -372,6 +376,8 @@
               <th class="text-center px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="ticket" label="เช็คตั๋ว" align="center" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="customer" label="ลูกค้า" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="shipment" label="เลขชิพเม้นลูกค้า" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="customerDocNo" label="เลขที่เอกสาร" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="ticketNo" label="เลขตั๋ว" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="loadingDate" label="วันที่ลงงาน" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="loadingTime" label="เวลา" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="site" label="สถานที่ส่ง" /></th>
@@ -466,6 +472,8 @@
                 </span>
               </td>
               <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ customerShipmentNo(booking) || '-' }}</td>
+              <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ bookingDocNo(booking) }}</td>
+              <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ booking.ticketNo || '-' }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-3 py-3 text-text">
@@ -484,7 +492,7 @@
               </td>
             </tr>
             <tr v-if="inTransitTable.rows.value.length === 0">
-              <td colspan="14" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
+              <td colspan="16" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
             </tr>
           </tbody>
         </table>
@@ -1131,12 +1139,13 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductNames } from '@/utils/bookingProducts'
 import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
 import DriverJobDetailsContent from '@/components/booking/DriverJobDetailsContent.vue'
 import { compareInTransitBookings } from '@/utils/inTransitSort'
 import { tripNumberChoices as tripNumberChoicesFor } from '@/utils/driverDayTrips'
 import { normalizeDriverName } from '@/utils/driverIdentity'
-import { bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
+import { bookingDocNo, bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
 import ColumnHeader from '@/components/ColumnHeader.vue'
 import { useTableColumns, type TableColumn } from '@/composables/useTableColumns'
 import { bookingShipmentKey, duplicateGroupKey, findDuplicateGroups, shipmentKey, type DuplicateGroup } from '@/utils/bookingDuplicates'
@@ -1559,7 +1568,7 @@ const inTransitBookings = computed(() => {
 })
 
 const productLabel = (booking: Booking) => {
-  const names = [...new Set(booking.items.map((i) => i.product).filter(Boolean))]
+  const names = bookingProductNames(booking)
   return names.length ? names.join(', ') : '-'
 }
 
@@ -1902,6 +1911,8 @@ const bookingTableColumns: TableColumn<Booking>[] = [
   { key: 'ticket', label: (b) => (b.ticketChecked ? 'เช็คแล้ว' : 'ยังไม่เช็ค') },
   { key: 'customer', label: (b) => customerRecordFor(b)?.code || b.customer || '' },
   { key: 'shipment', label: (b) => customerShipmentNo(b) },
+  { key: 'customerDocNo', label: (b) => bookingDocNo(b) },
+  { key: 'ticketNo', label: (b) => b.ticketNo || '' },
   { key: 'loadingDate', label: (b) => (b.loadingDate ? formatShortDate(b.loadingDate) : ''), sortValue: (b) => (b.loadingDate ? new Date(b.loadingDate).getTime() : undefined) },
   { key: 'loadingTime', label: (b) => b.loadingTime || '' },
   { key: 'site', label: (b) => destinationLabel(b) },
@@ -2155,6 +2166,8 @@ const IMPORT_COLUMN_ORDER = [
   IMPORT_HEADERS.driverName,
   IMPORT_HEADERS.plate,
   IMPORT_HEADERS.docRef,
+  IMPORT_HEADERS.shipmentNo,
+  IMPORT_HEADERS.ticketNo,
   IMPORT_HEADERS.customer,
   IMPORT_HEADERS.ticketChecked,
   IMPORT_HEADERS.time,
@@ -2177,6 +2190,8 @@ const IMPORT_COLUMN_ORDER = [
 const downloadImportTemplate = async () => {
   const sampleRow = [
     1,
+    '',
+    '',
     '',
     '',
     '',
@@ -2288,7 +2303,7 @@ const importTripClashFor = (row: ImportRowResult) => {
 /** ชื่อเล่นใน Excel ที่ยังไม่ได้ map เป็นคนขับ (ผู้ใช้ยังไม่ได้เลือก) — ต้องตรวจก่อนสร้างงาน */
 const importUnmappedDriverFor = (row: ImportRowResult) =>
   row.driverNickname && !row.driverName ? `ชื่อเล่น "${row.driverNickname}" ยังไม่ได้ map เป็นคนขับ — เลือกคนขับในคอลัมน์ พขร. ก่อน ไม่งั้นงานจะไม่มีคนขับ` : undefined
-const importShipmentKey = (row: ImportRowResult) => shipmentKey(row.customer, row.docRef)
+const importShipmentKey = (row: ImportRowResult) => shipmentKey(row.customer, row.shipmentNo)
 /** เลขชิพเม้นที่มีอยู่แล้วใน Fleet นี้ → เลขที่งาน (ตรวจซ้ำตอน import) */
 const existingShipments = computed(() => {
   const map = new Map<string, string>()
@@ -2303,9 +2318,9 @@ const importDuplicateFor = (row: ImportRowResult): string | undefined => {
   const key = importShipmentKey(row)
   if (!key) return undefined
   const docNo = existingShipments.value.get(key)
-  if (docNo) return `เลขชิพเม้นลูกค้า ${row.docRef} มีงานนี้อยู่แล้วในระบบ (${docNo})`
+  if (docNo) return `เลขชิพเม้นลูกค้า ${row.shipmentNo} มีงานนี้อยู่แล้วในระบบ (${docNo})`
   const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importShipmentKey(r) === key)
-  return earlier ? `เลขชิพเม้นลูกค้า ${row.docRef} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้` : undefined
+  return earlier ? `เลขชิพเม้นลูกค้า ${row.shipmentNo} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้` : undefined
 }
 /** แถวที่เลือก "ข้าม" (ค่าเริ่มต้น = ข้ามแถวที่อาจซ้ำ) */
 const importSkip = ref<Record<number, boolean>>({})
@@ -2385,7 +2400,9 @@ const confirmImport = () => {
       // เดิมไม่เคยเซ็ต po เลยสำหรับงาน import ต่างจากสร้างงานด้วยมือที่ auto-gen ให้เสมอ (BookingCreateView.vue) —
       // ทำให้เอกสารที่พิมพ์ออกมาช่อง "ใบสั่งงาน (PO)" ว่างเป็น "-" เสมอสำหรับงาน import ทุกงาน
       po: bookingStore.nextPoNo(),
-      reference: row.docRef || undefined,
+      reference: row.shipmentNo || undefined,
+      customerDocNo: row.customerDocNo || undefined,
+      ticketNo: row.ticketNo || undefined,
       customer: row.customer,
       items,
       allowance: row.allowance,

@@ -22,6 +22,8 @@ function bookingSearchText(b: Booking, extraTerms: (string | undefined)[]): stri
     b.po,
     b.reference,
     b.shipmentNo,
+    b.customerDocNo,
+    b.ticketNo,
     b.customer,
     b.plate,
     b.driverName,

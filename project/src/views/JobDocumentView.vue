@@ -61,8 +61,7 @@
               <img v-if="documentSettingsStore.settings.company.logo" :src="documentSettingsStore.settings.company.logo" class="w-12 h-12 object-contain flex-shrink-0" />
               <div>
                 <div class="text-base font-bold">{{ documentSettingsStore.settings.company.name }}</div>
-                <div class="text-xs leading-relaxed text-gray-600 max-w-xs">{{ documentSettingsStore.settings.company.address }}</div>
-                <div class="text-xs text-gray-600">เลขประจำตัวผู้เสียภาษี: {{ documentSettingsStore.settings.company.taxId }}</div>
+                <CompanyInfoLines />
               </div>
             </div>
             <div>
@@ -248,6 +247,24 @@
             <span v-else class="inline-flex items-center gap-2 flex-wrap">
               {{ booking.shipmentNo || '-' }}
               <button v-if="!refBlockedReason" @click="startEditRef('shipmentNo')" class="inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="แก้เลขชิพเม้น">
+              <span class="material-symbols-rounded text-sm">edit</span>
+              แก้
+            </button>
+            </span>
+          </div>
+          <div v-for="f in extraRefFields" :key="f.field">
+            <span class="text-muted">{{ f.label }}:</span>
+            <template v-if="refEditing === f.field">
+              <input v-model="refDraft" class="input-field h-8 px-2 text-sm w-full max-w-[14rem]" @keyup.enter="saveRef" />
+              <span class="flex gap-1 mt-1">
+                <button @click="saveRef" class="btn-primary h-8 px-3 text-xs">บันทึก</button>
+                <button @click="refEditing = null" class="btn-secondary h-8 px-3 text-xs">ยกเลิก</button>
+              </span>
+              <span v-if="refError" class="block text-xs text-red-600 mt-1">{{ refError }}</span>
+            </template>
+            <span v-else class="inline-flex items-center gap-2 flex-wrap">
+              {{ f.display() }}
+              <button v-if="!refBlockedReason" @click="startEditRef(f.field)" class="inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" :title="`แก้${f.label}`">
               <span class="material-symbols-rounded text-sm">edit</span>
               แก้
             </button>
@@ -611,7 +628,9 @@
 </template>
 
 <script setup lang="ts">
-import { bookingRefNo } from '@/utils/customerShipment'
+import { bookingProductNames } from '@/utils/bookingProducts'
+import CompanyInfoLines from '@/components/documents/CompanyInfoLines.vue'
+import { bookingDocNo, bookingRefNo } from '@/utils/customerShipment'
 import { jobTypeCode } from '@/utils/jobType'
 import { loadingTimeOf } from '@/utils/loadingTime'
 import { ref, computed } from 'vue'
@@ -669,10 +688,16 @@ const refBlockedReason = computed(() => {
   if (!canEditBookingRole.value) return 'ไม่มีสิทธิ์แก้ไขงาน'
   return bookingStore.staffBilledEditBlockedReason(booking.value)
 })
-const refEditing = ref<'reference' | 'shipmentNo' | null>(null)
+type RefField = 'reference' | 'shipmentNo' | 'customerDocNo' | 'ticketNo'
+const refEditing = ref<RefField | null>(null)
 const refDraft = ref('')
 const refError = ref('')
-const startEditRef = (field: 'reference' | 'shipmentNo') => {
+/** เลขที่เอกสาร (ว่าง = แสดงเลขที่ระบบรัน) และเลขตั๋ว — แก้ได้ที่หน้านี้เหมือนเลข PO/ชิพเม้น */
+const extraRefFields: { field: RefField; label: string; display: () => string }[] = [
+  { field: 'customerDocNo', label: 'เลขที่เอกสาร', display: () => (booking.value ? bookingDocNo(booking.value) : '-') },
+  { field: 'ticketNo', label: 'เลขตั๋ว', display: () => booking.value?.ticketNo || '-' },
+]
+const startEditRef = (field: RefField) => {
   if (!booking.value) return
   refDraft.value = booking.value[field] || ''
   refError.value = ''
@@ -843,7 +868,7 @@ const docTitleEn = computed(() => (isDispatched.value ? 'WORK ORDER' : 'PURCHASE
 const fillerRows = computed(() => 3)
 
 const productLabel = (b: Booking) => {
-  const names = [...new Set(b.items.map((i) => i.product).filter(Boolean))]
+  const names = bookingProductNames(b)
   return names.length ? names.join(', ') : '-'
 }
 

@@ -95,7 +95,7 @@ describe('combined Billing via the actual production path (createBillingManual +
   it('creates a billing note from multiple selected bookings and claims them all', () => {
     const bookingStore = useBookingStore()
     const salesDocs = useSalesDocumentsStore()
-    const b1 = makeBooking({ customer: 'ลูกค้า A', status: 'IN_TRANSIT' })
+    const b1 = makeBooking({ customer: 'ลูกค้า A', status: 'DELIVERED' })
     const b2 = makeBooking({ customer: 'ลูกค้า A', status: 'DELIVERED' })
     bookingStore.bookings.push(b1, b2)
 
@@ -159,7 +159,7 @@ describe('Phase 1 verification: create -> cancel -> create cycle preserves every
   it('case 5: Document ID references still resolve correctly after a cancel + recreate cycle (never fall back to documentNo)', () => {
     const bookingStore = useBookingStore()
     const salesDocs = useSalesDocumentsStore()
-    const booking = makeBooking({ customer: 'ลูกค้า A', status: 'IN_TRANSIT' })
+    const booking = makeBooking({ customer: 'ลูกค้า A', status: 'DELIVERED' })
     bookingStore.bookings.push(booking)
 
     const firstBilling = salesDocs.createBillingManual({ customer: 'ลูกค้า A', items: oneItem, bookingIds: [booking.id] })!

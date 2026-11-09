@@ -102,6 +102,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductsText } from '@/utils/bookingProducts'
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -195,13 +196,13 @@ const bookingDestination = (b: Booking) => {
 }
 const bookingDescription = (b: Booking) => {
   const dest = bookingDestination(b)
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products ? `${dest} — ${products}` : dest
 }
 /** ชนิดปูน (เหมือน BillingBookingSelectView.vue) — ข้อมูลเดียวกับที่ผสมอยู่ใน bookingDescription ด้านบนอยู่แล้ว
  *  (b.items[].product) แค่แยกออกมาเป็นคอลัมน์ของตัวเอง ไม่มี field/schema ใหม่ */
 const bookingProducts = (b: Booking) => {
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products || '-'
 }
 const bookingTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)

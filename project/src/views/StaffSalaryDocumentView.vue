@@ -22,7 +22,7 @@
             <div>
               <div class="text-base font-bold">{{ documentSettingsStore.settings.company.name }}</div>
               <div class="text-sm font-semibold text-primary">ใบจ่ายเงินเดือน</div>
-              <div v-if="documentSettingsStore.settings.company.phone" class="text-xs text-gray-600">โทร. {{ documentSettingsStore.settings.company.phone }}</div>
+              <CompanyInfoLines />
             </div>
           </div>
           <div class="text-right">
@@ -138,6 +138,7 @@
 </template>
 
 <script setup lang="ts">
+import CompanyInfoLines from '@/components/documents/CompanyInfoLines.vue'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStaffStore } from '@/stores/staff'

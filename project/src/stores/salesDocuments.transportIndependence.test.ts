@@ -58,13 +58,14 @@ describe('Transport Status vs Billing Progress — independence', () => {
     expect(stillExists?.status).toBe('BILLING_PENDING')
   })
 
-  it('IN_TRANSIT + BILLED: Reset Transport preserves the Billing Note completely', () => {
+  it('IN_TRANSIT + BILLED (วางบิลไว้ตั้งแต่กฎเดิมที่ยังไม่จบงานก็วางบิลได้): Reset Transport preserves the Billing Note completely', () => {
     const bookingStore = useBookingStore()
     const salesDocs = useSalesDocumentsStore()
-    const booking = makeBooking({ customer: 'ลูกค้า A', category: 'cements', status: 'IN_TRANSIT', items: [makeJobItem()] })
+    const booking = makeBooking({ customer: 'ลูกค้า A', category: 'cements', status: 'DELIVERED', items: [makeJobItem()] })
     bookingStore.bookings.push(booking)
     const billing = salesDocs.createBillingFromBookings([booking.id])
     expect(billing).not.toBeNull()
+    booking.status = 'IN_TRANSIT'
 
     const result = bookingStore.resetBookingStatus(booking.id)
 

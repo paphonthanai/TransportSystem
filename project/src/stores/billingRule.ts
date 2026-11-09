@@ -3,7 +3,7 @@ import { useFirestoreSettings } from '@/composables/useFirestoreSettings'
 import type { Booking, BookingStatus } from '@/types'
 
 export interface BillingRule {
-  /** สถานะงานที่ถือว่าพร้อมนำไปวางบิลได้ ค่าเริ่มต้น = ต้องส่งของสำเร็จ (DELIVERED) เท่านั้น ปรับเพิ่มสถานะอื่นได้ในอนาคตโดยไม่ต้องแก้โค้ด */
+  /** เลิกใช้แล้ว — เดิมเป็นสถานะที่แอดมินเปิดให้วางบิลเพิ่มได้ ตอนนี้วางบิลได้เฉพาะงานที่จบงานแล้ว (ดู MANDATORY_BILLING_STATUSES) */
   allowedJobStatus: BookingStatus[]
   /** ต้องมี POD ครบทุกรายการก่อนจึงจะวางบิลได้ */
   requirePOD: boolean
@@ -13,10 +13,9 @@ export interface BillingRule {
   requireApproval: boolean
 }
 
-/** สถานะที่วางบิลได้เสมอ ไม่ว่าตั้งค่า "เงื่อนไขวางบิล" จะเป็นอย่างไร — เป็น Business Rule ตายตัวของระบบวางบิลจริง
- *  (/billing-notes, ดู salesDocuments.ts) ไม่ให้แอดมินปิดจากหน้าตั้งค่าได้ ตั้งค่าในหน้า "เงื่อนไขวางบิล" มีผลแค่กับ
- *  สถานะอื่นนอกเหนือจากสองตัวนี้เท่านั้น (เปิดเพิ่มได้ ปิดสองตัวนี้ไม่ได้) */
-export const MANDATORY_BILLING_STATUSES: BookingStatus[] = ['DELIVERED', 'IN_TRANSIT']
+/** สถานะเดียวที่วางบิลได้ = ส่งของสำเร็จ (กดจบงานแล้ว) — กติกาตายตัวของระบบ (เดิมเปิดให้งาน "อยู่ระหว่างขนส่ง" ที่ยังไม่จบงาน
+ *  วางบิลได้ด้วย และแอดมินเปิดสถานะอื่นเพิ่มได้ ตอนนี้ยกเลิกทั้งคู่ตามที่ลูกค้าขอ) ค่า allowedJobStatus ที่บันทึกไว้เดิมไม่มีผลแล้ว */
+export const MANDATORY_BILLING_STATUSES: BookingStatus[] = ['DELIVERED']
 
 function defaultRule(): BillingRule {
   return {
@@ -30,9 +29,8 @@ function defaultRule(): BillingRule {
 export const useBillingRuleStore = defineStore('billingRule', () => {
   const { data: rule, loading, error } = useFirestoreSettings<BillingRule>('billingRule', defaultRule)
 
-  /** สถานะนี้วางบิลได้ไหมตามเงื่อนไขที่ตั้งไว้ — รวม MANDATORY_BILLING_STATUSES เข้าไปเสมอโดยไม่สนใจค่าที่ตั้งไว้ */
-  const isStatusBillable = (status: BookingStatus): boolean =>
-    MANDATORY_BILLING_STATUSES.includes(status) || rule.value.allowedJobStatus.includes(status)
+  /** สถานะนี้วางบิลได้ไหม — เฉพาะงานที่จบงานแล้ว (MANDATORY_BILLING_STATUSES) ไม่ขึ้นกับสถานะที่เคยตั้งเพิ่มไว้ในหน้าตั้งค่า */
+  const isStatusBillable = (status: BookingStatus): boolean => MANDATORY_BILLING_STATUSES.includes(status)
 
   const hasAllPods = (booking: Booking) =>
     booking.items.length > 0 && booking.items.every((i) => i.deliveryStatus === 'DELIVERED' && !!i.podImage)

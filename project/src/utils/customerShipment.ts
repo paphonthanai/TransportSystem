@@ -6,5 +6,8 @@ import type { Booking } from '@/types'
  */
 export const customerShipmentNo = (b: Pick<Booking, 'reference' | 'shipmentNo'>) => b.reference?.trim() || b.shipmentNo?.trim() || ''
 
+/** ช่อง "เลขที่เอกสาร" ของงาน = เลขที่เอกสารของลูกค้าจากไฟล์ import (I-...) ถ้ามี ไม่มีใช้เลขที่ระบบรันเอง */
+export const bookingDocNo = (b: Pick<Booking, 'customerDocNo' | 'docNo'>) => b.customerDocNo?.trim() || b.docNo
+
 /** เลขที่ใช้แสดงแทนงาน 1 งานทุกหน้า = เลข PO ลูกค้า (ชิพเม้น) — งานที่ไม่มีเลข PO ใช้เลขที่เอกสารของระบบแทน ไม่ให้ช่องว่าง */
 export const bookingRefNo = (b: Pick<Booking, 'reference' | 'shipmentNo' | 'docNo'>) => customerShipmentNo(b) || b.docNo
