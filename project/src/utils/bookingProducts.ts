@@ -30,10 +30,6 @@ export function bookingProductTotals(b: ProductSource): ProductTotal[] {
 /** ชื่อสินค้าทุกชนิดในงาน (ไม่ซ้ำ) */
 export const bookingProductNames = (b: ProductSource): string[] => [...new Set(bookingProductTotals(b).map((p) => p.product))]
 
-/** ข้อความสินค้าในรายละเอียดเอกสาร — ชนิดเดียวแสดงแค่ชื่อเหมือนเดิม ("M300") หลายชนิดแสดงทุกตัวพร้อมจำนวนแยกต่อชนิด
- *  ("M500 5 ตัน + M400 3 ตัน + M200 2 ตัน") ชนิดที่ไม่มีจำนวนแสดงแค่ชื่อ */
-export function bookingProductsText(b: ProductSource): string {
-  const totals = bookingProductTotals(b)
-  if (new Set(totals.map((p) => p.product)).size <= 1) return totals[0]?.product || ''
-  return totals.map((p) => (p.qty > 0 ? `${p.product} ${p.qty}${p.unit ? ' ' + p.unit : ''}` : p.product)).join(' + ')
-}
+/** ข้อความสินค้าในรายละเอียดเอกสาร (วางบิล/ใบกำกับภาษี/ใบเสร็จ) — ชื่อปูนทุกชนิดในเที่ยว ไม่มีจำนวนตัน ตามที่ลูกค้าขอ
+ *  ("M500 + M400 + M200") ชนิดเดียวแสดงแค่ชื่อ ("M300") */
+export const bookingProductsText = (b: ProductSource): string => bookingProductNames(b).join(' + ')

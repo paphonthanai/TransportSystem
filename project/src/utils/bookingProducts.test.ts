@@ -3,10 +3,10 @@ import { bookingProductNames, bookingProductsText, bookingProductTotals } from '
 import { makeJobItem } from '../../tests/fixtures/booking'
 
 describe('สินค้าหลายชนิดในเที่ยวเดียว', () => {
-  it('รวมสินค้าหลัก + extraProducts ทุกตัว แสดงจำนวนแยกต่อชนิด', () => {
+  it('รวมสินค้าหลัก + extraProducts ทุกตัว แสดงชื่อทุกชนิด ไม่มีจำนวนตัน', () => {
     const b = { items: [makeJobItem({ product: 'M500', qty: 5, unit: 'ตัน', extraProducts: [{ product: 'M400', qty: 3, unit: 'ตัน' }, { product: 'M200', qty: 2, unit: 'ตัน' }] })] }
     expect(bookingProductNames(b)).toEqual(['M500', 'M400', 'M200'])
-    expect(bookingProductsText(b)).toBe('M500 5 ตัน + M400 3 ตัน + M200 2 ตัน')
+    expect(bookingProductsText(b)).toBe('M500 + M400 + M200')
   })
 
   it('ชนิดเดียวแสดงแค่ชื่อเหมือนเดิม — หลายปลายทางชนิดเดียวกันรวมจำนวน', () => {
@@ -17,6 +17,6 @@ describe('สินค้าหลายชนิดในเที่ยวเ�
 
   it('extraProducts ไม่มีหน่วยใช้หน่วยของรายการหลัก, ไม่มีจำนวนแสดงแค่ชื่อ, ชื่อว่างข้าม', () => {
     const b = { items: [makeJobItem({ product: '13', qty: 1.85, unit: 'ตัน', extraProducts: [{ product: '23', qty: 1.1, unit: '' }, { product: '52', qty: 0, unit: 'ตัน' }, { product: ' ', qty: 1, unit: 'ตัน' }] })] }
-    expect(bookingProductsText(b)).toBe('13 1.85 ตัน + 23 1.1 ตัน + 52')
+    expect(bookingProductsText(b)).toBe('13 + 23 + 52')
   })
 })
