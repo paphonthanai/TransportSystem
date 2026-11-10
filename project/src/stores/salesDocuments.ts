@@ -1485,6 +1485,50 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return eligible ? { added: addedBookings, removed, linked } : null
   }
 
+  /** เพิ่มงานเข้าใบวางบิลเดิมแล้วบันทึกทับทันที (ปุ่ม "เพิ่มรายการวางบิล" ในหน้าเลือกงาน) — ไม่ผ่านหน้าฟอร์ม
+   *  ใบต้อง BILLING_PENDING และยังไม่มีงานไหนออกใบกำกับภาษี งานใหม่ต้องลูกค้า/ประเภทงานเดียวกัน วางบิลได้ (billingBookingChanges)
+   *  แถวใหม่ต่อท้ายแถวเดิม ภาษี/หัก ณ ที่จ่ายตามแถวเดิมถ้าทุกแถวเท่ากัน ยอดหักที่ไม่ได้แก้เองคำนวณใหม่ คืน null ถ้าเพิ่มไม่ได้ */
+  function appendBookingsToBilling(id: string, bookingIds: string[]): SalesDocument | null {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'BILLING')
+    if (!doc || doc.status !== 'BILLING_PENDING' || bookingIds.length === 0) return null
+    const bookingStore = useBookingStore()
+    const linkedNow = doc.bookingIds.map((bid) => bookingStore.bookings.find((b) => b.id === bid)).filter((b): b is Booking => !!b)
+    if (linkedNow.some((b) => b.taxInvoiceDocId)) return null
+    const newIds = bookingIds.filter((bid) => !doc.bookingIds.includes(bid))
+    if (newIds.length === 0) return null
+    const oldRows = itemsForDocument(doc.id).map(({ id: _id, documentId: _d, sortOrder: _s, ...rest }) => rest)
+    // ส่งแถวเดิมไปด้วย = ไม่มีงานเดิมถูกนับว่า "เอาออก" ประเภทงานจึงเทียบกับงานเดิมในใบ
+    const changes = billingBookingChanges(doc, { customer: doc.customer, items: oldRows, bookingIds: [...doc.bookingIds, ...newIds] } as ManualDocumentFormData)
+    if (!changes || changes.added.length === 0 || changes.removed.length > 0) return null
+    const { added, linked } = changes
+    const vatRates = [...new Set(oldRows.map((r) => r.vatRate))]
+    const whtRates = [...new Set(oldRows.map((r) => r.whtRate || 0))]
+    const newRows = billingRowsFromBookings(sortBookingsForDocumentMerge(added)).map((r) => ({
+      ...r,
+      vatRate: r.vatRate ?? (vatRates.length === 1 ? vatRates[0] : undefined),
+      whtRate: whtRates.length === 1 ? whtRates[0] : 0,
+    }))
+    const followComputedWht = Math.round((doc.whtAmount || 0) * 100) === Math.round(computeDocumentTotals(oldRows).whtAmount * 100)
+    const allRows = [...oldRows, ...newRows]
+    const totals = computeDocumentTotals(allRows)
+    items.value = items.value.filter((i) => i.documentId !== doc.id)
+    addItemsToDocument(doc.id, allRows)
+    doc.amount = totals.amount
+    doc.discountTotal = totals.discountTotal
+    doc.vatAmount = totals.vatAmount
+    doc.vatRate = totals.vatRate
+    if (followComputedWht) doc.whtAmount = totals.whtAmount
+    const next = [...linked, ...added]
+    const unresolvedIds = doc.bookingIds.filter((bid) => !linked.some((b) => b.id === bid))
+    doc.bookingIds = [...unresolvedIds, ...next.map((b) => b.id)]
+    added.forEach((b) => {
+      b.billingNoteDocId = doc.id
+    })
+    refreshBillingSummary(doc, linked, next)
+    bookingStore.addLog(`แก้ไขเอกสาร ${doc.number} เพิ่มงาน ${added.length} งาน`, { docId: doc.id })
+    return doc
+  }
+
   /** ปรับหัวเอกสารที่ระบบสรุปจากงาน (ห้วงวันที่/จำนวนเที่ยว/เอกสารอ้างอิง) ให้ตรงกับงานชุดใหม่ — ข้อความที่ผู้ใช้พิมพ์เองไม่ถูกแตะ */
   function refreshBillingSummary(doc: SalesDocument, previous: Booking[], next: Booking[]) {
     if (doc.reference === previous.map(bookingReferenceDoc).join(', ')) doc.reference = next.map(bookingReferenceDoc).join(', ')
@@ -3193,6 +3237,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     peekNextDocumentNumber,
     createBillingManual,
     updateBillingManual,
+    appendBookingsToBilling,
     createInvoiceFromBilling,
     createTaxInvoiceManual,
     updateTaxInvoiceManual,

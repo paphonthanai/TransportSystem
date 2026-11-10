@@ -152,6 +152,7 @@
                       <RouterLink :to="`/job/${b.id}`" class="text-primary hover:underline">{{ customerShipmentNo(b) }}</RouterLink>
                       <span v-if="idx === 0" class="ml-1 text-[10px] font-semibold text-green-700">(สร้างก่อน)</span>
                     </td>
+                    <td class="px-3 py-2 font-mono whitespace-nowrap" title="เลขที่เอกสาร">เอกสาร {{ bookingDocNo(b) }}</td>
                     <td class="px-3 py-2 whitespace-nowrap">{{ formatShortDate(b.loadingDate) }} {{ b.loadingTime || '' }}</td>
                     <td class="px-3 py-2">{{ b.driverName || '-' }} · {{ b.plate || '-' }}</td>
                     <td class="px-3 py-2">{{ destinationLabel(b) }}</td>
@@ -2309,7 +2310,7 @@ const existingShipments = computed(() => {
   const map = new Map<string, string>()
   fleetBookings.value.forEach((b) => {
     const key = bookingShipmentKey(b)
-    if (key) map.set(key, bookingRefNo(b))
+    if (key) map.set(key, `เลขที่เอกสาร ${bookingDocNo(b)}`)
   })
   return map
 })
@@ -2320,7 +2321,9 @@ const importDuplicateFor = (row: ImportRowResult): string | undefined => {
   const docNo = existingShipments.value.get(key)
   if (docNo) return `เลขชิพเม้นลูกค้า ${row.shipmentNo} มีงานนี้อยู่แล้วในระบบ (${docNo})`
   const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importShipmentKey(r) === key)
-  return earlier ? `เลขชิพเม้นลูกค้า ${row.shipmentNo} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้` : undefined
+  return earlier
+    ? `เลขชิพเม้นลูกค้า ${row.shipmentNo} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้${earlier.customerDocNo ? ` (เลขที่เอกสาร ${earlier.customerDocNo})` : ''}`
+    : undefined
 }
 /** แถวที่เลือก "ข้าม" (ค่าเริ่มต้น = ข้ามแถวที่อาจซ้ำ) */
 const importSkip = ref<Record<number, boolean>>({})
