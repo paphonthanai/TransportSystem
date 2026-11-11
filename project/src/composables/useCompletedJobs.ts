@@ -179,6 +179,9 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
       วันที่ส่งของสำเร็จ: dateLabel(b.completedAt),
       ราคา: completedJobPriceOf(b),
       เบี้ยเลี้ยง: money.allowance,
+      // ลิตร × เรท = ค่าน้ำมัน — เรทที่บันทึกไว้ในงาน (ราคาประจำวันของวันที่สร้างงาน หรือที่กรอกเอง) ตรวจย้อนหลังได้ว่าคิดเรทเท่าไร
+      ลิตรน้ำมัน: b.fuelLiters || 0,
+      'เรทน้ำมัน (บาท/ลิตร)': b.fuelRate || 0,
       ค่าน้ำมัน: money.fuelCost,
       'รายได้คงเหลือ (รายได้บริษัท)': money.companyIncome ?? '',
       หมายเหตุรายได้: money.incomeNote || '',
