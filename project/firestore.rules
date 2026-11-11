@@ -156,6 +156,16 @@ service cloud.firestore {
       allow write: if hasRole(['ADMIN']);
     }
 
+    // ค่าน้ำมัน — เสมียน/ผู้จัดรถตั้ง "ราคาน้ำมันประจำวัน" ได้จากป๊อปอัพในหน้างานขนส่ง (FuelPriceForm.vue) จึงต้องเขียนได้
+    // แต่แก้ได้เฉพาะ priceHistory เท่านั้น (ลิตรมาตรฐานต่ออำเภอ/ค่าอื่นยังเป็นของ ADMIN) — เดิมเขียนได้แค่ ADMIN
+    // ราคาที่เสมียนบันทึกจึงถูก Firestore ปฏิเสธเงียบๆ แล้วเด้งกลับเป็นราคาเดิม งานที่ลงใหม่เลยไม่ได้ราคาใหม่
+    match /settings/fuelRates {
+      allow read: if hasRole(['ADMIN', 'STAFF', 'DISPATCHER', 'ACCOUNTING', 'DRIVER']);
+      allow write: if hasRole(['ADMIN']);
+      allow update: if hasRole(['STAFF', 'DISPATCHER'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['priceHistory']);
+    }
+
     // ทะเบียนเลขที่เอกสารถาวร (Phase 4 — ป้องกันเลขที่เอกสารย้อนกลับ/ซ้ำ) เขียนทุกครั้งที่ออกเอกสารขาย
     // จึงต้องเปิดให้ role เดียวกับที่สร้าง salesDocuments ได้ (ไม่ใช่ ADMIN อย่างเดียวเหมือน settings ทั่วไป)
     match /settings/documentNumberRegistry {
