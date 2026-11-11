@@ -23,7 +23,7 @@
           </select>
           <div class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface border border-border flex-1 min-w-[220px]">
             <span class="material-symbols-rounded text-muted">search</span>
-            <input v-model="searchText" type="text" placeholder="ค้นหา รายละเอียด/หน้างาน, ทะเบียน, เลขที่ PO ลูกค้า, วันที่, ราคา" class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted" />
+            <input v-model="searchText" type="text" placeholder="ค้นหา รายละเอียด/หน้างาน, ทะเบียน, เลขที่เอกสาร, เลขชิพเม้น, วันที่, ราคา" class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted" />
           </div>
         </div>
 
@@ -34,7 +34,7 @@
                 <th class="px-3 py-2 w-8"><input type="checkbox" :checked="allVisibleSelected" :disabled="visibleBookings.length === 0" @change="toggleAll" class="w-4 h-4" /></th>
                 <th class="text-left px-3 py-2 font-semibold">ชื่อสินค้า/รายละเอียด</th>
                 <th class="text-left px-3 py-2 font-semibold">ทะเบียน</th>
-                <th class="text-left px-3 py-2 font-semibold">เลขที่ PO ลูกค้า</th>
+                <th class="text-left px-3 py-2 font-semibold">เลขที่เอกสาร</th>
                 <th class="text-left px-3 py-2 font-semibold">วันที่ส่งของสำเร็จ</th>
                 <th class="text-right px-3 py-2 font-semibold">ราคารวม</th>
               </tr>
@@ -44,7 +44,7 @@
                 <td class="px-3 py-2"><input type="checkbox" :checked="selectedIds.has(b.id)" @change="toggle(b.id)" class="w-4 h-4" /></td>
                 <td class="px-3 py-2 text-text">{{ describe(b) }}</td>
                 <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
-                <td class="px-3 py-2 text-text">{{ b.reference || '-' }}</td>
+                <td class="px-3 py-2 text-text whitespace-pre-line">{{ billingDocNo(b) }}</td>
                 <td class="px-3 py-2 text-text">{{ dateText(b) }}</td>
                 <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(totalOf(b)) }}</td>
               </tr>
@@ -77,6 +77,7 @@
 
 <script setup lang="ts">
 import { bookingProductsText } from '@/utils/bookingProducts'
+import { billingDocNo } from '@/utils/customerShipment'
 import { computed, ref, watch } from 'vue'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { billingDateOf, billingMonthKey, billingMonthLabel, categoryFeedLabel } from '@/utils/bookingStatus'
@@ -115,7 +116,7 @@ const monthOptions = computed(() => [...new Set(categoryBookings.value.map(billi
 const visibleBookings = computed(() =>
   categoryBookings.value
     .filter((b) => !monthFilter.value || billingMonthKey(b) === monthFilter.value)
-    .filter((b) => matchesSearchFields(searchText.value, [describe(b), b.plate, b.reference, dateText(b), formatBaht(totalOf(b)), b.shipmentNo]))
+    .filter((b) => matchesSearchFields(searchText.value, [describe(b), b.plate, billingDocNo(b), b.reference, dateText(b), formatBaht(totalOf(b)), b.shipmentNo]))
 )
 /** งานที่ติ๊กไว้ยังอยู่แม้ค้นคำอื่น/เปลี่ยนเดือน เหมือนหน้าเลือกงานตอนสร้างใบวางบิล */
 const selectedBookings = computed(() => categoryBookings.value.filter((b) => selectedIds.value.has(b.id)))

@@ -64,7 +64,7 @@
           <tr v-for="(booking, idx) in batchBookings" :key="booking.id">
             <td class="border border-gray-400 px-2 py-1">{{ idx + 1 }}</td>
             <td class="border border-gray-400 px-2 py-1">
-              {{ bookingRefNo(booking) }} · {{ destinationLabel(booking) }}
+              {{ billingDocNo(booking) }} · {{ destinationLabel(booking) }}
               <span class="text-xs text-gray-600">- {{ formatDate(booking.dispatchedAt || booking.createdAt) }}</span>
             </td>
             <td class="border border-gray-400 px-2 py-1 text-right">1</td>
@@ -109,7 +109,7 @@
 
 <script setup lang="ts">
 import CompanyInfoLines from '@/components/documents/CompanyInfoLines.vue'
-import { bookingRefNo } from '@/utils/customerShipment'
+import { billingDocNo } from '@/utils/customerShipment'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'

@@ -35,6 +35,7 @@
           <table class="w-full text-sm">
             <thead class="bg-surface-2 border-b border-border">
               <tr>
+                <th class="text-left px-4 py-3 font-semibold text-muted whitespace-nowrap">เลขที่เอกสาร</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted whitespace-nowrap">เลขชิพเม้นลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ปลายทาง</th>
@@ -49,6 +50,10 @@
             </thead>
             <tbody>
               <tr v-for="booking in pagedRows" :key="booking.id" class="border-b border-border hover:bg-surface-2 transition-colors">
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <div class="font-bold text-text font-mono text-xs whitespace-pre-line">{{ bookingDocNo(booking) }}</div>
+                  <div v-if="booking.ticketNo" class="text-[11px] text-muted font-mono">ตั๋ว {{ booking.ticketNo }}</div>
+                </td>
                 <td class="px-4 py-3 whitespace-nowrap">
                   <div class="font-bold text-primary font-mono text-xs">{{ customerShipmentNo(booking) || '-' }}</div>
                 </td>
@@ -100,7 +105,7 @@
                 </td>
               </tr>
               <tr v-if="completedBookings.length === 0">
-                <td colspan="10" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่เสร็จสิ้น</td>
+                <td colspan="11" class="px-4 py-8 text-center text-muted">ยังไม่มีงานที่เสร็จสิ้น</td>
               </tr>
             </tbody>
           </table>
@@ -123,7 +128,7 @@ import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
 import TablePagination from '@/components/TablePagination.vue'
 import { usePagedRows } from '@/composables/usePagedRows'
-import { customerShipmentNo } from '@/utils/customerShipment'
+import { bookingDocNo, customerShipmentNo } from '@/utils/customerShipment'
 import { exportRowsToExcel } from '@/utils/exportExcel'
 
 const props = defineProps<{ fleet: BookingCategory }>()

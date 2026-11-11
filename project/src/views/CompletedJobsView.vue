@@ -92,6 +92,7 @@
                 <th class="px-4 py-3 w-8">
                   <input type="checkbox" :checked="allVisibleSelected" @change="toggleSelectAll" />
                 </th>
+                <th class="text-left px-4 py-3 font-semibold text-muted whitespace-nowrap">เลขที่เอกสาร</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted whitespace-nowrap">เลขชิพเม้นลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">กองรถ</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
@@ -116,8 +117,11 @@
                   />
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">
+                  <div class="font-bold text-text font-mono text-xs whitespace-pre-line">{{ bookingDocNo(booking) }}</div>
+                  <div v-if="booking.ticketNo" class="text-[11px] text-muted font-mono">ตั๋ว {{ booking.ticketNo }}</div>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
                   <div class="font-bold text-primary font-mono text-xs">{{ customerShipmentNo(booking) || '-' }}</div>
-                  <div class="text-[11px] text-muted font-mono">เอกสาร {{ bookingDocNo(booking) }}<template v-if="booking.ticketNo"> · ตั๋ว {{ booking.ticketNo }}</template></div>
                 </td>
                 <td class="px-4 py-3">
                   <span :class="['text-xs font-semibold px-2 py-1 rounded-full', booking.category === 'cements' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700']">
@@ -220,7 +224,7 @@
                 </td>
               </tr>
               <tr v-if="completedBookings.length === 0">
-                <td colspan="13" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับตัวกรอง</td>
+                <td colspan="14" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับตัวกรอง</td>
               </tr>
             </tbody>
           </table>

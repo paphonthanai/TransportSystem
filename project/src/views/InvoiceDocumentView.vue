@@ -151,7 +151,7 @@
                 <th class="border border-gray-400 px-2 py-1 text-left">วันที่ส่ง</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">ทะเบียนรถ</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">อ้างถึงเอกสาร</th>
-                <th class="border border-gray-400 px-2 py-1 text-left">เลข PO ลูกค้า</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">เลขที่เอกสาร</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">รายการ</th>
                 <th class="border border-gray-400 px-2 py-1 text-right">จำนวน<template v-if="commonRowUnit"><br />({{ commonRowUnit }})</template></th>
                 <th class="border border-gray-400 px-2 py-1 text-right">หน่วยละ</th>
@@ -169,7 +169,7 @@
                 <td class="border border-gray-400 px-2 py-1">{{ row.shipDate ? formatDateShort(row.shipDate) : '-' }}</td>
                 <td class="border border-gray-400 px-2 py-1 whitespace-nowrap">{{ plateNumberOnly(row.plate) || '-' }}</td>
                 <td class="border border-gray-400 px-2 py-1 break-all">{{ row.referenceDoc || '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1 break-all">{{ deliveryNoLabel(row.deliveryNo) }}</td>
+                <td class="border border-gray-400 px-2 py-1 break-all whitespace-pre-line">{{ deliveryNoLabel(row.deliveryNo) }}</td>
                 <td class="border border-gray-400 px-2 py-1 whitespace-pre-line">{{ row.description }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ commonRowUnit ? row.qty : `${row.qty} ${row.unit}` }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right whitespace-nowrap">{{ formatBaht(row.unitPrice) }}</td>
@@ -454,7 +454,7 @@
 
 <script setup lang="ts">
 import CompanyInfoLines from '@/components/documents/CompanyInfoLines.vue'
-import { bookingRefNo } from '@/utils/customerShipment'
+import { billingDocNo, bookingRefNo } from '@/utils/customerShipment'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -628,13 +628,13 @@ const bookingTotal = (booking: Booking) => {
   return (booking.tripFee || 0) + extras
 }
 
-/** รายการในเอกสารเก็บเลขที่งานของระบบ (deliveryNo = booking.docNo — ใช้จับคู่งาน/Feed ห้ามแก้ค่าที่เก็บ) แต่แสดงเป็นเลข PO ลูกค้า
+/** รายการในเอกสารเก็บเลขที่งานของระบบ (deliveryNo = booking.docNo — ใช้จับคู่งาน/Feed ห้ามแก้ค่าที่เก็บ) แต่แสดงเป็นเลขที่เอกสารของลูกค้า (billingDocNo — คอลัมน์ "เลขที่เอกสาร" ตอน import)
  *  หางานไม่เจอ (งานถูกลบ/รายการกรอกเอง) แสดงค่าที่เก็บไว้ตามเดิม */
 const bookingByDocNo = computed(() => new Map(bookingStore.bookings.map((b) => [b.docNo, b])))
 const deliveryNoLabel = (deliveryNo?: string) => {
   if (!deliveryNo) return '-'
   const booking = bookingByDocNo.value.get(deliveryNo)
-  return booking ? bookingRefNo(booking) : deliveryNo
+  return booking ? billingDocNo(booking) : deliveryNo
 }
 
 const docRows = computed<PrintRow[]>(() => {
