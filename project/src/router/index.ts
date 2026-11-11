@@ -440,7 +440,8 @@ const routes: RouteRecordRaw[] = [
         path: 'settings/fuel',
         name: 'SettingsFuel',
         component: () => import('@/views/FuelSettingsView.vue'),
-        meta: { roles: ['ADMIN'] },
+        // fuelManager: ผู้ใช้ที่ติ๊ก "สิทธิ์ผู้จัดการน้ำมัน" (canOverrideFuelRate) เข้าได้ด้วย แก้ได้ทั้งหมด (firestore.rules settings/fuelRates)
+        meta: { roles: ['ADMIN'], fuelManager: true },
       },
       {
         path: 'settings/origins',
@@ -510,7 +511,7 @@ router.beforeEach(async (to, from, next) => {
   } else if (authStore.isAuthenticated && authStore.role === 'DRIVER' && to.name !== 'DriverApp' && to.name !== 'DriverJobDetail') {
     // แยกมุมมองคนขับออกจากส่วนแอดมิน: คนขับเข้าได้เฉพาะหน้า Driver App (My Jobs + Job Detail)
     next({ name: 'DriverApp' })
-  } else if (authStore.isAuthenticated && !canAccess(authStore.role, to.meta.roles as UserRole[] | undefined) && to.name !== 'Unauthorized') {
+  } else if (authStore.isAuthenticated && !canAccess(authStore.role, to.meta.roles as UserRole[] | undefined) && !(to.meta.fuelManager && authStore.profile?.canOverrideFuelRate) && to.name !== 'Unauthorized') {
     next({ name: 'Unauthorized' })
   } else {
     next()

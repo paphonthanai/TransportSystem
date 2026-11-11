@@ -13,14 +13,16 @@ export type MenuItem = {
   /** roles ที่เห็นเมนูนี้ได้ — ไม่ระบุ = ทุก role ที่ login แล้วเห็นได้ ต้องตรงกับ meta.roles ของ route นั้นใน router/index.ts เสมอ
    *  (ซ่อนเมนูอย่างเดียวไม่พอ ต้องมี Route Guard ทำงานคู่กันเพื่อกันการเข้าถึงตรงๆ ผ่าน URL) */
   roles?: UserRole[]
+  /** ผู้ใช้ที่มีสิทธิ์ผู้จัดการน้ำมัน (UserProfile.canOverrideFuelRate) เห็นเมนูนี้ได้ด้วยแม้ role ไม่อยู่ใน roles — คู่กับ meta.fuelManager ของ route */
+  fuelManager?: boolean
   children?: MenuItem[]
 }
 
-function filterMenuByRole(items: MenuItem[], role: UserRole | null): MenuItem[] {
+function filterMenuByRole(items: MenuItem[], role: UserRole | null, fuelManager = false): MenuItem[] {
   return items.reduce<MenuItem[]>((acc, item) => {
-    if (!canAccess(role, item.roles)) return acc
+    if (!canAccess(role, item.roles) && !(fuelManager && item.fuelManager && role)) return acc
     if (item.children) {
-      const children = filterMenuByRole(item.children, role)
+      const children = filterMenuByRole(item.children, role, fuelManager)
       if (children.length === 0) return acc
       acc.push({ ...item, children })
     } else {
@@ -120,7 +122,7 @@ export const useAppStore = defineStore('app', () => {
           ],
         },
         { id: '5-4', icon: 'inventory_2', label: 'ตั้งค่าสินค้า', route: '/settings/products', roles: ['ADMIN'] },
-        { id: '5-4b', icon: 'local_gas_station', label: 'ตั้งค่าน้ำมัน', route: '/settings/fuel', roles: ['ADMIN'] },
+        { id: '5-4b', icon: 'local_gas_station', label: 'ตั้งค่าน้ำมัน', route: '/settings/fuel', roles: ['ADMIN'], fuelManager: true },
         { id: '5-4c', icon: 'factory', label: 'ต้นทาง/จุดรับสินค้า', route: '/settings/origins', roles: ['ADMIN'] },
         { id: '5-4d', icon: 'rule', label: 'เงื่อนไขวางบิล', route: '/settings/billing-rule', roles: ['ADMIN'] },
         { id: '5-5', icon: 'history', label: 'Log', route: '/settings/logs', roles: ['ADMIN'] },
@@ -135,7 +137,7 @@ export const useAppStore = defineStore('app', () => {
     },
   ]
 
-  const menu = computed<MenuItem[]>(() => filterMenuByRole(fullMenu, authStore.role))
+  const menu = computed<MenuItem[]>(() => filterMenuByRole(fullMenu, authStore.role, !!authStore.profile?.canOverrideFuelRate))
 
   const toggleDarkMode = () => {
     isDarkMode.value = !isDarkMode.value

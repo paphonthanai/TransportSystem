@@ -29,6 +29,11 @@ service cloud.firestore {
       return isSignedIn() && isActive() && userRole() in roles;
     }
 
+    // ติ๊ก "สิทธิ์ผู้จัดการน้ำมัน" ไว้ที่ผู้ใช้ (users/{uid}.canOverrideFuelRate — แก้ได้เฉพาะ ADMIN ดู match /users)
+    function isFuelManager() {
+      return isSignedIn() && isActive() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.canOverrideFuelRate == true;
+    }
+
     // driverId ของบัญชีที่ล็อกอินอยู่ (มีความหมายเฉพาะ role DRIVER) ใช้จำกัดให้คนขับแก้ไข/อ่านได้แค่ข้อมูล "ของตัวเอง"
     // เท่านั้นใน self-service flow (เปลี่ยนอีเมล/PIN จาก Driver App) — ดู users/{uid}.driverId
     function myDriverId() {
@@ -161,7 +166,8 @@ service cloud.firestore {
     // ราคาที่เสมียนบันทึกจึงถูก Firestore ปฏิเสธเงียบๆ แล้วเด้งกลับเป็นราคาเดิม งานที่ลงใหม่เลยไม่ได้ราคาใหม่
     match /settings/fuelRates {
       allow read: if hasRole(['ADMIN', 'STAFF', 'DISPATCHER', 'ACCOUNTING', 'DRIVER']);
-      allow write: if hasRole(['ADMIN']);
+      // ผู้จัดการน้ำมันแก้ได้ทั้งหมด (ลิตรมาตรฐานต่ออำเภอ/สาย/ราคา) เหมือน ADMIN
+      allow write: if hasRole(['ADMIN']) || isFuelManager();
       allow update: if hasRole(['STAFF', 'DISPATCHER'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['priceHistory']);
     }

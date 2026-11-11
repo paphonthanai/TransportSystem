@@ -166,7 +166,7 @@
             </div>
             <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
               <input v-model="form.canOverrideFuelRate" type="checkbox" class="w-4 h-4" />
-              สิทธิ์ผู้จัดการ: กรอกค่าน้ำมันสำหรับอำเภอที่ยังไม่ได้ตั้งค่าไว้ได้
+              สิทธิ์ผู้จัดการน้ำมัน: เข้าหน้าตั้งค่าน้ำมันและแก้ไขได้ทั้งหมด (ราคาน้ำมันต่อลิตร, ลิตรมาตรฐานต่ออำเภอ, สาย ฯลฯ)
             </label>
             <div v-if="formError" class="text-xs text-red-600">{{ formError }}</div>
           </div>
