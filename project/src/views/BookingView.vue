@@ -37,8 +37,8 @@
       </button>
     </div>
 
-    <!-- Search -->
-    <div class="flex gap-3 flex-wrap items-center">
+    <!-- Search — ตรึงแถบค้นหา/ตัวกรองไว้ด้านบนตอนเลื่อนหน้า -->
+    <div class="flex gap-3 flex-wrap items-center sticky -top-6 z-20 bg-bg -mx-6 px-6 py-2">
       <div class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface border border-border flex-1 max-w-md">
         <span class="material-symbols-rounded text-muted">search</span>
         <input
@@ -209,9 +209,10 @@
         </button>
       </div>
       <div class="card-lg overflow-hidden">
-      <div class="overflow-x-auto">
+      <!-- ตรึงหัวตาราง: ตารางเลื่อนในกรอบของตัวเอง (สูงไม่เกินจอ) หัวคอลัมน์ค้างอยู่ด้านบนเสมอ -->
+      <div class="overflow-auto max-h-[calc(100vh-240px)]">
         <table class="w-full text-sm">
-          <thead class="bg-surface-2 border-b border-border">
+          <thead class="bg-surface-2 sticky top-0 z-10 shadow-[inset_0_-1px_0_#e6e9f2]">
             <tr>
               <th v-if="canSelectDelete" class="px-3 py-3 w-8">
                 <input type="checkbox" :checked="allInProgressSelected" @change="toggleSelectAllInProgress" />
@@ -364,9 +365,10 @@
         <button v-if="inTransitTable.hasFilters.value" type="button" @click="inTransitTable.clearFilters()" class="btn-sm font-normal">ล้างตัวกรองคอลัมน์</button>
       </div>
       <div class="card-lg overflow-hidden">
-      <div class="overflow-x-auto">
+      <!-- ตรึงหัวตาราง: ตารางเลื่อนในกรอบของตัวเอง (สูงไม่เกินจอ) หัวคอลัมน์ค้างอยู่ด้านบนเสมอ -->
+      <div class="overflow-auto max-h-[calc(100vh-240px)]">
         <table class="w-full text-sm">
-          <thead class="bg-surface-2 border-b border-border">
+          <thead class="bg-surface-2 sticky top-0 z-10 shadow-[inset_0_-1px_0_#e6e9f2]">
             <tr>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="status" label="สถานะขนส่ง" /></th>
               <th class="px-3 py-3"></th>
@@ -601,7 +603,17 @@
                 ทะเบียนรถ *
                 <span class="text-[10px] font-normal text-muted">(พิมพ์ค้นหาได้ — แสดงเฉพาะรถที่วิ่ง Feed นี้ได้)</span>
               </label>
-              <SearchableSelect v-model="dispatchForm.plate" :options="dispatchPlateOptions" placeholder="เลือกหรือพิมพ์ค้นหาทะเบียนรถ..." />
+              <!-- ล็อกทะเบียน: คนขับที่มีรถประจำ = ใช้ทะเบียนรถประจำเท่านั้น แก้เองไม่ได้ (กันลงงานผิดคัน) แอดมินปลดล็อกได้กรณีขับรถคันอื่นแทน -->
+              <div v-if="dispatchLockedPlate" class="flex items-center gap-2 h-12 px-4 rounded-lg border border-border bg-surface-2">
+                <span class="material-symbols-rounded text-muted text-xl">lock</span>
+                <span class="flex-1 text-sm font-semibold text-text">{{ dispatchLockedPlate }}</span>
+                <span class="text-[11px] text-muted">รถประจำของคนขับ</span>
+                <button v-if="isAdmin" type="button" @click="dispatchPlateUnlocked = true" class="btn-sm" title="แอดมิน: เลือกรถคันอื่นแทนรถประจำ">ปลดล็อก</button>
+              </div>
+              <SearchableSelect v-else v-model="dispatchForm.plate" :options="dispatchPlateOptions" placeholder="เลือกหรือพิมพ์ค้นหาทะเบียนรถ..." />
+              <div v-if="dispatchPlateMismatch && dispatchLockedPlate" class="text-[11px] font-semibold text-amber-700 mt-1">
+                ทะเบียนเดิมในงาน {{ dispatchPlateMismatch }} ไม่ตรงกับรถประจำของคนขับ — ระบบเปลี่ยนเป็น {{ dispatchLockedPlate }}
+              </div>
             </div>
             <div>
               <label class="block text-xs font-semibold text-muted mb-1.5">คนขับ</label>
@@ -1149,6 +1161,7 @@ import { normalizeDriverName } from '@/utils/driverIdentity'
 import { bookingDocNo, bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
 import ColumnHeader from '@/components/ColumnHeader.vue'
 import { useTableColumns, type TableColumn } from '@/composables/useTableColumns'
+import { useRememberedState } from '@/composables/useRememberedState'
 import { bookingShipmentKey, duplicateGroupKey, findDuplicateGroups, shipmentKey, type DuplicateGroup } from '@/utils/bookingDuplicates'
 import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
@@ -1794,6 +1807,15 @@ const openDispatchDialog = (booking: Booking) => {
     odometerBefore: booking.odometerBefore || 0,
     tripSequence: defaultTripForDispatch(booking),
   }
+  dispatchPlateUnlocked.value = false
+  dispatchPlateMismatch.value = ''
+  // ล็อกทะเบียน: งานที่ลงทะเบียนไว้ไม่ตรงกับรถประจำของคนขับ → ใช้รถประจำ (ก่อนดึงเลขไมล์ จะได้ดึงของรถที่ถูกคัน)
+  const lockedDriver = booking.driverName ? findDriverByName(booking.driverName) : undefined
+  const lockedPlate = lockedDriver ? vehiclesStore.vehicleForDriver(lockedDriver.code)?.plate : undefined
+  if (lockedPlate && dispatchForm.value.plate !== lockedPlate) {
+    if (dispatchForm.value.plate && vehiclesStore.plateKey(dispatchForm.value.plate) !== vehiclesStore.plateKey(lockedPlate)) dispatchPlateMismatch.value = dispatchForm.value.plate
+    dispatchForm.value.plate = lockedPlate
+  }
   if (!dispatchForm.value.odometerBefore && dispatchForm.value.plate) {
     const prevOdometer = latestOdometerForPlate(dispatchForm.value.plate, booking.id)
     if (prevOdometer) dispatchForm.value.odometerBefore = prevOdometer.odometerAfter || 0
@@ -1808,6 +1830,7 @@ watch(
   () => dispatchForm.value.driverName,
   (name) => {
     if (suppressDispatchAutofill.value || !name) return
+    dispatchPlateMismatch.value = '' // เลือกคนขับใหม่เอง = ไม่ใช่การแก้ทะเบียนเดิมของงานแล้ว
     const driver = findDriverByName(name)
     if (!driver) return
     const vehicle = vehiclesStore.vehicleForDriver(driver.code)
@@ -1844,6 +1867,19 @@ const dispatchDriverOptions = computed<SearchableOption[]>(() =>
 )
 const dispatchDriverRecord = computed(() => (dispatchForm.value.driverName ? findDriverByName(dispatchForm.value.driverName) : undefined))
 
+/** ทะเบียนที่ล็อกไว้ = รถประจำของคนขับที่เลือก ('' = ไม่ล็อก: ยังไม่เลือกคนขับ / คนขับไม่มีรถประจำ / แอดมินปลดล็อกแล้ว) */
+const dispatchPlateUnlocked = ref(false)
+const dispatchLockedPlate = computed(() => {
+  const d = dispatchDriverRecord.value
+  if (!d || dispatchPlateUnlocked.value) return ''
+  return vehiclesStore.vehicleForDriver(d.code)?.plate || ''
+})
+/** ทะเบียนเดิมในงานที่ไม่ตรงกับรถประจำ (เปิดจัดรถงานที่ลงทะเบียนผิดไว้ก่อน) — แสดงเตือนว่าระบบเปลี่ยนให้ */
+const dispatchPlateMismatch = ref('')
+watch(dispatchLockedPlate, (plate) => {
+  if (plate && dispatchForm.value.plate !== plate) dispatchForm.value.plate = plate
+})
+
 const confirmDispatch = () => {
   if (!dispatchTarget.value || !dispatchForm.value.plate || !dispatchForm.value.driverName) return
   const selectedDriver = dispatchForm.value.driverName ? findDriverByName(dispatchForm.value.driverName) : undefined
@@ -1856,7 +1892,8 @@ const confirmDispatch = () => {
     tripSequence: dispatchForm.value.tripSequence >= 1 ? dispatchForm.value.tripSequence : undefined,
   })
   // ปรับคนขับประจำของรถให้ตรงกับที่เลือกจ่ายงานจริง เพื่อให้ทุกหน้าที่ใช้รถเห็นคนขับล่าสุด
-  if (selectedDriver) {
+  // ยกเว้นแอดมินปลดล็อกทะเบียน (ขับรถคันอื่นแทนชั่วคราว) — ไม่ย้ายรถประจำ ไม่งั้นคู่รถ-คนขับเพี้ยนในงานถัดไป
+  if (selectedDriver && !dispatchPlateUnlocked.value) {
     const vehicle = vehiclesStore.findByFullPlate(dispatchForm.value.plate)
     if (vehicle) vehiclesStore.assignDriver(vehicle.id, selectedDriver.code)
   }
@@ -1923,6 +1960,17 @@ const bookingTableColumns: TableColumn<Booking>[] = [
 ]
 const inProgressTable = useTableColumns(inProgressBookings, bookingTableColumns)
 const inTransitTable = useTableColumns(inTransitBookings, bookingTableColumns)
+// จำคำค้น/ตัวกรองราคา/ตัวกรอง+การเรียงหัวตาราง — กดแก้ไข/ดูงานแล้วกลับมา ไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState(`booking:${props.fleet}`, {
+  searchQuery,
+  priceFilter,
+  priceMin,
+  priceMax,
+  inProgressSort: inProgressTable.sort,
+  inProgressFilters: inProgressTable.filters,
+  inTransitSort: inTransitTable.sort,
+  inTransitFilters: inTransitTable.filters,
+})
 
 // --- เลือกหลายรายการ + ลบถาวรพร้อมกัน (เฉพาะ ADMIN) — เหมือน CompletedJobsView.vue's selected/bulkDeleteSelected
 // ทุกประการ แต่แยกตัวแปร/ฟังก์ชันเป็นชุดของตัวเอง (selectedInProgress/bulkDeleteSelectedInProgress) เพราะทำงานกับ

@@ -150,9 +150,11 @@ import PersonnelRowMenu from '@/components/settings/PersonnelRowMenu.vue'
 import UserManagementView from '@/views/UserManagementView.vue'
 import StaffView from '@/views/StaffView.vue'
 import DriversView from '@/views/DriversView.vue'
+import { useRememberedState } from '@/composables/useRememberedState'
 import {
   buildPersonnelRows,
   filterPersonnelRows,
+  sortPersonnelRows,
   countByRole,
   personnelStatusMismatch,
   type PersonnelRow,
@@ -236,9 +238,11 @@ watch(roleFilter, (key) => {
 })
 
 const query = ref('')
+// จำคำค้น/ตัวกรอง/การเรียง/หน้าที่เปิดอยู่ — กดแก้ไข/ดูเอกสารแล้วกลับมาไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState('personnel', { query })
 const counts = computed(() => countByRole(rows.value))
 const visibleRows = computed(() =>
-  filterPersonnelRows(rows.value, { role: roleFilter.value, query: query.value, plateOf })
+  sortPersonnelRows(filterPersonnelRows(rows.value, { role: roleFilter.value, query: query.value, plateOf }))
 )
 
 // ---- แสดงผลแถว ----

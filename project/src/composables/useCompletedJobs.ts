@@ -62,8 +62,14 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
 
   const completedBookings = computed(() => {
     const f = filters.value
-    const from = f.dateFrom ? new Date(f.dateFrom) : null
-    const to = f.dateTo ? new Date(f.dateTo) : null
+    // ค่าจาก <input type="date"> เป็น 'YYYY-MM-DD' — new Date('YYYY-MM-DD') อ่านเป็นเที่ยงคืน UTC (= 07:00 เวลาไทย)
+    // ทำให้งานที่ส่งสำเร็จ 00:00–06:59 ของวันเริ่มหลุดจากตัวกรอง/Excel ต้องอ่านเป็นเที่ยงคืนเวลาเครื่อง
+    const localDay = (s: string) => {
+      const [y, m, d] = s.split('-').map(Number)
+      return new Date(y, m - 1, d)
+    }
+    const from = f.dateFrom ? localDay(f.dateFrom) : null
+    const to = f.dateTo ? localDay(f.dateTo) : null
     return bookingStore.bookings
       .filter((b) => b.status === 'DELIVERED')
       // งานที่จบผ่านแอปคนขับ (มี podReviewStatus) ต้องรอ "ยืนยันการจบงาน" ก่อนถึงจะมาอยู่ในหน้านี้ — อยู่ในตาราง

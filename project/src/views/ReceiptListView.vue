@@ -219,6 +219,7 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { salesDocumentStatusClass } from '@/utils/salesDocumentStatus'
 import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
+import { useRememberedState } from '@/composables/useRememberedState'
 
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
@@ -303,6 +304,8 @@ const filteredDocs = computed(() => {
 
 const page = ref(1)
 const perPage = ref(20)
+// จำคำค้น/ตัวกรอง/การเรียง/หน้าที่เปิดอยู่ — กดแก้ไข/ดูเอกสารแล้วกลับมาไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState('receipt-list', { search, statusFilter, sortKey, sortDir, page, perPage })
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredDocs.value.length / perPage.value)))
 const pagedDocs = computed(() => filteredDocs.value.slice((page.value - 1) * perPage.value, page.value * perPage.value))
 const totalAmount = computed(() => filteredDocs.value.reduce((sum, d) => sum + d.amount + (d.vatAmount || 0), 0))

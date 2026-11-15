@@ -69,6 +69,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStaffStore } from '@/stores/staff'
 import { useStaffSalaryStore, type StaffSalaryRecord } from '@/stores/staffSalaries'
+import { useRememberedState } from '@/composables/useRememberedState'
 
 const router = useRouter()
 const staffStore = useStaffStore()
@@ -89,6 +90,8 @@ const period = ref(currentMonthValue())
 const periodLabel = computed(() => toBEPeriodLabel(period.value))
 const statusFilter = ref<'all' | 'DRAFT' | 'PAID'>('all')
 const search = ref('')
+// จำคำค้น/ตัวกรอง/การเรียง/หน้าที่เปิดอยู่ — กดแก้ไข/ดูเอกสารแล้วกลับมาไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState('payroll', { period, search })
 
 const additionsTotal = (r: StaffSalaryRecord) => r.additions.reduce((sum, a) => sum + a.amount, 0)
 const deductionsTotal = (r: StaffSalaryRecord) => r.deductions.reduce((sum, d) => sum + d.amount, 0)

@@ -143,6 +143,7 @@ import { useRouter } from 'vue-router'
 import { useDriverPayroll } from '@/composables/useDriverPayroll'
 import PayrollDeductionPanel from '@/components/payroll/PayrollDeductionPanel.vue'
 import PayrollRangePicker from '@/components/payroll/PayrollRangePicker.vue'
+import { useRememberedState } from '@/composables/useRememberedState'
 
 /** พนักงานขับรถเป็นเจ้าของข้อมูลรายได้คนขับทั้งหมด ไม่ว่าจะขับรถบริษัทหรือรถร่วม/รถหุ้นส่วน — ไม่กรองตามประเภทรถ
  *  (ต่างจากเดิมที่กรองเฉพาะ 'รถบริษัท' ทำให้รายได้คนขับรถร่วมไปโผล่ปนอยู่ในหน้า "เงินเดือน · รถร่วม" แทน ซึ่งหน้านั้น
@@ -163,6 +164,8 @@ const changePaymentStatus = async (driver: string, status: 'UNPAID' | 'PAID') =>
 
 /** ค้นหาในตาราง (ไม่สนตัวพิมพ์เล็ก-ใหญ่) — กรองเฉพาะที่แสดง ไม่กระทบยอด/ไฟล์ Excel ที่นำออก */
 const search = ref('')
+// จำคำค้น/ตัวกรอง/การเรียง/หน้าที่เปิดอยู่ — กดแก้ไข/ดูเอกสารแล้วกลับมาไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState('income', { search })
 const matches = (...fields: (string | undefined)[]) => {
   const q = search.value.trim().toLowerCase()
   return !q || fields.some((f) => (f || '').toLowerCase().includes(q))

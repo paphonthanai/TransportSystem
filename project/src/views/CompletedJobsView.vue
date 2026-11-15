@@ -258,6 +258,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
 import TablePagination from '@/components/TablePagination.vue'
+import { useRememberedState } from '@/composables/useRememberedState'
 import { usePagedRows } from '@/composables/usePagedRows'
 import { bookingDocNo, bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
 import { useCompletedJobs, useCompletedJobsFilters, completedJobPriceOf, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
@@ -279,6 +280,8 @@ const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.role === 'ADMIN')
 
 const filters = useCompletedJobsFilters()
+// จำตัวกรองไว้ — กดดู/แก้ไขงานแล้วกลับมา ไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState('completed-jobs', { filters })
 
 // ลิงก์จาก Dashboard "ต้องดำเนินการ" ตั้งตัวกรองมาให้ผ่าน query (?price=NOT_SET / ?money=UNCOMPUTABLE)
 const route = useRoute()
@@ -316,7 +319,7 @@ const {
   formatShortDate,
 } = useCompletedJobs(filters)
 
-const { page, perPage, pagedRows } = usePagedRows(completedBookings)
+const { page, perPage, pagedRows } = usePagedRows(completedBookings, 'completed-jobs')
 watch(filters, () => (page.value = 1), { deep: true })
 
 const hasActiveDateOrPicks = computed(

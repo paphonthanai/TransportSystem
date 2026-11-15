@@ -127,6 +127,7 @@ import { useCustomerStore } from '@/stores/customers'
 import BookingActionMenu from '@/components/booking/BookingActionMenu.vue'
 import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
 import TablePagination from '@/components/TablePagination.vue'
+import { useRememberedState } from '@/composables/useRememberedState'
 import { usePagedRows } from '@/composables/usePagedRows'
 import { bookingDocNo, customerShipmentNo } from '@/utils/customerShipment'
 import { exportRowsToExcel } from '@/utils/exportExcel'
@@ -138,6 +139,8 @@ const customerStore = useCustomerStore()
 
 const isCements = computed(() => props.fleet === 'cements')
 const filters = useCompletedJobsFilters(props.fleet)
+// จำตัวกรองไว้ — กดดู/แก้ไขงานแล้วกลับมา ไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState(`completed:${props.fleet}`, { filters })
 
 // ลิงก์ที่ตั้งตัวกรองมาให้ผ่าน query (?price=NOT_SET / ?money=UNCOMPUTABLE)
 const route = useRoute()
@@ -152,7 +155,7 @@ watch(
 
 const { completedBookings, productLabel, destinationLabel, weightQtyLabel, documentsForBooking, buildExportRow, formatBaht, formatShortDate } = useCompletedJobs(filters)
 
-const { page, perPage, pagedRows } = usePagedRows(completedBookings)
+const { page, perPage, pagedRows } = usePagedRows(completedBookings, `completed:${props.fleet}`)
 watch(filters, () => (page.value = 1), { deep: true })
 
 const clearFilters = () => {
