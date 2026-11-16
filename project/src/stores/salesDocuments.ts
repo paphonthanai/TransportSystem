@@ -402,7 +402,41 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   const lastKnownDocJson = new Map<string, string>()
   const lastKnownItemJson = new Map<string, string>()
 
-  function applyRemoteDocuments(remote: SalesDocument[]) {
+  /** id เอกสารที่มีอยู่บนเซิร์ฟเวอร์แล้ว (จาก snapshot ล่าสุด) — ใช้แยกว่าเขียนไม่สำเร็จตอน "สร้างใหม่" หรือตอน "แก้ไข" */
+  const remoteDocIds = new Set<string>()
+  /** ข้อความ error ล่าสุดที่เซิร์ฟเวอร์ปฏิเสธการบันทึกเอกสาร (แสดงให้ผู้ใช้เห็น ไม่เงียบ) */
+  const lastWriteFailure = ref<{ number: string; message: string; at: Date } | null>(null)
+
+  /**
+   * เซิร์ฟเวอร์ปฏิเสธการบันทึกเอกสาร — เดิมแค่เก็บ error ไว้เงียบๆ เอกสารใหม่หายไปเอง (snapshot ถัดไปไม่มีมัน) แต่งานขนส่งที่ถูก
+   * claim ไปแล้ว (billingNoteDocId/taxInvoiceDocId/receiptDocId) บันทึกสำเร็จ ค้างผูกกับเอกสารที่ไม่มีจริง ออกเอกสารใหม่ไม่ได้
+   * ตอนนี้: เอกสารใหม่ที่บันทึกไม่สำเร็จ → ปลด claim ของงานที่ผูกกับมันคืนทันที + แจ้งผู้ใช้พร้อมข้อความจากเซิร์ฟเวอร์
+   */
+  function handleDocumentWriteFailure(id: string, number: string, err: any) {
+    const message = [err?.code, err?.message].filter(Boolean).join(': ') || String(err)
+    lastWriteFailure.value = { number, message, at: new Date() }
+    if (!remoteDocIds.has(id)) {
+      const bookingStore = useBookingStore()
+      bookingStore.bookings.forEach((b) => {
+        if (b.billingNoteDocId === id) b.billingNoteDocId = undefined
+        if (b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
+        if (b.receiptDocId === id) b.receiptDocId = undefined
+      })
+      documents.value.forEach((d) => {
+        if (d.convertedToDocumentIds?.includes(id)) d.convertedToDocumentIds = d.convertedToDocumentIds.filter((c) => c !== id)
+      })
+      bookingStore.addLog(`บันทึกเอกสาร ${number} ขึ้นเซิร์ฟเวอร์ไม่สำเร็จ — คืนสถานะงานที่ผูกไว้แล้ว (${message})`)
+    }
+    if (typeof window !== 'undefined')
+      window.alert(`บันทึกเอกสาร ${number} ขึ้นเซิร์ฟเวอร์ไม่สำเร็จ — เอกสารนี้ไม่ถูกบันทึก กรุณาสร้างใหม่อีกครั้ง
+
+ข้อความจากระบบ: ${message}
+(ส่งข้อความนี้ให้ผู้ดูแลระบบได้)`)
+  }
+
+  function applyRemoteDocuments(remote: SalesDocument[], confirmedIds?: Set<string>) {
+    // เอกสารที่ยืนยันบนเซิร์ฟเวอร์แล้วครั้งหนึ่งถือว่ามีอยู่จริง (snapshot ระหว่างรอเขียนรอบถัดไปไม่ทำให้หลุดจากชุดนี้)
+    ;(confirmedIds ?? new Set(remote.map((d) => d.id))).forEach((id) => remoteDocIds.add(id))
     documents.value = remote
     lastKnownDocJson.clear()
     remote.forEach((d) => lastKnownDocJson.set(d.id, JSON.stringify(d)))
@@ -425,6 +459,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         const { id, ...rest } = d
         salesDocumentRepository.set(id, rest).catch((err: any) => {
           error.value = err?.message || 'บันทึกเอกสารไป Firestore ไม่สำเร็จ'
+          handleDocumentWriteFailure(id, d.number, err)
         })
       })
       lastKnownDocJson.forEach((_json, id) => {
@@ -471,8 +506,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       await Promise.all([
         firstSnapshot((next, fail) =>
           salesDocumentRepository.subscribe(
-            (docs) => {
-              applyRemoteDocuments(docs)
+            (docs, confirmedIds) => {
+              if (docs) applyRemoteDocuments(docs, confirmedIds)
+              else confirmedIds.forEach((cid) => remoteDocIds.add(cid))
               next()
             },
             (err) => {
@@ -1704,22 +1740,31 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    * ยืนยันกับเซิร์ฟเวอร์ทีละใบก่อนปลด (ไม่เชื่อแคชในเครื่องที่อาจยังโหลดเอกสารไม่ครบ) ใบที่ยังมีอยู่จริงไม่แตะ
    */
   async function releaseOrphanTaxInvoiceClaims(bookingIds: string[]): Promise<{ released: number; stillExists: number }> {
+    return releaseOrphanClaims(bookingIds, 'taxInvoiceDocId')
+  }
+
+  /** เหมือน releaseOrphanTaxInvoiceClaims แต่เลือก field ได้ (ใบเสร็จ = receiptDocId, ใบวางบิล = billingNoteDocId) */
+  async function releaseOrphanClaims(
+    bookingIds: string[],
+    field: 'taxInvoiceDocId' | 'receiptDocId' | 'billingNoteDocId'
+  ): Promise<{ released: number; stillExists: number }> {
     const bookingStore = useBookingStore()
     const targets = bookingIds
       .map((bid) => bookingStore.bookings.find((b) => b.id === bid))
-      .filter((b): b is Booking => !!b && !!b.taxInvoiceDocId && !documents.value.some((d) => d.id === b.taxInvoiceDocId))
-    const docIds = [...new Set(targets.map((b) => b.taxInvoiceDocId as string))]
+      .filter((b): b is Booking => !!b && !!b[field] && !documents.value.some((d) => d.id === b[field]))
+    const docIds = [...new Set(targets.map((b) => b[field] as string))]
     const missing = new Set<string>()
     for (const id of docIds) {
       if (!(await salesDocumentRepository.existsOnServer(id))) missing.add(id)
     }
     let released = 0
     targets.forEach((b) => {
-      if (!missing.has(b.taxInvoiceDocId as string)) return
-      b.taxInvoiceDocId = undefined
+      if (!missing.has(b[field] as string)) return
+      b[field] = undefined
       released++
     })
-    if (released) bookingStore.addLog(`ปลดงาน ${released} งานที่ค้างผูกกับใบแจ้งหนี้ที่ไม่มีในระบบแล้ว (${[...missing].join(', ')})`)
+    const kind = field === 'receiptDocId' ? 'ใบเสร็จ' : field === 'billingNoteDocId' ? 'ใบวางบิล' : 'ใบแจ้งหนี้'
+    if (released) bookingStore.addLog(`ปลดงาน ${released} งานที่ค้างผูกกับ${kind}ที่ไม่มีในระบบแล้ว (${[...missing].join(', ')})`)
     return { released, stillExists: targets.length - released }
   }
 
@@ -3312,6 +3357,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     createTaxInvoiceManual,
     taxInvoiceCreateBlockReasons,
     releaseOrphanTaxInvoiceClaims,
+    releaseOrphanClaims,
+    lastWriteFailure,
     updateTaxInvoiceManual,
     cancelBillingNote,
     markBillingBilled,

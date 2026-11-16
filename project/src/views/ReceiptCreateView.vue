@@ -34,6 +34,25 @@
       {{ submitError }}
     </div>
 
+    <!-- งานของเอกสารต้นทางที่ติดเงื่อนไข ทำให้สร้างใบเสร็จไม่ได้ (บอกเหตุผล + ปลดงานที่ค้างผูกกับใบเสร็จที่ไม่มีจริง) -->
+    <div v-if="!currentId && receiptBlockers.length" class="rounded-lg border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 text-sm">
+      <div class="font-semibold flex items-center gap-1"><span class="material-symbols-rounded text-base">warning</span>สร้างใบเสร็จไม่ได้ เพราะมีงาน {{ receiptBlockers.length }} งานติดอยู่</div>
+      <ul class="list-disc pl-6 mt-1 space-y-0.5">
+        <li v-for="p in receiptBlockers.slice(0, 15)" :key="p.key">{{ p.text }}</li>
+        <li v-if="receiptBlockers.length > 15">...และอีก {{ receiptBlockers.length - 15 }} งาน</li>
+      </ul>
+      <div v-if="orphanReceiptBookingIds.length" class="mt-3 rounded-lg border border-amber-400 bg-white/60 px-3 py-2">
+        มี <b>{{ orphanReceiptBookingIds.length }}</b> งานที่ระบบบันทึกว่า "ออกใบเสร็จแล้ว" แต่ใบเสร็จนั้น<b>ไม่มีอยู่ในระบบ</b> (ค้างจากการสร้างใบเสร็จที่บันทึกไม่สำเร็จ)
+        — กดปลดแล้วกดบันทึกใหม่ได้ ระบบตรวจกับเซิร์ฟเวอร์ก่อนว่าใบเสร็จนั้นไม่มีอยู่จริง
+        <div>
+          <button @click="releaseOrphanReceipts" :disabled="releasingReceipts" class="btn-primary mt-2 disabled:opacity-50">
+            <span class="material-symbols-rounded text-base">lock_open</span>
+            {{ releasingReceipts ? 'กำลังตรวจสอบ...' : `ปลดงานที่ค้าง ${orphanReceiptBookingIds.length} งาน` }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- แก้ไขเอกสารเดิม แต่ store ยังโหลดจาก Firestore ไม่เสร็จ (เช่น เข้าหน้านี้ตรงๆ ด้วย hard reload) — รอให้โหลดก่อนแสดงฟอร์ม กันข้อมูลว่างเปล่าทับของเดิม -->
     <div v-if="editingId && !editingDoc && salesDocumentsStore.loading" class="card-lg text-center text-muted py-10">กำลังโหลดข้อมูลเอกสาร...</div>
     <div v-else-if="editingId && !editingDoc" class="card-lg text-center text-muted py-10">ไม่พบเอกสารที่ต้องการแก้ไข</div>
@@ -218,6 +237,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { billingDocNo } from '@/utils/customerShipment'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type ReceiptSourceType, type DocumentNumberReuseCheck } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
@@ -314,6 +334,48 @@ const sourceDocs = computed(() =>
 /** ชนิดเอกสารต้นทางของใบเสร็จนี้ — อนุมานจากเอกสารที่เลือกไว้จริง (ไม่ผสมสองชนิดในใบเดียว) ถ้ายังไม่มีเลย ใช้ query ?source= เป็นค่าเริ่มต้น (มาจากหน้าเลือกเอกสาร) */
 const sourceType = computed<ReceiptSourceType>(() => sourceDocs.value[0]?.type === 'BILLING' ? 'BILLING' : sourceDocs.value[0]?.type === 'TAX_INVOICE' ? 'TAX_INVOICE' : (route.query.source as string) === 'billing' ? 'BILLING' : 'TAX_INVOICE')
 const sourceLabel = computed(() => (sourceType.value === 'BILLING' ? 'ใบวางบิล' : 'ใบแจ้งหนี้'))
+
+/** งานของเอกสารต้นทางที่ทำให้สร้างใบเสร็จไม่ได้ — เงื่อนไขเดียวกับ createReceiptFromSourceDocs (หาไม่เจอ / ออกใบเสร็จแล้ว) */
+const bookingStoreRef = useBookingStore()
+const receiptNumberOf = (id?: string) => salesDocumentsStore.documents.find((d) => d.id === id)?.number || ''
+const sourceBookingIds = computed(() => [...new Set(sourceDocs.value.flatMap((d) => d.bookingIds || []))])
+const receiptBlockers = computed(() => {
+  if (salesDocumentsStore.loading || bookingStoreRef.bookingsLoading) return []
+  const out: { key: string; text: string }[] = []
+  sourceBookingIds.value.forEach((bid) => {
+    const b = bookingStoreRef.bookings.find((x) => x.id === bid)
+    if (!b) return out.push({ key: bid, text: 'ไม่พบงานในระบบ (อาจถูกลบ หรือข้อมูลยังโหลดไม่ครบ — ลองรีเฟรชหน้า)' })
+    if (!b.receiptDocId) return
+    const number = receiptNumberOf(b.receiptDocId)
+    out.push({
+      key: bid,
+      text: number
+        ? `งาน ${billingDocNo(b)} ออกใบเสร็จไปแล้ว (เลขที่ ${number}) — ต้องยกเลิก/ลบใบเสร็จนั้นก่อน`
+        : `งาน ${billingDocNo(b)} ค้างสถานะ "ออกใบเสร็จแล้ว" แต่ไม่พบใบเสร็จนั้นในระบบ — กดปุ่ม "ปลดงานที่ค้าง" ด้านล่าง`,
+    })
+  })
+  return out
+})
+const orphanReceiptBookingIds = computed(() =>
+  sourceBookingIds.value.filter((bid) => {
+    const b = bookingStoreRef.bookings.find((x) => x.id === bid)
+    return !!b?.receiptDocId && !receiptNumberOf(b.receiptDocId)
+  })
+)
+const releasingReceipts = ref(false)
+const releaseOrphanReceipts = async () => {
+  if (!confirm(`ปลดงาน ${orphanReceiptBookingIds.value.length} งานที่ค้างผูกกับใบเสร็จที่ไม่มีในระบบ ให้กลับมาออกใบเสร็จได้?`)) return
+  releasingReceipts.value = true
+  try {
+    const { released, stillExists } = await salesDocumentsStore.releaseOrphanClaims([...orphanReceiptBookingIds.value], 'receiptDocId')
+    submitError.value = ''
+    alert(`ปลดแล้ว ${released} งาน` + (stillExists ? `\nอีก ${stillExists} งาน ใบเสร็จยังมีอยู่บนเซิร์ฟเวอร์ (ไม่ได้ปลด) — ลองรีเฟรชหน้า` : '\nกด "บันทึกเอกสาร" ใหม่ได้เลย'))
+  } catch (err: any) {
+    alert('ตรวจสอบกับเซิร์ฟเวอร์ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ต) — ยังไม่ได้ปลดงานใด ๆ: ' + (err?.message || err))
+  } finally {
+    releasingReceipts.value = false
+  }
+}
 
 watch(
   sourceDocs,

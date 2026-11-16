@@ -46,10 +46,19 @@ export const salesDocumentRepository = {
     await deleteDoc(doc(db, COLLECTION, id))
   },
 
-  subscribe(onData: (docs: SalesDocument[]) => void, onError: (err: any) => void) {
+  /** onData ได้ id ของเอกสารที่ยืนยันแล้วบนเซิร์ฟเวอร์ด้วย (ไม่นับเอกสารที่เพิ่งเขียนในเครื่องและยังรอเซิร์ฟเวอร์ตอบ — hasPendingWrites) */
+  subscribe(onData: (docs: SalesDocument[] | null, confirmedIds: Set<string>) => void, onError: (err: any) => void) {
+    let first = true
     return onSnapshot(
       collection(db, COLLECTION),
-      (snapshot) => onData(snapshot.docs.map((d) => revive({ id: d.id, ...d.data() }))),
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        const confirmedIds = new Set(snapshot.docs.filter((d) => !d.metadata.hasPendingWrites).map((d) => d.id))
+        // snapshot ที่เปลี่ยนแค่ metadata (เซิร์ฟเวอร์ตอบรับการเขียน) — ไม่สร้างเอกสารทั้งชุดใหม่ แจ้งแค่ id ที่ยืนยันแล้ว
+        if (!first && snapshot.docChanges().length === 0) return onData(null, confirmedIds)
+        first = false
+        onData(snapshot.docs.map((d) => revive({ id: d.id, ...d.data() })), confirmedIds)
+      },
       onError
     )
   },
