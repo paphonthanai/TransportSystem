@@ -1,5 +1,9 @@
 ﻿<template>
   <div class="space-y-4 pb-10">
+    <!-- เปิดหน้าแก้ไขแต่หาเอกสารเดิมไม่เจอ — ห้ามบันทึก (กันฟอร์มว่างไปทับเอกสารเดิม/เปลี่ยนเลขที่) -->
+    <div v-if="editTargetMissing" class="rounded-lg border border-red-300 bg-red-50 text-red-800 px-4 py-3 text-sm">
+      ไม่พบเอกสารที่จะแก้ไข (อาจถูกลบ หรือข้อมูลยังโหลดไม่เสร็จ) — กด Refresh อีกครั้ง หรือกลับไปเปิดจากหน้ารายการ · บันทึกไม่ได้จนกว่าจะพบเอกสาร
+    </div>
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="flex items-end gap-3">
         <div>
@@ -22,6 +26,13 @@
           บันทึกเอกสาร
         </button>
       </div>
+    </div>
+
+    <!-- แถวงานซ้ำ (เลขงานเดียวกันมากกว่า 1 แถว) — ยอดจะเกินจริง ห้ามบันทึกจนกว่าจะลบแถวซ้ำ -->
+    <div v-if="duplicateRowCount" class="rounded-lg border border-red-300 bg-red-50 text-red-800 px-4 py-3 text-sm">
+      <div class="font-semibold flex items-center gap-1"><span class="material-symbols-rounded text-base">content_copy</span>มีรายการงานซ้ำ {{ duplicateRowCount }} แถว (เลขงานเดียวกันมากกว่า 1 แถว) — ยอดรวมจะเกินจริง</div>
+      <div class="mt-1">กด "ลบแถวซ้ำ" ระบบจะเก็บไว้งานละ 1 แถว (แถวแรก) แล้วกดบันทึกเอกสารอีกครั้ง — บันทึกไม่ได้จนกว่าจะลบแถวซ้ำ</div>
+      <button @click="removeDuplicateRows" class="btn-primary mt-2"><span class="material-symbols-rounded text-base">delete_sweep</span>ลบแถวซ้ำ {{ duplicateRowCount }} แถว</button>
     </div>
 
     <div v-if="sourceNumber" class="text-xs text-muted flex items-center gap-1">
@@ -723,8 +734,34 @@ const numberReuseCheck = computed<DocumentNumberReuseCheck>(() => {
 const numberDuplicate = computed(() => !numberReuseCheck.value.eligible)
 const numberReusable = computed(() => numberReuseCheck.value.eligible && !!numberReuseCheck.value.previousDocumentId)
 
+/** แถวที่เลขงาน (deliveryNo) ซ้ำกับแถวก่อนหน้า — งานหนึ่งออกใบแจ้งหนี้ได้แถวเดียว (กันยอดเกินจริงจากแถวซ้ำ เช่น บั๊กบันทึกซ้ำเร็วๆ เดิม) */
+const duplicateRowIndexes = computed(() => {
+  const seen = new Set<string>()
+  const dup: number[] = []
+  rows.value.forEach((r, idx) => {
+    if (!r.deliveryNo) return
+    if (seen.has(r.deliveryNo)) dup.push(idx)
+    else seen.add(r.deliveryNo)
+  })
+  return dup
+})
+const duplicateRowCount = computed(() => duplicateRowIndexes.value.length)
+const removeDuplicateRows = () => {
+  const drop = new Set(duplicateRowIndexes.value)
+  rows.value = rows.value.filter((_r, idx) => !drop.has(idx))
+}
+
+/** โหมดแก้ไขแต่ไม่พบเอกสารเดิม — ห้ามบันทึก ไม่งั้นข้อมูลฟอร์มว่างจะไปทับเอกสารเดิม */
+const editTargetMissing = isEditMode && !editingDoc
+
 const canSubmit = computed(
-  () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
+  () =>
+    !editTargetMissing &&
+    customerName.value.trim().length > 0 &&
+    rows.value.length > 0 &&
+    rows.value.every((r) => r.qty > 0) &&
+    !numberDuplicate.value &&
+    duplicateRowCount.value === 0
 )
 
 /** เงินสด = เครดิต 0 วัน (ครบกำหนดวันเดียวกัน), เครดิต (ไม่แสดงวันที่) = ไม่บันทึกจำนวนวัน/วันครบกำหนดเลย */

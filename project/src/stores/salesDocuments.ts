@@ -442,10 +442,25 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     remote.forEach((d) => lastKnownDocJson.set(d.id, JSON.stringify(d)))
   }
 
+  /**
+   * รายการที่เครื่องนี้สั่งเขียน/ลบไปแล้วแต่ยังไม่เห็นผลใน snapshot — เอกสารหนึ่งใบบันทึกรายการทีละแถว (หลายสิบ write แยกกัน)
+   * snapshot ที่มาระหว่างทางจึงอาจเห็นรายการรอบใหม่แค่บางส่วน หรือยังเห็นแถวที่สั่งลบไปแล้ว ถ้าเอา snapshot นั้นมาแทนทั้งชุด
+   * store จะลืมแถวที่ยังเขียนไม่เสร็จ (บันทึกรอบถัดไปลบไม่ถึง ค้างบนเซิร์ฟเวอร์ = แถวซ้ำ ยอดเพี้ยน — บั๊ก INV202611160001)
+   * หรือแถวที่ลบแล้วโผล่กลับมาให้หน้าแก้ไขหยิบไปบันทึกซ้ำ จึงรวม snapshot กับงานที่ยังค้างอยู่เสมอ
+   */
+  const pendingItemWrites = new Map<string, SalesDocumentItem>()
+  const pendingItemDeletes = new Set<string>()
+
   function applyRemoteItems(remote: SalesDocumentItem[]) {
-    items.value = remote
+    const remoteIds = new Set(remote.map((i) => i.id))
+    remoteIds.forEach((id) => pendingItemWrites.delete(id)) // เซิร์ฟเวอร์/แคชเห็นแถวที่เขียนแล้ว
+    ;[...pendingItemDeletes].forEach((id) => {
+      if (!remoteIds.has(id)) pendingItemDeletes.delete(id) // ลบสำเร็จแล้ว
+    })
+    const merged = [...remote.filter((i) => !pendingItemDeletes.has(i.id)), ...pendingItemWrites.values()]
+    items.value = merged
     lastKnownItemJson.clear()
-    remote.forEach((i) => lastKnownItemJson.set(i.id, JSON.stringify(i)))
+    merged.forEach((i) => lastKnownItemJson.set(i.id, JSON.stringify(i)))
   }
 
   watch(
@@ -482,14 +497,20 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         if (lastKnownItemJson.get(i.id) === json) return
         lastKnownItemJson.set(i.id, json)
         const { id, ...rest } = i
+        pendingItemDeletes.delete(id)
+        pendingItemWrites.set(id, i)
         salesDocumentItemRepository.set(id, rest).catch((err: any) => {
+          pendingItemWrites.delete(id)
           error.value = err?.message || 'บันทึกรายการเอกสารไป Firestore ไม่สำเร็จ'
         })
       })
       lastKnownItemJson.forEach((_json, id) => {
         if (currentIds.has(id)) return
         lastKnownItemJson.delete(id)
+        pendingItemWrites.delete(id)
+        pendingItemDeletes.add(id)
         salesDocumentItemRepository.delete(id).catch((err: any) => {
+          pendingItemDeletes.delete(id)
           error.value = err?.message || 'ลบรายการเอกสารจาก Firestore ไม่สำเร็จ'
         })
       })
@@ -537,7 +558,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
   }
 
-  trackLoading(fetchAll())
+  const loadedPromise = trackLoading(fetchAll())
+  /** รอเอกสาร+รายการโหลดรอบแรกเสร็จ — หน้าแก้ไขเอกสารต้องรอก่อนสร้างฟอร์ม (ดู router meta.waitForSalesDocuments) */
+  const whenLoaded = () => loadedPromise
 
   const itemsForDocument = (documentId: string) => items.value.filter((i) => i.documentId === documentId).sort((a, b) => a.sortOrder - b.sortOrder)
 
@@ -3358,6 +3381,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     taxInvoiceCreateBlockReasons,
     releaseOrphanTaxInvoiceClaims,
     releaseOrphanClaims,
+    whenLoaded,
     lastWriteFailure,
     updateTaxInvoiceManual,
     cancelBillingNote,

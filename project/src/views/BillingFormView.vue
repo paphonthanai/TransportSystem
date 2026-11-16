@@ -1,5 +1,9 @@
 ﻿<template>
   <div class="space-y-4 pb-10">
+    <!-- เปิดหน้าแก้ไขแต่หาเอกสารเดิมไม่เจอ — ห้ามบันทึก (กันฟอร์มว่างไปทับเอกสารเดิม/เปลี่ยนเลขที่) -->
+    <div v-if="editTargetMissing" class="rounded-lg border border-red-300 bg-red-50 text-red-800 px-4 py-3 text-sm">
+      ไม่พบเอกสารที่จะแก้ไข (อาจถูกลบ หรือข้อมูลยังโหลดไม่เสร็จ) — กด Refresh อีกครั้ง หรือกลับไปเปิดจากหน้ารายการ · บันทึกไม่ได้จนกว่าจะพบเอกสาร
+    </div>
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="flex items-end gap-3">
         <div>
@@ -752,8 +756,11 @@ const numberDuplicate = computed(() => !numberReuseCheck.value.eligible)
 /** true เฉพาะกรณี "เคยใช้แต่ reuse ได้" — ไม่บล็อกการบันทึก แค่แจ้งให้ผู้ใช้รู้ว่าเลขนี้เคยผูกกับเอกสารอื่นมาก่อน */
 const numberReusable = computed(() => numberReuseCheck.value.eligible && !!numberReuseCheck.value.previousDocumentId)
 
+/** โหมดแก้ไขแต่ไม่พบเอกสารเดิม — ห้ามบันทึก ไม่งั้นข้อมูลฟอร์มว่างจะไปทับเอกสารเดิม */
+const editTargetMissing = isEditMode && !editingDoc
+
 const canSubmit = computed(
-  () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
+  () => !editTargetMissing && customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
 )
 
 /** เงินสด = เครดิต 0 วัน (ครบกำหนดวันเดียวกัน), เครดิต (ไม่แสดงวันที่) = ไม่บันทึกจำนวนวัน/วันครบกำหนดเลย */
