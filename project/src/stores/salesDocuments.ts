@@ -1660,7 +1660,13 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       const bookings = targetBookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid)).filter((b): b is Booking => !!b)
       bookings
         .filter((b) => b.taxInvoiceDocId)
-        .forEach((b) => reasons.push(`งาน ${label(b)} ออกใบแจ้งหนี้ไปแล้ว (เลขที่ ${taxInvoiceNumber(b.taxInvoiceDocId)}) — เอางานนี้ออก หรือยกเลิกใบแจ้งหนี้เดิมก่อน`))
+        .forEach((b) =>
+          reasons.push(
+            documents.value.some((d) => d.id === b.taxInvoiceDocId)
+              ? `งาน ${label(b)} ออกใบแจ้งหนี้ไปแล้ว (เลขที่ ${taxInvoiceNumber(b.taxInvoiceDocId)}) — เอางานนี้ออก หรือยกเลิกใบแจ้งหนี้เดิมก่อน`
+              : `งาน ${label(b)} ค้างสถานะ "ออกใบแจ้งหนี้แล้ว" แต่ไม่พบใบแจ้งหนี้นั้นในระบบ — กลับไปหน้าเลือกงานแล้วกด "ปลดงานที่ค้าง"`
+          )
+        )
       /** งานที่เลือกเพิ่มนอกใบวางบิล (หน้าเลือกงาน TaxInvoiceBookingSelectView.vue) ต้องผ่านเงื่อนไขเดียวกับการออกใบแจ้งหนี้จากงานตรง
        *  ลูกค้าเดียวกับใบวางบิล ประเภทงานเดียวกันทั้งใบ ยืนยันการจบงานแล้ว และไม่อยู่ในใบวางบิลอื่น */
       if (bookings.some((b) => b.category !== bookings[0].category)) reasons.push('มีงานต่างประเภท (Feed) ปนกัน — ต้องออกใบแจ้งหนี้แยกทีละประเภท')
@@ -1690,6 +1696,31 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       if (!reuse.eligible) reasons.push(reuse.reason || `เลขที่เอกสาร ${manualNumber} ถูกใช้ไปแล้ว`)
     }
     return reasons
+  }
+
+  /**
+   * งานที่ยังติด taxInvoiceDocId ของใบแจ้งหนี้ที่ "ไม่มีอยู่แล้ว" (ค้างจากการสร้างที่บันทึกขึ้นเซิร์ฟเวอร์ไม่สำเร็จ หรือการลบรุ่นเก่า
+   * ที่ปลดงานไม่ครบ) — งานพวกนี้ถูกมองว่าออกใบแจ้งหนี้ไปแล้ว ดึงมาออกใบใหม่ไม่ได้ ยอดจึงขาด
+   * ยืนยันกับเซิร์ฟเวอร์ทีละใบก่อนปลด (ไม่เชื่อแคชในเครื่องที่อาจยังโหลดเอกสารไม่ครบ) ใบที่ยังมีอยู่จริงไม่แตะ
+   */
+  async function releaseOrphanTaxInvoiceClaims(bookingIds: string[]): Promise<{ released: number; stillExists: number }> {
+    const bookingStore = useBookingStore()
+    const targets = bookingIds
+      .map((bid) => bookingStore.bookings.find((b) => b.id === bid))
+      .filter((b): b is Booking => !!b && !!b.taxInvoiceDocId && !documents.value.some((d) => d.id === b.taxInvoiceDocId))
+    const docIds = [...new Set(targets.map((b) => b.taxInvoiceDocId as string))]
+    const missing = new Set<string>()
+    for (const id of docIds) {
+      if (!(await salesDocumentRepository.existsOnServer(id))) missing.add(id)
+    }
+    let released = 0
+    targets.forEach((b) => {
+      if (!missing.has(b.taxInvoiceDocId as string)) return
+      b.taxInvoiceDocId = undefined
+      released++
+    })
+    if (released) bookingStore.addLog(`ปลดงาน ${released} งานที่ค้างผูกกับใบแจ้งหนี้ที่ไม่มีในระบบแล้ว (${[...missing].join(', ')})`)
+    return { released, stillExists: targets.length - released }
   }
 
   function createTaxInvoiceManual(data: ManualDocumentFormData): SalesDocument | null {
@@ -2735,13 +2766,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
     if (!doc || doc.status !== 'DRAFT') return false
     if (sourceDocsClaimedByOtherReceipts([id]).length > 0) return false
-    if (doc.bookingIds.length) {
-      const bookingStore = useBookingStore()
-      doc.bookingIds.forEach((bid) => {
-        const b = bookingStore.bookings.find((bk) => bk.id === bid)
-        if (b && b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
-      })
-    }
+    // ปลดทุกงานที่ผูกกับใบนี้ (ไม่ใช่แค่ doc.bookingIds) — กันงานค้างสถานะ "ออกใบแจ้งหนี้แล้ว" ทั้งที่ใบถูกลบไปแล้ว
+    useBookingStore().bookings.forEach((b) => {
+      if (b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
+    })
     if (doc.parentDocumentId) {
       const parent = documents.value.find((d) => d.id === doc.parentDocumentId && d.type === 'BILLING')
       if (parent) {
@@ -3102,9 +3130,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       return { ok: false, message: `ไม่สามารถลบได้ เนื่องจากใบแจ้งหนี้ ${doc.number} มีใบเสร็จรับเงินที่อ้างอิงอยู่แล้ว — ต้องลบใบเสร็จนั้นก่อน` }
     }
     const bookingStore = useBookingStore()
-    doc.bookingIds.forEach((bid) => {
-      const b = bookingStore.bookings.find((bk) => bk.id === bid)
-      if (b && b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
+    // ปลดทุกงานที่ผูกกับใบนี้ (ไม่ใช่แค่ doc.bookingIds) — กันงานค้างสถานะ "ออกใบแจ้งหนี้แล้ว" ทั้งที่ใบถูกลบไปแล้ว
+    bookingStore.bookings.forEach((b) => {
+      if (b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
     })
     if (doc.parentDocumentId) {
       const parent = documents.value.find((d) => d.id === doc.parentDocumentId && d.type === 'BILLING')
@@ -3283,6 +3311,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     createInvoiceFromBilling,
     createTaxInvoiceManual,
     taxInvoiceCreateBlockReasons,
+    releaseOrphanTaxInvoiceClaims,
     updateTaxInvoiceManual,
     cancelBillingNote,
     markBillingBilled,

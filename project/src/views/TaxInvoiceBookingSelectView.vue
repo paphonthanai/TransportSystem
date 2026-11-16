@@ -32,6 +32,17 @@
           <li v-for="p in billingProblems.slice(0, 20)" :key="p.key">{{ p.text }}</li>
           <li v-if="billingProblems.length > 20">...และอีก {{ billingProblems.length - 20 }} งาน</li>
         </ul>
+        <div v-if="orphanBookingIds.length" class="mt-3 rounded-lg border border-amber-400 bg-white/60 px-3 py-2">
+          <div>
+            มี <b>{{ orphanBookingIds.length }}</b> งานที่ระบบบันทึกว่า "ออกใบแจ้งหนี้แล้ว" แต่ใบแจ้งหนี้นั้น<b>ไม่มีอยู่ในระบบ</b>
+            (ค้างจากการสร้างใบแจ้งหนี้ที่บันทึกไม่สำเร็จ หรือใบที่ถูกลบไป) — กดปลดเพื่อให้ดึงงานเหล่านี้มาออกใบแจ้งหนี้ได้
+            ระบบจะตรวจกับเซิร์ฟเวอร์ก่อนว่าใบแจ้งหนี้ไม่มีอยู่จริง ใบที่ยังมีอยู่จะไม่ถูกแตะ
+          </div>
+          <button @click="releaseOrphans" :disabled="releasing" class="btn-primary mt-2 disabled:opacity-50">
+            <span class="material-symbols-rounded text-base">lock_open</span>
+            {{ releasing ? 'กำลังตรวจสอบ...' : `ปลดงานที่ค้าง ${orphanBookingIds.length} งาน` }}
+          </button>
+        </div>
       </div>
       <div v-else-if="selectedDiffersFromBilling" class="mt-2">มีงานของใบวางบิลที่ไม่ได้ติ๊กไว้ ยอดใบแจ้งหนี้จะไม่เท่าใบวางบิล</div>
     </div>
@@ -208,12 +219,51 @@ const billingProblems = computed(() => {
       return
     }
     const name = `งาน ${billingDocNo(b)}`
-    if (b.taxInvoiceDocId) out.push({ key: bid, text: `${name} ออกใบแจ้งหนี้ไปแล้ว${taxInvoiceNumberOf(b.taxInvoiceDocId) ? ` (เลขที่ ${taxInvoiceNumberOf(b.taxInvoiceDocId)})` : ''}` })
+    if (b.taxInvoiceDocId) {
+      const number = taxInvoiceNumberOf(b.taxInvoiceDocId)
+      out.push({
+        key: bid,
+        text: number
+          ? `${name} ออกใบแจ้งหนี้ไปแล้ว (เลขที่ ${number}) — ต้องยกเลิก/ลบใบแจ้งหนี้นั้นก่อนถึงจะดึงมาออกใหม่ได้`
+          : `${name} ค้างสถานะ "ออกใบแจ้งหนี้แล้ว" แต่ไม่พบใบแจ้งหนี้นั้นในระบบ — กดปุ่ม "ปลดงานที่ค้าง" ด้านล่าง`,
+      })
+    }
     else if (b.status !== 'DELIVERED') out.push({ key: bid, text: `${name} ยังไม่จบงาน (สถานะ "${bookingStatusLabel[b.status] || b.status}") — ต้องกดจบงานก่อน` })
     else if (groupCategory && b.category !== groupCategory) out.push({ key: bid, text: `${name} เป็นประเภทงาน ${categoryFeedLabel[b.category]} — ต้องออกใบแจ้งหนี้แยกอีกใบ` })
   })
   return out
 })
+/** งานของใบวางบิลที่ผูก taxInvoiceDocId กับเอกสารที่ไม่มีในเครื่อง (ยืนยันกับเซิร์ฟเวอร์อีกชั้นตอนกดปลด) */
+const orphanBookingIds = computed(() => {
+  const doc = sourceBillingRef.value
+  if (!doc || salesDocumentsStore.loading) return []
+  return doc.bookingIds.filter((bid) => {
+    const b = bookingStore.bookings.find((x) => x.id === bid)
+    return !!b?.taxInvoiceDocId && !taxInvoiceNumberOf(b.taxInvoiceDocId)
+  })
+})
+const releasing = ref(false)
+const releaseOrphans = async () => {
+  if (!confirm(`ปลดงาน ${orphanBookingIds.value.length} งานที่ค้างผูกกับใบแจ้งหนี้ที่ไม่มีในระบบ ให้กลับมาออกใบแจ้งหนี้ได้?`)) return
+  releasing.value = true
+  try {
+    const ids = [...orphanBookingIds.value]
+    const { released, stillExists } = await salesDocumentsStore.releaseOrphanTaxInvoiceClaims(ids)
+    // งานที่เพิ่งปลด เลือกไว้ให้เลย (ถ้าผู้ใช้ยังไม่ได้ติ๊กเอง ระบบเลือกตาม watcher ให้อยู่แล้ว)
+    const freed = ids.filter((id) => !bookingStore.bookings.find((b) => b.id === id)?.taxInvoiceDocId)
+    pickerSelectedIds.value = new Set([...pickerSelectedIds.value, ...freed])
+    alert(
+      `ปลดแล้ว ${released} งาน` +
+        (stillExists ? `
+อีก ${stillExists} งาน ใบแจ้งหนี้ยังมีอยู่บนเซิร์ฟเวอร์ (ไม่ได้ปลด) — ลองรีเฟรชหน้าแล้วตรวจที่หน้าใบแจ้งหนี้` : '')
+    )
+  } catch (err: any) {
+    alert('ตรวจสอบกับเซิร์ฟเวอร์ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ต) — ยังไม่ได้ปลดงานใด ๆ: ' + (err?.message || err))
+  } finally {
+    releasing.value = false
+  }
+}
+
 const billingTripTotal = computed(() => {
   const doc = sourceBillingRef.value
   if (!doc) return 0

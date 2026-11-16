@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, onSnapshot, setDoc } from 'firebase/firestore'
+import { collection, deleteDoc, doc, getDocFromServer, getDocs, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import type { SalesDocument } from '@/stores/salesDocuments'
 
@@ -34,6 +34,12 @@ export const salesDocumentRepository = {
   /** upsert ด้วย id ที่ store สร้างเอง (genId('sdoc')) — ใช้ setDoc แทน create/update แยก เพราะฟังก์ชันสร้าง/แก้ไขเอกสารมีกระจายอยู่เกือบ 20 จุด */
   async set(id: string, data: Omit<SalesDocument, 'id'>): Promise<void> {
     await setDoc(doc(db, COLLECTION, id), sanitize(data as unknown as Record<string, unknown>))
+  },
+
+  /** มีเอกสารนี้อยู่จริงบนเซิร์ฟเวอร์หรือไม่ (ไม่เชื่อแคชในเครื่อง) — ใช้ยืนยันก่อนปลดงานที่ค้างผูกกับเอกสารที่ไม่มีแล้ว
+   *  ต่อเซิร์ฟเวอร์ไม่ได้ (ออฟไลน์) = โยน error ให้ผู้เรียกหยุด ไม่ถือว่า "ไม่มี" */
+  async existsOnServer(id: string): Promise<boolean> {
+    return (await getDocFromServer(doc(db, COLLECTION, id))).exists()
   },
 
   async delete(id: string): Promise<void> {
