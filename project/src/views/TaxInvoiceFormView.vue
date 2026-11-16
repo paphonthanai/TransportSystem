@@ -800,7 +800,12 @@ const saveAndGetDoc = () => {
   if (currentId.value) return salesDocumentsStore.updateTaxInvoiceManual(currentId.value, payload)
   const created = salesDocumentsStore.createTaxInvoiceManual(payload)
   if (!created) {
-    alert('สร้างใบแจ้งหนี้ไม่สำเร็จ — ใบวางบิลต้นทางอาจถูกออกใบแจ้งหนี้ไปแล้ว หรืองานขนส่งที่ผูกอยู่บางรายการถูกดึงไปออกใบแจ้งหนี้อื่นไปแล้ว')
+    const reasons = salesDocumentsStore.taxInvoiceCreateBlockReasons(payload)
+    alert(
+      reasons.length
+        ? 'สร้างใบแจ้งหนี้ไม่สำเร็จ เพราะ:\n• ' + reasons.slice(0, 10).join('\n• ') + (reasons.length > 10 ? `\n...และอีก ${reasons.length - 10} ข้อ` : '')
+        : 'สร้างใบแจ้งหนี้ไม่สำเร็จ — งานขนส่งที่ผูกอยู่ไม่ผ่านเงื่อนไข (ลูกค้า/ประเภทงานต้องตรงกัน งานต้องจบงานและยืนยันแล้ว และยังไม่ถูกออกใบแจ้งหนี้อื่น) ลองรีเฟรชหน้าแล้วทำใหม่'
+    )
     return null
   }
   currentId.value = created.id

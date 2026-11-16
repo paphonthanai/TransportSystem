@@ -12,7 +12,9 @@ import { salesDocumentRepository } from '@/repositories/salesDocumentRepository'
 import { salesDocumentItemRepository } from '@/repositories/salesDocumentItemRepository'
 import { computeRowAmount, computeRowDiscountBaht, computeRowVat, computeDocumentTotals, bookingBillingRow } from '@/utils/documentTotals'
 import { sortBookingsForDocumentMerge } from '@/utils/bookingMergeSort'
-import { isBookingConfirmedForBilling } from '@/utils/bookingStatus'
+import { isBookingConfirmedForBilling, bookingStatusLabel } from '@/utils/bookingStatus'
+import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
+import { billingDocNo as billingDocNoOf } from '@/utils/customerShipment'
 import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
 import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
 import { useAuditLogStore } from './auditLog'
@@ -1636,24 +1638,64 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     })
   }
 
-  function createTaxInvoiceManual(data: ManualDocumentFormData): SalesDocument | null {
-    const documentSettingsStore = useDocumentSettingsStore()
+  /**
+   * เหตุผลที่สร้างใบแจ้งหนี้/ใบกำกับภาษีไม่ได้ (ว่าง = สร้างได้) — เงื่อนไขเดียวกับที่ createTaxInvoiceManual บังคับจริงทุกข้อ
+   * ใช้แสดงหมายเหตุให้ผู้ใช้รู้ว่าติดตรงไหน (TaxInvoiceFormView.vue) แทนข้อความกว้างๆ ว่า "สร้างไม่สำเร็จ"
+   */
+  function taxInvoiceCreateBlockReasons(data: ManualDocumentFormData): string[] {
     const bookingStore = useBookingStore()
+    const reasons: string[] = []
+    const label = (b: Booking) => billingDocNoOf(b)
+    const taxInvoiceNumber = (id?: string) => documents.value.find((d) => d.id === id)?.number || 'อื่น'
     if (data.sourceBillingId) {
       const billing = documents.value.find((d) => d.id === data.sourceBillingId && d.type === 'BILLING')
-      if (!billing || billing.status !== 'BILLING_PENDING') return null
+      if (!billing) return ['ไม่พบใบวางบิลต้นทาง (อาจถูกลบไปแล้ว)']
+      if (billing.status !== 'BILLING_PENDING')
+        return [`ใบวางบิล ${billing.number} สถานะ "${salesDocumentStatusLabel('BILLING', billing.status)}" — ออกใบแจ้งหนี้จากใบวางบิลได้เฉพาะสถานะ "รอวางบิล" (อาจออกใบแจ้งหนี้จากใบนี้ไปแล้ว)`]
       /** เช็คเฉพาะกลุ่มงานขนส่งที่ระบุมาจริง (data.bookingIds) ไม่ใช่ทั้งหมดของใบวางบิลเสมอไป — รองรับกรณีใบวางบิลมีสินค้า
        *  หลาย Feed ที่ต้องแยกออกใบแจ้งหนี้ทีละ Feed (Feed อื่นที่ถูก claim ไปแล้วจากรอบก่อนหน้าไม่ควรมาบล็อครอบนี้) */
       const targetBookingIds = data.bookingIds && data.bookingIds.length ? data.bookingIds : billing.bookingIds
-      const linkedBookings = targetBookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid))
-      if (linkedBookings.some((b) => !b || b.taxInvoiceDocId)) return null
+      const missing = targetBookingIds.filter((bid) => !bookingStore.bookings.some((bk) => bk.id === bid)).length
+      if (missing) reasons.push(`ไม่พบงานขนส่ง ${missing} งานในระบบ (อาจถูกลบ หรือข้อมูลยังโหลดไม่ครบ — ลองรีเฟรชหน้าแล้วทำใหม่)`)
+      const bookings = targetBookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid)).filter((b): b is Booking => !!b)
+      bookings
+        .filter((b) => b.taxInvoiceDocId)
+        .forEach((b) => reasons.push(`งาน ${label(b)} ออกใบแจ้งหนี้ไปแล้ว (เลขที่ ${taxInvoiceNumber(b.taxInvoiceDocId)}) — เอางานนี้ออก หรือยกเลิกใบแจ้งหนี้เดิมก่อน`))
       /** งานที่เลือกเพิ่มนอกใบวางบิล (หน้าเลือกงาน TaxInvoiceBookingSelectView.vue) ต้องผ่านเงื่อนไขเดียวกับการออกใบแจ้งหนี้จากงานตรง
        *  ลูกค้าเดียวกับใบวางบิล ประเภทงานเดียวกันทั้งใบ ยืนยันการจบงานแล้ว และไม่อยู่ในใบวางบิลอื่น */
-      const bookings = linkedBookings as Booking[]
-      const extras = bookings.filter((b) => !billing.bookingIds.includes(b.id))
-      if (bookings.some((b) => b.category !== bookings[0].category)) return null
-      if (extras.some((b) => b.customer !== billing.customer || b.status !== 'DELIVERED' || !!b.billingNoteDocId || !isBookingConfirmedForBilling(b))) return null
+      if (bookings.some((b) => b.category !== bookings[0].category)) reasons.push('มีงานต่างประเภท (Feed) ปนกัน — ต้องออกใบแจ้งหนี้แยกทีละประเภท')
+      bookings
+        .filter((b) => !billing.bookingIds.includes(b.id))
+        .forEach((b) => {
+          if (b.customer !== billing.customer) reasons.push(`งาน ${label(b)} เป็นของลูกค้า "${b.customer}" ไม่ใช่ลูกค้าของใบวางบิล`)
+          if (b.status !== 'DELIVERED') reasons.push(`งาน ${label(b)} ยังไม่จบงาน (สถานะ "${bookingStatusLabel[b.status] || b.status}")`)
+          if (b.billingNoteDocId) reasons.push(`งาน ${label(b)} อยู่ในใบวางบิลอื่นแล้ว`)
+          if (!isBookingConfirmedForBilling(b)) reasons.push(`งาน ${label(b)} ยังไม่ได้ยืนยันการจบงาน (รอตรวจหลักฐานการส่ง)`)
+        })
+    } else if (data.bookingIds?.length) {
+      const missing = data.bookingIds.filter((bid) => !bookingStore.bookings.some((bk) => bk.id === bid)).length
+      if (missing) reasons.push(`ไม่พบงานขนส่ง ${missing} งานในระบบ (อาจถูกลบ หรือข้อมูลยังโหลดไม่ครบ — ลองรีเฟรชหน้าแล้วทำใหม่)`)
+      const bookings = data.bookingIds.map((bid) => bookingStore.bookings.find((b) => b.id === bid)).filter((b): b is Booking => !!b)
+      if (bookings.some((b) => b.category !== bookings[0].category)) reasons.push('มีงานต่างประเภท (Feed) ปนกัน — ต้องออกใบแจ้งหนี้แยกทีละประเภท')
+      bookings.forEach((b) => {
+        if (b.customer !== data.customer) reasons.push(`งาน ${label(b)} เป็นของลูกค้า "${b.customer}" ไม่ตรงกับลูกค้าในเอกสาร "${data.customer}"`)
+        if (b.status !== 'DELIVERED') reasons.push(`งาน ${label(b)} ยังไม่จบงาน (สถานะ "${bookingStatusLabel[b.status] || b.status}")`)
+        if (b.taxInvoiceDocId) reasons.push(`งาน ${label(b)} ออกใบแจ้งหนี้ไปแล้ว (เลขที่ ${taxInvoiceNumber(b.taxInvoiceDocId)})`)
+        if (!isBookingConfirmedForBilling(b)) reasons.push(`งาน ${label(b)} ยังไม่ได้ยืนยันการจบงาน (รอตรวจหลักฐานการส่ง)`)
+      })
     }
+    const manualNumber = data.number?.trim()
+    if (manualNumber) {
+      const reuse = checkDocumentNumberReuseEligibility(manualNumber)
+      if (!reuse.eligible) reasons.push(reuse.reason || `เลขที่เอกสาร ${manualNumber} ถูกใช้ไปแล้ว`)
+    }
+    return reasons
+  }
+
+  function createTaxInvoiceManual(data: ManualDocumentFormData): SalesDocument | null {
+    const documentSettingsStore = useDocumentSettingsStore()
+    const bookingStore = useBookingStore()
+    if (taxInvoiceCreateBlockReasons(data).length) return null
     if (!isDirectBookingClaimEligibleForTaxInvoice(data)) return null
     const manualNumber = data.number?.trim()
     /** กติกาปัจจุบัน: ตรวจแค่ว่ามี Active Document ถือเลขนี้อยู่หรือไม่ — ดูคอมเมนต์เดียวกันใน createBillingManual */
@@ -3240,6 +3282,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     appendBookingsToBilling,
     createInvoiceFromBilling,
     createTaxInvoiceManual,
+    taxInvoiceCreateBlockReasons,
     updateTaxInvoiceManual,
     cancelBillingNote,
     markBillingBilled,
