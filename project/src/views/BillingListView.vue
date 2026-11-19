@@ -182,7 +182,8 @@ import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
 import { salesDocumentStatusClass, salesDocumentStatusLabel, salesDocumentTypeLabel } from '@/utils/salesDocumentStatus'
 import { categoryFeedLabel } from '@/utils/bookingStatus'
-import { unclaimedBillingGroups } from '@/utils/billingPrefill'
+import { buildPrefillFromBilling, unclaimedBillingGroups } from '@/utils/billingPrefill'
+import { useDocumentPrefillStore } from '@/stores/documentPrefill'
 import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import type { Booking } from '@/types'
 import { useRememberedState } from '@/composables/useRememberedState'
@@ -358,6 +359,17 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
       break
     }
     case 'CREATE_INVOICE': {
+      /** ใบวางบิลที่กรอกรายการเอง (ไม่มีงานขนส่งผูก) — ไม่มีงานให้เลือก ไปหน้าสร้างใบแจ้งหนี้พร้อมรายการทั้งหมดของใบวางบิลเลย
+       *  (เดิมนับงานขนส่งได้ 0 แล้วแจ้งผิดว่า "งานถูกดึงไปออกใบแจ้งหนี้แล้ว") */
+      if (!doc.bookingIds?.length) {
+        if (doc.status !== 'BILLING_PENDING') {
+          alert(`ใบวางบิล ${doc.number} ออกใบแจ้งหนี้ไปแล้ว`)
+          break
+        }
+        useDocumentPrefillStore().setPrefill(buildPrefillFromBilling(doc, salesDocumentsStore.itemsForDocument(doc.id), bookingStore.bookings, []))
+        router.push('/tax-invoices/new')
+        break
+      }
       /** ไปหน้าเลือกงานขนส่งก่อนเสมอ (เลือกงานของใบวางบิลไว้ให้แล้ว เลือกงานเพิ่ม/เอาออกได้) แล้วค่อยไปตรวจสอบในหน้าสร้างใบแจ้งหนี้
        *  ใบวางบิลเก่าที่มีหลายประเภทงาน (Feed) ต้องออกใบแจ้งหนี้ทีละประเภท — หน้าเลือกงานเริ่มจากประเภทแรกที่ยังไม่ได้ออก */
       const groups = unclaimedBillingGroups(doc, bookingStore.bookings)

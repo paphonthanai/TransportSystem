@@ -2951,7 +2951,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function createReceiptFromSourceDocs(
     sourceIds: string[],
     sourceType: ReceiptSourceType,
-    overrides?: { customer?: string; reference?: string; contactId?: string; number?: string }
+    overrides?: { customer?: string; reference?: string; contactId?: string; number?: string; date?: Date }
   ): { doc: SalesDocument; warnings: string[] } | null {
     if (sourceIds.length === 0) return null
     const targetDocs = documents.value.filter((d) => sourceIds.includes(d.id) && d.type === sourceType)
@@ -2985,7 +2985,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
        *  (ย้ายมาที่ Receipt ทั้งหมด) การจ่ายเงินจึงต้องกด "เก็บเงิน" ที่ใบเสร็จนี้เสมอ ซึ่งจะไล่ปิดสถานะใบแจ้งหนี้ต้นทาง
        *  เป็น PAID ให้อัตโนมัติอยู่แล้ว (ดู recordReceiptPayment) */
       status: 'DRAFT',
-      date: now,
+      /** วันที่ตามที่เลือกในฟอร์ม (เดิมใช้วันนี้เสมอ ช่องวันที่ในหน้าสร้างใบเสร็จไม่มีผล) */
+      date: overrides?.date && !Number.isNaN(overrides.date.getTime()) ? overrides.date : now,
       amount,
       bookingIds,
       sourceDocumentIds: targetDocs.map((d) => d.id),
@@ -3019,7 +3020,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     id: string,
     sourceIds: string[],
     sourceType: ReceiptSourceType,
-    overrides?: { customer?: string; reference?: string; contactId?: string }
+    overrides?: { customer?: string; reference?: string; contactId?: string; date?: Date }
   ): { doc: SalesDocument; warnings: string[] } | null {
     if (sourceIds.length === 0) return null
     const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
@@ -3046,6 +3047,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const { amount, discountTotal, vatRate, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
     doc.customer = customer
     doc.reference = reference
+    if (overrides?.date && !Number.isNaN(overrides.date.getTime())) doc.date = overrides.date
     doc.amount = amount
     doc.bookingIds = bookingIds
     doc.sourceDocumentIds = targetDocs.map((d) => d.id)

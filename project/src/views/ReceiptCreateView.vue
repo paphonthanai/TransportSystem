@@ -238,6 +238,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { billingDocNo } from '@/utils/customerShipment'
+import { toDateInputValue } from '@/utils/dateRanges'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type ReceiptSourceType, type DocumentNumberReuseCheck } from '@/stores/salesDocuments'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
@@ -273,7 +274,7 @@ const currentId = ref<string | undefined>(editingId)
  *  (ดู watch ด้านล่างที่ prefill ฟอร์มทันทีที่ editingDoc ปรากฏ ไม่ว่าจะพร้อมตั้งแต่ mount หรือมาทีหลังจาก fetch เสร็จ) */
 const editingDoc = computed(() => (editingId ? salesDocumentsStore.documents.find((d) => d.id === editingId && d.type === 'RECEIPT') : undefined))
 
-const todayStr = () => new Date().toISOString().slice(0, 10)
+const todayStr = () => toDateInputValue(new Date())
 
 const customerName = ref('')
 const customerAddress = ref('')
@@ -317,7 +318,7 @@ watch(
     customerZipCode.value = doc.customerZipCode || ''
     customerTaxId.value = doc.customerTaxId || ''
     contactId.value = doc.contactId
-    dateStr.value = new Date(doc.date).toISOString().slice(0, 10)
+    dateStr.value = toDateInputValue(doc.date)
     reference.value = doc.reference || ''
     salesperson.value = doc.salesperson || authStore.userName
     useESignature.value = doc.useESignature ?? true
@@ -471,6 +472,7 @@ const saveAndGetDoc = () => {
     reference: reference.value || undefined,
     contactId: contactId.value,
     number: !currentId.value ? documentNumber.value.trim() || undefined : undefined,
+    date: dateStr.value ? new Date(dateStr.value) : undefined,
   }
   const result = currentId.value
     ? salesDocumentsStore.updateReceiptFromSourceDocs(currentId.value, sourceIds.value, sourceType.value, overrides)

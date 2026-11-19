@@ -67,8 +67,8 @@
             </div>
 
             <div class="text-right flex-shrink-0">
-              <div class="text-2xl font-bold text-primary">{{ docModeLabel[docMode].th }}</div>
-              <div class="text-xs text-gray-500">{{ sheet.label }}<template v-if="sheet.pageCount > 1"> · หน้า {{ sheet.pageIdx + 1 }}/{{ sheet.pageCount }}</template></div>
+              <div class="text-2xl font-bold text-primary" :class="showCornerFlag && 'clear-corner-flag'">{{ docModeLabel[docMode].th }}</div>
+              <div class="text-xs text-gray-500" :class="showCornerFlag && 'clear-corner-flag'">{{ sheet.label }}<template v-if="sheet.pageCount > 1"> · หน้า {{ sheet.pageIdx + 1 }}/{{ sheet.pageCount }}</template></div>
               <div v-if="statusStampLabel" class="status-stamp">{{ statusStampLabel }}</div>
               <div class="doc-meta-box text-left text-xs w-64">
                 <div class="flex justify-between gap-4">
@@ -1033,6 +1033,11 @@ const printDoc = () => window.print()
   }
   .print-page-break {
     page-break-after: always;
+  }
+  /* ตอนพิมพ์แผ่นเอกสารไม่มี padding (ใช้พื้นที่เต็ม A4) หัวเอกสารเลยชิดมุมขวาบนใต้สามเหลี่ยมสีมุม (56px) — ชื่อเอกสารโดนบังครึ่งคำ
+     เว้นขวาเท่าความกว้างมุมเฉพาะบรรทัดหัว (บนจอมี padding อยู่แล้ว ไม่ทับ) */
+  .clear-corner-flag {
+    padding-right: 60px;
   }
 }
 </style>
