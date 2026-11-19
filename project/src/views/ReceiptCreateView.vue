@@ -473,6 +473,13 @@ const saveAndGetDoc = () => {
     contactId: contactId.value,
     number: !currentId.value ? documentNumber.value.trim() || undefined : undefined,
     date: dateStr.value ? new Date(dateStr.value) : undefined,
+    customerAddress: customerAddress.value,
+    customerZipCode: customerZipCode.value,
+    customerTaxId: customerTaxId.value,
+    salesperson: salesperson.value,
+    useESignature: useESignature.value,
+    note: note.value,
+    internalNote: internalNote.value,
   }
   const result = currentId.value
     ? salesDocumentsStore.updateReceiptFromSourceDocs(currentId.value, sourceIds.value, sourceType.value, overrides)

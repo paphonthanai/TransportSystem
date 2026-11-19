@@ -30,6 +30,21 @@ export type PaymentTermMode = 'CREDIT_DAYS' | 'CASH' | 'CREDIT_NO_DATE'
 /** ประเภทเอกสารต้นทางที่ใบเสร็จอ้างอิงตรงได้ — TAX_INVOICE (เดิม) หรือ BILLING ตรงๆ (ข้าม Tax Invoice ไปเลย, ดู createReceiptFromSourceDocs) */
 export type ReceiptSourceType = 'TAX_INVOICE' | 'BILLING'
 
+/** ค่าที่ผู้ใช้กรอกในหน้าสร้าง/แก้ไขใบเสร็จจากเอกสารต้นทาง (ReceiptCreateView.vue) */
+export interface ReceiptFormOverrides {
+  customer?: string
+  reference?: string
+  contactId?: string
+  date?: Date
+  customerAddress?: string
+  customerZipCode?: string
+  customerTaxId?: string
+  salesperson?: string
+  useESignature?: boolean
+  note?: string
+  internalNote?: string
+}
+
 /**
  * หนึ่ง union รวมทุกประเภทเอกสาร แทนที่จะแยก union ต่อประเภท เพราะสถานะของ BILLING ต้องคงค่าเดิมเป๊ะ
  * (มี UI ที่ผูกกับค่าพวกนี้อยู่แล้วจาก BillingView.vue) และ 'PAID' ต้องมีความหมายเดียวกันไม่ว่าจะเป็น
@@ -2948,10 +2963,24 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    * ยังไม่มี receiptDocId (เป็นอิสระจาก sourceDocsClaimedByOtherReceipts ที่เช็คระดับเอกสาร — กันกรณีงานเดียวกันถูกดึงไป
    * ออกใบเสร็จตรงจากงานขนส่ง (createReceiptFromBookings) ไปแล้วซ้ำอีกทาง)
    */
+  /** ช่องในหน้าสร้าง/แก้ไขใบเสร็จจากเอกสารต้นทาง (ReceiptCreateView.vue) ที่ต้องบันทึกตามที่กรอก — เดิมบันทึกแค่ลูกค้า/อ้างอิง
+   *  ที่เหลือ (วันที่ ที่อยู่ พนักงานขาย หมายเหตุ ลายเซ็น) กรอกแล้วหายหมด ที่อยู่/รหัสไปรษณีย์/เลขผู้เสียภาษีที่เว้นว่าง = ใช้ของลูกค้า */
+  function applyReceiptFormOverrides(doc: SalesDocument, overrides?: ReceiptFormOverrides) {
+    if (!overrides) return
+    if (overrides.date && !Number.isNaN(overrides.date.getTime())) doc.date = overrides.date
+    if (overrides.customerAddress?.trim()) doc.customerAddress = overrides.customerAddress.trim()
+    if (overrides.customerZipCode?.trim()) doc.customerZipCode = overrides.customerZipCode.trim()
+    if (overrides.customerTaxId?.trim()) doc.customerTaxId = overrides.customerTaxId.trim()
+    if (overrides.salesperson !== undefined) doc.salesperson = overrides.salesperson
+    if (overrides.useESignature !== undefined) doc.useESignature = overrides.useESignature
+    if (overrides.note !== undefined) doc.note = overrides.note
+    if (overrides.internalNote !== undefined) doc.internalNote = overrides.internalNote
+  }
+
   function createReceiptFromSourceDocs(
     sourceIds: string[],
     sourceType: ReceiptSourceType,
-    overrides?: { customer?: string; reference?: string; contactId?: string; number?: string; date?: Date }
+    overrides?: ReceiptFormOverrides & { number?: string }
   ): { doc: SalesDocument; warnings: string[] } | null {
     if (sourceIds.length === 0) return null
     const targetDocs = documents.value.filter((d) => sourceIds.includes(d.id) && d.type === sourceType)
@@ -2985,8 +3014,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
        *  (ย้ายมาที่ Receipt ทั้งหมด) การจ่ายเงินจึงต้องกด "เก็บเงิน" ที่ใบเสร็จนี้เสมอ ซึ่งจะไล่ปิดสถานะใบแจ้งหนี้ต้นทาง
        *  เป็น PAID ให้อัตโนมัติอยู่แล้ว (ดู recordReceiptPayment) */
       status: 'DRAFT',
-      /** วันที่ตามที่เลือกในฟอร์ม (เดิมใช้วันนี้เสมอ ช่องวันที่ในหน้าสร้างใบเสร็จไม่มีผล) */
-      date: overrides?.date && !Number.isNaN(overrides.date.getTime()) ? overrides.date : now,
+      date: now,
       amount,
       bookingIds,
       sourceDocumentIds: targetDocs.map((d) => d.id),
@@ -2999,6 +3027,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
     Object.assign(receipt, resolveCustomerTaxSnapshot(customer))
     Object.assign(receipt, resolveContactSnapshot(customer, overrides?.contactId ?? targetDocs[0].contactId))
+    applyReceiptFormOverrides(receipt, overrides)
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, receiptItemRowsFromSourceDocs(targetDocs))
     if (sourceType === 'BILLING') {
@@ -3020,7 +3049,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     id: string,
     sourceIds: string[],
     sourceType: ReceiptSourceType,
-    overrides?: { customer?: string; reference?: string; contactId?: string; date?: Date }
+    overrides?: ReceiptFormOverrides
   ): { doc: SalesDocument; warnings: string[] } | null {
     if (sourceIds.length === 0) return null
     const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
@@ -3047,7 +3076,6 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const { amount, discountTotal, vatRate, vatAmount, whtAmount, bookingIds, warnings } = buildReceiptTotalsFromSourceDocs(targetDocs)
     doc.customer = customer
     doc.reference = reference
-    if (overrides?.date && !Number.isNaN(overrides.date.getTime())) doc.date = overrides.date
     doc.amount = amount
     doc.bookingIds = bookingIds
     doc.sourceDocumentIds = targetDocs.map((d) => d.id)
@@ -3056,6 +3084,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.vatAmount = vatAmount
     doc.whtAmount = whtAmount
     Object.assign(doc, resolveContactSnapshot(customer, overrides?.contactId ?? doc.contactId ?? targetDocs[0].contactId))
+    applyReceiptFormOverrides(doc, overrides)
     items.value = items.value.filter((i) => i.documentId !== id)
     addItemsToDocument(id, receiptItemRowsFromSourceDocs(targetDocs))
     if (sourceType === 'BILLING') {

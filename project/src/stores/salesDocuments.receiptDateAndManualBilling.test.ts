@@ -38,6 +38,34 @@ describe('วันที่ใบเสร็จตามที่เลือ�
   })
 })
 
+/** บั๊กจริง: ช่องอื่นในหน้าสร้างใบเสร็จ (ที่อยู่/รหัสไปรษณีย์/เลขผู้เสียภาษี/พนักงานขาย/หมายเหตุ/หมายเหตุภายใน/ลายเซ็น) กรอกแล้วไม่ถูกบันทึก */
+describe('ช่องอื่นในหน้าสร้างใบเสร็จถูกบันทึก', () => {
+  const fields = {
+    customerAddress: '99 ถนนทดสอบ',
+    customerZipCode: '18000',
+    customerTaxId: '0105555555555',
+    salesperson: 'พนักงาน ข',
+    useESignature: false,
+    note: 'หมายเหตุลูกค้า',
+    internalNote: 'หมายเหตุภายใน',
+  }
+
+  it('สร้างใบเสร็จเก็บทุกช่อง', () => {
+    const salesDocs = useSalesDocumentsStore()
+    const invoice = invoiceForReceipt()
+    const receipt = salesDocs.createReceiptFromSourceDocs([invoice.id], 'TAX_INVOICE', fields)!
+    expect(receipt.doc).toMatchObject(fields)
+  })
+
+  it('แก้ไขใบเสร็จเปลี่ยนทุกช่องได้', () => {
+    const salesDocs = useSalesDocumentsStore()
+    const invoice = invoiceForReceipt()
+    const receipt = salesDocs.createReceiptFromSourceDocs([invoice.id], 'TAX_INVOICE')!
+    const updated = salesDocs.updateReceiptFromSourceDocs(receipt.doc.id, [invoice.id], 'TAX_INVOICE', fields)!
+    expect(updated.doc).toMatchObject(fields)
+  })
+})
+
 /** บั๊กจริง: ใบวางบิลแบบกรอกรายการเอง (ไม่มีงานขนส่ง) กด "สร้างใบกำกับภาษี" ขึ้นว่างานถูกดึงไปออกใบแจ้งหนี้หมดแล้ว */
 describe('สร้างใบกำกับภาษีจากใบวางบิลที่กรอกรายการเอง', () => {
   it('prefill เอารายการทั้งหมดของใบวางบิลไป และบันทึกแล้วใบวางบิลปิดเป็น "วางบิลแล้ว"', () => {
