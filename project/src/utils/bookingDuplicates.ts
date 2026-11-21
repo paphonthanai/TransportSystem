@@ -1,24 +1,25 @@
 import type { Booking } from '@/types'
-import { customerShipmentNo } from '@/utils/customerShipment'
 
 /**
  * ตรวจงานซ้ำ — งานเดียวกันถูกสร้าง 2 ครั้ง (เช่น import ไฟล์เดิมซ้ำ หรือกดสร้างซ้ำ)
- * เกณฑ์ตามที่ผู้ใช้กำหนด: เลขชิพเม้นของลูกค้าซ้ำกันในลูกค้าเดียวกัน — ลูกค้าออกเลขชิพเม้นให้เที่ยวละเลข
- * เลขชิพเม้นของลูกค้า ดู customerShipmentNo — ไม่ใช่ Booking.po หรือเลขที่เอกสาร (docNo) ที่ระบบออกเอง
- * (เดิมเทียบเนื้อหางาน วัน/ลูกค้า/PO/คนขับ/หน้างาน/สินค้า ซึ่งงานจริงที่ส่งซ้ำที่เดิมก็ถูกจับเป็นงานซ้ำ)
- * งานที่ไม่มีเลขชิพเม้นไม่ถูกตรวจ ผู้ใช้กด "ไม่ใช่งานซ้ำ" เก็บไว้ได้ (ดู duplicateGroupKey)
+ * เกณฑ์ตามที่ผู้ใช้กำหนด: "เลขที่เอกสาร" ของลูกค้า (Booking.customerDocNo เช่น I-1235516026) ซ้ำกันในลูกค้าเดียวกัน
+ * (เดิมใช้เลขชิพเม้น/รับนาม — 1 ชิพเม้นมีได้หลายเอกสาร งานจริงคนละเอกสารจึงถูกจับเป็นงานซ้ำ)
+ * ไม่ใช้ docNo ที่ระบบรันเอง งานที่ไม่มีเลขที่เอกสารลูกค้าไม่ถูกตรวจ
+ * ผู้ใช้กด "ไม่ใช่งานซ้ำ" แล้ว ระบบจำไว้ที่ตัวงาน (Booking.notDuplicateKey) บนเซิร์ฟเวอร์ — เห็นตรงกันทุกเครื่อง
  */
 const norm = (s: string | undefined) => (s || '').replace(/\s+/g, '').toLowerCase()
 
-/** key เลขชิพเม้นของลูกค้า — ว่าง = ไม่มีเลขชิพเม้น (ไม่ตรวจซ้ำ) */
-export function shipmentKey(customer: string | undefined, shipmentNo: string | undefined): string {
-  const no = norm(shipmentNo)
+/** key เลขที่เอกสารของลูกค้า — ว่าง = ไม่มีเลขที่เอกสาร (ไม่ตรวจซ้ำ) */
+export function docNoKey(customer: string | undefined, customerDocNo: string | undefined): string {
+  const no = norm(customerDocNo)
   return no ? `${norm(customer)}|${no}` : ''
 }
 
-export const bookingShipmentKey = (b: Pick<Booking, 'customer' | 'reference' | 'shipmentNo'>) => shipmentKey(b.customer, customerShipmentNo(b))
+export const bookingDocNoKey = (b: Pick<Booking, 'customer' | 'customerDocNo'>) => docNoKey(b.customer, b.customerDocNo)
 
 export interface DuplicateGroup {
+  /** key เลขที่เอกสาร (ลูกค้า|เลขที่เอกสาร) ของกลุ่ม */
+  key: string
   bookings: Booking[]
 }
 
@@ -27,13 +28,15 @@ export function findDuplicateGroups(bookings: Booking[]): DuplicateGroup[] {
   const byCreated = (a: Booking, b: Booking) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   const map = new Map<string, Booking[]>()
   bookings.forEach((b) => {
-    const key = bookingShipmentKey(b)
+    const key = bookingDocNoKey(b)
     if (!key) return
     map.set(key, [...(map.get(key) || []), b])
   })
-  return [...map.values()].filter((list) => list.length > 1).map((list) => ({ bookings: [...list].sort(byCreated) }))
+  return [...map.entries()].filter(([, list]) => list.length > 1).map(([key, list]) => ({ key, bookings: [...list].sort(byCreated) }))
 }
 
-/** key ของกลุ่ม (ใช้จำว่าผู้ใช้กด "ไม่ใช่งานซ้ำ" ไว้แล้ว) — เปลี่ยนเมื่อมีงานเข้า/ออกจากกลุ่ม จึงเตือนใหม่ถ้ามีงานซ้ำเพิ่ม */
-// prefix SAME_SHIPMENT คงไว้ให้ตรงกับ key ที่ผู้ใช้เคยกด "ไม่ใช่งานซ้ำ" ไว้แล้ว
-export const duplicateGroupKey = (g: DuplicateGroup) => `SAME_SHIPMENT:${g.bookings.map((b) => b.id).sort().join(',')}`
+/**
+ * กลุ่มที่ผู้ใช้ยืนยัน "ไม่ใช่งานซ้ำ" แล้ว = ทุกงานในกลุ่มถูกกดไว้ด้วยเลขที่เอกสารเดียวกับตอนนี้
+ * มีงานใหม่เลขเดียวกันเข้ามา (ยังไม่ถูกกด) หรือแก้เลขที่เอกสาร → เตือนใหม่ เพราะเป็นงานที่ยังไม่ได้ตรวจจริง
+ */
+export const isDuplicateGroupDismissed = (g: DuplicateGroup) => g.bookings.every((b) => b.notDuplicateKey === g.key)

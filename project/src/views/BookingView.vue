@@ -136,23 +136,23 @@
           </div>
           <div class="p-6 space-y-4 text-sm">
             <div class="text-xs text-muted">
-              เกณฑ์: เลขชิพเม้นลูกค้าซ้ำกันในลูกค้าเดียวกัน — งานที่ไม่มีเลขชิพเม้นลูกค้าไม่ถูกตรวจ —
+              เกณฑ์: เลขที่เอกสารลูกค้าซ้ำกันในลูกค้าเดียวกัน — งานที่ไม่มีเลขที่เอกสารลูกค้าไม่ถูกตรวจ — กด "ไม่ใช่งานซ้ำ" แล้วจะไม่เตือนอีกทุกเครื่อง (เว้นมีงานเลขเดียวกันเพิ่ม) —
               งานแรก (สร้างก่อน) น่าจะเป็นต้นฉบับ ลบได้เฉพาะผู้ดูแลระบบ
             </div>
             <div v-if="!activeDuplicateGroups.length" class="text-center text-muted py-6">ไม่มีงานที่อาจซ้ำแล้ว</div>
-            <div v-for="group in activeDuplicateGroups" :key="duplicateGroupKey(group)" class="rounded-lg border border-border">
+            <div v-for="group in activeDuplicateGroups" :key="group.key" class="rounded-lg border border-border">
               <div class="flex items-center justify-between gap-2 px-3 py-2 bg-surface-2 rounded-t-lg">
-                <span class="font-semibold">เลขชิพเม้นลูกค้าซ้ำ: {{ customerShipmentNo(group.bookings[0]) }} · {{ group.bookings[0].customer }}</span>
+                <span class="font-semibold">เลขที่เอกสารซ้ำ: {{ group.bookings[0].customerDocNo }} · {{ group.bookings[0].customer }}</span>
                 <button @click="dismissDuplicateGroup(group)" class="btn-sm">ไม่ใช่งานซ้ำ</button>
               </div>
               <table class="w-full text-xs">
                 <tbody>
                   <tr v-for="(b, idx) in group.bookings" :key="b.id" class="border-t border-border">
                     <td class="px-3 py-2 font-mono whitespace-nowrap">
-                      <RouterLink :to="`/job/${b.id}`" class="text-primary hover:underline">{{ customerShipmentNo(b) }}</RouterLink>
+                      <RouterLink :to="`/job/${b.id}`" class="text-primary hover:underline">{{ bookingDocNo(b) }}</RouterLink>
                       <span v-if="idx === 0" class="ml-1 text-[10px] font-semibold text-green-700">(สร้างก่อน)</span>
                     </td>
-                    <td class="px-3 py-2 font-mono whitespace-nowrap" title="เลขที่เอกสาร">เอกสาร {{ bookingDocNo(b) }}</td>
+                    <td class="px-3 py-2 font-mono whitespace-nowrap" title="เลขชิพเม้น/รับนาม">ชิพเม้น {{ customerShipmentNo(b) || '-' }}</td>
                     <td class="px-3 py-2 whitespace-nowrap">{{ formatShortDate(b.loadingDate) }} {{ b.loadingTime || '' }}</td>
                     <td class="px-3 py-2">{{ b.driverName || '-' }} · {{ b.plate || '-' }}</td>
                     <td class="px-3 py-2">{{ destinationLabel(b) }}</td>
@@ -1162,7 +1162,7 @@ import { bookingDocNo, bookingRefNo, customerShipmentNo } from '@/utils/customer
 import ColumnHeader from '@/components/ColumnHeader.vue'
 import { useTableColumns, type TableColumn } from '@/composables/useTableColumns'
 import { useRememberedState } from '@/composables/useRememberedState'
-import { bookingShipmentKey, duplicateGroupKey, findDuplicateGroups, shipmentKey, type DuplicateGroup } from '@/utils/bookingDuplicates'
+import { bookingDocNoKey, docNoKey, findDuplicateGroups, isDuplicateGroupDismissed, type DuplicateGroup } from '@/utils/bookingDuplicates'
 import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -1517,28 +1517,15 @@ const matchesSearch = (b: Booking, q: string) => {
   return matchesBookingSearch(b, q, [driver?.nickname, driver?.code])
 }
 
-/** งานที่อาจซ้ำของ Fleet นี้ — ซ่อนกลุ่มที่ผู้ใช้กด "ไม่ใช่งานซ้ำ" แล้ว (จำไว้ในเครื่องนี้) */
-const DUP_DISMISS_KEY = 'tms.dismissedDuplicateGroups'
-const readDismissed = (): string[] => {
-  try {
-    return JSON.parse(localStorage.getItem(DUP_DISMISS_KEY) || '[]')
-  } catch {
-    return []
-  }
-}
-const dismissedDuplicates = ref<string[]>(readDismissed())
+/** งานที่อาจซ้ำของ Fleet นี้ — ซ่อนกลุ่มที่ผู้ใช้กด "ไม่ใช่งานซ้ำ" แล้ว (จำไว้ที่ตัวงานบนเซิร์ฟเวอร์ ทุกเครื่องเห็นตรงกัน
+ *  เดิมจำไว้ในเบราว์เซอร์เครื่องเดียว + key ผูกกับรายชื่องาน เครื่องอื่น/ล้างแคช/มีงานเข้ากลุ่ม จึงเด้งเตือนกลับมา) */
 const duplicateModalOpen = ref(false)
-const activeDuplicateGroups = computed(() =>
-  findDuplicateGroups(fleetBookings.value).filter((g) => !dismissedDuplicates.value.includes(duplicateGroupKey(g)))
-)
-const dismissDuplicateGroup = (group: DuplicateGroup) => {
-  dismissedDuplicates.value = [...dismissedDuplicates.value, duplicateGroupKey(group)]
-  try {
-    localStorage.setItem(DUP_DISMISS_KEY, JSON.stringify(dismissedDuplicates.value))
-  } catch {
-    /* เก็บไม่ได้ (โหมดส่วนตัว) — ซ่อนแค่รอบนี้ */
-  }
-}
+const activeDuplicateGroups = computed(() => findDuplicateGroups(fleetBookings.value).filter((g) => !isDuplicateGroupDismissed(g)))
+const dismissDuplicateGroup = (group: DuplicateGroup) =>
+  bookingStore.markNotDuplicate(
+    group.bookings.map((b) => b.id),
+    group.key
+  )
 
 const inProgressBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -2352,25 +2339,25 @@ const importTripClashFor = (row: ImportRowResult) => {
 /** ชื่อเล่นใน Excel ที่ยังไม่ได้ map เป็นคนขับ (ผู้ใช้ยังไม่ได้เลือก) — ต้องตรวจก่อนสร้างงาน */
 const importUnmappedDriverFor = (row: ImportRowResult) =>
   row.driverNickname && !row.driverName ? `ชื่อเล่น "${row.driverNickname}" ยังไม่ได้ map เป็นคนขับ — เลือกคนขับในคอลัมน์ พขร. ก่อน ไม่งั้นงานจะไม่มีคนขับ` : undefined
-const importShipmentKey = (row: ImportRowResult) => shipmentKey(row.customer, row.shipmentNo)
-/** เลขชิพเม้นที่มีอยู่แล้วใน Fleet นี้ → เลขที่งาน (ตรวจซ้ำตอน import) */
-const existingShipments = computed(() => {
+const importDocNoKey = (row: ImportRowResult) => docNoKey(row.customer, row.customerDocNo)
+/** เลขที่เอกสารลูกค้าที่มีอยู่แล้วใน Fleet นี้ → เลขชิพเม้นของงานนั้น (ตรวจซ้ำตอน import) */
+const existingDocNos = computed(() => {
   const map = new Map<string, string>()
   fleetBookings.value.forEach((b) => {
-    const key = bookingShipmentKey(b)
-    if (key) map.set(key, `เลขที่เอกสาร ${bookingDocNo(b)}`)
+    const key = bookingDocNoKey(b)
+    if (key) map.set(key, customerShipmentNo(b) ? `ชิพเม้น ${customerShipmentNo(b)}` : `งาน ${b.docNo}`)
   })
   return map
 })
-/** แถวที่เลขชิพเม้นซ้ำกับงานที่มีอยู่แล้ว (หรือแถวก่อนหน้าในไฟล์เดียวกัน) — ค่าเริ่มต้นข้ามไม่สร้าง แถวไม่มีเลขชิพเม้นไม่ตรวจ */
+/** แถวที่เลขที่เอกสารซ้ำกับงานที่มีอยู่แล้ว (หรือแถวก่อนหน้าในไฟล์เดียวกัน) — ค่าเริ่มต้นข้ามไม่สร้าง แถวไม่มีเลขที่เอกสารไม่ตรวจ */
 const importDuplicateFor = (row: ImportRowResult): string | undefined => {
-  const key = importShipmentKey(row)
+  const key = importDocNoKey(row)
   if (!key) return undefined
-  const docNo = existingShipments.value.get(key)
-  if (docNo) return `เลขชิพเม้นลูกค้า ${row.shipmentNo} มีงานนี้อยู่แล้วในระบบ (${docNo})`
-  const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importShipmentKey(r) === key)
+  const existing = existingDocNos.value.get(key)
+  if (existing) return `เลขที่เอกสาร ${row.customerDocNo} มีงานนี้อยู่แล้วในระบบ (${existing})`
+  const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importDocNoKey(r) === key)
   return earlier
-    ? `เลขชิพเม้นลูกค้า ${row.shipmentNo} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้${earlier.customerDocNo ? ` (เลขที่เอกสาร ${earlier.customerDocNo})` : ''}`
+    ? `เลขที่เอกสาร ${row.customerDocNo} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้${earlier.shipmentNo ? ` (ชิพเม้น ${earlier.shipmentNo})` : ''}`
     : undefined
 }
 /** แถวที่เลือก "ข้าม" (ค่าเริ่มต้น = ข้ามแถวที่อาจซ้ำ) */

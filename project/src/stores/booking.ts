@@ -787,6 +787,13 @@ export const useBookingStore = defineStore('booking', () => {
     return { ok: true }
   }
 
+  /** ยืนยัน "ไม่ใช่งานซ้ำ" ทั้งกลุ่ม — จำ key เลขที่เอกสารไว้ที่ทุกงานในกลุ่ม (บันทึกขึ้น Firestore ผ่าน deep watcher) */
+  function markNotDuplicate(ids: string[], key: string) {
+    const targets = bookings.value.filter((b) => ids.includes(b.id) && b.notDuplicateKey !== key)
+    targets.forEach((b) => (b.notDuplicateKey = key))
+    if (targets.length) addLog(`ยืนยันไม่ใช่งานซ้ำ เลขที่เอกสาร ${targets[0].customerDocNo || '-'} (${ids.length} งาน)`, { bookingId: targets[0].id })
+  }
+
   /**
    * แก้ค่าเที่ยวได้ไหม: ก่อนจัดรถทุก role / หลังจากนั้น ADMIN เสมอ และเสมียนจนกว่างานจะถูกนำไปวางบิล — ยกเว้นงานที่อยู่ใน
    * เอกสารรายได้รถร่วมแล้ว ล็อกทุก role (เอกสารเก็บยอด snapshot ไว้ แก้ที่งานจะไม่ตรงกับเอกสาร ต้องยกเลิกเอกสารก่อน)
@@ -1771,6 +1778,7 @@ export const useBookingStore = defineStore('booking', () => {
     staffBilledEditBlockedReason,
     tripFeeEditBlockedReason,
     updateBookingRefs,
+    markNotDuplicate,
     isLegacyPodUnreviewed,
     canApproveLegacyPod,
     approveLegacyPod,
