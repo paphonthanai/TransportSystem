@@ -39,7 +39,7 @@
         <input
           v-model="searchText"
           type="text"
-          placeholder="ค้นหา รายละเอียด/หน้างาน, ทะเบียน, ชนิดปูน, เลขที่ PO ลูกค้า, วันที่ส่งของสำเร็จ, ราคา, เลขชิพเม้น"
+          placeholder="ค้นหา รายละเอียด/หน้างาน, ทะเบียน, ชนิดปูน, เลขที่เอกสาร, เลขชิพเม้น, วันที่ส่งของสำเร็จ, ราคา, เลขชิพเม้น"
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
@@ -56,7 +56,7 @@
               <th class="text-left px-3 py-2 font-semibold">ทะเบียน</th>
               <th class="text-left px-3 py-2 font-semibold">ชนิดปูน</th>
               <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('po')">
-                เลขที่ PO ลูกค้า<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('po') }}</span>
+                เลขที่เอกสาร<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('po') }}</span>
               </th>
               <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('shipDate')">
                 วันที่ส่งของสำเร็จ<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('shipDate') }}</span>
@@ -76,7 +76,7 @@
               <td class="px-3 py-2 text-text">{{ bookingDescription(b) }}</td>
               <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ bookingProducts(b) }}</td>
-              <td class="px-3 py-2 text-text">{{ b.reference || '-' }}</td>
+              <td class="px-3 py-2 text-text whitespace-pre-line">{{ billingDocNo(b) }}</td>
               <td class="px-3 py-2 text-text">{{ formatDateShort(billingDateOf(b)) }}</td>
               <td class="px-3 py-2 text-right text-text">1</td>
               <td class="px-3 py-2 text-text">เที่ยว</td>
@@ -102,6 +102,8 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductsText } from '@/utils/bookingProducts'
+import { billingDocNo } from '@/utils/customerShipment'
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -130,6 +132,7 @@ const matchesTableColumns = (b: Booking) =>
     bookingDescription(b),
     b.plate,
     bookingProducts(b),
+    billingDocNo(b),
     b.reference,
     formatDateShort(billingDateOf(b)),
     formatBaht(bookingTotal(b)),
@@ -171,7 +174,7 @@ const sortIcon = (key: SortKey) => (sortKey.value !== key ? 'unfold_more' : sort
 const sortedEligibleBookings = computed(() => {
   const list = eligibleBookings.value.filter((b) => matchesTableColumns(b))
   const dir = sortDir.value === 'asc' ? 1 : -1
-  if (sortKey.value === 'po') list.sort((a, b) => (a.reference || '').localeCompare(b.reference || '') * dir)
+  if (sortKey.value === 'po') list.sort((a, b) => billingDocNo(a).localeCompare(billingDocNo(b)) * dir)
   else if (sortKey.value === 'shipDate') list.sort((a, b) => ((billingDateOf(a)?.getTime() ?? 0) - (billingDateOf(b)?.getTime() ?? 0)) * dir)
   else if (sortKey.value === 'index' && dir === -1) list.reverse()
   return list
@@ -195,13 +198,13 @@ const bookingDestination = (b: Booking) => {
 }
 const bookingDescription = (b: Booking) => {
   const dest = bookingDestination(b)
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products ? `${dest} — ${products}` : dest
 }
 /** ชนิดปูน (เหมือน BillingBookingSelectView.vue) — ข้อมูลเดียวกับที่ผสมอยู่ใน bookingDescription ด้านบนอยู่แล้ว
  *  (b.items[].product) แค่แยกออกมาเป็นคอลัมน์ของตัวเอง ไม่มี field/schema ใหม่ */
 const bookingProducts = (b: Booking) => {
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products || '-'
 }
 const bookingTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)

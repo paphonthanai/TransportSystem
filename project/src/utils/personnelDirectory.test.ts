@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPersonnelRows, filterPersonnelRows, countByRole, normalizePersonName, personnelStatusMismatch } from './personnelDirectory'
+import { buildPersonnelRows, filterPersonnelRows, countByRole, normalizePersonName, personnelStatusMismatch, sortPersonnelRows } from './personnelDirectory'
 import type { UserProfile } from '@/stores/users'
 import type { StaffRecord } from '@/stores/staff'
 import type { DriverRecord } from '@/stores/drivers'
@@ -94,6 +94,24 @@ describe('filterPersonnelRows', () => {
     expect(filterPersonnelRows(rows, { query: '0001' })).toHaveLength(1)
     const plateOf = (r: { driver?: { code: string } }) => (r.driver?.code === '0001' ? '73-1124 สระบุรี' : '')
     expect(filterPersonnelRows(rows, { query: '73-1124', plateOf })).toHaveLength(1)
+  })
+})
+
+describe('sortPersonnelRows', () => {
+  it('เรียงตามรหัสพนักงานจากน้อยไปมาก (ตัวเลขเรียงตามค่า) แถวที่ไม่มีรหัสอยู่ท้าย เรียงตามชื่อ', () => {
+    const rows = buildPersonnelRows({
+      users: [
+        user({ id: 'b', role: 'ADMIN', name: 'ข แอดมิน', email: 'b@x.com' }),
+        user({ id: 'a', role: 'ACCOUNTING', name: 'ก บัญชี', email: 'a@x.com' }),
+      ],
+      staff: [staff({ id: 's2', code: 'S010', firstName: 'สิบ' }), staff({ id: 's1', code: 'S002', firstName: 'สอง' })],
+      drivers: [
+        driver({ id: 'd3', code: '0100', firstName: 'ร้อย' }),
+        driver({ id: 'd1', code: '0009', firstName: 'เก้า' }),
+        driver({ id: 'd2', code: '0010', firstName: 'สิบ' }),
+      ],
+    })
+    expect(sortPersonnelRows(rows).map((r) => r.code || r.name)).toEqual(['0009', '0010', '0100', 'S002', 'S010', 'ก บัญชี', 'ข แอดมิน'])
   })
 })
 

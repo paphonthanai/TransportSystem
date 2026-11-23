@@ -181,6 +181,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { Vehicle, VehicleType, BookingCategory } from '@/types'
 import { VEHICLE_GROUPS, vehicleGroupOf, isUnresolvedVehicleType } from '@/utils/vehicleType'
 import { categoryFeedLabel } from '@/utils/bookingStatus'
+import { useRememberedState } from '@/composables/useRememberedState'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -197,6 +198,8 @@ const isLegacyDepartment = isUnresolvedVehicleType
  *  localStorage แบบเดิมเพราะข้อมูลพร้อมตั้งแต่ก่อน component mount แล้ว ไม่มีช่วง async ให้พลาด) */
 const vehicles = computed(() => vehiclesStore.vehicles)
 const search = ref('')
+// จำคำค้น/ตัวกรอง/การเรียง/หน้าที่เปิดอยู่ — กดแก้ไข/ดูเอกสารแล้วกลับมาไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState('vehicles', { search })
 /** ค้นหาจากทะเบียน/จังหวัด/เบอร์รถ/ทะเบียนหาง/ยี่ห้อ/ลักษณะรถ/เลขตัวถัง/เลขเครื่อง/ประเภทรถ/คนขับประจำ (ไม่สนตัวพิมพ์เล็ก-ใหญ่) */
 const filteredVehicles = computed(() => {
   const q = search.value.trim().toLowerCase()

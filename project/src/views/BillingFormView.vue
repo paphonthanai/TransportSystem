@@ -1,5 +1,9 @@
 ﻿<template>
   <div class="space-y-4 pb-10">
+    <!-- เปิดหน้าแก้ไขแต่หาเอกสารเดิมไม่เจอ — ห้ามบันทึก (กันฟอร์มว่างไปทับเอกสารเดิม/เปลี่ยนเลขที่) -->
+    <div v-if="editTargetMissing" class="rounded-lg border border-red-300 bg-red-50 text-red-800 px-4 py-3 text-sm">
+      ไม่พบเอกสารที่จะแก้ไข (อาจถูกลบ หรือข้อมูลยังโหลดไม่เสร็จ) — กด Refresh อีกครั้ง หรือกลับไปเปิดจากหน้ารายการ · บันทึกไม่ได้จนกว่าจะพบเอกสาร
+    </div>
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="flex items-end gap-3">
         <div>
@@ -371,6 +375,7 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductsText } from '@/utils/bookingProducts'
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocumentItem, type DocumentNumberReuseCheck } from '@/stores/salesDocuments'
@@ -391,6 +396,7 @@ import ContactPickerField from '@/components/shared/ContactPickerField.vue'
 import TaxRateCell from '@/components/shared/TaxRateCell.vue'
 import BillingAddBookingsModal from '@/components/billing/BillingAddBookingsModal.vue'
 import ImageLightbox from '@/components/shared/ImageLightbox.vue'
+import { insertRowsByDate } from '@/utils/billingRowOrder'
 import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
 import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
 import type { Booking } from '@/types'
@@ -595,7 +601,7 @@ const bookingPickerDestination = (b: Booking) => {
 const bookingPickerTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)
 const bookingPickerDescription = (b: Booking) => {
   const dest = bookingPickerDestination(b)
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products ? `${dest} — ${products}` : dest
 }
 
@@ -619,19 +625,6 @@ const addBookingRow = (b: Booking) => {
   rows.value.push(bookingRowOf(b))
 }
 
-/** เวลาของวันที่ในแถว (ไม่มีวันที่ = ไม่รู้ตำแหน่ง ไปท้ายสุด) */
-const rowTime = (r: Row) => {
-  const t = r.shipDate ? new Date(r.shipDate).getTime() : NaN
-  return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY
-}
-/** แทรกแถวงานใหม่ตามวันที่ (ก่อนแถวแรกที่วันที่ถัดไป) แทนการต่อท้าย — เทียบกับทุกแถวที่มีวันที่ (แถวของใบเดิมที่โหลดมา
- *  ไม่มี bookingId ติดมา จึงใช้วันที่เป็นเกณฑ์) แถวที่กรอกเองไม่มีวันที่อยู่ที่เดิม */
-const insertBookingRowByDate = (row: Row) => {
-  const t = rowTime(row)
-  const idx = rows.value.findIndex((r) => !!r.shipDate && rowTime(r) > t)
-  if (idx === -1) rows.value.push(row)
-  else rows.value.splice(idx, 0, row)
-}
 
 /** ทางลัดจาก SalesOrderListView.vue "🧾 ออกใบวางบิล" (bookingId เดี่ยว) และจากหน้า BillingBookingSelectView.vue
  *  "ใบวางบิลรวม" (bookingIds หลายรายการ คั่นด้วย , ) — preselect ลูกค้า + ดึงงานที่เลือกมาเป็นแถวให้ทันที
@@ -671,9 +664,9 @@ const onAddBookings = (bookings: Booking[]) => {
   const whtRates = [...new Set(rows.value.map((r) => r.whtRate))]
   const followComputedWht = whtOverride.value !== null && Math.round(whtOverride.value * 100) === Math.round(whtComputed.value * 100)
   // งานที่ติ๊กเพิ่มเรียงแทรกตามวันที่ส่งงานในใบ (เดิมต่อท้ายสุดเสมอ)
-  const newRows = [...bookings].sort((x, y) => rowTime(bookingRowOf(x)) - rowTime(bookingRowOf(y))).map(bookingRowOf)
+  const newRows = bookings.map(bookingRowOf)
   if (whtRates.length === 1) newRows.forEach((r) => (r.whtRate = whtRates[0]))
-  newRows.forEach(insertBookingRowByDate)
+  rows.value = insertRowsByDate(rows.value, newRows)
   if (followComputedWht) whtOverride.value = null
   addBookingsOpen.value = false
 }
@@ -812,8 +805,11 @@ const numberDuplicate = computed(() => !numberReuseCheck.value.eligible)
 /** true เฉพาะกรณี "เคยใช้แต่ reuse ได้" — ไม่บล็อกการบันทึก แค่แจ้งให้ผู้ใช้รู้ว่าเลขนี้เคยผูกกับเอกสารอื่นมาก่อน */
 const numberReusable = computed(() => numberReuseCheck.value.eligible && !!numberReuseCheck.value.previousDocumentId)
 
+/** โหมดแก้ไขแต่ไม่พบเอกสารเดิม — ห้ามบันทึก ไม่งั้นข้อมูลฟอร์มว่างจะไปทับเอกสารเดิม */
+const editTargetMissing = isEditMode && !editingDoc
+
 const canSubmit = computed(
-  () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value && !attachmentBusy.value
+  () => !editTargetMissing && customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value && !attachmentBusy.value
 )
 
 /** เงินสด = เครดิต 0 วัน (ครบกำหนดวันเดียวกัน), เครดิต (ไม่แสดงวันที่) = ไม่บันทึกจำนวนวัน/วันครบกำหนดเลย */

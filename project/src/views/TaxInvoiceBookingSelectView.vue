@@ -2,13 +2,13 @@
   <div class="space-y-4 pb-10">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div>
-        <h2 class="text-lg font-bold text-text">{{ sourceBilling ? `ออกใบแจ้งหนี้จากใบวางบิล ${sourceBilling.number}` : 'เลือกงานขนส่งเพื่อออกใบแจ้งหนี้รวม' }}</h2>
+        <h2 class="text-lg font-bold text-text">{{ sourceBillingRef ? `ออกใบแจ้งหนี้จากใบวางบิล ${sourceBillingRef.number}` : 'เลือกงานขนส่งเพื่อออกใบแจ้งหนี้รวม' }}</h2>
         <div class="text-xs text-muted mt-0.5">
-          {{ sourceBilling ? 'เลือกงานของใบวางบิลนี้ไว้ให้แล้ว เลือกงานเพิ่มหรือเอาออกได้ แล้วกดถัดไปเพื่อตรวจสอบก่อนสร้างใบแจ้งหนี้' : 'เลือกลูกค้าและงานขนส่ง แล้วนำข้อมูลไปแสดงในหน้าสร้างใบแจ้งหนี้' }}
+          {{ sourceBillingRef ? 'เลือกงานของใบวางบิลนี้ไว้ให้แล้ว เลือกงานเพิ่มหรือเอาออกได้ แล้วกดถัดไปเพื่อตรวจสอบก่อนสร้างใบแจ้งหนี้' : 'เลือกลูกค้าและงานขนส่ง แล้วนำข้อมูลไปแสดงในหน้าสร้างใบแจ้งหนี้' }}
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <button @click="router.push(sourceBilling ? '/billing-notes' : '/tax-invoices')" class="btn-secondary">ยกเลิก</button>
+        <button @click="router.push(sourceBillingRef ? '/billing-notes' : '/tax-invoices')" class="btn-secondary">ยกเลิก</button>
         <button @click="goToForm" :disabled="pickerSelectedIds.size === 0" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
           <span class="material-symbols-rounded text-base">arrow_forward</span>
           ถัดไป ({{ pickerSelectedIds.size }})
@@ -16,18 +16,49 @@
       </div>
     </div>
 
+    <!-- หมายเหตุ: ทำไมออกใบแจ้งหนี้จากใบวางบิลนี้ไม่ได้ / งานไหนของใบวางบิลดึงมาไม่ได้ (ยอดไม่ครบ) -->
+    <div v-if="billingBlockedNote" class="rounded-lg border border-red-300 bg-red-50 text-red-800 px-4 py-3 text-sm">
+      <div class="font-semibold flex items-center gap-1"><span class="material-symbols-rounded text-base">block</span>ออกใบแจ้งหนี้จากใบวางบิลนี้ไม่ได้</div>
+      <div class="mt-1">{{ billingBlockedNote }}</div>
+    </div>
+    <div v-else-if="sourceBillingRef" class="rounded-lg border px-4 py-3 text-sm" :class="billingProblems.length || selectedDiffersFromBilling ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-border bg-surface text-text'">
+      <div class="flex flex-wrap gap-x-6 gap-y-1">
+        <span>ใบวางบิล {{ sourceBillingRef.number }}: <b>{{ sourceBillingRef.bookingIds.length }}</b> งาน ยอด <b>{{ formatBaht(billingTripTotal) }}</b></span>
+        <span>เลือกไว้: <b>{{ pickerSelectedIds.size }}</b> งาน ยอด <b>{{ formatBaht(selectedTotal) }}</b> (ก่อน VAT/ส่วนลด)</span>
+      </div>
+      <div v-if="billingProblems.length" class="mt-2">
+        <div class="font-semibold flex items-center gap-1"><span class="material-symbols-rounded text-base">warning</span>งานในใบวางบิลที่ดึงมาออกใบแจ้งหนี้ไม่ได้ {{ billingProblems.length }} งาน</div>
+        <ul class="list-disc pl-6 mt-1 space-y-0.5">
+          <li v-for="p in billingProblems.slice(0, 20)" :key="p.key">{{ p.text }}</li>
+          <li v-if="billingProblems.length > 20">...และอีก {{ billingProblems.length - 20 }} งาน</li>
+        </ul>
+        <div v-if="orphanBookingIds.length" class="mt-3 rounded-lg border border-amber-400 bg-white/60 px-3 py-2">
+          <div>
+            มี <b>{{ orphanBookingIds.length }}</b> งานที่ระบบบันทึกว่า "ออกใบแจ้งหนี้แล้ว" แต่ใบแจ้งหนี้นั้น<b>ไม่มีอยู่ในระบบ</b>
+            (ค้างจากการสร้างใบแจ้งหนี้ที่บันทึกไม่สำเร็จ หรือใบที่ถูกลบไป) — กดปลดเพื่อให้ดึงงานเหล่านี้มาออกใบแจ้งหนี้ได้
+            ระบบจะตรวจกับเซิร์ฟเวอร์ก่อนว่าใบแจ้งหนี้ไม่มีอยู่จริง ใบที่ยังมีอยู่จะไม่ถูกแตะ
+          </div>
+          <button @click="releaseOrphans" :disabled="releasing" class="btn-primary mt-2 disabled:opacity-50">
+            <span class="material-symbols-rounded text-base">lock_open</span>
+            {{ releasing ? 'กำลังตรวจสอบ...' : `ปลดงานที่ค้าง ${orphanBookingIds.length} งาน` }}
+          </button>
+        </div>
+      </div>
+      <div v-else-if="selectedDiffersFromBilling" class="mt-2">มีงานของใบวางบิลที่ไม่ได้ติ๊กไว้ ยอดใบแจ้งหนี้จะไม่เท่าใบวางบิล</div>
+    </div>
+
     <div class="card-lg space-y-4">
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl">
         <div>
           <label class="field-label">ลูกค้า</label>
-          <select v-model="customerName" :disabled="!!sourceBilling" class="input-field w-full disabled:opacity-60">
+          <select v-model="customerName" :disabled="!!sourceBillingRef" class="input-field w-full disabled:opacity-60">
             <option value="">เลือกลูกค้า...</option>
             <option v-for="c in eligibleCustomers" :key="c" :value="c">{{ c }}</option>
           </select>
         </div>
         <div>
           <label class="field-label">ประเภทงาน (Feed)</label>
-          <select v-model="bookingCategory" :disabled="!customerName.trim() || !!sourceBilling" class="input-field w-full disabled:opacity-40">
+          <select v-model="bookingCategory" :disabled="!customerName.trim() || !!sourceBillingRef" class="input-field w-full disabled:opacity-40">
             <option value="">เลือกประเภทงาน...</option>
             <option v-for="c in bookingCategories" :key="c" :value="c">{{ categoryFeedLabel[c] }}</option>
           </select>
@@ -41,6 +72,10 @@
         </div>
       </div>
       <div v-if="bookingCategories.length > 1" class="text-[11px] text-muted">ลูกค้ารายนี้มีงานมากกว่าหนึ่งประเภท ต้องออกใบแจ้งหนี้แยกทีละประเภท (Feed) เสมอ</div>
+      <div class="text-[11px] text-muted leading-relaxed">
+        หมายเหตุ: งานที่ไม่แสดงในรายการ (ออกใบแจ้งหนี้ไม่ได้) — ยังไม่จบงาน (สถานะยังไม่ใช่ "ส่งสำเร็จ"), ออกใบแจ้งหนี้ไปแล้ว,
+        ต่างประเภทงาน (Feed) กับที่เลือก, หรือถ้าเลือกงานเพิ่มนอกใบวางบิล: อยู่ในใบวางบิลอื่นแล้ว / ยังไม่ได้ยืนยันการจบงาน — ตัวกรองเดือนที่เลือกไว้ก็ซ่อนงานเดือนอื่นด้วย
+      </div>
 
       <!-- ค้นหางานในตารางตามคอลัมน์ที่แสดง (ดู matchesTableColumns)
            กรองแค่ที่แสดง งานที่ติ๊กไว้แล้วยังถูกเลือกอยู่แม้ค้นคำอื่น -->
@@ -49,7 +84,7 @@
         <input
           v-model="searchText"
           type="text"
-          placeholder="ค้นหา รายละเอียด/หน้างาน, ทะเบียน, ชนิดปูน, เลขที่ PO ลูกค้า, วันที่ส่งของสำเร็จ, ราคา, เลขชิพเม้น"
+          placeholder="ค้นหา รายละเอียด/หน้างาน, ทะเบียน, ชนิดปูน, เลขที่เอกสาร, เลขชิพเม้น, วันที่ส่งของสำเร็จ, ราคา, เลขชิพเม้น"
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
@@ -66,7 +101,7 @@
               <th class="text-left px-3 py-2 font-semibold">ทะเบียน</th>
               <th class="text-left px-3 py-2 font-semibold">ชนิดปูน</th>
               <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('po')">
-                เลขที่ PO ลูกค้า<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('po') }}</span>
+                เลขที่เอกสาร<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('po') }}</span>
               </th>
               <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('shipDate')">
                 วันที่ส่งของสำเร็จ<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('shipDate') }}</span>
@@ -84,12 +119,12 @@
               </td>
               <td class="px-3 py-2 text-muted whitespace-nowrap">
                 {{ idx + 1 }}
-                <span v-if="sourceBilling && b.billingNoteDocId === sourceBilling.id" class="ml-1 text-[10px] font-semibold text-primary">ในใบวางบิล</span>
+                <span v-if="sourceBillingRef && b.billingNoteDocId === sourceBillingRef.id" class="ml-1 text-[10px] font-semibold text-primary">ในใบวางบิล</span>
               </td>
               <td class="px-3 py-2 text-text">{{ bookingDescription(b) }}</td>
               <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ bookingProducts(b) }}</td>
-              <td class="px-3 py-2 text-text">{{ b.reference || '-' }}</td>
+              <td class="px-3 py-2 text-text whitespace-pre-line">{{ billingDocNo(b) }}</td>
               <td class="px-3 py-2 text-text">{{ formatDateShort(billingDateOf(b)) }}</td>
               <td class="px-3 py-2 text-right text-text">1</td>
               <td class="px-3 py-2 text-text">เที่ยว</td>
@@ -115,6 +150,8 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductsText } from '@/utils/bookingProducts'
+import { billingDocNo } from '@/utils/customerShipment'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -122,7 +159,8 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { useDocumentPrefillStore } from '@/stores/documentPrefill'
 import { buildPrefillFromBilling, unclaimedBillingGroups } from '@/utils/billingPrefill'
-import { categoryFeedLabel, billingDateOf, billingMonthKey, billingMonthLabel, isBookingConfirmedForBilling } from '@/utils/bookingStatus'
+import { categoryFeedLabel, billingDateOf, billingMonthKey, billingMonthLabel, bookingStatusLabel, isBookingConfirmedForBilling } from '@/utils/bookingStatus'
+import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
 import { matchesSearchFields } from '@/utils/searchFields'
 import type { Booking, BookingCategory } from '@/types'
 
@@ -136,16 +174,17 @@ const documentPrefillStore = useDocumentPrefillStore()
 
 /** มาจากปุ่มสถานะ "สร้างใบกำกับภาษี" ของใบวางบิล (?billingId=) — ลูกค้า/ประเภทงานล็อกตามใบวางบิล เลือกงานของใบวางบิลไว้ให้
  *  เลือกงานเพิ่มได้เฉพาะงานที่ยังไม่อยู่ในใบวางบิลอื่น และยืนยันการจบงานแล้ว (เงื่อนไขเดียวกับที่สโตร์เช็คตอนบันทึก) */
-const sourceBilling = (() => {
-  const id = typeof route.query.billingId === 'string' ? route.query.billingId : ''
-  const doc = id ? salesDocumentsStore.documents.find((d) => d.id === id && d.type === 'BILLING') : undefined
-  return doc && doc.status === 'BILLING_PENDING' ? doc : undefined
-})()
-const sourceGroup = sourceBilling ? unclaimedBillingGroups(sourceBilling, bookingStore.bookings)[0] : undefined
+/** computed (ไม่ใช่ค่าที่จับไว้ครั้งเดียวตอนเปิดหน้า) — หน้านี้ถูกสร้างระหว่างที่ข้อมูลยังโหลดอยู่ (PageGate) และข้อมูลแรกที่ได้
+ *  อาจมาจากแคชในเครื่องที่ยังไม่ครบ (งานที่เพิ่ง import/แก้จากเครื่องอื่น) ถ้าจับไว้ครั้งเดียว งานของใบวางบิลจะถูกเลือกไว้ไม่ครบ ยอดหาย */
+const billingId = typeof route.query.billingId === 'string' ? route.query.billingId : ''
+const sourceBillingDoc = computed(() => (billingId ? salesDocumentsStore.documents.find((d) => d.id === billingId && d.type === 'BILLING') : undefined))
+const sourceBillingRef = computed(() => (sourceBillingDoc.value?.status === 'BILLING_PENDING' ? sourceBillingDoc.value : undefined))
+const sourceGroup = computed(() => (sourceBillingRef.value ? unclaimedBillingGroups(sourceBillingRef.value, bookingStore.bookings)[0] : undefined))
 
 /** เงื่อนไขเดียวกับ createTaxInvoiceFromBookings/createTaxInvoiceManual (claim ทางตรง) ทุกประการ */
 const isBookingBillable = (b: Booking) => {
   if (b.status !== 'DELIVERED' || b.taxInvoiceDocId) return false
+  const sourceBilling = sourceBillingRef.value
   if (!sourceBilling) return true
   if (b.billingNoteDocId === sourceBilling.id) return true
   return !b.billingNoteDocId && isBookingConfirmedForBilling(b)
@@ -153,9 +192,94 @@ const isBookingBillable = (b: Booking) => {
 
 const eligibleCustomers = computed(() => [...new Set(bookingStore.bookings.filter(isBookingBillable).map((b) => b.customer))].sort())
 
-const customerName = ref(sourceGroup ? sourceBilling!.customer : '')
-const bookingCategory = ref<BookingCategory | ''>(sourceGroup?.category || '')
-const pickerSelectedIds = ref<Set<string>>(new Set(sourceGroup?.bookingIds || []))
+const customerName = ref('')
+const bookingCategory = ref<BookingCategory | ''>('')
+const pickerSelectedIds = ref<Set<string>>(new Set())
+/** หมายเหตุว่าทำไมใช้ใบวางบิลนี้ไม่ได้ — มาจากลิงก์ ?billingId= แต่ใบวางบิลไม่อยู่ในสถานะที่ออกใบแจ้งหนี้ได้ */
+const billingBlockedNote = computed(() => {
+  if (!billingId || salesDocumentsStore.loading) return ''
+  const doc = sourceBillingDoc.value
+  if (!doc) return 'ไม่พบใบวางบิลนี้ (อาจถูกลบไปแล้ว) — เลือกลูกค้าและงานด้วยตนเองได้ด้านล่าง'
+  if (doc.status !== 'BILLING_PENDING')
+    return `ใบวางบิล ${doc.number} สถานะ "${salesDocumentStatusLabel('BILLING', doc.status)}" — ออกใบแจ้งหนี้จากใบวางบิลได้เฉพาะสถานะ "รอวางบิล" (ใบนี้อาจออกใบแจ้งหนี้ไปแล้ว หรือถูกยกเลิก)`
+  return ''
+})
+
+const taxInvoiceNumberOf = (id?: string) => salesDocumentsStore.documents.find((d) => d.id === id)?.number || ''
+/** งานของใบวางบิลที่ดึงมาไม่ได้ พร้อมเหตุผล — ยอดใบแจ้งหนี้จะขาดเท่ากับงานเหล่านี้ */
+const billingProblems = computed(() => {
+  const doc = sourceBillingRef.value
+  if (!doc) return []
+  const groupCategory = sourceGroup.value?.category
+  const out: { key: string; text: string }[] = []
+  doc.bookingIds.forEach((bid) => {
+    const b = bookingStore.bookings.find((x) => x.id === bid)
+    if (!b) {
+      if (!bookingStore.bookingsLoading) out.push({ key: bid, text: 'ไม่พบงานในระบบ (อาจถูกลบ หรือข้อมูลยังโหลดไม่ครบ — ลองรีเฟรชหน้า)' })
+      return
+    }
+    const name = `งาน ${billingDocNo(b)}`
+    if (b.taxInvoiceDocId) {
+      const number = taxInvoiceNumberOf(b.taxInvoiceDocId)
+      out.push({
+        key: bid,
+        text: number
+          ? `${name} ออกใบแจ้งหนี้ไปแล้ว (เลขที่ ${number}) — ต้องยกเลิก/ลบใบแจ้งหนี้นั้นก่อนถึงจะดึงมาออกใหม่ได้`
+          : `${name} ค้างสถานะ "ออกใบแจ้งหนี้แล้ว" แต่ไม่พบใบแจ้งหนี้นั้นในระบบ — กดปุ่ม "ปลดงานที่ค้าง" ด้านล่าง`,
+      })
+    }
+    else if (b.status !== 'DELIVERED') out.push({ key: bid, text: `${name} ยังไม่จบงาน (สถานะ "${bookingStatusLabel[b.status] || b.status}") — ต้องกดจบงานก่อน` })
+    else if (groupCategory && b.category !== groupCategory) out.push({ key: bid, text: `${name} เป็นประเภทงาน ${categoryFeedLabel[b.category]} — ต้องออกใบแจ้งหนี้แยกอีกใบ` })
+  })
+  return out
+})
+/** งานของใบวางบิลที่ผูก taxInvoiceDocId กับเอกสารที่ไม่มีในเครื่อง (ยืนยันกับเซิร์ฟเวอร์อีกชั้นตอนกดปลด) */
+const orphanBookingIds = computed(() => {
+  const doc = sourceBillingRef.value
+  if (!doc || salesDocumentsStore.loading) return []
+  return doc.bookingIds.filter((bid) => {
+    const b = bookingStore.bookings.find((x) => x.id === bid)
+    return !!b?.taxInvoiceDocId && !taxInvoiceNumberOf(b.taxInvoiceDocId)
+  })
+})
+const releasing = ref(false)
+const releaseOrphans = async () => {
+  if (!confirm(`ปลดงาน ${orphanBookingIds.value.length} งานที่ค้างผูกกับใบแจ้งหนี้ที่ไม่มีในระบบ ให้กลับมาออกใบแจ้งหนี้ได้?`)) return
+  releasing.value = true
+  try {
+    const ids = [...orphanBookingIds.value]
+    const { released, stillExists } = await salesDocumentsStore.releaseOrphanTaxInvoiceClaims(ids)
+    // งานที่เพิ่งปลด เลือกไว้ให้เลย (ถ้าผู้ใช้ยังไม่ได้ติ๊กเอง ระบบเลือกตาม watcher ให้อยู่แล้ว)
+    const freed = ids.filter((id) => !bookingStore.bookings.find((b) => b.id === id)?.taxInvoiceDocId)
+    pickerSelectedIds.value = new Set([...pickerSelectedIds.value, ...freed])
+    alert(
+      `ปลดแล้ว ${released} งาน` +
+        (stillExists ? `
+อีก ${stillExists} งาน ใบแจ้งหนี้ยังมีอยู่บนเซิร์ฟเวอร์ (ไม่ได้ปลด) — ลองรีเฟรชหน้าแล้วตรวจที่หน้าใบแจ้งหนี้` : '')
+    )
+  } catch (err: any) {
+    alert('ตรวจสอบกับเซิร์ฟเวอร์ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ต) — ยังไม่ได้ปลดงานใด ๆ: ' + (err?.message || err))
+  } finally {
+    releasing.value = false
+  }
+}
+
+const billingTripTotal = computed(() => {
+  const doc = sourceBillingRef.value
+  if (!doc) return 0
+  return doc.bookingIds.reduce((sum, bid) => {
+    const b = bookingStore.bookings.find((x) => x.id === bid)
+    return sum + (b ? bookingTotal(b) : 0)
+  }, 0)
+})
+const selectedDiffersFromBilling = computed(() => {
+  const doc = sourceBillingRef.value
+  if (!doc) return false
+  return doc.bookingIds.some((bid) => !pickerSelectedIds.value.has(bid) && !billingProblems.value.some((p) => p.key === bid))
+})
+
+/** เลือกงานของใบวางบิลไว้ให้ — ตามข้อมูลที่โหลดเข้ามาเพิ่มจนกว่าผู้ใช้จะติ๊ก/เอาติ๊กออกเอง (ไม่ทับสิ่งที่ผู้ใช้เลือก) */
+let userPicked = false
 
 /** กรองตามเดือนที่ส่งของสำเร็จ (รองรับลูกค้าที่วางบิลรายเดือน) — ว่าง = ทุกเดือน เปลี่ยนเดือน/ลูกค้าแล้วล้างงานที่เลือกไว้นอกเดือนนั้นทิ้ง */
 const searchText = ref('')
@@ -165,6 +289,7 @@ const matchesTableColumns = (b: Booking) =>
     bookingDescription(b),
     b.plate,
     bookingProducts(b),
+    billingDocNo(b),
     b.reference,
     formatDateShort(billingDateOf(b)),
     formatBaht(bookingTotal(b)),
@@ -212,7 +337,7 @@ const sortIcon = (key: SortKey) => (sortKey.value !== key ? 'unfold_more' : sort
 const sortedEligibleBookings = computed(() => {
   const list = eligibleBookings.value.filter((b) => matchesTableColumns(b))
   const dir = sortDir.value === 'asc' ? 1 : -1
-  if (sortKey.value === 'po') list.sort((a, b) => (a.reference || '').localeCompare(b.reference || '') * dir)
+  if (sortKey.value === 'po') list.sort((a, b) => billingDocNo(a).localeCompare(billingDocNo(b)) * dir)
   else if (sortKey.value === 'shipDate') list.sort((a, b) => ((billingDateOf(a)?.getTime() ?? 0) - (billingDateOf(b)?.getTime() ?? 0)) * dir)
   else if (sortKey.value === 'index' && dir === -1) list.reverse()
   return list
@@ -223,7 +348,23 @@ watch([customerName, bookingCategory], () => {
   sortDir.value = 'asc'
 })
 
+watch(
+  sourceGroup,
+  (group) => {
+    if (!group || userPicked) return
+    customerName.value = sourceBillingRef.value!.customer
+    bookingCategory.value = group.category
+    const billable = group.bookingIds.filter((id) => {
+      const b = bookingStore.bookings.find((x) => x.id === id)
+      return !!b && isBookingBillable(b)
+    })
+    pickerSelectedIds.value = new Set([...pickerSelectedIds.value, ...billable])
+  },
+  { immediate: true }
+)
+
 const toggleBooking = (id: string) => {
+  userPicked = true
   if (pickerSelectedIds.value.has(id)) pickerSelectedIds.value.delete(id)
   else pickerSelectedIds.value.add(id)
   pickerSelectedIds.value = new Set(pickerSelectedIds.value)
@@ -236,13 +377,13 @@ const bookingDestination = (b: Booking) => {
 }
 const bookingDescription = (b: Booking) => {
   const dest = bookingDestination(b)
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products ? `${dest} — ${products}` : dest
 }
 /** ชนิดปูน (เหมือน BillingBookingSelectView.vue) — ข้อมูลเดียวกับที่ผสมอยู่ใน bookingDescription ด้านบนอยู่แล้ว
  *  (b.items[].product) แค่แยกออกมาเป็นคอลัมน์ของตัวเอง ไม่มี field/schema ใหม่ */
 const bookingProducts = (b: Booking) => {
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products || '-'
 }
 const bookingTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)
@@ -263,7 +404,13 @@ const formatBaht = (value: number) => `${documentSettingsStore.settings.currency
 
 const goToForm = () => {
   if (pickerSelectedIds.value.size === 0) return
-  const selected = [...pickerSelectedIds.value]
+  const sourceBilling = sourceBillingRef.value
+  // งานที่ติ๊กไว้แล้วแต่สถานะเปลี่ยนจนออกใบแจ้งหนี้ไม่ได้ (เช่นถูกออกใบแจ้งหนี้จากอีกเครื่อง) ไม่ส่งต่อ — ดูเหตุผลในหมายเหตุด้านบน
+  const selected = [...pickerSelectedIds.value].filter((id) => {
+    const b = bookingStore.bookings.find((x) => x.id === id)
+    return !!b && isBookingBillable(b)
+  })
+  if (selected.length === 0) return
   const fromBilling = sourceBilling ? selected.filter((id) => bookingStore.bookings.find((b) => b.id === id)?.billingNoteDocId === sourceBilling.id) : []
   // ไม่ได้เลือกงานของใบวางบิลเลยสักงาน = ไม่ผูกกับใบวางบิล ออกเป็นใบแจ้งหนี้จากงานขนส่งตามปกติ
   if (!sourceBilling || fromBilling.length === 0) {

@@ -7,7 +7,20 @@
       </div>
       <div class="flex items-center gap-2">
         <button @click="router.push('/billing-notes')" class="btn-secondary">ยกเลิก</button>
-        <button @click="goToForm" :disabled="pickerSelectedIds.size === 0" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+        <!-- ลูกค้ามีใบวางบิลเดิมที่ยังเพิ่มงานได้ → เพิ่มงานเข้าใบนั้นแทนการสร้างใบใหม่ -->
+        <button
+          v-if="existingBillings.length > 0"
+          @click="appendMode = !appendMode"
+          :class="['btn-secondary', appendMode ? '!border-primary !text-primary' : '']"
+        >
+          <span class="material-symbols-rounded text-base">{{ appendMode ? 'close' : 'playlist_add' }}</span>
+          {{ appendMode ? 'ยกเลิกเพิ่มรายการวางบิล' : 'เพิ่มรายการวางบิล' }}
+        </button>
+        <button v-if="appendMode" @click="addToExistingBilling" :disabled="!targetBilling || pickerSelectedIds.size === 0 || appending" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+          <span class="material-symbols-rounded text-base">save</span>
+          ยืนยันเพิ่มเข้า {{ targetBilling?.number || 'ใบวางบิล' }} ({{ pickerSelectedIds.size }})
+        </button>
+        <button v-else @click="goToForm" :disabled="pickerSelectedIds.size === 0" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
           <span class="material-symbols-rounded text-base">arrow_forward</span>
           ถัดไป ({{ pickerSelectedIds.size }})
         </button>
@@ -38,6 +51,35 @@
           </select>
         </div>
       </div>
+      <!-- โหมด "เพิ่มรายการวางบิล": เลือกใบวางบิลเดิมของลูกค้า/ประเภทงานนี้ (ยังไม่ออกใบกำกับภาษี) แล้วติ๊กรายการใหม่ด้านล่าง
+           กดยืนยัน = บันทึกทับใบเดิมทันที (salesDocumentsStore.appendBookingsToBilling) -->
+      <div v-if="appendMode && existingBillings.length > 0" class="space-y-2">
+        <div class="text-sm font-semibold text-text">1. เลือกใบวางบิลเดิม</div>
+        <div class="border border-border rounded-lg overflow-x-auto bg-surface max-w-3xl">
+          <table class="w-full text-sm">
+            <thead class="bg-surface-2 text-xs text-muted">
+              <tr>
+                <th class="px-3 py-2 w-8"></th>
+                <th class="text-left px-3 py-2 font-semibold">เลขที่</th>
+                <th class="text-left px-3 py-2 font-semibold">วันที่</th>
+                <th class="text-right px-3 py-2 font-semibold">จำนวนงาน</th>
+                <th class="text-right px-3 py-2 font-semibold">ยอดรวม</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="d in existingBillings" :key="d.id" @click="targetBillingId = d.id" :class="['border-t border-border cursor-pointer', targetBillingId === d.id ? 'bg-primary/5' : 'hover:bg-surface-2']">
+                <td class="px-3 py-2"><input type="radio" :checked="targetBillingId === d.id" name="targetBilling" class="w-4 h-4" /></td>
+                <td class="px-3 py-2 font-mono text-text">{{ d.number }}</td>
+                <td class="px-3 py-2 text-text">{{ formatDateShort(d.date) }}</td>
+                <td class="px-3 py-2 text-right text-text">{{ (d.bookingIds || []).length }}</td>
+                <td class="px-3 py-2 text-right font-semibold text-text">{{ formatBaht(d.amount) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="text-sm font-semibold text-text pt-2">2. เลือกรายการใหม่ที่จะเพิ่ม</div>
+      </div>
+      <div v-if="appendError" class="text-sm text-red-600">{{ appendError }}</div>
       <div v-if="bookingCategories.length > 1" class="text-[11px] text-muted">ลูกค้ารายนี้มีงานมากกว่าหนึ่งประเภท ต้องวางบิลแยกทีละประเภท (Feed) เสมอ</div>
 
       <!-- ค้นหางานในตารางตามคอลัมน์ที่แสดง (ดู matchesTableColumns)
@@ -47,7 +89,7 @@
         <input
           v-model="searchText"
           type="text"
-          placeholder="ค้นหา รายละเอียด/หน้างาน, ทะเบียน, ชนิดปูน, เลขที่ PO ลูกค้า, วันที่ส่งของสำเร็จ, ราคา, เลขชิพเม้น"
+          placeholder="ค้นหา รายละเอียด/หน้างาน, ทะเบียน, ชนิดปูน, เลขที่เอกสาร, เลขชิพเม้น, วันที่ส่งของสำเร็จ, ราคา, เลขชิพเม้น"
           class="border-0 outline-0 bg-transparent text-sm text-text w-full placeholder:text-muted"
         />
       </div>
@@ -64,7 +106,7 @@
               <th class="text-left px-3 py-2 font-semibold">ทะเบียน</th>
               <th class="text-left px-3 py-2 font-semibold">ชนิดปูน</th>
               <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('po')">
-                เลขที่ PO ลูกค้า<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('po') }}</span>
+                เลขที่เอกสาร<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('po') }}</span>
               </th>
               <th class="text-left px-3 py-2 font-semibold cursor-pointer select-none" @click="toggleSort('shipDate')">
                 วันที่ส่งของสำเร็จ<span class="material-symbols-rounded text-sm align-text-bottom">{{ sortIcon('shipDate') }}</span>
@@ -89,7 +131,7 @@
               </td>
               <td class="px-3 py-2 text-text">{{ b.plate || '-' }}</td>
               <td class="px-3 py-2 text-text">{{ bookingProducts(b) }}</td>
-              <td class="px-3 py-2 text-text">{{ b.reference || '-' }}</td>
+              <td class="px-3 py-2 text-text whitespace-pre-line">{{ billingDocNo(b) }}</td>
               <td class="px-3 py-2 text-text">{{ formatDateShort(billingDateOf(b)) }}</td>
               <td class="px-3 py-2 text-right text-text">1</td>
               <td class="px-3 py-2 text-text">เที่ยว</td>
@@ -115,11 +157,14 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductsText } from '@/utils/bookingProducts'
+import { billingDocNo } from '@/utils/customerShipment'
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
 import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useBillingRuleStore } from '@/stores/billingRule'
+import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { categoryFeedLabel, isBookingConfirmedForBilling, billingDateOf, billingMonthKey, billingMonthLabel } from '@/utils/bookingStatus'
 import { matchesSearchFields } from '@/utils/searchFields'
 import type { Booking, BookingCategory } from '@/types'
@@ -128,9 +173,10 @@ const router = useRouter()
 const bookingStore = useBookingStore()
 const documentSettingsStore = useDocumentSettingsStore()
 const billingRuleStore = useBillingRuleStore()
+const salesDocumentsStore = useSalesDocumentsStore()
 
 /** เงื่อนไขเดียวกับ createBillingFromBookings/createBillingManual (claim ทางตรง) ทุกประการ — สถานะงานอ่านจาก
- *  billingRuleStore.isStatusBillable (DELIVERED/IN_TRANSIT บังคับเสมอ + สถานะอื่นที่แอดมินเปิดเพิ่มจาก "เงื่อนไขวางบิล")
+ *  billingRuleStore.isStatusBillable (เฉพาะงานที่จบงานแล้ว DELIVERED)
  *  ต้อง "ยืนยันการจบงาน" แล้วด้วย (ดู isBookingConfirmedForBilling) ไม่งั้นเลือกได้ในหน้านี้แต่ไปพังตอนกดสร้างจริงที่
  *  createBillingFromBookings */
 const isBookingBillable = (b: Booking) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId && isBookingConfirmedForBilling(b)
@@ -156,6 +202,7 @@ const matchesTableColumns = (b: Booking) =>
     bookingDescription(b),
     b.plate,
     bookingProducts(b),
+    billingDocNo(b),
     b.reference,
     formatDateShort(billingDateOf(b)),
     formatBaht(bookingTotal(b)),
@@ -203,7 +250,7 @@ const sortIcon = (key: SortKey) => (sortKey.value !== key ? 'unfold_more' : sort
 const sortedEligibleBookings = computed(() => {
   const list = eligibleBookings.value.filter((b) => matchesTableColumns(b))
   const dir = sortDir.value === 'asc' ? 1 : -1
-  if (sortKey.value === 'po') list.sort((a, b) => (a.reference || '').localeCompare(b.reference || '') * dir)
+  if (sortKey.value === 'po') list.sort((a, b) => billingDocNo(a).localeCompare(billingDocNo(b)) * dir)
   else if (sortKey.value === 'shipDate') list.sort((a, b) => ((billingDateOf(a)?.getTime() ?? 0) - (billingDateOf(b)?.getTime() ?? 0)) * dir)
   else if (sortKey.value === 'index' && dir === -1) list.reverse()
   return list
@@ -227,13 +274,13 @@ const bookingDestination = (b: Booking) => {
 }
 const bookingDescription = (b: Booking) => {
   const dest = bookingDestination(b)
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products ? `${dest} — ${products}` : dest
 }
 /** ชนิดปูน (Phase 3 — PM-requested column) — ข้อมูลเดียวกับที่ผสมอยู่ใน bookingDescription ด้านบนอยู่แล้ว
  *  (b.items[].product) แค่แยกออกมาเป็นคอลัมน์ของตัวเอง ไม่มี field/schema ใหม่ */
 const bookingProducts = (b: Booking) => {
-  const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+  const products = bookingProductsText(b)
   return products || '-'
 }
 const bookingTotal = (b: Booking) => (b.tripFee || 0) + (b.extraCharges || []).reduce((s, c) => s + c.amount, 0)
@@ -251,6 +298,50 @@ const formatDateShort = (date?: Date) => {
 const selectedTotal = computed(() => eligibleBookings.value.filter((b) => pickerSelectedIds.value.has(b.id)).reduce((sum, b) => sum + bookingTotal(b), 0))
 
 const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+/** ใบวางบิลเดิมที่ยังเพิ่มงานได้ — ลูกค้าเดียวกัน, ยังไม่ออกใบกำกับภาษี (BILLING_PENDING และไม่มีงานไหนออกใบกำกับแล้ว),
+ *  ประเภทงานเดียวกับที่เลือก (ใบที่ยังไม่มีงานผูกเลยก็เลือกได้) — เงื่อนไขเดียวกับ canAddBookings ใน BillingFormView.vue */
+const existingBillings = computed(() => {
+  if (!bookingCategory.value) return []
+  return salesDocumentsStore.documents
+    .filter((d) => d.type === 'BILLING' && d.status === 'BILLING_PENDING' && d.customer === customerName.value)
+    .filter((d) => {
+      const linked = (d.bookingIds || []).map((id) => bookingStore.bookings.find((b) => b.id === id)).filter((b): b is Booking => !!b)
+      return !linked.some((b) => b.taxInvoiceDocId) && (linked.length === 0 || linked[0].category === bookingCategory.value)
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+})
+const appendMode = ref(false)
+const targetBillingId = ref('')
+const targetBilling = computed(() => existingBillings.value.find((d) => d.id === targetBillingId.value))
+const appendError = ref('')
+const appending = ref(false)
+watch([customerName, bookingCategory], () => {
+  targetBillingId.value = ''
+  appendError.value = ''
+})
+watch(existingBillings, (list) => {
+  if (list.length === 0) appendMode.value = false
+  else if (appendMode.value && !targetBillingId.value && list.length === 1) targetBillingId.value = list[0].id
+})
+watch(appendMode, (on) => {
+  appendError.value = ''
+  if (on && !targetBillingId.value && existingBillings.value.length === 1) targetBillingId.value = existingBillings.value[0].id
+})
+/** บันทึกทับใบวางบิลเดิมทันที (เพิ่มงานที่ติ๊กไว้ต่อท้าย) แล้วเปิดดูเอกสาร */
+const addToExistingBilling = () => {
+  const target = targetBilling.value
+  if (!target || pickerSelectedIds.value.size === 0 || appending.value) return
+  appending.value = true
+  appendError.value = ''
+  const doc = salesDocumentsStore.appendBookingsToBilling(target.id, [...pickerSelectedIds.value])
+  appending.value = false
+  if (!doc) {
+    appendError.value = `เพิ่มงานเข้า ${target.number} ไม่ได้ — งานอาจถูกวางบิลไปแล้ว หรือใบนี้ออกใบกำกับภาษีแล้ว`
+    return
+  }
+  router.push(`/documents/${doc.id}`)
+}
 
 const goToForm = () => {
   if (pickerSelectedIds.value.size === 0) return

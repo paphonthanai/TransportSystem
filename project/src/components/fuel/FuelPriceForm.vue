@@ -46,6 +46,11 @@
         {{ message }}
       </span>
     </div>
+    <!-- บันทึกไป Firestore ไม่ผ่าน (เช่น ไม่มีสิทธิ์/หลุดเน็ต) — เดิมเงียบ ราคาเด้งกลับเป็นของเดิมโดยไม่มีใครรู้ -->
+    <div v-if="fuelRateStore.error" class="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+      <span class="material-symbols-rounded text-sm">error</span>
+      บันทึกราคาน้ำมันไม่สำเร็จ: {{ fuelRateStore.error }} — ราคานี้ยังไม่ถูกบันทึกจริง กรุณารีเฟรชหน้าแล้วลองใหม่ หรือแจ้งผู้ดูแลระบบ
+    </div>
   </div>
 </template>
 

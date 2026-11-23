@@ -151,6 +151,17 @@ export function filterPersonnelRows(rows: PersonnelRow[], filter: PersonnelFilte
   })
 }
 
+/** เรียงตามรหัสพนักงาน (0009 < 0010 < 0100 < S002 — ตัวเลขเรียงตามค่า) แถวที่ไม่มีรหัส (บัญชี login อย่างเดียว) ไว้ท้าย เรียงตามชื่อ */
+export function sortPersonnelRows(rows: PersonnelRow[]): PersonnelRow[] {
+  const cmp = (a: string, b: string) => a.localeCompare(b, 'th', { numeric: true, sensitivity: 'base' })
+  return [...rows].sort((a, b) => {
+    if (a.code && b.code) return cmp(a.code, b.code) || cmp(a.name, b.name)
+    if (a.code) return -1
+    if (b.code) return 1
+    return cmp(a.name, b.name)
+  })
+}
+
 export function countByRole(rows: PersonnelRow[]): Record<UserRole | 'ALL', number> {
   const out: Record<string, number> = { ALL: rows.length, ADMIN: 0, STAFF: 0, DISPATCHER: 0, DRIVER: 0, ACCOUNTING: 0 }
   for (const r of rows) out[r.role] = (out[r.role] || 0) + 1

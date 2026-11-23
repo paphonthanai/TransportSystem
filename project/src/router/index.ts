@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useLoadingStore } from '@/stores/loading'
+import { useSalesDocumentsStore } from '@/stores/salesDocuments'
 import { isChunkLoadError, reloadOnceForChunkError } from '@/utils/chunkError'
 import { canAccess } from '@/services/permission'
 import type { UserRole } from '@/stores/users'
@@ -92,7 +93,7 @@ const routes: RouteRecordRaw[] = [
         name: 'QuotationEdit',
         component: () => import('@/views/QuotationFormView.vue'),
         props: true,
-        meta: { roles: ['ADMIN', 'STAFF', 'ACCOUNTING'] },
+        meta: { roles: ['ADMIN', 'STAFF', 'ACCOUNTING'], waitForSalesDocuments: true },
       },
       {
         path: 'documents/:sourceType/:id/convert/:targetType',
@@ -135,7 +136,7 @@ const routes: RouteRecordRaw[] = [
         name: 'BillingNoteEdit',
         component: () => import('@/views/BillingFormView.vue'),
         props: true,
-        meta: { roles: ['ADMIN', 'ACCOUNTING'] },
+        meta: { roles: ['ADMIN', 'ACCOUNTING'], waitForSalesDocuments: true },
       },
       {
         path: 'tax-invoices',
@@ -166,7 +167,7 @@ const routes: RouteRecordRaw[] = [
         name: 'TaxInvoiceEdit',
         component: () => import('@/views/TaxInvoiceFormView.vue'),
         props: true,
-        meta: { roles: ['ADMIN', 'ACCOUNTING'] },
+        meta: { roles: ['ADMIN', 'ACCOUNTING'], waitForSalesDocuments: true },
       },
       {
         path: 'receipts',
@@ -440,7 +441,8 @@ const routes: RouteRecordRaw[] = [
         path: 'settings/fuel',
         name: 'SettingsFuel',
         component: () => import('@/views/FuelSettingsView.vue'),
-        meta: { roles: ['ADMIN'] },
+        // fuelManager: ผู้ใช้ที่ติ๊ก "สิทธิ์ผู้จัดการน้ำมัน" (canOverrideFuelRate) เข้าได้ด้วย แก้ได้ทั้งหมด (firestore.rules settings/fuelRates)
+        meta: { roles: ['ADMIN'], fuelManager: true },
       },
       {
         path: 'settings/origins',
@@ -510,9 +512,14 @@ router.beforeEach(async (to, from, next) => {
   } else if (authStore.isAuthenticated && authStore.role === 'DRIVER' && to.name !== 'DriverApp' && to.name !== 'DriverJobDetail') {
     // แยกมุมมองคนขับออกจากส่วนแอดมิน: คนขับเข้าได้เฉพาะหน้า Driver App (My Jobs + Job Detail)
     next({ name: 'DriverApp' })
-  } else if (authStore.isAuthenticated && !canAccess(authStore.role, to.meta.roles as UserRole[] | undefined) && to.name !== 'Unauthorized') {
+  } else if (authStore.isAuthenticated && !canAccess(authStore.role, to.meta.roles as UserRole[] | undefined) && !(to.meta.fuelManager && authStore.profile?.canOverrideFuelRate) && to.name !== 'Unauthorized') {
     next({ name: 'Unauthorized' })
   } else {
+    // หน้าแก้ไขเอกสาร: ฟอร์มหาเอกสารเดิมตอนสร้างหน้า — กด Refresh แล้วข้อมูลยังไม่มา ฟอร์มจะว่างและเลขที่กลายเป็นเลขถัดไป
+    // (บันทึกแล้วทับเอกสารเดิม) จึงรอเอกสารโหลดรอบแรกก่อน (ไม่เกิน 15 วินาที)
+    if (to.meta.waitForSalesDocuments && authStore.isAuthenticated) {
+      await Promise.race([useSalesDocumentsStore().whenLoaded(), new Promise((r) => setTimeout(r, 15000))])
+    }
     next()
   }
 })

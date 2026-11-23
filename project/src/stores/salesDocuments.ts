@@ -1,4 +1,6 @@
-﻿import { defineStore } from 'pinia'
+﻿import { bookingProductsText } from '@/utils/bookingProducts'
+import { defineStore } from 'pinia'
+import { insertRowsByDate } from '@/utils/billingRowOrder'
 import { trackLoading } from '@/stores/loading'
 import { firstSnapshot } from '@/utils/firstSnapshot'
 import { ref, watch } from 'vue'
@@ -11,7 +13,9 @@ import { salesDocumentRepository } from '@/repositories/salesDocumentRepository'
 import { salesDocumentItemRepository } from '@/repositories/salesDocumentItemRepository'
 import { computeRowAmount, computeRowDiscountBaht, computeRowVat, computeDocumentTotals, bookingBillingRow } from '@/utils/documentTotals'
 import { sortBookingsForDocumentMerge } from '@/utils/bookingMergeSort'
-import { isBookingConfirmedForBilling } from '@/utils/bookingStatus'
+import { isBookingConfirmedForBilling, bookingStatusLabel } from '@/utils/bookingStatus'
+import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
+import { billingDocNo as billingDocNoOf } from '@/utils/customerShipment'
 import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
 import { useDocumentNumberRegistryStore } from './documentNumberRegistry'
 import { useAuditLogStore } from './auditLog'
@@ -26,6 +30,21 @@ export type PaymentTermMode = 'CREDIT_DAYS' | 'CASH' | 'CREDIT_NO_DATE'
 
 /** ประเภทเอกสารต้นทางที่ใบเสร็จอ้างอิงตรงได้ — TAX_INVOICE (เดิม) หรือ BILLING ตรงๆ (ข้าม Tax Invoice ไปเลย, ดู createReceiptFromSourceDocs) */
 export type ReceiptSourceType = 'TAX_INVOICE' | 'BILLING'
+
+/** ค่าที่ผู้ใช้กรอกในหน้าสร้าง/แก้ไขใบเสร็จจากเอกสารต้นทาง (ReceiptCreateView.vue) */
+export interface ReceiptFormOverrides {
+  customer?: string
+  reference?: string
+  contactId?: string
+  date?: Date
+  customerAddress?: string
+  customerZipCode?: string
+  customerTaxId?: string
+  salesperson?: string
+  useESignature?: boolean
+  note?: string
+  internalNote?: string
+}
 
 /**
  * หนึ่ง union รวมทุกประเภทเอกสาร แทนที่จะแยก union ต่อประเภท เพราะสถานะของ BILLING ต้องคงค่าเดิมเป๊ะ
@@ -410,16 +429,65 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   const lastKnownDocJson = new Map<string, string>()
   const lastKnownItemJson = new Map<string, string>()
 
-  function applyRemoteDocuments(remote: SalesDocument[]) {
+  /** id เอกสารที่มีอยู่บนเซิร์ฟเวอร์แล้ว (จาก snapshot ล่าสุด) — ใช้แยกว่าเขียนไม่สำเร็จตอน "สร้างใหม่" หรือตอน "แก้ไข" */
+  const remoteDocIds = new Set<string>()
+  /** ข้อความ error ล่าสุดที่เซิร์ฟเวอร์ปฏิเสธการบันทึกเอกสาร (แสดงให้ผู้ใช้เห็น ไม่เงียบ) */
+  const lastWriteFailure = ref<{ number: string; message: string; at: Date } | null>(null)
+
+  /**
+   * เซิร์ฟเวอร์ปฏิเสธการบันทึกเอกสาร — เดิมแค่เก็บ error ไว้เงียบๆ เอกสารใหม่หายไปเอง (snapshot ถัดไปไม่มีมัน) แต่งานขนส่งที่ถูก
+   * claim ไปแล้ว (billingNoteDocId/taxInvoiceDocId/receiptDocId) บันทึกสำเร็จ ค้างผูกกับเอกสารที่ไม่มีจริง ออกเอกสารใหม่ไม่ได้
+   * ตอนนี้: เอกสารใหม่ที่บันทึกไม่สำเร็จ → ปลด claim ของงานที่ผูกกับมันคืนทันที + แจ้งผู้ใช้พร้อมข้อความจากเซิร์ฟเวอร์
+   */
+  function handleDocumentWriteFailure(id: string, number: string, err: any) {
+    const message = [err?.code, err?.message].filter(Boolean).join(': ') || String(err)
+    lastWriteFailure.value = { number, message, at: new Date() }
+    if (!remoteDocIds.has(id)) {
+      const bookingStore = useBookingStore()
+      bookingStore.bookings.forEach((b) => {
+        if (b.billingNoteDocId === id) b.billingNoteDocId = undefined
+        if (b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
+        if (b.receiptDocId === id) b.receiptDocId = undefined
+      })
+      documents.value.forEach((d) => {
+        if (d.convertedToDocumentIds?.includes(id)) d.convertedToDocumentIds = d.convertedToDocumentIds.filter((c) => c !== id)
+      })
+      bookingStore.addLog(`บันทึกเอกสาร ${number} ขึ้นเซิร์ฟเวอร์ไม่สำเร็จ — คืนสถานะงานที่ผูกไว้แล้ว (${message})`)
+    }
+    if (typeof window !== 'undefined')
+      window.alert(`บันทึกเอกสาร ${number} ขึ้นเซิร์ฟเวอร์ไม่สำเร็จ — เอกสารนี้ไม่ถูกบันทึก กรุณาสร้างใหม่อีกครั้ง
+
+ข้อความจากระบบ: ${message}
+(ส่งข้อความนี้ให้ผู้ดูแลระบบได้)`)
+  }
+
+  function applyRemoteDocuments(remote: SalesDocument[], confirmedIds?: Set<string>) {
+    // เอกสารที่ยืนยันบนเซิร์ฟเวอร์แล้วครั้งหนึ่งถือว่ามีอยู่จริง (snapshot ระหว่างรอเขียนรอบถัดไปไม่ทำให้หลุดจากชุดนี้)
+    ;(confirmedIds ?? new Set(remote.map((d) => d.id))).forEach((id) => remoteDocIds.add(id))
     documents.value = remote
     lastKnownDocJson.clear()
     remote.forEach((d) => lastKnownDocJson.set(d.id, JSON.stringify(d)))
   }
 
+  /**
+   * รายการที่เครื่องนี้สั่งเขียน/ลบไปแล้วแต่ยังไม่เห็นผลใน snapshot — เอกสารหนึ่งใบบันทึกรายการทีละแถว (หลายสิบ write แยกกัน)
+   * snapshot ที่มาระหว่างทางจึงอาจเห็นรายการรอบใหม่แค่บางส่วน หรือยังเห็นแถวที่สั่งลบไปแล้ว ถ้าเอา snapshot นั้นมาแทนทั้งชุด
+   * store จะลืมแถวที่ยังเขียนไม่เสร็จ (บันทึกรอบถัดไปลบไม่ถึง ค้างบนเซิร์ฟเวอร์ = แถวซ้ำ ยอดเพี้ยน — บั๊ก INV202611160001)
+   * หรือแถวที่ลบแล้วโผล่กลับมาให้หน้าแก้ไขหยิบไปบันทึกซ้ำ จึงรวม snapshot กับงานที่ยังค้างอยู่เสมอ
+   */
+  const pendingItemWrites = new Map<string, SalesDocumentItem>()
+  const pendingItemDeletes = new Set<string>()
+
   function applyRemoteItems(remote: SalesDocumentItem[]) {
-    items.value = remote
+    const remoteIds = new Set(remote.map((i) => i.id))
+    remoteIds.forEach((id) => pendingItemWrites.delete(id)) // เซิร์ฟเวอร์/แคชเห็นแถวที่เขียนแล้ว
+    ;[...pendingItemDeletes].forEach((id) => {
+      if (!remoteIds.has(id)) pendingItemDeletes.delete(id) // ลบสำเร็จแล้ว
+    })
+    const merged = [...remote.filter((i) => !pendingItemDeletes.has(i.id)), ...pendingItemWrites.values()]
+    items.value = merged
     lastKnownItemJson.clear()
-    remote.forEach((i) => lastKnownItemJson.set(i.id, JSON.stringify(i)))
+    merged.forEach((i) => lastKnownItemJson.set(i.id, JSON.stringify(i)))
   }
 
   watch(
@@ -433,6 +501,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         const { id, ...rest } = d
         salesDocumentRepository.set(id, rest).catch((err: any) => {
           error.value = err?.message || 'บันทึกเอกสารไป Firestore ไม่สำเร็จ'
+          handleDocumentWriteFailure(id, d.number, err)
         })
       })
       lastKnownDocJson.forEach((_json, id) => {
@@ -455,14 +524,20 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
         if (lastKnownItemJson.get(i.id) === json) return
         lastKnownItemJson.set(i.id, json)
         const { id, ...rest } = i
+        pendingItemDeletes.delete(id)
+        pendingItemWrites.set(id, i)
         salesDocumentItemRepository.set(id, rest).catch((err: any) => {
+          pendingItemWrites.delete(id)
           error.value = err?.message || 'บันทึกรายการเอกสารไป Firestore ไม่สำเร็จ'
         })
       })
       lastKnownItemJson.forEach((_json, id) => {
         if (currentIds.has(id)) return
         lastKnownItemJson.delete(id)
+        pendingItemWrites.delete(id)
+        pendingItemDeletes.add(id)
         salesDocumentItemRepository.delete(id).catch((err: any) => {
+          pendingItemDeletes.delete(id)
           error.value = err?.message || 'ลบรายการเอกสารจาก Firestore ไม่สำเร็จ'
         })
       })
@@ -479,8 +554,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       await Promise.all([
         firstSnapshot((next, fail) =>
           salesDocumentRepository.subscribe(
-            (docs) => {
-              applyRemoteDocuments(docs)
+            (docs, confirmedIds) => {
+              if (docs) applyRemoteDocuments(docs, confirmedIds)
+              else confirmedIds.forEach((cid) => remoteDocIds.add(cid))
               next()
             },
             (err) => {
@@ -509,7 +585,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
   }
 
-  trackLoading(fetchAll())
+  const loadedPromise = trackLoading(fetchAll())
+  /** รอเอกสาร+รายการโหลดรอบแรกเสร็จ — หน้าแก้ไขเอกสารต้องรอก่อนสร้างฟอร์ม (ดู router meta.waitForSalesDocuments) */
+  const whenLoaded = () => loadedPromise
 
   const itemsForDocument = (documentId: string) => items.value.filter((i) => i.documentId === documentId).sort((a, b) => a.sortOrder - b.sortOrder)
 
@@ -1496,6 +1574,51 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     return eligible ? { added: addedBookings, removed, linked } : null
   }
 
+  /** เพิ่มงานเข้าใบวางบิลเดิมแล้วบันทึกทับทันที (ปุ่ม "เพิ่มรายการวางบิล" ในหน้าเลือกงาน) — ไม่ผ่านหน้าฟอร์ม
+   *  ใบต้อง BILLING_PENDING และยังไม่มีงานไหนออกใบกำกับภาษี งานใหม่ต้องลูกค้า/ประเภทงานเดียวกัน วางบิลได้ (billingBookingChanges)
+   *  แถวใหม่ต่อท้ายแถวเดิม ภาษี/หัก ณ ที่จ่ายตามแถวเดิมถ้าทุกแถวเท่ากัน ยอดหักที่ไม่ได้แก้เองคำนวณใหม่ คืน null ถ้าเพิ่มไม่ได้ */
+  function appendBookingsToBilling(id: string, bookingIds: string[]): SalesDocument | null {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'BILLING')
+    if (!doc || doc.status !== 'BILLING_PENDING' || bookingIds.length === 0) return null
+    const bookingStore = useBookingStore()
+    const linkedNow = doc.bookingIds.map((bid) => bookingStore.bookings.find((b) => b.id === bid)).filter((b): b is Booking => !!b)
+    if (linkedNow.some((b) => b.taxInvoiceDocId)) return null
+    const newIds = bookingIds.filter((bid) => !doc.bookingIds.includes(bid))
+    if (newIds.length === 0) return null
+    const oldRows = itemsForDocument(doc.id).map(({ id: _id, documentId: _d, sortOrder: _s, ...rest }) => rest)
+    // ส่งแถวเดิมไปด้วย = ไม่มีงานเดิมถูกนับว่า "เอาออก" ประเภทงานจึงเทียบกับงานเดิมในใบ
+    const changes = billingBookingChanges(doc, { customer: doc.customer, items: oldRows, bookingIds: [...doc.bookingIds, ...newIds] } as ManualDocumentFormData)
+    if (!changes || changes.added.length === 0 || changes.removed.length > 0) return null
+    const { added, linked } = changes
+    const vatRates = [...new Set(oldRows.map((r) => r.vatRate))]
+    const whtRates = [...new Set(oldRows.map((r) => r.whtRate || 0))]
+    const newRows = billingRowsFromBookings(sortBookingsForDocumentMerge(added)).map((r) => ({
+      ...r,
+      vatRate: r.vatRate ?? (vatRates.length === 1 ? vatRates[0] : undefined),
+      whtRate: whtRates.length === 1 ? whtRates[0] : 0,
+    }))
+    const followComputedWht = Math.round((doc.whtAmount || 0) * 100) === Math.round(computeDocumentTotals(oldRows).whtAmount * 100)
+    // แทรกงานใหม่ตามวันที่ในใบ (เดิมต่อท้ายสุดเสมอ)
+    const allRows = insertRowsByDate(oldRows, newRows)
+    const totals = computeDocumentTotals(allRows)
+    items.value = items.value.filter((i) => i.documentId !== doc.id)
+    addItemsToDocument(doc.id, allRows)
+    doc.amount = totals.amount
+    doc.discountTotal = totals.discountTotal
+    doc.vatAmount = totals.vatAmount
+    doc.vatRate = totals.vatRate
+    if (followComputedWht) doc.whtAmount = totals.whtAmount
+    const next = [...linked, ...added]
+    const unresolvedIds = doc.bookingIds.filter((bid) => !linked.some((b) => b.id === bid))
+    doc.bookingIds = [...unresolvedIds, ...next.map((b) => b.id)]
+    added.forEach((b) => {
+      b.billingNoteDocId = doc.id
+    })
+    refreshBillingSummary(doc, linked, next)
+    bookingStore.addLog(`แก้ไขเอกสาร ${doc.number} เพิ่มงาน ${added.length} งาน`, { docId: doc.id })
+    return doc
+  }
+
   /** ปรับหัวเอกสารที่ระบบสรุปจากงาน (ห้วงวันที่/จำนวนเที่ยว/เอกสารอ้างอิง) ให้ตรงกับงานชุดใหม่ — ข้อความที่ผู้ใช้พิมพ์เองไม่ถูกแตะ */
   function refreshBillingSummary(doc: SalesDocument, previous: Booking[], next: Booking[]) {
     if (doc.reference === previous.map(bookingReferenceDoc).join(', ')) doc.reference = next.map(bookingReferenceDoc).join(', ')
@@ -1604,24 +1727,104 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     })
   }
 
-  function createTaxInvoiceManual(data: ManualDocumentFormData): SalesDocument | null {
-    const documentSettingsStore = useDocumentSettingsStore()
+  /**
+   * เหตุผลที่สร้างใบแจ้งหนี้/ใบกำกับภาษีไม่ได้ (ว่าง = สร้างได้) — เงื่อนไขเดียวกับที่ createTaxInvoiceManual บังคับจริงทุกข้อ
+   * ใช้แสดงหมายเหตุให้ผู้ใช้รู้ว่าติดตรงไหน (TaxInvoiceFormView.vue) แทนข้อความกว้างๆ ว่า "สร้างไม่สำเร็จ"
+   */
+  function taxInvoiceCreateBlockReasons(data: ManualDocumentFormData): string[] {
     const bookingStore = useBookingStore()
+    const reasons: string[] = []
+    const label = (b: Booking) => billingDocNoOf(b)
+    const taxInvoiceNumber = (id?: string) => documents.value.find((d) => d.id === id)?.number || 'อื่น'
     if (data.sourceBillingId) {
       const billing = documents.value.find((d) => d.id === data.sourceBillingId && d.type === 'BILLING')
-      if (!billing || billing.status !== 'BILLING_PENDING') return null
+      if (!billing) return ['ไม่พบใบวางบิลต้นทาง (อาจถูกลบไปแล้ว)']
+      if (billing.status !== 'BILLING_PENDING')
+        return [`ใบวางบิล ${billing.number} สถานะ "${salesDocumentStatusLabel('BILLING', billing.status)}" — ออกใบแจ้งหนี้จากใบวางบิลได้เฉพาะสถานะ "รอวางบิล" (อาจออกใบแจ้งหนี้จากใบนี้ไปแล้ว)`]
       /** เช็คเฉพาะกลุ่มงานขนส่งที่ระบุมาจริง (data.bookingIds) ไม่ใช่ทั้งหมดของใบวางบิลเสมอไป — รองรับกรณีใบวางบิลมีสินค้า
        *  หลาย Feed ที่ต้องแยกออกใบแจ้งหนี้ทีละ Feed (Feed อื่นที่ถูก claim ไปแล้วจากรอบก่อนหน้าไม่ควรมาบล็อครอบนี้) */
       const targetBookingIds = data.bookingIds && data.bookingIds.length ? data.bookingIds : billing.bookingIds
-      const linkedBookings = targetBookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid))
-      if (linkedBookings.some((b) => !b || b.taxInvoiceDocId)) return null
+      const missing = targetBookingIds.filter((bid) => !bookingStore.bookings.some((bk) => bk.id === bid)).length
+      if (missing) reasons.push(`ไม่พบงานขนส่ง ${missing} งานในระบบ (อาจถูกลบ หรือข้อมูลยังโหลดไม่ครบ — ลองรีเฟรชหน้าแล้วทำใหม่)`)
+      const bookings = targetBookingIds.map((bid) => bookingStore.bookings.find((bk) => bk.id === bid)).filter((b): b is Booking => !!b)
+      bookings
+        .filter((b) => b.taxInvoiceDocId)
+        .forEach((b) =>
+          reasons.push(
+            documents.value.some((d) => d.id === b.taxInvoiceDocId)
+              ? `งาน ${label(b)} ออกใบแจ้งหนี้ไปแล้ว (เลขที่ ${taxInvoiceNumber(b.taxInvoiceDocId)}) — เอางานนี้ออก หรือยกเลิกใบแจ้งหนี้เดิมก่อน`
+              : `งาน ${label(b)} ค้างสถานะ "ออกใบแจ้งหนี้แล้ว" แต่ไม่พบใบแจ้งหนี้นั้นในระบบ — กลับไปหน้าเลือกงานแล้วกด "ปลดงานที่ค้าง"`
+          )
+        )
       /** งานที่เลือกเพิ่มนอกใบวางบิล (หน้าเลือกงาน TaxInvoiceBookingSelectView.vue) ต้องผ่านเงื่อนไขเดียวกับการออกใบแจ้งหนี้จากงานตรง
        *  ลูกค้าเดียวกับใบวางบิล ประเภทงานเดียวกันทั้งใบ ยืนยันการจบงานแล้ว และไม่อยู่ในใบวางบิลอื่น */
-      const bookings = linkedBookings as Booking[]
-      const extras = bookings.filter((b) => !billing.bookingIds.includes(b.id))
-      if (bookings.some((b) => b.category !== bookings[0].category)) return null
-      if (extras.some((b) => b.customer !== billing.customer || b.status !== 'DELIVERED' || !!b.billingNoteDocId || !isBookingConfirmedForBilling(b))) return null
+      if (bookings.some((b) => b.category !== bookings[0].category)) reasons.push('มีงานต่างประเภท (Feed) ปนกัน — ต้องออกใบแจ้งหนี้แยกทีละประเภท')
+      bookings
+        .filter((b) => !billing.bookingIds.includes(b.id))
+        .forEach((b) => {
+          if (b.customer !== billing.customer) reasons.push(`งาน ${label(b)} เป็นของลูกค้า "${b.customer}" ไม่ใช่ลูกค้าของใบวางบิล`)
+          if (b.status !== 'DELIVERED') reasons.push(`งาน ${label(b)} ยังไม่จบงาน (สถานะ "${bookingStatusLabel[b.status] || b.status}")`)
+          if (b.billingNoteDocId) reasons.push(`งาน ${label(b)} อยู่ในใบวางบิลอื่นแล้ว`)
+          if (!isBookingConfirmedForBilling(b)) reasons.push(`งาน ${label(b)} ยังไม่ได้ยืนยันการจบงาน (รอตรวจหลักฐานการส่ง)`)
+        })
+    } else if (data.bookingIds?.length) {
+      const missing = data.bookingIds.filter((bid) => !bookingStore.bookings.some((bk) => bk.id === bid)).length
+      if (missing) reasons.push(`ไม่พบงานขนส่ง ${missing} งานในระบบ (อาจถูกลบ หรือข้อมูลยังโหลดไม่ครบ — ลองรีเฟรชหน้าแล้วทำใหม่)`)
+      const bookings = data.bookingIds.map((bid) => bookingStore.bookings.find((b) => b.id === bid)).filter((b): b is Booking => !!b)
+      if (bookings.some((b) => b.category !== bookings[0].category)) reasons.push('มีงานต่างประเภท (Feed) ปนกัน — ต้องออกใบแจ้งหนี้แยกทีละประเภท')
+      bookings.forEach((b) => {
+        if (b.customer !== data.customer) reasons.push(`งาน ${label(b)} เป็นของลูกค้า "${b.customer}" ไม่ตรงกับลูกค้าในเอกสาร "${data.customer}"`)
+        if (b.status !== 'DELIVERED') reasons.push(`งาน ${label(b)} ยังไม่จบงาน (สถานะ "${bookingStatusLabel[b.status] || b.status}")`)
+        if (b.taxInvoiceDocId) reasons.push(`งาน ${label(b)} ออกใบแจ้งหนี้ไปแล้ว (เลขที่ ${taxInvoiceNumber(b.taxInvoiceDocId)})`)
+        if (!isBookingConfirmedForBilling(b)) reasons.push(`งาน ${label(b)} ยังไม่ได้ยืนยันการจบงาน (รอตรวจหลักฐานการส่ง)`)
+      })
     }
+    const manualNumber = data.number?.trim()
+    if (manualNumber) {
+      const reuse = checkDocumentNumberReuseEligibility(manualNumber)
+      if (!reuse.eligible) reasons.push(reuse.reason || `เลขที่เอกสาร ${manualNumber} ถูกใช้ไปแล้ว`)
+    }
+    return reasons
+  }
+
+  /**
+   * งานที่ยังติด taxInvoiceDocId ของใบแจ้งหนี้ที่ "ไม่มีอยู่แล้ว" (ค้างจากการสร้างที่บันทึกขึ้นเซิร์ฟเวอร์ไม่สำเร็จ หรือการลบรุ่นเก่า
+   * ที่ปลดงานไม่ครบ) — งานพวกนี้ถูกมองว่าออกใบแจ้งหนี้ไปแล้ว ดึงมาออกใบใหม่ไม่ได้ ยอดจึงขาด
+   * ยืนยันกับเซิร์ฟเวอร์ทีละใบก่อนปลด (ไม่เชื่อแคชในเครื่องที่อาจยังโหลดเอกสารไม่ครบ) ใบที่ยังมีอยู่จริงไม่แตะ
+   */
+  async function releaseOrphanTaxInvoiceClaims(bookingIds: string[]): Promise<{ released: number; stillExists: number }> {
+    return releaseOrphanClaims(bookingIds, 'taxInvoiceDocId')
+  }
+
+  /** เหมือน releaseOrphanTaxInvoiceClaims แต่เลือก field ได้ (ใบเสร็จ = receiptDocId, ใบวางบิล = billingNoteDocId) */
+  async function releaseOrphanClaims(
+    bookingIds: string[],
+    field: 'taxInvoiceDocId' | 'receiptDocId' | 'billingNoteDocId'
+  ): Promise<{ released: number; stillExists: number }> {
+    const bookingStore = useBookingStore()
+    const targets = bookingIds
+      .map((bid) => bookingStore.bookings.find((b) => b.id === bid))
+      .filter((b): b is Booking => !!b && !!b[field] && !documents.value.some((d) => d.id === b[field]))
+    const docIds = [...new Set(targets.map((b) => b[field] as string))]
+    const missing = new Set<string>()
+    for (const id of docIds) {
+      if (!(await salesDocumentRepository.existsOnServer(id))) missing.add(id)
+    }
+    let released = 0
+    targets.forEach((b) => {
+      if (!missing.has(b[field] as string)) return
+      b[field] = undefined
+      released++
+    })
+    const kind = field === 'receiptDocId' ? 'ใบเสร็จ' : field === 'billingNoteDocId' ? 'ใบวางบิล' : 'ใบแจ้งหนี้'
+    if (released) bookingStore.addLog(`ปลดงาน ${released} งานที่ค้างผูกกับ${kind}ที่ไม่มีในระบบแล้ว (${[...missing].join(', ')})`)
+    return { released, stillExists: targets.length - released }
+  }
+
+  function createTaxInvoiceManual(data: ManualDocumentFormData): SalesDocument | null {
+    const documentSettingsStore = useDocumentSettingsStore()
+    const bookingStore = useBookingStore()
+    if (taxInvoiceCreateBlockReasons(data).length) return null
     if (!isDirectBookingClaimEligibleForTaxInvoice(data)) return null
     const manualNumber = data.number?.trim()
     /** กติกาปัจจุบัน: ตรวจแค่ว่ามี Active Document ถือเลขนี้อยู่หรือไม่ — ดูคอมเมนต์เดียวกันใน createBillingManual */
@@ -1916,7 +2119,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   function tripDescription(b: Booking): string {
     if (!b.items.length) return '-'
     const dest = b.items.length > 1 ? `${b.items[0].siteName} +${b.items.length - 1} ที่อื่น` : b.items[0].siteName
-    const products = [...new Set(b.items.map((i) => i.product).filter(Boolean))].join(' + ')
+    const products = bookingProductsText(b)
     return products ? `${dest} — ${products}` : dest
   }
 
@@ -1965,10 +2168,8 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const sameCategory = targetBookings.every((b) => b.category === targetBookings[0].category)
     /** เช็คเฉพาะว่า "ยังไม่เคยอยู่ในใบวางบิลรวมอื่น" (billingNoteDocId) เท่านั้น — เป็นอิสระจาก taxInvoiceDocId/receiptDocId โดยเจตนา
      *  งานเดียวกันอยู่ในใบแจ้งหนี้รวม/ใบเสร็จรวมอื่นพร้อมกันได้ (Booking → Billing / Booking → Tax Invoice / Booking → Receipt แยกเส้นทางกัน)
-     *  สถานะที่วางบิลได้: DELIVERED/IN_TRANSIT บังคับเสมอ (MANDATORY_BILLING_STATUSES) ส่วนสถานะอื่นเปิดเพิ่มได้จากหน้า
-     *  "เงื่อนไขวางบิล" (ดู billingRuleStore.isStatusBillable) — ครอบคลุมทั้งงานปกติที่ยังไม่ถึงปลายทาง, งาน Reset กลับมา
-     *  ที่ IN_TRANSIT, และงาน partial delivery (บาง item ยัง PENDING) เพราะการออกใบวางบิลไม่แตะ/ไม่ต้องพึ่งข้อมูลระดับ
-     *  item เลย (ดู bookingBillingRow/tripDescription ด้านล่าง — อ่านแค่ tripFee/extraCharges/discount ระดับ booking เท่านั้น) */
+     *  สถานะที่วางบิลได้: เฉพาะงานที่กดจบงานแล้ว DELIVERED (MANDATORY_BILLING_STATUSES ดู billingRuleStore.isStatusBillable)
+     *  — เดิมงาน IN_TRANSIT ที่ยังไม่จบงานก็วางบิลได้ ยกเลิกตามที่ลูกค้าขอ */
     const allEligible = targetBookings.every((b) => billingRuleStore.isStatusBillable(b.status) && !b.billingNoteDocId)
     /** งานที่ยังไม่ "ยืนยันการจบงาน" (ขั้นตอนสุดท้ายจริงที่เสมียนกดแยกต่างหากจากการตรวจสอบ POD) ห้ามออกใบวางบิลได้ —
      *  ดู isBookingConfirmedForBilling ใน utils/bookingStatus.ts: งานที่ไม่เคยผ่านขั้นตรวจสอบ POD เลย (ออฟฟิศปิดงานเอง)
@@ -2663,13 +2864,10 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     const doc = documents.value.find((d) => d.id === id && d.type === 'TAX_INVOICE')
     if (!doc || doc.status !== 'DRAFT') return false
     if (sourceDocsClaimedByOtherReceipts([id]).length > 0) return false
-    if (doc.bookingIds.length) {
-      const bookingStore = useBookingStore()
-      doc.bookingIds.forEach((bid) => {
-        const b = bookingStore.bookings.find((bk) => bk.id === bid)
-        if (b && b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
-      })
-    }
+    // ปลดทุกงานที่ผูกกับใบนี้ (ไม่ใช่แค่ doc.bookingIds) — กันงานค้างสถานะ "ออกใบแจ้งหนี้แล้ว" ทั้งที่ใบถูกลบไปแล้ว
+    useBookingStore().bookings.forEach((b) => {
+      if (b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
+    })
     if (doc.parentDocumentId) {
       const parent = documents.value.find((d) => d.id === doc.parentDocumentId && d.type === 'BILLING')
       if (parent) {
@@ -2780,10 +2978,24 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
    * ยังไม่มี receiptDocId (เป็นอิสระจาก sourceDocsClaimedByOtherReceipts ที่เช็คระดับเอกสาร — กันกรณีงานเดียวกันถูกดึงไป
    * ออกใบเสร็จตรงจากงานขนส่ง (createReceiptFromBookings) ไปแล้วซ้ำอีกทาง)
    */
+  /** ช่องในหน้าสร้าง/แก้ไขใบเสร็จจากเอกสารต้นทาง (ReceiptCreateView.vue) ที่ต้องบันทึกตามที่กรอก — เดิมบันทึกแค่ลูกค้า/อ้างอิง
+   *  ที่เหลือ (วันที่ ที่อยู่ พนักงานขาย หมายเหตุ ลายเซ็น) กรอกแล้วหายหมด ที่อยู่/รหัสไปรษณีย์/เลขผู้เสียภาษีที่เว้นว่าง = ใช้ของลูกค้า */
+  function applyReceiptFormOverrides(doc: SalesDocument, overrides?: ReceiptFormOverrides) {
+    if (!overrides) return
+    if (overrides.date && !Number.isNaN(overrides.date.getTime())) doc.date = overrides.date
+    if (overrides.customerAddress?.trim()) doc.customerAddress = overrides.customerAddress.trim()
+    if (overrides.customerZipCode?.trim()) doc.customerZipCode = overrides.customerZipCode.trim()
+    if (overrides.customerTaxId?.trim()) doc.customerTaxId = overrides.customerTaxId.trim()
+    if (overrides.salesperson !== undefined) doc.salesperson = overrides.salesperson
+    if (overrides.useESignature !== undefined) doc.useESignature = overrides.useESignature
+    if (overrides.note !== undefined) doc.note = overrides.note
+    if (overrides.internalNote !== undefined) doc.internalNote = overrides.internalNote
+  }
+
   function createReceiptFromSourceDocs(
     sourceIds: string[],
     sourceType: ReceiptSourceType,
-    overrides?: { customer?: string; reference?: string; contactId?: string; number?: string }
+    overrides?: ReceiptFormOverrides & { number?: string }
   ): { doc: SalesDocument; warnings: string[] } | null {
     if (sourceIds.length === 0) return null
     const targetDocs = documents.value.filter((d) => sourceIds.includes(d.id) && d.type === sourceType)
@@ -2830,6 +3042,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     }
     Object.assign(receipt, resolveCustomerTaxSnapshot(customer))
     Object.assign(receipt, resolveContactSnapshot(customer, overrides?.contactId ?? targetDocs[0].contactId))
+    applyReceiptFormOverrides(receipt, overrides)
     documents.value.unshift(receipt)
     addItemsToDocument(receipt.id, receiptItemRowsFromSourceDocs(targetDocs))
     if (sourceType === 'BILLING') {
@@ -2851,7 +3064,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     id: string,
     sourceIds: string[],
     sourceType: ReceiptSourceType,
-    overrides?: { customer?: string; reference?: string; contactId?: string }
+    overrides?: ReceiptFormOverrides
   ): { doc: SalesDocument; warnings: string[] } | null {
     if (sourceIds.length === 0) return null
     const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
@@ -2886,6 +3099,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.vatAmount = vatAmount
     doc.whtAmount = whtAmount
     Object.assign(doc, resolveContactSnapshot(customer, overrides?.contactId ?? doc.contactId ?? targetDocs[0].contactId))
+    applyReceiptFormOverrides(doc, overrides)
     items.value = items.value.filter((i) => i.documentId !== id)
     addItemsToDocument(id, receiptItemRowsFromSourceDocs(targetDocs))
     if (sourceType === 'BILLING') {
@@ -3078,9 +3292,9 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       return { ok: false, message: `ไม่สามารถลบได้ เนื่องจากใบแจ้งหนี้ ${doc.number} มีใบเสร็จรับเงินที่อ้างอิงอยู่แล้ว — ต้องลบใบเสร็จนั้นก่อน` }
     }
     const bookingStore = useBookingStore()
-    doc.bookingIds.forEach((bid) => {
-      const b = bookingStore.bookings.find((bk) => bk.id === bid)
-      if (b && b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
+    // ปลดทุกงานที่ผูกกับใบนี้ (ไม่ใช่แค่ doc.bookingIds) — กันงานค้างสถานะ "ออกใบแจ้งหนี้แล้ว" ทั้งที่ใบถูกลบไปแล้ว
+    bookingStore.bookings.forEach((b) => {
+      if (b.taxInvoiceDocId === id) b.taxInvoiceDocId = undefined
     })
     if (doc.parentDocumentId) {
       const parent = documents.value.find((d) => d.id === doc.parentDocumentId && d.type === 'BILLING')
@@ -3255,8 +3469,14 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     peekNextDocumentNumber,
     createBillingManual,
     updateBillingManual,
+    appendBookingsToBilling,
     createInvoiceFromBilling,
     createTaxInvoiceManual,
+    taxInvoiceCreateBlockReasons,
+    releaseOrphanTaxInvoiceClaims,
+    releaseOrphanClaims,
+    whenLoaded,
+    lastWriteFailure,
     updateTaxInvoiceManual,
     cancelBillingNote,
     markBillingBilled,

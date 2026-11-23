@@ -92,6 +92,7 @@
                 <th class="px-4 py-3 w-8">
                   <input type="checkbox" :checked="allVisibleSelected" @change="toggleSelectAll" />
                 </th>
+                <th class="text-left px-4 py-3 font-semibold text-muted whitespace-nowrap">เลขที่เอกสาร</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted whitespace-nowrap">เลขชิพเม้นลูกค้า</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">กองรถ</th>
                 <th class="text-left px-4 py-3 font-semibold text-muted">ลูกค้า</th>
@@ -114,6 +115,10 @@
                     :checked="!!selected[booking.id]"
                     @change="(e) => (selected[booking.id] = (e.target as HTMLInputElement).checked)"
                   />
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <div class="font-bold text-text font-mono text-xs whitespace-pre-line">{{ bookingDocNo(booking) }}</div>
+                  <div v-if="booking.ticketNo" class="text-[11px] text-muted font-mono">ตั๋ว {{ booking.ticketNo }}</div>
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">
                   <div class="font-bold text-primary font-mono text-xs">{{ customerShipmentNo(booking) || '-' }}</div>
@@ -219,7 +224,7 @@
                 </td>
               </tr>
               <tr v-if="completedBookings.length === 0">
-                <td colspan="13" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับตัวกรอง</td>
+                <td colspan="14" class="px-4 py-8 text-center text-muted">ไม่พบงานที่ตรงกับตัวกรอง</td>
               </tr>
             </tbody>
           </table>
@@ -253,8 +258,9 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BookingDriverFixCell from '@/components/booking/BookingDriverFixCell.vue'
 import TablePagination from '@/components/TablePagination.vue'
+import { useRememberedState } from '@/composables/useRememberedState'
 import { usePagedRows } from '@/composables/usePagedRows'
-import { bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
+import { bookingDocNo, bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
 import { useCompletedJobs, useCompletedJobsFilters, completedJobPriceOf, type CompletedJobsDocClaimFilter } from '@/composables/useCompletedJobs'
 import { useBookingStore } from '@/stores/booking'
 import { useCustomerStore } from '@/stores/customers'
@@ -274,6 +280,8 @@ const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.role === 'ADMIN')
 
 const filters = useCompletedJobsFilters()
+// จำตัวกรองไว้ — กดดู/แก้ไขงานแล้วกลับมา ไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState('completed-jobs', { filters })
 
 // ลิงก์จาก Dashboard "ต้องดำเนินการ" ตั้งตัวกรองมาให้ผ่าน query (?price=NOT_SET / ?money=UNCOMPUTABLE)
 const route = useRoute()
@@ -311,7 +319,7 @@ const {
   formatShortDate,
 } = useCompletedJobs(filters)
 
-const { page, perPage, pagedRows } = usePagedRows(completedBookings)
+const { page, perPage, pagedRows } = usePagedRows(completedBookings, 'completed-jobs')
 watch(filters, () => (page.value = 1), { deep: true })
 
 const hasActiveDateOrPicks = computed(

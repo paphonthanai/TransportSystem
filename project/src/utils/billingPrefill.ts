@@ -34,7 +34,10 @@ export function buildPrefillFromBilling(
     sourceId: doc.id,
     sourceNumber: doc.number,
     customer: doc.customer,
-    items: items.filter((i) => !!i.deliveryNo && docNos.has(i.deliveryNo)).map(({ id, documentId, sortOrder, ...rest }) => rest),
+    /** ใบวางบิลที่กรอกรายการเอง (ไม่มีงานขนส่งผูก) = เอารายการทั้งหมด ไม่งั้นได้ใบแจ้งหนี้ว่าง */
+    items: (billingBookingIds.length === 0 ? items : items.filter((i) => !!i.deliveryNo && docNos.has(i.deliveryNo))).map(
+      ({ id, documentId, sortOrder, ...rest }) => rest
+    ),
     bookingIds: allBookingIds,
     reference: doc.number,
     creditDays: doc.creditDays,

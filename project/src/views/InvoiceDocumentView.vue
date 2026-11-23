@@ -55,7 +55,7 @@
                 <img v-if="documentSettingsStore.settings.company.logo" :src="documentSettingsStore.settings.company.logo" class="w-12 h-12 object-contain flex-shrink-0" />
                 <div>
                   <div class="text-base font-bold">{{ documentSettingsStore.settings.company.name }}</div>
-                  <div v-if="documentSettingsStore.settings.company.phone" class="text-xs text-gray-600">โทร. {{ documentSettingsStore.settings.company.phone }}</div>
+                  <CompanyInfoLines />
                 </div>
               </div>
               <div>
@@ -67,8 +67,8 @@
             </div>
 
             <div class="text-right flex-shrink-0">
-              <div class="text-2xl font-bold text-primary">{{ docModeLabel[docMode].th }}</div>
-              <div class="text-xs text-gray-500 mb-3">{{ sheet.label }}<template v-if="sheet.pageCount > 1"> · หน้า {{ sheet.pageIdx + 1 }}/{{ sheet.pageCount }}</template></div>
+              <div class="text-2xl font-bold text-primary" :class="showCornerFlag && 'clear-corner-flag'">{{ docModeLabel[docMode].th }}</div>
+              <div class="text-xs text-gray-500 mb-3" :class="showCornerFlag && 'clear-corner-flag'">{{ sheet.label }}<template v-if="sheet.pageCount > 1"> · หน้า {{ sheet.pageIdx + 1 }}/{{ sheet.pageCount }}</template></div>
               <div class="doc-meta-box text-left text-xs w-64">
                 <div class="flex justify-between gap-4">
                   <span class="text-gray-500">เลขที่</span>
@@ -150,7 +150,7 @@
                 <th class="border border-gray-400 px-2 py-1 text-left">วันที่ส่ง</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">ทะเบียนรถ</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">อ้างถึงเอกสาร</th>
-                <th class="border border-gray-400 px-2 py-1 text-left">เลข PO ลูกค้า</th>
+                <th class="border border-gray-400 px-2 py-1 text-left">เลขที่เอกสาร</th>
                 <th class="border border-gray-400 px-2 py-1 text-left">รายการ</th>
                 <th class="border border-gray-400 px-2 py-1 text-right">จำนวน<template v-if="commonRowUnit"><br />({{ commonRowUnit }})</template></th>
                 <th class="border border-gray-400 px-2 py-1 text-right">หน่วยละ</th>
@@ -168,7 +168,7 @@
                 <td class="border border-gray-400 px-2 py-1">{{ row.shipDate ? formatDateShort(row.shipDate) : '-' }}</td>
                 <td class="border border-gray-400 px-2 py-1 whitespace-nowrap">{{ plateNumberOnly(row.plate) || '-' }}</td>
                 <td class="border border-gray-400 px-2 py-1 break-all">{{ row.referenceDoc || '-' }}</td>
-                <td class="border border-gray-400 px-2 py-1 break-all">{{ deliveryNoLabel(row.deliveryNo) }}</td>
+                <td class="border border-gray-400 px-2 py-1 break-all whitespace-pre-line">{{ deliveryNoLabel(row.deliveryNo) }}</td>
                 <td class="border border-gray-400 px-2 py-1 whitespace-pre-line">{{ row.description }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right">{{ commonRowUnit ? row.qty : `${row.qty} ${row.unit}` }}</td>
                 <td class="border border-gray-400 px-2 py-1 text-right whitespace-nowrap">{{ formatBaht(row.unitPrice) }}</td>
@@ -452,7 +452,8 @@
 </template>
 
 <script setup lang="ts">
-import { bookingRefNo } from '@/utils/customerShipment'
+import CompanyInfoLines from '@/components/documents/CompanyInfoLines.vue'
+import { billingDocNo, bookingRefNo } from '@/utils/customerShipment'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'
@@ -625,13 +626,13 @@ const bookingTotal = (booking: Booking) => {
   return (booking.tripFee || 0) + extras
 }
 
-/** รายการในเอกสารเก็บเลขที่งานของระบบ (deliveryNo = booking.docNo — ใช้จับคู่งาน/Feed ห้ามแก้ค่าที่เก็บ) แต่แสดงเป็นเลข PO ลูกค้า
+/** รายการในเอกสารเก็บเลขที่งานของระบบ (deliveryNo = booking.docNo — ใช้จับคู่งาน/Feed ห้ามแก้ค่าที่เก็บ) แต่แสดงเป็นเลขที่เอกสารของลูกค้า (billingDocNo — คอลัมน์ "เลขที่เอกสาร" ตอน import)
  *  หางานไม่เจอ (งานถูกลบ/รายการกรอกเอง) แสดงค่าที่เก็บไว้ตามเดิม */
 const bookingByDocNo = computed(() => new Map(bookingStore.bookings.map((b) => [b.docNo, b])))
 const deliveryNoLabel = (deliveryNo?: string) => {
   if (!deliveryNo) return '-'
   const booking = bookingByDocNo.value.get(deliveryNo)
-  return booking ? bookingRefNo(booking) : deliveryNo
+  return booking ? billingDocNo(booking) : deliveryNo
 }
 
 const docRows = computed<PrintRow[]>(() => {
@@ -1025,6 +1026,11 @@ const printDoc = () => window.print()
   }
   .print-page-break {
     page-break-after: always;
+  }
+  /* ตอนพิมพ์แผ่นเอกสารไม่มี padding (ใช้พื้นที่เต็ม A4) หัวเอกสารเลยชิดมุมขวาบนใต้สามเหลี่ยมสีมุม (56px) — ชื่อเอกสารโดนบังครึ่งคำ
+     เว้นขวาเท่าความกว้างมุมเฉพาะบรรทัดหัว (บนจอมี padding อยู่แล้ว ไม่ทับ) */
+  .clear-corner-flag {
+    padding-right: 60px;
   }
 }
 </style>

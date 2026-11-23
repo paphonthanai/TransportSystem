@@ -193,6 +193,7 @@ import { useCustomerStore } from '@/stores/customers'
 import { bookingStatusLabel, bookingStatusClass } from '@/utils/bookingStatus'
 import { PRICE_NOT_SET_LABEL } from '@/utils/priceDisplay'
 import type { Booking, BookingCategory, BookingStatus } from '@/types'
+import { useRememberedState } from '@/composables/useRememberedState'
 
 const router = useRouter()
 const salesDocumentsStore = useSalesDocumentsStore()
@@ -247,6 +248,8 @@ const filteredRows = computed(() => {
 
 const page = ref(1)
 const perPage = ref(20)
+// จำคำค้น/ตัวกรอง/การเรียง/หน้าที่เปิดอยู่ — กดแก้ไข/ดูเอกสารแล้วกลับมาไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState('sales-order-list', { search, statusFilter, sortKey, sortDir, page, perPage })
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / perPage.value)))
 const pagedRows = computed(() => filteredRows.value.slice((page.value - 1) * perPage.value, page.value * perPage.value))
 const totalAmount = computed(() => filteredRows.value.reduce((sum, r) => sum + r.doc.amount + (r.doc.vatAmount || 0), 0))

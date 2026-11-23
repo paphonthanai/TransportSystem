@@ -1,11 +1,11 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, updateDoc } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import type { BookingCategory, Vehicle, VehicleType } from '@/types'
 
 /**
  * Phase 3 ของ incremental migration (localStorage -> Firestore) — เหมือน customerRepository.ts/driverRepository.ts:
  * ไฟล์นี้ไฟล์เดียวที่ import จาก 'firebase/firestore' ให้ stores/vehicles.ts ไม่ต้องรู้จัก Firestore เลย
- * ยังไม่ทำ realtime listener (onSnapshot) — ใช้ getDocs/addDoc/updateDoc/deleteDoc แบบ one-shot ก่อน
+ * store ใช้ subscribe() (realtime) — อ่าน/เขียนอื่นๆ เป็นแบบ one-shot
  */
 const COLLECTION = 'vehicles'
 
@@ -79,6 +79,27 @@ export const vehicleRepository = {
 
   async update(id: string, data: Partial<Vehicle>): Promise<void> {
     await updateDoc(doc(db, COLLECTION, id), sanitizeVehicle(data))
+  },
+
+  /** แก้ข้อมูลรถ "ยกเว้น" คนขับประจำ — คนขับประจำแก้ผ่าน setDriverCode() เท่านั้น สำเนาในเครื่องที่ยังไม่อัปเดตจึงเขียน
+   *  คนขับประจำเก่ากลับไปไม่ได้ (บั๊กรถประจำคนขับ 0035 เด้งกลับเป็น 73-0388) */
+  async updateDetails(id: string, data: Partial<Vehicle>): Promise<void> {
+    const { driverCode: _driverCode, ...fields } = sanitizeVehicle(data)
+    await updateDoc(doc(db, COLLECTION, id), fields)
+  },
+
+  /** เขียนเฉพาะช่องคนขับประจำ (null = ถอดคนขับ) ไม่แตะข้อมูลรถช่องอื่น */
+  async setDriverCode(id: string, driverCode: string | undefined): Promise<void> {
+    await updateDoc(doc(db, COLLECTION, id), { driverCode: driverCode || null })
+  },
+
+  /** realtime — store ใช้ตัวนี้แทน getAll() (เดิมโหลดครั้งเดียว เครื่องที่เปิดหน้าค้างถือข้อมูลรถเก่าแล้วเขียนทับกลับ) */
+  subscribe(onData: (vehicles: Vehicle[]) => void, onError: (err: any) => void) {
+    return onSnapshot(
+      collection(db, COLLECTION),
+      (snapshot) => onData(snapshot.docs.map((d) => fromFirestore(d.id, d.data()))),
+      onError
+    )
   },
 
   async delete(id: string): Promise<void> {

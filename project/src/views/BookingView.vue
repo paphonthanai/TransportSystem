@@ -37,8 +37,8 @@
       </button>
     </div>
 
-    <!-- Search -->
-    <div class="flex gap-3 flex-wrap items-center">
+    <!-- Search — ตรึงแถบค้นหา/ตัวกรองไว้ด้านบนตอนเลื่อนหน้า -->
+    <div class="flex gap-3 flex-wrap items-center sticky -top-6 z-20 bg-bg -mx-6 px-6 py-2">
       <div class="flex items-center gap-2 px-3 h-10 rounded-lg bg-surface border border-border flex-1 max-w-md">
         <span class="material-symbols-rounded text-muted">search</span>
         <input
@@ -136,22 +136,23 @@
           </div>
           <div class="p-6 space-y-4 text-sm">
             <div class="text-xs text-muted">
-              เกณฑ์: เลขชิพเม้นลูกค้าซ้ำกันในลูกค้าเดียวกัน — งานที่ไม่มีเลขชิพเม้นลูกค้าไม่ถูกตรวจ —
+              เกณฑ์: เลขที่เอกสารลูกค้าซ้ำกันในลูกค้าเดียวกัน — งานที่ไม่มีเลขที่เอกสารลูกค้าไม่ถูกตรวจ — กด "ไม่ใช่งานซ้ำ" แล้วจะไม่เตือนอีกทุกเครื่อง (เว้นมีงานเลขเดียวกันเพิ่ม) —
               งานแรก (สร้างก่อน) น่าจะเป็นต้นฉบับ ลบได้เฉพาะผู้ดูแลระบบ
             </div>
             <div v-if="!activeDuplicateGroups.length" class="text-center text-muted py-6">ไม่มีงานที่อาจซ้ำแล้ว</div>
-            <div v-for="group in activeDuplicateGroups" :key="duplicateGroupKey(group)" class="rounded-lg border border-border">
+            <div v-for="group in activeDuplicateGroups" :key="group.key" class="rounded-lg border border-border">
               <div class="flex items-center justify-between gap-2 px-3 py-2 bg-surface-2 rounded-t-lg">
-                <span class="font-semibold">เลขชิพเม้นลูกค้าซ้ำ: {{ customerShipmentNo(group.bookings[0]) }} · {{ group.bookings[0].customer }}</span>
+                <span class="font-semibold">เลขที่เอกสารซ้ำ: {{ group.bookings[0].customerDocNo }} · {{ group.bookings[0].customer }}</span>
                 <button @click="dismissDuplicateGroup(group)" class="btn-sm">ไม่ใช่งานซ้ำ</button>
               </div>
               <table class="w-full text-xs">
                 <tbody>
                   <tr v-for="(b, idx) in group.bookings" :key="b.id" class="border-t border-border">
                     <td class="px-3 py-2 font-mono whitespace-nowrap">
-                      <RouterLink :to="`/job/${b.id}`" class="text-primary hover:underline">{{ customerShipmentNo(b) }}</RouterLink>
+                      <RouterLink :to="`/job/${b.id}`" class="text-primary hover:underline">{{ bookingDocNo(b) }}</RouterLink>
                       <span v-if="idx === 0" class="ml-1 text-[10px] font-semibold text-green-700">(สร้างก่อน)</span>
                     </td>
+                    <td class="px-3 py-2 font-mono whitespace-nowrap" title="เลขชิพเม้น/รับนาม">ชิพเม้น {{ customerShipmentNo(b) || '-' }}</td>
                     <td class="px-3 py-2 whitespace-nowrap">{{ formatShortDate(b.loadingDate) }} {{ b.loadingTime || '' }}</td>
                     <td class="px-3 py-2">{{ b.driverName || '-' }} · {{ b.plate || '-' }}</td>
                     <td class="px-3 py-2">{{ destinationLabel(b) }}</td>
@@ -208,9 +209,10 @@
         </button>
       </div>
       <div class="card-lg overflow-hidden">
-      <div class="overflow-x-auto">
+      <!-- ตรึงหัวตาราง: ตารางเลื่อนในกรอบของตัวเอง (สูงไม่เกินจอ) หัวคอลัมน์ค้างอยู่ด้านบนเสมอ -->
+      <div class="overflow-auto max-h-[calc(100vh-240px)]">
         <table class="w-full text-sm">
-          <thead class="bg-surface-2 border-b border-border">
+          <thead class="bg-surface-2 sticky top-0 z-10 shadow-[inset_0_-1px_0_#e6e9f2]">
             <tr>
               <th v-if="canSelectDelete" class="px-3 py-3 w-8">
                 <input type="checkbox" :checked="allInProgressSelected" @change="toggleSelectAllInProgress" />
@@ -221,6 +223,8 @@
               <th class="text-center px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="ticket" label="เช็คตั๋ว" align="center" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="customer" label="ลูกค้า" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="shipment" label="เลขชิพเม้นลูกค้า" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="customerDocNo" label="เลขที่เอกสาร" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="ticketNo" label="เลขตั๋ว" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="loadingDate" label="วันที่ลงงาน" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="loadingTime" label="เวลา" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inProgressTable" column="site" label="สถานที่ส่ง" /></th>
@@ -290,6 +294,8 @@
                 </span>
               </td>
               <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ customerShipmentNo(booking) || '-' }}</td>
+              <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ bookingDocNo(booking) }}</td>
+              <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ booking.ticketNo || '-' }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-3 py-3 text-text">
@@ -344,7 +350,7 @@
               </td>
             </tr>
             <tr v-if="inProgressTable.rows.value.length === 0">
-              <td :colspan="canSelectDelete ? 15 : 14" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
+              <td :colspan="canSelectDelete ? 17 : 16" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
             </tr>
           </tbody>
         </table>
@@ -359,9 +365,10 @@
         <button v-if="inTransitTable.hasFilters.value" type="button" @click="inTransitTable.clearFilters()" class="btn-sm font-normal">ล้างตัวกรองคอลัมน์</button>
       </div>
       <div class="card-lg overflow-hidden">
-      <div class="overflow-x-auto">
+      <!-- ตรึงหัวตาราง: ตารางเลื่อนในกรอบของตัวเอง (สูงไม่เกินจอ) หัวคอลัมน์ค้างอยู่ด้านบนเสมอ -->
+      <div class="overflow-auto max-h-[calc(100vh-240px)]">
         <table class="w-full text-sm">
-          <thead class="bg-surface-2 border-b border-border">
+          <thead class="bg-surface-2 sticky top-0 z-10 shadow-[inset_0_-1px_0_#e6e9f2]">
             <tr>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="status" label="สถานะขนส่ง" /></th>
               <th class="px-3 py-3"></th>
@@ -372,6 +379,8 @@
               <th class="text-center px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="ticket" label="เช็คตั๋ว" align="center" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="customer" label="ลูกค้า" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="shipment" label="เลขชิพเม้นลูกค้า" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="customerDocNo" label="เลขที่เอกสาร" /></th>
+              <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="ticketNo" label="เลขตั๋ว" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="loadingDate" label="วันที่ลงงาน" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="loadingTime" label="เวลา" /></th>
               <th class="text-left px-3 py-3 text-muted"><ColumnHeader :table="inTransitTable" column="site" label="สถานที่ส่ง" /></th>
@@ -466,6 +475,8 @@
                 </span>
               </td>
               <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ customerShipmentNo(booking) || '-' }}</td>
+              <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ bookingDocNo(booking) }}</td>
+              <td class="px-3 py-3 text-text font-mono text-xs whitespace-nowrap">{{ booking.ticketNo || '-' }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ formatShortDate(booking.loadingDate) }}</td>
               <td class="px-3 py-3 text-muted whitespace-nowrap">{{ booking.loadingTime || '-' }}</td>
               <td class="px-3 py-3 text-text">
@@ -484,7 +495,7 @@
               </td>
             </tr>
             <tr v-if="inTransitTable.rows.value.length === 0">
-              <td colspan="14" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
+              <td colspan="16" class="px-3 py-8 text-center text-muted">ไม่พบงานที่ตรงกับการค้นหา/ตัวกรอง</td>
             </tr>
           </tbody>
         </table>
@@ -592,7 +603,17 @@
                 ทะเบียนรถ *
                 <span class="text-[10px] font-normal text-muted">(พิมพ์ค้นหาได้ — แสดงเฉพาะรถที่วิ่ง Feed นี้ได้)</span>
               </label>
-              <SearchableSelect v-model="dispatchForm.plate" :options="dispatchPlateOptions" placeholder="เลือกหรือพิมพ์ค้นหาทะเบียนรถ..." />
+              <!-- ล็อกทะเบียน: คนขับที่มีรถประจำ = ใช้ทะเบียนรถประจำเท่านั้น แก้เองไม่ได้ (กันลงงานผิดคัน) แอดมินปลดล็อกได้กรณีขับรถคันอื่นแทน -->
+              <div v-if="dispatchLockedPlate" class="flex items-center gap-2 h-12 px-4 rounded-lg border border-border bg-surface-2">
+                <span class="material-symbols-rounded text-muted text-xl">lock</span>
+                <span class="flex-1 text-sm font-semibold text-text">{{ dispatchLockedPlate }}</span>
+                <span class="text-[11px] text-muted">รถประจำของคนขับ</span>
+                <button v-if="isAdmin" type="button" @click="dispatchPlateUnlocked = true" class="btn-sm" title="แอดมิน: เลือกรถคันอื่นแทนรถประจำ">ปลดล็อก</button>
+              </div>
+              <SearchableSelect v-else v-model="dispatchForm.plate" :options="dispatchPlateOptions" placeholder="เลือกหรือพิมพ์ค้นหาทะเบียนรถ..." />
+              <div v-if="dispatchPlateMismatch && dispatchLockedPlate" class="text-[11px] font-semibold text-amber-700 mt-1">
+                ทะเบียนเดิมในงาน {{ dispatchPlateMismatch }} ไม่ตรงกับรถประจำของคนขับ — ระบบเปลี่ยนเป็น {{ dispatchLockedPlate }}
+              </div>
             </div>
             <div>
               <label class="block text-xs font-semibold text-muted mb-1.5">คนขับ</label>
@@ -1131,15 +1152,17 @@
 </template>
 
 <script setup lang="ts">
+import { bookingProductNames } from '@/utils/bookingProducts'
 import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
 import DriverJobDetailsContent from '@/components/booking/DriverJobDetailsContent.vue'
 import { compareInTransitBookings } from '@/utils/inTransitSort'
 import { tripNumberChoices as tripNumberChoicesFor } from '@/utils/driverDayTrips'
 import { normalizeDriverName } from '@/utils/driverIdentity'
-import { bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
+import { bookingDocNo, bookingRefNo, customerShipmentNo } from '@/utils/customerShipment'
 import ColumnHeader from '@/components/ColumnHeader.vue'
 import { useTableColumns, type TableColumn } from '@/composables/useTableColumns'
-import { bookingShipmentKey, duplicateGroupKey, findDuplicateGroups, shipmentKey, type DuplicateGroup } from '@/utils/bookingDuplicates'
+import { useRememberedState } from '@/composables/useRememberedState'
+import { bookingDocNoKey, docNoKey, findDuplicateGroups, isDuplicateGroupDismissed, type DuplicateGroup } from '@/utils/bookingDuplicates'
 import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -1494,28 +1517,15 @@ const matchesSearch = (b: Booking, q: string) => {
   return matchesBookingSearch(b, q, [driver?.nickname, driver?.code])
 }
 
-/** งานที่อาจซ้ำของ Fleet นี้ — ซ่อนกลุ่มที่ผู้ใช้กด "ไม่ใช่งานซ้ำ" แล้ว (จำไว้ในเครื่องนี้) */
-const DUP_DISMISS_KEY = 'tms.dismissedDuplicateGroups'
-const readDismissed = (): string[] => {
-  try {
-    return JSON.parse(localStorage.getItem(DUP_DISMISS_KEY) || '[]')
-  } catch {
-    return []
-  }
-}
-const dismissedDuplicates = ref<string[]>(readDismissed())
+/** งานที่อาจซ้ำของ Fleet นี้ — ซ่อนกลุ่มที่ผู้ใช้กด "ไม่ใช่งานซ้ำ" แล้ว (จำไว้ที่ตัวงานบนเซิร์ฟเวอร์ ทุกเครื่องเห็นตรงกัน
+ *  เดิมจำไว้ในเบราว์เซอร์เครื่องเดียว + key ผูกกับรายชื่องาน เครื่องอื่น/ล้างแคช/มีงานเข้ากลุ่ม จึงเด้งเตือนกลับมา) */
 const duplicateModalOpen = ref(false)
-const activeDuplicateGroups = computed(() =>
-  findDuplicateGroups(fleetBookings.value).filter((g) => !dismissedDuplicates.value.includes(duplicateGroupKey(g)))
-)
-const dismissDuplicateGroup = (group: DuplicateGroup) => {
-  dismissedDuplicates.value = [...dismissedDuplicates.value, duplicateGroupKey(group)]
-  try {
-    localStorage.setItem(DUP_DISMISS_KEY, JSON.stringify(dismissedDuplicates.value))
-  } catch {
-    /* เก็บไม่ได้ (โหมดส่วนตัว) — ซ่อนแค่รอบนี้ */
-  }
-}
+const activeDuplicateGroups = computed(() => findDuplicateGroups(fleetBookings.value).filter((g) => !isDuplicateGroupDismissed(g)))
+const dismissDuplicateGroup = (group: DuplicateGroup) =>
+  bookingStore.markNotDuplicate(
+    group.bookings.map((b) => b.id),
+    group.key
+  )
 
 const inProgressBookings = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -1559,7 +1569,7 @@ const inTransitBookings = computed(() => {
 })
 
 const productLabel = (booking: Booking) => {
-  const names = [...new Set(booking.items.map((i) => i.product).filter(Boolean))]
+  const names = bookingProductNames(booking)
   return names.length ? names.join(', ') : '-'
 }
 
@@ -1784,6 +1794,15 @@ const openDispatchDialog = (booking: Booking) => {
     odometerBefore: booking.odometerBefore || 0,
     tripSequence: defaultTripForDispatch(booking),
   }
+  dispatchPlateUnlocked.value = false
+  dispatchPlateMismatch.value = ''
+  // ล็อกทะเบียน: งานที่ลงทะเบียนไว้ไม่ตรงกับรถประจำของคนขับ → ใช้รถประจำ (ก่อนดึงเลขไมล์ จะได้ดึงของรถที่ถูกคัน)
+  const lockedDriver = booking.driverName ? findDriverByName(booking.driverName) : undefined
+  const lockedPlate = lockedDriver ? vehiclesStore.vehicleForDriver(lockedDriver.code)?.plate : undefined
+  if (lockedPlate && dispatchForm.value.plate !== lockedPlate) {
+    if (dispatchForm.value.plate && vehiclesStore.plateKey(dispatchForm.value.plate) !== vehiclesStore.plateKey(lockedPlate)) dispatchPlateMismatch.value = dispatchForm.value.plate
+    dispatchForm.value.plate = lockedPlate
+  }
   if (!dispatchForm.value.odometerBefore && dispatchForm.value.plate) {
     const prevOdometer = latestOdometerForPlate(dispatchForm.value.plate, booking.id)
     if (prevOdometer) dispatchForm.value.odometerBefore = prevOdometer.odometerAfter || 0
@@ -1798,6 +1817,7 @@ watch(
   () => dispatchForm.value.driverName,
   (name) => {
     if (suppressDispatchAutofill.value || !name) return
+    dispatchPlateMismatch.value = '' // เลือกคนขับใหม่เอง = ไม่ใช่การแก้ทะเบียนเดิมของงานแล้ว
     const driver = findDriverByName(name)
     if (!driver) return
     const vehicle = vehiclesStore.vehicleForDriver(driver.code)
@@ -1834,6 +1854,19 @@ const dispatchDriverOptions = computed<SearchableOption[]>(() =>
 )
 const dispatchDriverRecord = computed(() => (dispatchForm.value.driverName ? findDriverByName(dispatchForm.value.driverName) : undefined))
 
+/** ทะเบียนที่ล็อกไว้ = รถประจำของคนขับที่เลือก ('' = ไม่ล็อก: ยังไม่เลือกคนขับ / คนขับไม่มีรถประจำ / แอดมินปลดล็อกแล้ว) */
+const dispatchPlateUnlocked = ref(false)
+const dispatchLockedPlate = computed(() => {
+  const d = dispatchDriverRecord.value
+  if (!d || dispatchPlateUnlocked.value) return ''
+  return vehiclesStore.vehicleForDriver(d.code)?.plate || ''
+})
+/** ทะเบียนเดิมในงานที่ไม่ตรงกับรถประจำ (เปิดจัดรถงานที่ลงทะเบียนผิดไว้ก่อน) — แสดงเตือนว่าระบบเปลี่ยนให้ */
+const dispatchPlateMismatch = ref('')
+watch(dispatchLockedPlate, (plate) => {
+  if (plate && dispatchForm.value.plate !== plate) dispatchForm.value.plate = plate
+})
+
 const confirmDispatch = () => {
   if (!dispatchTarget.value || !dispatchForm.value.plate || !dispatchForm.value.driverName) return
   const selectedDriver = dispatchForm.value.driverName ? findDriverByName(dispatchForm.value.driverName) : undefined
@@ -1846,7 +1879,8 @@ const confirmDispatch = () => {
     tripSequence: dispatchForm.value.tripSequence >= 1 ? dispatchForm.value.tripSequence : undefined,
   })
   // ปรับคนขับประจำของรถให้ตรงกับที่เลือกจ่ายงานจริง เพื่อให้ทุกหน้าที่ใช้รถเห็นคนขับล่าสุด
-  if (selectedDriver) {
+  // ยกเว้นแอดมินปลดล็อกทะเบียน (ขับรถคันอื่นแทนชั่วคราว) — ไม่ย้ายรถประจำ ไม่งั้นคู่รถ-คนขับเพี้ยนในงานถัดไป
+  if (selectedDriver && !dispatchPlateUnlocked.value) {
     const vehicle = vehiclesStore.findByFullPlate(dispatchForm.value.plate)
     if (vehicle) vehiclesStore.assignDriver(vehicle.id, selectedDriver.code)
   }
@@ -1902,6 +1936,8 @@ const bookingTableColumns: TableColumn<Booking>[] = [
   { key: 'ticket', label: (b) => (b.ticketChecked ? 'เช็คแล้ว' : 'ยังไม่เช็ค') },
   { key: 'customer', label: (b) => customerRecordFor(b)?.code || b.customer || '' },
   { key: 'shipment', label: (b) => customerShipmentNo(b) },
+  { key: 'customerDocNo', label: (b) => bookingDocNo(b) },
+  { key: 'ticketNo', label: (b) => b.ticketNo || '' },
   { key: 'loadingDate', label: (b) => (b.loadingDate ? formatShortDate(b.loadingDate) : ''), sortValue: (b) => (b.loadingDate ? new Date(b.loadingDate).getTime() : undefined) },
   { key: 'loadingTime', label: (b) => b.loadingTime || '' },
   { key: 'site', label: (b) => destinationLabel(b) },
@@ -1911,6 +1947,17 @@ const bookingTableColumns: TableColumn<Booking>[] = [
 ]
 const inProgressTable = useTableColumns(inProgressBookings, bookingTableColumns)
 const inTransitTable = useTableColumns(inTransitBookings, bookingTableColumns)
+// จำคำค้น/ตัวกรองราคา/ตัวกรอง+การเรียงหัวตาราง — กดแก้ไข/ดูงานแล้วกลับมา ไม่ต้องกรองใหม่ (ดู useRememberedState)
+useRememberedState(`booking:${props.fleet}`, {
+  searchQuery,
+  priceFilter,
+  priceMin,
+  priceMax,
+  inProgressSort: inProgressTable.sort,
+  inProgressFilters: inProgressTable.filters,
+  inTransitSort: inTransitTable.sort,
+  inTransitFilters: inTransitTable.filters,
+})
 
 // --- เลือกหลายรายการ + ลบถาวรพร้อมกัน (เฉพาะ ADMIN) — เหมือน CompletedJobsView.vue's selected/bulkDeleteSelected
 // ทุกประการ แต่แยกตัวแปร/ฟังก์ชันเป็นชุดของตัวเอง (selectedInProgress/bulkDeleteSelectedInProgress) เพราะทำงานกับ
@@ -2155,6 +2202,8 @@ const IMPORT_COLUMN_ORDER = [
   IMPORT_HEADERS.driverName,
   IMPORT_HEADERS.plate,
   IMPORT_HEADERS.docRef,
+  IMPORT_HEADERS.shipmentNo,
+  IMPORT_HEADERS.ticketNo,
   IMPORT_HEADERS.customer,
   IMPORT_HEADERS.ticketChecked,
   IMPORT_HEADERS.time,
@@ -2177,6 +2226,8 @@ const IMPORT_COLUMN_ORDER = [
 const downloadImportTemplate = async () => {
   const sampleRow = [
     1,
+    '',
+    '',
     '',
     '',
     '',
@@ -2288,24 +2339,26 @@ const importTripClashFor = (row: ImportRowResult) => {
 /** ชื่อเล่นใน Excel ที่ยังไม่ได้ map เป็นคนขับ (ผู้ใช้ยังไม่ได้เลือก) — ต้องตรวจก่อนสร้างงาน */
 const importUnmappedDriverFor = (row: ImportRowResult) =>
   row.driverNickname && !row.driverName ? `ชื่อเล่น "${row.driverNickname}" ยังไม่ได้ map เป็นคนขับ — เลือกคนขับในคอลัมน์ พขร. ก่อน ไม่งั้นงานจะไม่มีคนขับ` : undefined
-const importShipmentKey = (row: ImportRowResult) => shipmentKey(row.customer, row.docRef)
-/** เลขชิพเม้นที่มีอยู่แล้วใน Fleet นี้ → เลขที่งาน (ตรวจซ้ำตอน import) */
-const existingShipments = computed(() => {
+const importDocNoKey = (row: ImportRowResult) => docNoKey(row.customer, row.customerDocNo)
+/** เลขที่เอกสารลูกค้าที่มีอยู่แล้วใน Fleet นี้ → เลขชิพเม้นของงานนั้น (ตรวจซ้ำตอน import) */
+const existingDocNos = computed(() => {
   const map = new Map<string, string>()
   fleetBookings.value.forEach((b) => {
-    const key = bookingShipmentKey(b)
-    if (key) map.set(key, bookingRefNo(b))
+    const key = bookingDocNoKey(b)
+    if (key) map.set(key, customerShipmentNo(b) ? `ชิพเม้น ${customerShipmentNo(b)}` : `งาน ${b.docNo}`)
   })
   return map
 })
-/** แถวที่เลขชิพเม้นซ้ำกับงานที่มีอยู่แล้ว (หรือแถวก่อนหน้าในไฟล์เดียวกัน) — ค่าเริ่มต้นข้ามไม่สร้าง แถวไม่มีเลขชิพเม้นไม่ตรวจ */
+/** แถวที่เลขที่เอกสารซ้ำกับงานที่มีอยู่แล้ว (หรือแถวก่อนหน้าในไฟล์เดียวกัน) — ค่าเริ่มต้นข้ามไม่สร้าง แถวไม่มีเลขที่เอกสารไม่ตรวจ */
 const importDuplicateFor = (row: ImportRowResult): string | undefined => {
-  const key = importShipmentKey(row)
+  const key = importDocNoKey(row)
   if (!key) return undefined
-  const docNo = existingShipments.value.get(key)
-  if (docNo) return `เลขชิพเม้นลูกค้า ${row.docRef} มีงานนี้อยู่แล้วในระบบ (${docNo})`
-  const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importShipmentKey(r) === key)
-  return earlier ? `เลขชิพเม้นลูกค้า ${row.docRef} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้` : undefined
+  const existing = existingDocNos.value.get(key)
+  if (existing) return `เลขที่เอกสาร ${row.customerDocNo} มีงานนี้อยู่แล้วในระบบ (${existing})`
+  const earlier = importableRows.value.find((r) => r.rowNumber < row.rowNumber && importDocNoKey(r) === key)
+  return earlier
+    ? `เลขที่เอกสาร ${row.customerDocNo} ซ้ำกับแถว ${earlier.rowNumber} ในไฟล์นี้${earlier.shipmentNo ? ` (ชิพเม้น ${earlier.shipmentNo})` : ''}`
+    : undefined
 }
 /** แถวที่เลือก "ข้าม" (ค่าเริ่มต้น = ข้ามแถวที่อาจซ้ำ) */
 const importSkip = ref<Record<number, boolean>>({})
@@ -2385,7 +2438,9 @@ const confirmImport = () => {
       // เดิมไม่เคยเซ็ต po เลยสำหรับงาน import ต่างจากสร้างงานด้วยมือที่ auto-gen ให้เสมอ (BookingCreateView.vue) —
       // ทำให้เอกสารที่พิมพ์ออกมาช่อง "ใบสั่งงาน (PO)" ว่างเป็น "-" เสมอสำหรับงาน import ทุกงาน
       po: bookingStore.nextPoNo(),
-      reference: row.docRef || undefined,
+      reference: row.shipmentNo || undefined,
+      customerDocNo: row.customerDocNo || undefined,
+      ticketNo: row.ticketNo || undefined,
       customer: row.customer,
       items,
       allowance: row.allowance,

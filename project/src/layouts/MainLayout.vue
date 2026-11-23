@@ -101,7 +101,7 @@
       </header>
 
       <!-- Content Area -->
-      <main class="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
+      <main ref="mainEl" class="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
         <PersistenceErrorBanner />
         <!-- แต่ละหน้าแสดง loading จนข้อมูลที่หน้านั้นใช้โหลดเสร็จ แล้วค่อยแสดงเนื้อหา (ดู PageGate / trackLoading) -->
         <PageGate>
@@ -122,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -134,6 +134,38 @@ import PageGate from '@/components/shared/PageGate.vue'
 
 const router = useRouter()
 const currentRoute = useRoute()
+
+// กลับมาหน้ารายการเดิม (เช่น กดแก้ไขงานแล้วกลับมา) ให้เลื่อนอยู่ตำแหน่งเดิม ไม่เด้งขึ้นบนสุด — คู่กับ useRememberedState ที่จำตัวกรองไว้
+// เนื้อหาอาจยังโหลดไม่เสร็จ (PageGate) จึงลองเลื่อนซ้ำจนกว่าหน้าจะยาวพอ (ไม่เกิน ~1.5 วินาที) หน้าที่ไม่เคยเปิด = เริ่มบนสุด
+const mainEl = ref<HTMLElement | null>(null)
+const scrollPositions = new Map<string, number>()
+let restoreTimer: ReturnType<typeof setTimeout> | undefined
+const removeBeforeEach = router.beforeEach((_to, from) => {
+  if (mainEl.value) scrollPositions.set(from.fullPath, mainEl.value.scrollTop)
+})
+const removeAfterEach = router.afterEach((to, from, failure) => {
+  if (failure || to.fullPath === from.fullPath) return
+  clearTimeout(restoreTimer)
+  const target = scrollPositions.get(to.fullPath)
+  if (!target) {
+    // ?highlight= เลื่อนไปที่แถวเอง (BookingView) ไม่ไปทับ
+    if (mainEl.value && !to.query.highlight) mainEl.value.scrollTop = 0
+    return
+  }
+  let tries = 0
+  const apply = () => {
+    const el = mainEl.value
+    if (!el) return
+    el.scrollTop = target
+    if (Math.abs(el.scrollTop - target) > 2 && tries++ < 30) restoreTimer = setTimeout(apply, 50)
+  }
+  restoreTimer = setTimeout(apply, 0)
+})
+onBeforeUnmount(() => {
+  removeBeforeEach()
+  removeAfterEach()
+  clearTimeout(restoreTimer)
+})
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const isSmallScreen = ref(false)

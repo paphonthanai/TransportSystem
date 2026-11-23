@@ -1,3 +1,4 @@
+import { bookingProductNames } from '@/utils/bookingProducts'
 import { computed, ref, type Ref } from 'vue'
 import { useBookingStore } from '@/stores/booking'
 import { useSalesDocumentsStore } from '@/stores/salesDocuments'
@@ -5,7 +6,7 @@ import { useVehiclesStore } from '@/stores/vehicles'
 import { computeBookingMoney } from '@/utils/bookingMoney'
 import { isBookingConfirmedForBilling } from '@/utils/bookingStatus'
 import { matchesBookingSearch } from '@/utils/bookingSearch'
-import { customerShipmentNo } from '@/utils/customerShipment'
+import { bookingDocNo, customerShipmentNo } from '@/utils/customerShipment'
 import type { Booking, BookingCategory } from '@/types'
 
 /** สถานะเอกสารทั้ง 3 ประเภท (billingNoteDocId/taxInvoiceDocId/receiptDocId) เป็นอิสระต่อกันโดยเจตนา ไม่ใช่ enum เดียวแบบ
@@ -61,8 +62,14 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
 
   const completedBookings = computed(() => {
     const f = filters.value
-    const from = f.dateFrom ? new Date(f.dateFrom) : null
-    const to = f.dateTo ? new Date(f.dateTo) : null
+    // ค่าจาก <input type="date"> เป็น 'YYYY-MM-DD' — new Date('YYYY-MM-DD') อ่านเป็นเที่ยงคืน UTC (= 07:00 เวลาไทย)
+    // ทำให้งานที่ส่งสำเร็จ 00:00–06:59 ของวันเริ่มหลุดจากตัวกรอง/Excel ต้องอ่านเป็นเที่ยงคืนเวลาเครื่อง
+    const localDay = (s: string) => {
+      const [y, m, d] = s.split('-').map(Number)
+      return new Date(y, m - 1, d)
+    }
+    const from = f.dateFrom ? localDay(f.dateFrom) : null
+    const to = f.dateTo ? localDay(f.dateTo) : null
     return bookingStore.bookings
       .filter((b) => b.status === 'DELIVERED')
       // งานที่จบผ่านแอปคนขับ (มี podReviewStatus) ต้องรอ "ยืนยันการจบงาน" ก่อนถึงจะมาอยู่ในหน้านี้ — อยู่ในตาราง
@@ -111,7 +118,7 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
   })
 
   const productLabel = (booking: Booking) => {
-    const names = [...new Set(booking.items.map((i) => i.product).filter(Boolean))]
+    const names = bookingProductNames(booking)
     return names.length ? names.join(', ') : '-'
   }
 
@@ -164,7 +171,8 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
     const dateLabel = (d?: Date) => (d ? new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '')
     return {
       เลขชิพเม้นลูกค้า: customerShipmentNo(b),
-      เลขที่เอกสาร: b.docNo,
+      เลขที่เอกสาร: bookingDocNo(b),
+      เลขตั๋ว: b.ticketNo || '',
       'เลข PO': b.po || '',
       กองรถ: b.category === 'cements' ? 'Cements' : 'Ceramics',
       ลูกค้า: b.customer,
@@ -177,6 +185,9 @@ export function useCompletedJobs(filters: Ref<CompletedJobsFilters>) {
       วันที่ส่งของสำเร็จ: dateLabel(b.completedAt),
       ราคา: completedJobPriceOf(b),
       เบี้ยเลี้ยง: money.allowance,
+      // ลิตร × เรท = ค่าน้ำมัน — เรทที่บันทึกไว้ในงาน (ราคาประจำวันของวันที่สร้างงาน หรือที่กรอกเอง) ตรวจย้อนหลังได้ว่าคิดเรทเท่าไร
+      ลิตรน้ำมัน: b.fuelLiters || 0,
+      'เรทน้ำมัน (บาท/ลิตร)': b.fuelRate || 0,
       ค่าน้ำมัน: money.fuelCost,
       'รายได้คงเหลือ (รายได้บริษัท)': money.companyIncome ?? '',
       หมายเหตุรายได้: money.incomeNote || '',

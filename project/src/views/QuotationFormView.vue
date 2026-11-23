@@ -1,5 +1,9 @@
 ﻿<template>
   <div class="space-y-4 pb-10">
+    <!-- เปิดหน้าแก้ไขแต่หาเอกสารเดิมไม่เจอ — ห้ามบันทึก (กันฟอร์มว่างไปทับเอกสารเดิม/เปลี่ยนเลขที่) -->
+    <div v-if="editTargetMissing" class="rounded-lg border border-red-300 bg-red-50 text-red-800 px-4 py-3 text-sm">
+      ไม่พบเอกสารที่จะแก้ไข (อาจถูกลบ หรือข้อมูลยังโหลดไม่เสร็จ) — กด Refresh อีกครั้ง หรือกลับไปเปิดจากหน้ารายการ · บันทึกไม่ได้จนกว่าจะพบเอกสาร
+    </div>
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="flex items-end gap-3">
         <div>
@@ -551,7 +555,10 @@ const previewNumber = computed(() => {
 /** เลขที่เอกสารแก้ไขเองได้ — ตั้งต้นจากเลขที่ auto-generate (หรือเลขเดิมถ้าเป็นการแก้ไข) แล้วผู้ใช้พิมพ์ทับได้อิสระ */
 const documentNumber = ref(previewNumber.value)
 
-const canSubmit = computed(() => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0))
+/** โหมดแก้ไขแต่ไม่พบเอกสารเดิม — ห้ามบันทึก ไม่งั้นข้อมูลฟอร์มว่างจะไปทับเอกสารเดิม */
+const editTargetMissing = isEditMode && !editingDoc
+
+const canSubmit = computed(() => !editTargetMissing && customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0))
 
 /** เงินสด = เครดิต 0 วัน (ครบกำหนดวันเดียวกัน), เครดิต (ไม่แสดงวันที่) = ไม่บันทึกจำนวนวัน/วันครบกำหนดเลย */
 const resolvedCreditDays = computed<number | undefined>(() => {

@@ -128,16 +128,23 @@ vi.mock('firebase/firestore', () => ({
   },
   // รองรับทั้ง onSnapshot(collectionRef, ...) (repository pattern ปกติ) และ onSnapshot(docRef, ...) (single-document
   // listener เช่น composables/useFirestoreSettings.ts) — สอง shape คืนค่าต่างกัน (docs[] vs exists()/data() ตรงๆ)
-  onSnapshot: (ref: DocRef | CollectionRef, onNext: (snap: unknown) => void) => {
+  // รองรับ onSnapshot(ref, { includeMetadataChanges }, onNext) ด้วย (salesDocumentRepository ใช้รูปนี้) — snapshot จำลอง
+  // ยืนยันบนเซิร์ฟเวอร์แล้วทุกเอกสาร (metadata.hasPendingWrites = false) และ docChanges() = เอกสารทั้งหมด (snapshot แรก)
+  onSnapshot: (ref: DocRef | CollectionRef, optsOrNext: unknown, maybeNext?: (snap: unknown) => void) => {
+    const onNext = (typeof optsOrNext === 'function' ? optsOrNext : maybeNext) as (snap: unknown) => void
     if (ref.__kind === 'doc') {
       const data = collectionMap(ref.path).get(ref.id)
       onNext({ exists: () => data !== undefined, data: () => data, id: ref.id })
       return () => {}
     }
     const map = collectionMap(ref.path)
-    const docs = [...map.entries()].map(([id, data]) => ({ id, data: () => data }))
-    onNext({ docs })
+    const docs = [...map.entries()].map(([id, data]) => ({ id, data: () => data, metadata: { hasPendingWrites: false } }))
+    onNext({ docs, docChanges: () => docs.map((d) => ({ type: 'added', doc: d })) })
     return () => {}
+  },
+  getDocFromServer: async (ref: DocRef) => {
+    const data = collectionMap(ref.path).get(ref.id)
+    return { exists: () => data !== undefined, data: () => data, id: ref.id }
   },
   deleteField: () => DELETE_FIELD,
   // Hard Delete Booking (bookingRepository.hardDeleteWithReferences) ใช้ writeBatch เพื่อลบหลาย document แบบ atomic

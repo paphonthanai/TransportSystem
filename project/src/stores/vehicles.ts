@@ -2,8 +2,9 @@ import { defineStore } from 'pinia'
 import { trackLoading } from '@/stores/loading'
 import { ref } from 'vue'
 import type { Vehicle, BookingCategory } from '@/types'
-import { vehicleRepository, sanitizeVehicle } from '@/repositories/vehicleRepository'
+import { vehicleRepository } from '@/repositories/vehicleRepository'
 import { normalizePlateCode } from '@/utils/importReconciliation'
+import { firstSnapshot } from '@/utils/firstSnapshot'
 
 export const useVehiclesStore = defineStore('vehicles', () => {
   const vehicles = ref<Vehicle[]>([])
@@ -16,7 +17,20 @@ export const useVehiclesStore = defineStore('vehicles', () => {
     loading.value = true
     error.value = null
     try {
-      vehicles.value = await vehicleRepository.getAll()
+      // realtime — เดิมโหลดครั้งเดียว เครื่องที่เปิดหน้าค้างไว้ไม่เห็นการเปลี่ยนรถประจำของเครื่องอื่น แล้วจัดรถ/บันทึกจากข้อมูลเก่า
+      // เขียนรถประจำเดิมกลับไป (คนขับ 0035: เปลี่ยนเป็น 72-3379 แล้วเด้งกลับเป็น 73-0388)
+      await firstSnapshot((next, fail) =>
+        vehicleRepository.subscribe(
+          (list) => {
+            vehicles.value = list
+            next()
+          },
+          (err) => {
+            error.value = err?.message || 'เชื่อมต่อ realtime ข้อมูลรถไม่สำเร็จ'
+            fail(err)
+          }
+        )
+      )
     } catch (err: any) {
       error.value = err?.message || 'โหลดข้อมูลรถจาก Firestore ไม่สำเร็จ'
     } finally {
@@ -75,20 +89,21 @@ export const useVehiclesStore = defineStore('vehicles', () => {
   async function assignDriver(vehicleId: string, driverCode: string | undefined) {
     const vehicle = vehicles.value.find((v) => v.id === vehicleId)
     if (!vehicle) return
-    if (driverCode) {
-      const prev = vehicles.value.find((v) => v.driverCode === driverCode && v.id !== vehicleId)
-      if (prev) {
-        prev.driverCode = undefined
-        await vehicleRepository.update(prev.id, sanitizeVehicle(prev))
-      }
-    }
+    // เขียนเฉพาะช่องคนขับประจำ (ไม่เขียนข้อมูลรถทั้งคันจากสำเนาในเครื่องทับ) และถอดคนขับคนนี้ออกจากรถ "ทุก" คันอื่น
+    // (เดิมถอดแค่คันแรกที่เจอ ถ้าข้อมูลเพี้ยนมี 2 คัน คันที่เหลือยังผูกอยู่ = รถประจำเด้งไปมา)
+    const others = driverCode ? vehicles.value.filter((v) => v.driverCode === driverCode && v.id !== vehicleId) : []
+    others.forEach((v) => (v.driverCode = undefined))
     vehicle.driverCode = driverCode || undefined
-    await vehicleRepository.update(vehicle.id, sanitizeVehicle(vehicle))
+    await Promise.all([
+      ...others.map((v) => vehicleRepository.setDriverCode(v.id, undefined)),
+      vehicleRepository.setDriverCode(vehicle.id, driverCode),
+    ])
   }
 
   async function createVehicle(data: Omit<Vehicle, 'id' | 'repairStatus' | 'repairDays' | 'driverCode'>): Promise<string> {
     const id = await vehicleRepository.create(data)
-    vehicles.value.unshift({ id, ...data })
+    // realtime snapshot อาจใส่คันนี้ให้แล้วก่อน addDoc คืนค่า — กันซ้ำ
+    if (!vehicles.value.some((v) => v.id === id)) vehicles.value.unshift({ id, ...data })
     return id
   }
 
@@ -98,7 +113,8 @@ export const useVehiclesStore = defineStore('vehicles', () => {
   async function updateVehicle(id: string, data: Omit<Vehicle, 'id' | 'repairStatus' | 'repairDays' | 'driverCode'>) {
     const existing = vehicles.value.find((v) => v.id === id)
     const merged: Vehicle = { ...(existing as Vehicle), ...data, id }
-    await vehicleRepository.update(id, sanitizeVehicle(merged))
+    // ไม่เขียนคนขับประจำ — สำเนาในเครื่องอาจเก่า (คนขับประจำแก้ผ่าน assignDriver() เท่านั้น)
+    await vehicleRepository.updateDetails(id, merged)
     const index = vehicles.value.findIndex((v) => v.id === id)
     if (index !== -1) vehicles.value[index] = merged
   }

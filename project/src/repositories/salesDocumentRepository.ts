@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, onSnapshot, setDoc } from 'firebase/firestore'
+import { collection, deleteDoc, doc, getDocFromServer, getDocs, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '@/config/firebase'
 import type { SalesDocument } from '@/stores/salesDocuments'
 
@@ -36,14 +36,29 @@ export const salesDocumentRepository = {
     await setDoc(doc(db, COLLECTION, id), sanitize(data as unknown as Record<string, unknown>))
   },
 
+  /** มีเอกสารนี้อยู่จริงบนเซิร์ฟเวอร์หรือไม่ (ไม่เชื่อแคชในเครื่อง) — ใช้ยืนยันก่อนปลดงานที่ค้างผูกกับเอกสารที่ไม่มีแล้ว
+   *  ต่อเซิร์ฟเวอร์ไม่ได้ (ออฟไลน์) = โยน error ให้ผู้เรียกหยุด ไม่ถือว่า "ไม่มี" */
+  async existsOnServer(id: string): Promise<boolean> {
+    return (await getDocFromServer(doc(db, COLLECTION, id))).exists()
+  },
+
   async delete(id: string): Promise<void> {
     await deleteDoc(doc(db, COLLECTION, id))
   },
 
-  subscribe(onData: (docs: SalesDocument[]) => void, onError: (err: any) => void) {
+  /** onData ได้ id ของเอกสารที่ยืนยันแล้วบนเซิร์ฟเวอร์ด้วย (ไม่นับเอกสารที่เพิ่งเขียนในเครื่องและยังรอเซิร์ฟเวอร์ตอบ — hasPendingWrites) */
+  subscribe(onData: (docs: SalesDocument[] | null, confirmedIds: Set<string>) => void, onError: (err: any) => void) {
+    let first = true
     return onSnapshot(
       collection(db, COLLECTION),
-      (snapshot) => onData(snapshot.docs.map((d) => revive({ id: d.id, ...d.data() }))),
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        const confirmedIds = new Set(snapshot.docs.filter((d) => !d.metadata.hasPendingWrites).map((d) => d.id))
+        // snapshot ที่เปลี่ยนแค่ metadata (เซิร์ฟเวอร์ตอบรับการเขียน) — ไม่สร้างเอกสารทั้งชุดใหม่ แจ้งแค่ id ที่ยืนยันแล้ว
+        if (!first && snapshot.docChanges().length === 0) return onData(null, confirmedIds)
+        first = false
+        onData(snapshot.docs.map((d) => revive({ id: d.id, ...d.data() })), confirmedIds)
+      },
       onError
     )
   },

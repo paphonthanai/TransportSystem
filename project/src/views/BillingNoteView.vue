@@ -19,8 +19,7 @@
           <img v-if="documentSettingsStore.settings.company.logo" :src="documentSettingsStore.settings.company.logo" class="w-14 h-14 object-contain flex-shrink-0" />
           <div>
             <div class="text-lg font-bold">{{ documentSettingsStore.settings.company.name }}</div>
-            <div class="text-xs leading-relaxed max-w-xs">{{ documentSettingsStore.settings.company.address }}</div>
-            <div class="text-xs">เลขประจำตัวผู้เสียภาษี: {{ documentSettingsStore.settings.company.taxId }}</div>
+            <CompanyInfoLines />
           </div>
         </div>
         <div class="text-right">
@@ -65,7 +64,7 @@
           <tr v-for="(booking, idx) in batchBookings" :key="booking.id">
             <td class="border border-gray-400 px-2 py-1">{{ idx + 1 }}</td>
             <td class="border border-gray-400 px-2 py-1">
-              {{ bookingRefNo(booking) }} · {{ destinationLabel(booking) }}
+              {{ billingDocNo(booking) }} · {{ destinationLabel(booking) }}
               <span class="text-xs text-gray-600">- {{ formatDate(booking.dispatchedAt || booking.createdAt) }}</span>
             </td>
             <td class="border border-gray-400 px-2 py-1 text-right">1</td>
@@ -109,7 +108,8 @@
 </template>
 
 <script setup lang="ts">
-import { bookingRefNo } from '@/utils/customerShipment'
+import CompanyInfoLines from '@/components/documents/CompanyInfoLines.vue'
+import { billingDocNo } from '@/utils/customerShipment'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookingStore } from '@/stores/booking'

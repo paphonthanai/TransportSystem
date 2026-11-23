@@ -65,6 +65,14 @@
           <input v-model="editForm.reference" class="input-field w-full" />
         </div>
         <div>
+          <label class="block text-xs font-semibold text-muted mb-1">เลขที่เอกสาร</label>
+          <input v-model="editForm.customerDocNo" :placeholder="target?.docNo ? `ว่าง = ${target.docNo}` : ''" class="input-field w-full" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-muted mb-1">เลขตั๋ว</label>
+          <input v-model="editForm.ticketNo" class="input-field w-full" />
+        </div>
+        <div>
           <label class="block text-xs font-semibold text-muted mb-1">รายละเอียด</label>
           <input v-model="editForm.description" class="input-field w-full" />
         </div>
@@ -346,6 +354,8 @@ const editForm = ref({
   loadingTimeEnd: '',
   returnDate: '',
   shipmentNo: '',
+  customerDocNo: '',
+  ticketNo: '',
   route: '',
   origin: '',
   reference: '',
@@ -383,6 +393,8 @@ watch(
       loadingTimeEnd,
       returnDate: toDateInput(booking.returnDate),
       shipmentNo: booking.shipmentNo || '',
+      customerDocNo: booking.customerDocNo || '',
+      ticketNo: booking.ticketNo || '',
       route: booking.route || '',
       origin: booking.origin || '',
       reference: booking.reference || '',
@@ -621,6 +633,8 @@ const confirmEditBooking = () => {
     loadingTime: combineLoadingTime(f.loadingTime, f.loadingTimeEnd),
     returnDate: f.returnDate ? new Date(f.returnDate) : undefined,
     shipmentNo: f.shipmentNo ?? '',
+    customerDocNo: f.customerDocNo ?? '',
+    ticketNo: f.ticketNo ?? '',
     route: f.route ?? '',
     origin: f.origin ?? '',
     reference: f.reference ?? '',

@@ -110,20 +110,20 @@ describe('createBillingFromBookings — eligibility guards', () => {
   })
 })
 
-/** Business Rule: "IN_TRANSIT สามารถออกใบวางบิลได้ UNIVERSALLY" — ไม่จำกัดแค่งานที่เคย DELIVERED แล้วถูก Reset
- *  กลับมา ครอบคลุมงานปกติที่ยังไม่ถึงปลายทาง, งาน Reset-derived, และงาน partial delivery ทั้งหมดเท่ากัน — และต้อง
- *  ไม่ทำลาย eligibility rule อื่น (customer/category/claim) ที่มีอยู่แล้ว */
-describe('createBillingFromBookings — universal IN_TRANSIT eligibility', () => {
-  it('allows a normal IN_TRANSIT booking with zero items delivered yet', () => {
+/** Business Rule (เปลี่ยนตามที่ลูกค้าขอ): วางบิลได้เฉพาะงานที่กดจบงานแล้ว (DELIVERED) — งาน IN_TRANSIT ที่ยังไม่จบงาน
+ *  วางบิลไม่ได้แล้ว ทั้งงานปกติที่ยังไม่ถึงปลายทาง และงาน Reset กลับมาจากระหว่างส่ง (เดิมเปิดให้วางบิลได้) */
+describe('createBillingFromBookings — only completed (DELIVERED) jobs are billable', () => {
+  it('rejects a normal IN_TRANSIT booking (job not completed yet)', () => {
     const bookingStore = useBookingStore()
     const salesDocs = useSalesDocumentsStore()
     const booking = makeBooking({ customer: 'ลูกค้า A', category: 'cements', status: 'IN_TRANSIT', items: [makeJobItem(), makeJobItem()] })
     bookingStore.bookings.push(booking)
 
-    expect(salesDocs.createBillingFromBookings([booking.id])).not.toBeNull()
+    expect(salesDocs.createBillingFromBookings([booking.id])).toBeNull()
+    expect(booking.billingNoteDocId).toBeUndefined()
   })
 
-  it('allows a reset-derived IN_TRANSIT booking that still carries preserved partial-delivery history', () => {
+  it('rejects a reset-derived IN_TRANSIT booking even with preserved partial-delivery history', () => {
     const bookingStore = useBookingStore()
     const salesDocs = useSalesDocumentsStore()
     const delivered = makeJobItem({ id: 'a', deliveryStatus: 'DELIVERED', deliveredAt: new Date(), podImage: 'pod-a', deliveredBy: 'สมชาย' })
@@ -137,23 +137,23 @@ describe('createBillingFromBookings — universal IN_TRANSIT eligibility', () =>
     expect(booking.status).toBe('IN_TRANSIT')
 
     const billingResult = salesDocs.createBillingFromBookings([booking.id])
-    expect(billingResult).not.toBeNull()
-    // ออกใบวางบิลแล้วต้องไม่แตะข้อมูลการส่งของที่ preserve ไว้เลย
+    expect(billingResult).toBeNull()
+    // วางบิลไม่สำเร็จต้องไม่แตะข้อมูลการส่งของที่ preserve ไว้เลย
     expect(booking.items.find((i) => i.id === 'a')?.deliveryStatus).toBe('DELIVERED')
     expect(booking.items.find((i) => i.id === 'a')?.podImage).toBe('pod-a')
     expect(booking.items.find((i) => i.id === 'b')?.deliveryStatus).not.toBe('DELIVERED')
   })
 
-  it('customer/category guards still apply to IN_TRANSIT bookings exactly as they do for DELIVERED ones', () => {
+  it('customer/category guards still apply to completed bookings', () => {
     const bookingStore = useBookingStore()
     const salesDocs = useSalesDocumentsStore()
-    const cement = makeBooking({ customer: 'ลูกค้า A', category: 'cements', status: 'IN_TRANSIT' })
-    const ceramic = makeBooking({ customer: 'ลูกค้า A', category: 'ceramics', status: 'IN_TRANSIT' })
+    const cement = makeBooking({ customer: 'ลูกค้า A', category: 'cements', status: 'DELIVERED' })
+    const ceramic = makeBooking({ customer: 'ลูกค้า A', category: 'ceramics', status: 'DELIVERED' })
     bookingStore.bookings.push(cement, ceramic)
 
     expect(salesDocs.createBillingFromBookings([cement.id, ceramic.id])).toBeNull()
 
-    const otherCustomer = makeBooking({ customer: 'ลูกค้า B', category: 'cements', status: 'IN_TRANSIT' })
+    const otherCustomer = makeBooking({ customer: 'ลูกค้า B', category: 'cements', status: 'DELIVERED' })
     bookingStore.bookings.push(otherCustomer)
     expect(salesDocs.createBillingFromBookings([cement.id, otherCustomer.id])).toBeNull()
   })

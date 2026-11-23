@@ -51,10 +51,10 @@ function defaultSettings(): DocumentSettings {
   return {
     company: {
       name: 'บริษัท มิตรกาญจน์ จำกัด',
-      address: '42 หมู่ที่ 8 ตำบลทับกวาง อำเภอแก่งคอย จ.สระบุรี',
+      address: '42 หมู่ที่ 8 ต.ทับกวาง อ.แก่งคอย จ.สระบุรี',
       zipCode: '18260',
-      taxId: '',
-      phone: '',
+      taxId: '0195560002479',
+      phone: '085-4077648, 091-9956525',
       logo: null,
       stamp: null,
     },
@@ -92,11 +92,20 @@ function defaultSettings(): DocumentSettings {
   }
 }
 
+/** ข้อมูลบริษัทที่บันทึกไว้ — ชื่อ/ที่อยู่/รหัสไปรษณีย์/เลขผู้เสียภาษี/เบอร์โทรที่เว้นว่างไว้ใช้ค่าเริ่มต้นของบริษัทแทน (ข้อมูลเก่าบันทึกช่องว่างไว้ก่อนมีค่าเริ่มต้น) */
+function mergeCompany(def: DocumentSettings['company'], raw: Partial<DocumentSettings['company']> | undefined): DocumentSettings['company'] {
+  const out = { ...def, ...raw }
+  for (const key of ['name', 'address', 'zipCode', 'taxId', 'phone'] as const) {
+    if (!String(out[key] ?? '').trim()) out[key] = def[key]
+  }
+  return out
+}
+
 /** รวม settings ที่โหลดจาก localStorage เข้ากับค่า default เผื่อมีฟิลด์ใหม่ที่ข้อมูลเก่ายังไม่มี */
 function mergeWithDefaults(raw: any): DocumentSettings {
   const def = defaultSettings()
   return {
-    company: { ...def.company, ...raw?.company },
+    company: mergeCompany(def.company, raw?.company),
     priceDisplay: raw?.priceDisplay ?? def.priceDisplay,
     vatRate: raw?.vatRate ?? def.vatRate,
     whtRate: raw?.whtRate ?? def.whtRate,

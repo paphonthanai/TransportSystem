@@ -221,4 +221,32 @@ body {
     max-width: 100% !important;
     margin: 0 !important;
   }
+
+  /*
+   * เอกสารยาวหลายหน้า (เช่น ใบวางบิล 70 รายการ) ต้องพิมพ์ได้ครบทุกหน้า:
+   * โครงแอป (MainLayout) สูงเท่าจอ + overflow-hidden และ <main> เลื่อนในตัว — ตอนพิมพ์จึงถูกตัดเหลือหน้าเดียว
+   * ปลดความสูง/การตัดของทุกกล่องที่ครอบ #print-area และเอาส่วนอื่นของแอปออกจากหน้า (ไม่ให้กินพื้นที่จนเกิดหน้าว่าง)
+   */
+  html:has(#print-area),
+  body:has(#print-area),
+  body *:has(#print-area) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+    position: static !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    transform: none !important;
+    background: transparent !important;
+  }
+
+  body:has(#print-area) *:not(:has(#print-area)):not(#print-area):not(#print-area *) {
+    display: none !important;
+  }
+
+  body:has(#print-area) #print-area {
+    position: static;
+  }
 }
