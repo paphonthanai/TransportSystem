@@ -263,14 +263,41 @@
               <textarea v-model="internalNote" rows="3" class="input-field w-full" />
             </div>
           </div>
-          <label class="block border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary transition-all">
-            <input type="file" accept="image/*" class="hidden" @change="onAttachmentSelected" />
-            <img v-if="attachmentPreview" :src="attachmentPreview" class="max-h-40 mx-auto rounded-lg object-contain" />
-            <template v-else>
+          <div>
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <span class="field-label !mb-0">รูปแนบ ({{ attachments.length }}/{{ MAX_ATTACHMENTS }})</span>
+              <label v-if="attachments.length && attachments.length < MAX_ATTACHMENTS" class="btn-sm cursor-pointer">
+                <span class="material-symbols-rounded text-base">add_photo_alternate</span>
+                {{ attachmentBusy ? 'กำลังอัปโหลด...' : 'แนบรูปเพิ่ม' }}
+                <input type="file" accept="image/*" multiple class="hidden" :disabled="attachmentBusy" @change="onAttachmentSelected" />
+              </label>
+            </div>
+            <div v-if="attachments.length" class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              <div v-for="(url, i) in attachments" :key="url" class="relative">
+                <img
+                  :src="url"
+                  :alt="`รูปแนบ ${i + 1}`"
+                  class="w-full h-24 object-cover rounded-lg border border-border bg-white cursor-zoom-in"
+                  title="กดเพื่อดูรูปขนาดใหญ่"
+                  @click="attachmentViewer = { src: url, title: `${documentNumber || 'ใบวางบิล'} · รูปแนบ ${i + 1}`, filename: `${documentNumber || 'ใบวางบิล'} รูปแนบ ${i + 1}` }"
+                />
+                <button
+                  type="button"
+                  class="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-600"
+                  title="เอารูปนี้ออก"
+                  @click="removeAttachment(i)"
+                >
+                  <span class="material-symbols-rounded text-sm">close</span>
+                </button>
+              </div>
+            </div>
+            <label v-else class="block border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary transition-all">
+              <input type="file" accept="image/*" multiple class="hidden" :disabled="attachmentBusy" @change="onAttachmentSelected" />
               <span class="material-symbols-rounded text-3xl text-muted block mb-1">upload_file</span>
-              <div class="text-sm text-muted">คลิกเพื่อเลือกไฟล์ หรือลากและวางไฟล์ที่นี่</div>
-            </template>
-          </label>
+              <div class="text-sm text-muted">{{ attachmentBusy ? 'กำลังอัปโหลด...' : `คลิกเพื่อเลือกรูป (เลือกได้หลายรูป สูงสุด ${MAX_ATTACHMENTS} รูป)` }}</div>
+            </label>
+          </div>
+          <ImageLightbox :image="attachmentViewer" @close="attachmentViewer = null" />
           <div v-if="attachmentError" class="text-xs text-red-600 flex items-center gap-1">
             <span class="material-symbols-rounded text-sm">error</span>
             {{ attachmentError }}
@@ -363,6 +390,8 @@ import DocumentHistoryModal from '@/components/shared/DocumentHistoryModal.vue'
 import ContactPickerField from '@/components/shared/ContactPickerField.vue'
 import TaxRateCell from '@/components/shared/TaxRateCell.vue'
 import BillingAddBookingsModal from '@/components/billing/BillingAddBookingsModal.vue'
+import ImageLightbox from '@/components/shared/ImageLightbox.vue'
+import { uploadJobPhoto, photoPaths } from '@/utils/photoUpload'
 import { computeRowAmount, computeRowVat, computeRowWht, computeRowDiscountBaht } from '@/utils/documentTotals'
 import type { Booking } from '@/types'
 
@@ -432,28 +461,44 @@ const useESignature = ref(prefill?.useESignature ?? true)
 const note = ref(prefill?.note || '')
 const internalNote = ref(prefill?.internalNote || '')
 
-const attachmentPreview = ref<string | null>(prefill?.attachmentImage || null)
+/** รูปแนบหลายรูป — อัปโหลดขึ้น Storage เก็บแค่ URL ในเอกสาร (ไม่ฝังรูปในเอกสาร Firestore ที่จำกัด 1 MiB)
+ *  ใบเก่าที่มีรูปเดียวแบบ data URL (attachmentImage) ยังแสดงเป็นรูปแรก และย้ายเข้าลิสต์ใหม่เมื่อบันทึก */
+const MAX_ATTACHMENTS = 10
+const attachmentsOf = (d?: { attachmentImages?: string[]; attachmentImage?: string } | null) =>
+  d ? [...(d.attachmentImage && !(d.attachmentImages || []).includes(d.attachmentImage) ? [d.attachmentImage] : []), ...(d.attachmentImages || [])] : []
+const attachments = ref<string[]>(attachmentsOf(prefill))
 const attachmentError = ref('')
+const attachmentBusy = ref(false)
+const attachmentViewer = ref<{ src: string; title: string; filename?: string } | null>(null)
 
-const onAttachmentSelected = (event: Event) => {
+/** อัปโหลดทีละรูป — รูปไหนพังก็ยังเก็บรูปที่ขึ้นสำเร็จไว้; เกินจำนวนสูงสุดตัดส่วนเกินทิ้งพร้อมแจ้ง */
+const onAttachmentSelected = async (event: Event) => {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  attachmentError.value = ''
-  attachmentPreview.value = null
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
-    attachmentError.value = 'ไฟล์ที่แนบไม่ใช่รูปภาพ กรุณาแนบไฟล์ที่ถูกต้อง'
-    input.value = ''
-    return
+  const picked = Array.from(input.files || [])
+  input.value = ''
+  if (!picked.length) return
+  const room = MAX_ATTACHMENTS - attachments.value.length
+  const files = picked.slice(0, Math.max(0, room))
+  attachmentError.value = picked.length > files.length ? `แนบได้สูงสุด ${MAX_ATTACHMENTS} รูป — อัปโหลดเฉพาะ ${files.length} รูปแรก` : ''
+  attachmentBusy.value = true
+  try {
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        attachmentError.value = 'มีไฟล์ที่ไม่ใช่รูปภาพ — ข้ามไฟล์นั้นไป'
+        continue
+      }
+      attachments.value.push(await uploadJobPhoto(photoPaths.salesDocAttachment(), file))
+    }
+  } catch (err: any) {
+    attachmentError.value = err?.message || 'อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่'
+  } finally {
+    attachmentBusy.value = false
   }
-  const reader = new FileReader()
-  reader.onload = () => {
-    attachmentPreview.value = reader.result as string
-  }
-  reader.onerror = () => {
-    attachmentError.value = 'ไม่สามารถอ่านไฟล์ได้ กรุณาลองใหม่'
-  }
-  reader.readAsDataURL(file)
+}
+
+const removeAttachment = (i: number) => {
+  if (!confirm('เอารูปนี้ออกจากใบวางบิล?')) return
+  attachments.value.splice(i, 1)
 }
 
 const onCustomerChange = () => {
@@ -554,8 +599,7 @@ const bookingPickerDescription = (b: Booking) => {
   return products ? `${dest} — ${products}` : dest
 }
 
-const addBookingRow = (b: Booking) => {
-  rows.value.push({
+const bookingRowOf = (b: Booking): Row => ({
     description: bookingPickerDescription(b),
     qty: 1,
     unit: 'เที่ยว',
@@ -570,7 +614,23 @@ const addBookingRow = (b: Booking) => {
     referenceDoc: bookingReferenceDoc(b),
     deliveryNo: b.docNo,
     bookingId: b.id,
-  })
+})
+const addBookingRow = (b: Booking) => {
+  rows.value.push(bookingRowOf(b))
+}
+
+/** เวลาของวันที่ในแถว (ไม่มีวันที่ = ไม่รู้ตำแหน่ง ไปท้ายสุด) */
+const rowTime = (r: Row) => {
+  const t = r.shipDate ? new Date(r.shipDate).getTime() : NaN
+  return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY
+}
+/** แทรกแถวงานใหม่ตามวันที่ (ก่อนแถวแรกที่วันที่ถัดไป) แทนการต่อท้าย — เทียบกับทุกแถวที่มีวันที่ (แถวของใบเดิมที่โหลดมา
+ *  ไม่มี bookingId ติดมา จึงใช้วันที่เป็นเกณฑ์) แถวที่กรอกเองไม่มีวันที่อยู่ที่เดิม */
+const insertBookingRowByDate = (row: Row) => {
+  const t = rowTime(row)
+  const idx = rows.value.findIndex((r) => !!r.shipDate && rowTime(r) > t)
+  if (idx === -1) rows.value.push(row)
+  else rows.value.splice(idx, 0, row)
 }
 
 /** ทางลัดจาก SalesOrderListView.vue "🧾 ออกใบวางบิล" (bookingId เดี่ยว) และจากหน้า BillingBookingSelectView.vue
@@ -610,9 +670,10 @@ const onAddBookings = (bookings: Booking[]) => {
   // แถวใหม่ใช้อัตราหัก ณ ที่จ่ายเดียวกับแถวเดิมถ้าทุกแถวเท่ากัน / ยอดหักที่โหลดมาจากเอกสารเดิม (ไม่ได้แก้เอง) คำนวณใหม่จากแถวชุดใหม่
   const whtRates = [...new Set(rows.value.map((r) => r.whtRate))]
   const followComputedWht = whtOverride.value !== null && Math.round(whtOverride.value * 100) === Math.round(whtComputed.value * 100)
-  const firstNewRow = rows.value.length
-  bookings.forEach(addBookingRow)
-  if (whtRates.length === 1) rows.value.slice(firstNewRow).forEach((r) => (r.whtRate = whtRates[0]))
+  // งานที่ติ๊กเพิ่มเรียงแทรกตามวันที่ส่งงานในใบ (เดิมต่อท้ายสุดเสมอ)
+  const newRows = [...bookings].sort((x, y) => rowTime(bookingRowOf(x)) - rowTime(bookingRowOf(y))).map(bookingRowOf)
+  if (whtRates.length === 1) newRows.forEach((r) => (r.whtRate = whtRates[0]))
+  newRows.forEach(insertBookingRowByDate)
   if (followComputedWht) whtOverride.value = null
   addBookingsOpen.value = false
 }
@@ -683,7 +744,7 @@ if (editingDoc) {
   useESignature.value = editingDoc.useESignature ?? true
   note.value = editingDoc.note || ''
   internalNote.value = editingDoc.internalNote || ''
-  attachmentPreview.value = editingDoc.attachmentImage || null
+  attachments.value = attachmentsOf(editingDoc)
   if (editingDoc.whtAmount) whtOverride.value = editingDoc.whtAmount
   rows.value = salesDocumentsStore.itemsForDocument(editingDoc.id).map((i) => ({
     productId: i.productId,
@@ -752,7 +813,7 @@ const numberDuplicate = computed(() => !numberReuseCheck.value.eligible)
 const numberReusable = computed(() => numberReuseCheck.value.eligible && !!numberReuseCheck.value.previousDocumentId)
 
 const canSubmit = computed(
-  () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value
+  () => customerName.value.trim().length > 0 && rows.value.length > 0 && rows.value.every((r) => r.qty > 0) && !numberDuplicate.value && !attachmentBusy.value
 )
 
 /** เงินสด = เครดิต 0 วัน (ครบกำหนดวันเดียวกัน), เครดิต (ไม่แสดงวันที่) = ไม่บันทึกจำนวนวัน/วันครบกำหนดเลย */
@@ -814,7 +875,9 @@ const saveAndGetDoc = () => {
     description: description.value || undefined,
     note: note.value || undefined,
     internalNote: internalNote.value || undefined,
-    attachmentImage: attachmentPreview.value || undefined,
+    // รูปทั้งหมดอยู่ใน attachmentImages แล้ว (รวมรูปเดิมแบบเก่า) — ล้าง field เก่าทิ้ง
+    attachmentImage: undefined,
+    attachmentImages: [...attachments.value],
     useESignature: useESignature.value,
     discountTotal: discountTotal.value,
     vatAmount: vatTotal.value,

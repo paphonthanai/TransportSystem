@@ -578,6 +578,8 @@ export const useBookingStore = defineStore('booking', () => {
       reference?: string
       description?: string
       note?: string
+      /** เงื่อนไขลูกค้า (คนขับเห็น) — แยกจากหมายเหตุภายใน */
+      customerCondition?: string
       tripFee?: number
       agreedPrice?: number
       allowance?: number
@@ -610,6 +612,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (data.reference !== undefined) booking.reference = data.reference || undefined
     if (data.description !== undefined) booking.description = data.description || undefined
     if (data.note !== undefined) booking.note = data.note || undefined
+    if (data.customerCondition !== undefined) booking.customerCondition = data.customerCondition.trim() || undefined
     if (data.tripFee !== undefined) booking.tripFee = data.tripFee
     if (data.agreedPrice !== undefined) booking.agreedPrice = data.agreedPrice
     if (data.allowance !== undefined) booking.allowance = data.allowance
@@ -657,6 +660,16 @@ export const useBookingStore = defineStore('booking', () => {
     if (next === booking.note) return
     booking.note = next
     addLog(`แก้ไขหมายเหตุงาน ${bookingRefNo(booking)}${next ? '' : ' (ล้างหมายเหตุ)'}`, { bookingId: booking.id })
+  }
+
+  /** แก้เงื่อนไขลูกค้า (ข้อความที่คนขับเห็นในแอป) จากหน้ารายละเอียดงาน ได้ทุกสถานะ — ข้อความว่าง = ล้างทิ้ง */
+  function updateBookingCustomerCondition(id: string, text: string) {
+    const booking = bookings.value.find((b) => b.id === id)
+    if (!booking) return
+    const next = text.trim() || undefined
+    if (next === booking.customerCondition) return
+    booking.customerCondition = next
+    addLog(`แก้ไขเงื่อนไขลูกค้างาน ${bookingRefNo(booking)}${next ? '' : ' (ล้างเงื่อนไขลูกค้า)'}`, { bookingId: booking.id })
   }
 
   /**
@@ -1777,6 +1790,7 @@ export const useBookingStore = defineStore('booking', () => {
     reviewPod,
     confirmJobCompletion,
     updateBookingNote,
+    updateBookingCustomerCondition,
     approvePodAndConfirmCompletion,
     bookingsInBatch,
     addBookingsToBatch,

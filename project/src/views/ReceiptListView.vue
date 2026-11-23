@@ -163,42 +163,87 @@
     <!-- บันทึกการรับชำระเงิน -->
     <Teleport to="body">
       <div v-if="paymentDoc" class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" @click.self="paymentDoc = null">
-        <div class="bg-surface rounded-xl shadow-xl w-full max-w-md p-5 space-y-4">
+        <div class="bg-surface rounded-xl shadow-xl w-full max-w-lg p-5 space-y-4 max-h-[92vh] overflow-y-auto">
           <h3 class="text-lg font-bold text-text">บันทึกการรับชำระเงิน</h3>
-          <div class="text-sm text-muted">
-            เลขที่เอกสาร: <span class="font-mono font-semibold text-text">{{ paymentDoc.number }}</span> ({{ paymentDoc.customer }})
+
+          <div class="pay-grid">
+            <span class="pay-label">เลขที่เอกสาร:</span>
+            <span class="font-semibold text-text">{{ paymentDoc.number }} <span class="font-normal text-muted">({{ paymentDoc.customer }})</span></span>
+            <span class="pay-label">ยอดที่ต้องชำระ:</span>
+            <span class="font-semibold text-text">{{ formatNumber(amountDue) }} บาท</span>
           </div>
-          <div>
-            <label class="field-label">วันที่รับชำระ</label>
+
+          <div class="pay-grid">
+            <label class="pay-label">วันที่รับชำระ:</label>
             <input type="date" v-model="paymentDate" class="input-field w-full" />
-          </div>
-          <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
-            <input type="checkbox" v-model="whtEnabled" class="w-4 h-4" />
-            หัก ณ ที่จ่าย
-          </label>
-          <div v-if="whtEnabled">
-            <label class="field-label">จำนวนเงินหัก ณ ที่จ่าย</label>
-            <input v-model.number="whtAmount" type="number" min="0" class="input-field w-full" />
-          </div>
-          <div>
-            <label class="field-label">วิธีการรับชำระ</label>
+
             <select v-model="paymentMethod" class="input-field w-full">
               <option value="เงินสด">เงินสด</option>
               <option value="โอนเงิน">โอนเงิน</option>
               <option value="เช็ค">เช็ค</option>
             </select>
+            <input
+              :value="receivedAmount"
+              type="number"
+              min="0"
+              step="0.01"
+              class="input-field w-full text-right"
+              aria-label="จำนวนเงินที่ได้รับ"
+              @input="onReceivedInput(($event.target as HTMLInputElement).value)"
+            />
+
+            <template v-if="paymentMethod !== 'เงินสด'">
+              <label class="pay-label">ธนาคาร:</label>
+              <input v-model="paymentBankName" class="input-field w-full" />
+              <label class="pay-label">{{ paymentMethod === 'เช็ค' ? 'เลขที่เช็ค:' : 'เลขที่รายการ:' }}</label>
+              <input v-model="paymentReference" class="input-field w-full" />
+            </template>
           </div>
-          <div v-if="paymentMethod === 'โอนเงิน' || paymentMethod === 'เช็ค'">
-            <label class="field-label">ธนาคาร</label>
-            <input v-model="paymentBankName" class="input-field w-full" />
+
+          <div class="flex items-center justify-between border-t border-border pt-3">
+            <span class="pay-label">ยอดรับสุทธิ:</span>
+            <span class="text-lg font-bold text-text">{{ formatNumber(receivedAmount) }}</span>
           </div>
-          <div v-if="paymentMethod === 'โอนเงิน' || paymentMethod === 'เช็ค'">
-            <label class="field-label">{{ paymentMethod === 'เช็ค' ? 'เลขที่เช็ค' : 'เลขที่รายการ' }}</label>
-            <input v-model="paymentReference" class="input-field w-full" />
+
+          <div class="pay-grid">
+            <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
+              <input type="checkbox" v-model="adjustEnabled" class="w-4 h-4" />
+              รายการปรับลด/เพิ่ม:
+            </label>
+            <div class="flex gap-2">
+              <select v-model="adjustLabel" :disabled="!adjustEnabled" class="input-field flex-1 min-w-0">
+                <option v-for="opt in ADJUST_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
+              </select>
+              <input v-model.number="adjustAmount" type="number" step="0.01" :disabled="!adjustEnabled" class="input-field w-28 text-right" aria-label="จำนวนเงินปรับลด/เพิ่ม" />
+            </div>
+
+            <label class="flex items-center gap-2 text-sm text-text cursor-pointer">
+              <input type="checkbox" v-model="whtEnabled" class="w-4 h-4" />
+              หัก ณ ที่จ่าย:
+            </label>
+            <div class="flex gap-2">
+              <select v-model="whtRate" :disabled="!whtEnabled" class="input-field flex-1 min-w-0" @change="onWhtRateChange">
+                <option :value="1">1%</option>
+                <option :value="1.5">1.5%</option>
+                <option :value="2">2%</option>
+                <option :value="3">3%</option>
+                <option :value="5">5%</option>
+                <option :value="0">กำหนดเอง</option>
+              </select>
+              <input v-model.number="whtAmount" type="number" min="0" step="0.01" :disabled="!whtEnabled" class="input-field w-28 text-right" aria-label="จำนวนเงินหัก ณ ที่จ่าย" @input="whtRate = 0" />
+            </div>
+
+            <span class="pay-label">ยอดเงินขาด/เงินเกิน:</span>
+            <span class="font-semibold" :class="Math.abs(shortOver) < 0.005 ? 'text-text' : shortOver < 0 ? 'text-red-600' : 'text-amber-600'">
+              {{ formatNumber(shortOver) }} บาท
+              <span v-if="shortOver <= -0.005" class="text-xs font-normal">(ขาด)</span>
+              <span v-else-if="shortOver >= 0.005" class="text-xs font-normal">(เกิน)</span>
+            </span>
           </div>
+
           <div>
             <label class="field-label">หมายเหตุ</label>
-            <textarea v-model="paymentNote" rows="2" class="input-field w-full" />
+            <textarea v-model="paymentNote" rows="2" class="input-field w-full !h-auto py-2" />
           </div>
           <div class="flex justify-end gap-2 pt-2">
             <button @click="paymentDoc = null" class="btn-secondary">ยกเลิก</button>
@@ -321,6 +366,7 @@ const statusOptionsFor = (doc: SalesDocument): ActionOption[] => {
   if (s === 'PAID') {
     return [
       { value: 'PAID', label: statusLabel.PAID! },
+      { value: 'RESET', label: 'รีเซ็ต (กลับเป็นรอเก็บเงิน)' },
       { value: 'DELETE', label: 'ลบ' },
     ]
   }
@@ -343,32 +389,67 @@ const editRouteFor = (doc: SalesDocument) => (doc.sourceDocumentIds?.length ? `/
 const paymentDoc = ref<SalesDocument | null>(null)
 const paymentDate = ref(new Date().toISOString().slice(0, 10))
 const whtEnabled = ref(false)
+/** อัตราหัก ณ ที่จ่าย (%) คิดจากยอดก่อน VAT — 0 = กรอกจำนวนเงินเอง */
+const whtRate = ref(1)
 const whtAmount = ref(0)
+const adjustEnabled = ref(false)
+const ADJUST_OPTIONS = ['ส่วนลดพิเศษ', 'ค่าธรรมเนียมธนาคาร', 'ปัดเศษ', 'อื่นๆ']
+const adjustLabel = ref(ADJUST_OPTIONS[0])
+const adjustAmount = ref(0)
 const paymentMethod = ref('เงินสด')
 const paymentBankName = ref('')
 const paymentReference = ref('')
 const paymentNote = ref('')
+/** ยอดรับเงินจริง — คำนวณให้อัตโนมัติ (ยอดที่ต้องชำระ - หัก ณ ที่จ่าย - ปรับลด) จนกว่าผู้ใช้จะพิมพ์แก้เอง */
+const receivedManual = ref<number | null>(null)
+
+const round2 = (n: number) => Math.round((n || 0) * 100) / 100
+const amountDue = computed(() => (paymentDoc.value ? round2(paymentDoc.value.amount + (paymentDoc.value.vatAmount || 0)) : 0))
+const whtApplied = computed(() => (whtEnabled.value ? round2(whtAmount.value) : 0))
+const adjustApplied = computed(() => (adjustEnabled.value ? round2(adjustAmount.value) : 0))
+const receivedAmount = computed(() => receivedManual.value ?? round2(amountDue.value - whtApplied.value - adjustApplied.value))
+/** ยอดเงินขาด(-)/เกิน(+) = รับจริง + หัก ณ ที่จ่าย + ปรับลด - ยอดที่ต้องชำระ */
+const shortOver = computed(() => round2(receivedAmount.value + whtApplied.value + adjustApplied.value - amountDue.value))
+
+const onReceivedInput = (value: string) => {
+  const n = parseFloat(value)
+  receivedManual.value = Number.isFinite(n) ? n : 0
+}
+const onWhtRateChange = () => {
+  if (whtRate.value > 0 && paymentDoc.value) whtAmount.value = round2((paymentDoc.value.amount * whtRate.value) / 100)
+}
 
 const openPaymentModal = (doc: SalesDocument) => {
   paymentDoc.value = doc
   paymentDate.value = new Date().toISOString().slice(0, 10)
-  whtEnabled.value = false
-  whtAmount.value = 0
+  // ใบเสร็จที่มียอดหัก ณ ที่จ่ายติดมาจากตอนสร้าง (จากใบแจ้งหนี้/ใบวางบิล) เปิดติ๊กไว้ให้เลย
+  whtEnabled.value = (doc.whtAmount || 0) > 0
+  whtAmount.value = round2(doc.whtAmount || 0)
+  whtRate.value = whtEnabled.value ? 0 : 1
+  if (!whtEnabled.value) onWhtRateChange()
+  adjustEnabled.value = false
+  adjustLabel.value = ADJUST_OPTIONS[0]
+  adjustAmount.value = 0
+  receivedManual.value = null
   paymentMethod.value = 'เงินสด'
   paymentBankName.value = ''
   paymentReference.value = ''
-  paymentNote.value = ''
+  paymentNote.value = doc.note || ''
 }
 
 const confirmPayment = () => {
   if (!paymentDoc.value) return
+  if (Math.abs(shortOver.value) >= 0.005 && !confirm(`ยอดเงิน${shortOver.value < 0 ? 'ขาด' : 'เกิน'} ${formatNumber(Math.abs(shortOver.value))} บาท — ยืนยันบันทึก?`)) return
   salesDocumentsStore.recordReceiptPayment(paymentDoc.value.id, {
     paidDate: new Date(paymentDate.value),
-    whtAmount: whtEnabled.value ? whtAmount.value : undefined,
+    whtAmount: whtEnabled.value ? whtApplied.value : 0,
     paymentMethod: paymentMethod.value,
     paymentBankName: paymentMethod.value !== 'เงินสด' ? paymentBankName.value || undefined : undefined,
     paymentReference: paymentMethod.value !== 'เงินสด' ? paymentReference.value || undefined : undefined,
     note: paymentNote.value || undefined,
+    receivedAmount: receivedAmount.value,
+    paymentAdjustment: adjustApplied.value || undefined,
+    paymentAdjustmentLabel: adjustApplied.value ? adjustLabel.value : undefined,
   })
   paymentDoc.value = null
 }
@@ -381,6 +462,12 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
     case 'CANCEL':
       if (confirm(`ยืนยันยกเลิกใบเสร็จรับเงิน ${doc.number}?`)) salesDocumentsStore.cancelReceipt(doc.id)
       break
+    case 'RESET': {
+      if (!confirm(`รีเซ็ตใบเสร็จ ${doc.number} กลับเป็น "รอเก็บเงิน"? ข้อมูลการรับชำระของใบนี้จะถูกล้าง และใบแจ้งหนี้ต้นทางจะกลับเป็นยังไม่ชำระ (ไม่ลบเอกสาร)`)) break
+      const result = salesDocumentsStore.resetReceiptPayment(doc.id)
+      if (!result.ok && result.message) alert(result.message)
+      break
+    }
     case 'DELETE':
       if (confirm(`ยืนยันลบใบเสร็จรับเงิน ${doc.number}? งานขนส่งที่ผูกอยู่จะกลับมาเลือกออกใบเสร็จใหม่ได้อีกครั้ง (ไม่กระทบใบแจ้งหนี้/ใบวางบิลต้นทาง)`))
         salesDocumentsStore.deleteReceipt(doc.id)
@@ -391,6 +478,7 @@ const onStatusSelect = (doc: SalesDocument, action: string) => {
 }
 
 const formatBaht = (value: number) => `${documentSettingsStore.settings.currency.symbol}${(value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const formatNumber = (value: number) => (value || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const formatDate = (date?: Date) => (date ? new Date(date).toLocaleDateString('th-TH') : '-')
 
 // --- เลือกหลายรายการ + ดาวน์โหลด PDF รวม ---
@@ -443,6 +531,15 @@ const downloadSelectedPdf = async () => {
 <style scoped>
 .field-label {
   @apply block text-xs font-semibold text-muted mb-1;
+}
+
+.pay-grid {
+  @apply grid gap-x-3 gap-y-2 items-center text-sm;
+  grid-template-columns: minmax(8rem, auto) 1fr;
+}
+
+.pay-label {
+  @apply text-sm font-semibold text-text;
 }
 
 .btn-primary {

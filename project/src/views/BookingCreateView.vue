@@ -149,9 +149,15 @@
         </div>
       </div>
 
-      <div>
-        <label class="field-label">หมายเหตุ</label>
-        <textarea v-model="header.note" rows="3" class="input-field w-full" />
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="field-label">เงื่อนไขลูกค้า <span class="font-normal text-[11px] text-amber-700">(คนขับเห็นในแอป)</span></label>
+          <textarea v-model="header.customerCondition" rows="3" class="input-field w-full" placeholder="เช่น ต้องใส่หมวกนิรภัย / ห้ามเข้าก่อน 8 โมง (ขึ้นบรรทัดใหม่ = ข้อใหม่)" />
+        </div>
+        <div>
+          <label class="field-label">หมายเหตุ <span class="font-normal text-[11px] text-muted">(ภายในออฟฟิศ คนขับไม่เห็น)</span></label>
+          <textarea v-model="header.note" rows="3" class="input-field w-full" />
+        </div>
       </div>
     </div>
 
@@ -417,6 +423,7 @@ const defaultHeader = () => ({
   reference: '',
   description: '',
   note: '',
+  customerCondition: '',
   tripFee: prefill.amount ? Number(prefill.amount) : 0,
   agreedPrice: prefill.amount ? Number(prefill.amount) : 0,
   discountMode: 'percent' as 'percent' | 'fixed',
@@ -685,6 +692,7 @@ const saveAllItems = () => {
     reference: header.value.reference || undefined,
     description: header.value.description || undefined,
     note: header.value.note || undefined,
+    customerCondition: header.value.customerCondition.trim() || undefined,
     customer: header.value.customer,
     items: lineItems.value,
     allowance: isCements.value ? header.value.allowance || 0 : headerCalculatedAllowance.value,

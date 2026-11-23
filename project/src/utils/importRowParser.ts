@@ -117,6 +117,14 @@ export function withColumnAliases(raw: Record<string, unknown>): Record<string, 
   const out = { ...raw }
   if (cols.mapLink && cols.mapLink !== IMPORT_HEADERS.mapLink && !str0(out[IMPORT_HEADERS.mapLink])) out[IMPORT_HEADERS.mapLink] = raw[cols.mapLink]
   if (cols.tripNo && cols.tripNo !== IMPORT_HEADERS.tripNo && !str0(out[IMPORT_HEADERS.tripNo])) out[IMPORT_HEADERS.tripNo] = raw[cols.tripNo]
+  // "หมายเหตุ" (ภายในออฟฟิศ) กับ "เงื่อนไขลูกค้า" (คนขับเห็น) ต้องอ่านเข้าช่องของตัวเองเสมอ แม้หัวคอลัมน์ในไฟล์จะมีช่องว่าง/
+  // วรรณยุกต์เพี้ยนนิดหน่อย — เดิมเทียบชื่อตรงเป๊ะ หัวคอลัมน์ "เงื่อนไขลูกค้า " (มีวรรคท้าย) จึงอ่านไม่ได้เงียบๆ
+  for (const key of [IMPORT_HEADERS.note, IMPORT_HEADERS.customerCondition]) {
+    if (str0(out[key])) continue
+    const target = normalizeHeader(key)
+    const actual = Object.keys(raw).find((h) => h !== key && normalizeHeader(h) === target)
+    if (actual) out[key] = raw[actual]
+  }
   return out
 }
 const str0 = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())

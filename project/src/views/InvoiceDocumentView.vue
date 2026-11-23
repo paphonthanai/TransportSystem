@@ -68,8 +68,7 @@
 
             <div class="text-right flex-shrink-0">
               <div class="text-2xl font-bold text-primary">{{ docModeLabel[docMode].th }}</div>
-              <div class="text-xs text-gray-500">{{ sheet.label }}<template v-if="sheet.pageCount > 1"> · หน้า {{ sheet.pageIdx + 1 }}/{{ sheet.pageCount }}</template></div>
-              <div v-if="statusStampLabel" class="status-stamp">{{ statusStampLabel }}</div>
+              <div class="text-xs text-gray-500 mb-3">{{ sheet.label }}<template v-if="sheet.pageCount > 1"> · หน้า {{ sheet.pageIdx + 1 }}/{{ sheet.pageCount }}</template></div>
               <div class="doc-meta-box text-left text-xs w-64">
                 <div class="flex justify-between gap-4">
                   <span class="text-gray-500">เลขที่</span>
@@ -462,7 +461,6 @@ import { useDocumentSettingsStore } from '@/stores/documentSettings'
 import { useCustomerStore } from '@/stores/customers'
 import { useVehiclesStore } from '@/stores/vehicles'
 import { bahtText } from '@/utils/companyInfo'
-import { salesDocumentStatusLabel } from '@/utils/salesDocumentStatus'
 import { groupRowsByFeed, type FeedGroup } from '@/utils/feedGrouping'
 import { traceDocumentChain } from '@/utils/documentTrace'
 import EntityTimeline from '@/components/shared/EntityTimeline.vue'
@@ -856,7 +854,6 @@ const copyCount = ref(0)
  *  บริษัทไม่มีมุมนี้ (ดูภาพอ้างอิงเอกสารวางบิลค่าบรรทุกสินค้า) */
 const showCornerFlag = computed(() => docMode.value === 'invoice' || docMode.value === 'receipt')
 
-const statusStampLabel = computed(() => (newDoc.value ? salesDocumentStatusLabel(newDoc.value.type, newDoc.value.status) : null))
 const copyLabels = computed(() => {
   const labels: string[] = []
   for (let i = 0; i < originalCount.value; i++) labels.push('ต้นฉบับ')
@@ -961,10 +958,6 @@ const printDoc = () => window.print()
 
 .spin-input {
   @apply w-16 h-8 px-2 border border-border rounded-lg bg-surface text-text text-sm font-medium text-center focus:outline-none focus:border-primary;
-}
-
-.status-stamp {
-  @apply inline-block text-[11px] font-bold px-2 py-0.5 rounded border border-primary text-primary mt-1 mb-3;
 }
 
 .corner-flag {

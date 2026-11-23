@@ -21,36 +21,12 @@ export function pruneResolvedNote(booking: Booking): string | undefined {
   return kept.length ? kept.join(' | ') : undefined
 }
 
-/** ท่อนหมายเหตุที่ระบบแปะเอง (ตอน import / ตั้งเรทน้ำมัน) — ไม่ใช่เงื่อนไขจากลูกค้า ดู importRowParser.ts และ applyFuelRate ใน stores/booking.ts */
-const SYSTEM_NOTE_PREFIXES = [
-  'ต้องกรอกเพิ่ม:',
-  'เรทน้ำมัน:',
-  'คอนเฟิร์มมีทะเบียนรถ',
-  'ชื่อลูกค้าจาก Excel',
-  'ตรวจคนขับ:',
-  'ตรวจทะเบียน:',
-  'ชื่อเล่นคนขับ',
-  'สินค้าหลายชนิดในเที่ยวเดียว',
-  'อ่านค่าน้ำมัน',
-  'ยังไม่มีปลายทางน้ำมัน',
-  'ประเภทงานจาก Excel',
-  'ราคาปูน (',
-]
-
-/**
- * "เงื่อนไขลูกค้า" สำหรับแสดงให้คนขับดู = ท่อนหมายเหตุของงานที่ไม่ใช่ข้อความระบบ และไม่เกี่ยวกับเบี้ยเลี้ยง/ค่าน้ำมัน
- * (หมายเหตุเก็บรวมกันเป็นข้อความเดียวคั่นด้วย " | " — ใช้ได้ทั้งงานเก่าและงานใหม่ ไม่ต้องมี field แยก)
- */
-/** เงื่อนไขลูกค้าของงาน — ใช้คอลัมน์ "เงื่อนไขลูกค้า" จาก import ก่อน ถ้าไม่มีค่อยดึงจากหมายเหตุ (customerConditionsOf) */
-export function customerConditionsFor(booking: Pick<Booking, 'customerCondition' | 'note'>): string[] {
-  const own = booking.customerCondition?.trim()
-  return own ? [own] : customerConditionsOf(booking.note)
-}
-
-export function customerConditionsOf(note?: string): string[] {
-  if (!note) return []
-  return note
-    .split(' | ')
-    .map((part) => part.trim())
-    .filter((part) => part && !SYSTEM_NOTE_PREFIXES.some((prefix) => part.startsWith(prefix)) && !part.includes('เบี้ยเลี้ยง') && !part.includes('น้ำมัน'))
+/** เงื่อนไขลูกค้าที่แสดงให้คนขับเห็น — อ่านจากช่อง customerCondition อย่างเดียว (แยกบรรทัดเป็นข้อ)
+ *  ห้ามดึงจากหมายเหตุ (note) เด็ดขาด: หมายเหตุเป็นข้อความภายในของออฟฟิศ คนขับต้องไม่เห็น
+ *  (เดิม fallback ไปหมายเหตุเมื่อไม่มีเงื่อนไข ทำให้หมายเหตุภายในไปโผล่ในแอปคนขับแทนเงื่อนไขลูกค้า) */
+export function customerConditionsFor(booking: Pick<Booking, 'customerCondition'>): string[] {
+  return (booking.customerCondition || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
 }

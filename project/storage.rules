@@ -73,6 +73,12 @@ service firebase.storage {
     }
 
     // โซนออฟฟิศ: รูปที่เสมียน/แอดมินแนบแทนคนขับ — เขียนได้เฉพาะออฟฟิศ คนขับอ่านของงานตัวเองได้อย่างเดียว
+    // รูปแนบของเอกสารขาย (ใบวางบิล) — ฝ่ายบัญชีสร้างใบวางบิลได้ จึงต้องอัปโหลดได้ด้วย (ไม่ผูกกับงานขนส่ง)
+    match /sales-doc-uploads/{fileName} {
+      allow read: if hasRole(['ADMIN', 'DISPATCHER', 'STAFF', 'ACCOUNTING']);
+      allow write: if hasRole(['ADMIN', 'STAFF', 'ACCOUNTING']) && isImageUnder3Mb();
+    }
+
     match /office-uploads/{bookingId}/{fileName} {
       allow read: if canReadBookingPhoto(bookingId);
       allow write: if isOffice() && isImageUnder3Mb();

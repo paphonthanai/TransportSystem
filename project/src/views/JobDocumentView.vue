@@ -575,10 +575,31 @@
         </div>
       </div>
 
+      <!-- เงื่อนไขลูกค้า (คนขับเห็น) -->
+      <div class="card-lg no-print">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <h3 class="font-semibold text-text">เงื่อนไขลูกค้า <span class="text-xs font-normal text-amber-700">(คนขับเห็นในแอป)</span></h3>
+        </div>
+        <template v-if="conditionEditing">
+          <textarea v-model="conditionDraft" rows="3" class="input-field w-full" placeholder="ขึ้นบรรทัดใหม่ = ข้อใหม่ · ลบข้อความทั้งหมดแล้วกดบันทึก = ล้างเงื่อนไข"></textarea>
+          <div class="flex justify-end gap-2 mt-2">
+            <button type="button" class="btn-sm" @click="conditionEditing = false">ยกเลิก</button>
+            <button type="button" class="btn-primary" @click="saveCondition">บันทึก</button>
+          </div>
+        </template>
+        <div v-else class="text-sm text-text">
+          <span class="whitespace-pre-wrap">{{ booking.customerCondition || '-' }}</span>
+          <button @click="startConditionEdit" class="ml-2 inline-flex items-center gap-0.5 text-xs font-normal text-primary hover:underline" title="แก้เงื่อนไขลูกค้า">
+            <span class="material-symbols-rounded text-sm">edit</span>
+            แก้
+          </button>
+        </div>
+      </div>
+
       <!-- หมายเหตุ -->
       <div class="card-lg no-print">
         <div class="flex items-center justify-between gap-3 mb-3">
-          <h3 class="font-semibold text-text">หมายเหตุ</h3>
+          <h3 class="font-semibold text-text">หมายเหตุ <span class="text-xs font-normal text-muted">(ภายในออฟฟิศ คนขับไม่เห็น)</span></h3>
         </div>
         <template v-if="noteEditing">
           <textarea v-model="noteDraft" rows="3" class="input-field w-full" placeholder="ลบข้อความทั้งหมดแล้วกดบันทึก = ล้างหมายเหตุ"></textarea>
@@ -949,6 +970,18 @@ const saveNote = () => {
   if (!booking.value) return
   bookingStore.updateBookingNote(booking.value.id, noteDraft.value)
   noteEditing.value = false
+}
+// ---- แก้เงื่อนไขลูกค้า (ข้อความที่คนขับเห็น) แยกจากหมายเหตุภายใน ----
+const conditionEditing = ref(false)
+const conditionDraft = ref('')
+const startConditionEdit = () => {
+  conditionDraft.value = booking.value?.customerCondition || ''
+  conditionEditing.value = true
+}
+const saveCondition = () => {
+  if (!booking.value) return
+  bookingStore.updateBookingCustomerCondition(booking.value.id, conditionDraft.value)
+  conditionEditing.value = false
 }
 const priceForm = ref({ tripFee: 0 })
 

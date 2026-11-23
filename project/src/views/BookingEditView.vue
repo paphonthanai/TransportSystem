@@ -68,9 +68,15 @@
           <label class="block text-xs font-semibold text-muted mb-1">รายละเอียด</label>
           <input v-model="editForm.description" class="input-field w-full" />
         </div>
-        <div class="md:col-span-3">
-          <label class="block text-xs font-semibold text-muted mb-1">หมายเหตุ</label>
-          <textarea v-model="editForm.note" rows="3" class="input-field w-full" />
+        <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-muted mb-1">เงื่อนไขลูกค้า <span class="font-normal text-[10px] text-amber-700">(คนขับเห็นในแอป)</span></label>
+            <textarea v-model="editForm.customerCondition" rows="3" class="input-field w-full" placeholder="ขึ้นบรรทัดใหม่ = ข้อใหม่" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-muted mb-1">หมายเหตุ <span class="font-normal text-[10px]">(ภายในออฟฟิศ คนขับไม่เห็น)</span></label>
+            <textarea v-model="editForm.note" rows="3" class="input-field w-full" />
+          </div>
         </div>
         <div class="md:col-span-3">
           <label class="block text-xs font-semibold text-muted mb-1">
@@ -345,6 +351,7 @@ const editForm = ref({
   reference: '',
   description: '',
   note: '',
+  customerCondition: '',
   tripFee: 0,
   agreedPrice: 0,
   allowance: 0,
@@ -381,6 +388,7 @@ watch(
       reference: booking.reference || '',
       description: booking.description || '',
       note: booking.note || '',
+      customerCondition: booking.customerCondition || '',
       tripFee: booking.tripFee,
       agreedPrice: booking.agreedPrice,
       allowance: booking.allowance || 0,
@@ -618,6 +626,7 @@ const confirmEditBooking = () => {
     reference: f.reference ?? '',
     description: f.description ?? '',
     note: f.note ?? '',
+    customerCondition: f.customerCondition ?? '',
     tripFee: resolvedTripFee,
     // "ราคาที่ตกลง" ไม่ใช่ field ที่แสดง/แก้แยกให้ผู้ใช้เห็นอีกต่อไป — ให้เท่ากับค่าเที่ยวเสมอ
     agreedPrice: resolvedTripFee,

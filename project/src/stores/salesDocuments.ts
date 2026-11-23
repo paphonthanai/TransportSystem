@@ -110,6 +110,16 @@ export interface SalesDocument {
   internalNote?: string
   /** QUOTATION: ไฟล์แนบ (data URL) */
   attachmentImage?: string
+  /** BILLING: รูปแนบหลายรูป (download URL ใน Storage โฟลเดอร์ sales-doc-uploads/) — ใบเก่าที่มีแค่ attachmentImage ยังแสดงได้ */
+  attachmentImages?: string[]
+  /** RECEIPT: ยอดเงินที่ได้รับจริงตอนกด "เก็บเงิน" (ยอดรับสุทธิ) */
+  receivedAmount?: number
+  /** RECEIPT: รายการปรับลด(+)/เพิ่ม(-) ตอนเก็บเงิน เช่น ส่วนลดพิเศษ/ค่าธรรมเนียมโอน — ยอดเงินขาด/เกิน = รับ + หัก ณ ที่จ่าย + ปรับลด - ยอดที่ต้องชำระ */
+  paymentAdjustment?: number
+  /** RECEIPT: คำอธิบายรายการปรับลด/เพิ่ม */
+  paymentAdjustmentLabel?: string
+  /** TAX_INVOICE: สถานะก่อนถูกปิดเป็น PAID โดยการเก็บเงินที่ใบเสร็จ — ใช้คืนสถานะตอนรีเซ็ตใบเสร็จ (resetReceiptPayment) */
+  statusBeforeReceiptPaid?: SalesDocumentStatus
   /** QUOTATION: แสดงลายเซ็นอิเล็กทรอนิกส์/ตรายางบนเอกสารหรือไม่ */
   useESignature?: boolean
   /** QUOTATION: ยอดส่วนลดรวม คำนวณจากส่วนลดต่อรายการ ณ ตอนบันทึก */
@@ -199,6 +209,7 @@ export interface ManualDocumentFormData {
   note?: string
   internalNote?: string
   attachmentImage?: string
+  attachmentImages?: string[]
   useESignature?: boolean
   discountTotal?: number
   vatRate?: number
@@ -1427,6 +1438,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       note: data.note,
       internalNote: data.internalNote,
       attachmentImage: data.attachmentImage,
+      attachmentImages: data.attachmentImages?.length ? data.attachmentImages : undefined,
       useESignature: data.useESignature,
       discountTotal: data.discountTotal,
       vatAmount: data.vatAmount,
@@ -1534,6 +1546,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     doc.note = data.note
     doc.internalNote = data.internalNote
     doc.attachmentImage = data.attachmentImage
+    doc.attachmentImages = data.attachmentImages?.length ? data.attachmentImages : undefined
     doc.useESignature = data.useESignature
     doc.discountTotal = data.discountTotal
     doc.vatAmount = data.vatAmount
@@ -2907,13 +2920,26 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
   /** กด "เก็บเงิน" บนใบเสร็จรับเงิน — จบขั้นตอนทั้ง chain โดยปิดสถานะเอกสารต้นทางเป็นชำระแล้วด้วย (ใบแจ้งหนี้ -> PAID, ใบวางบิลที่อ้างอิงตรง คงสถานะ BILLED เดิมไว้เพราะไม่มีสถานะ "จ่ายแล้ว" แยกของตัวเอง — ใช้สถานะใบเสร็จเป็นตัวบอกแทน) */
   function recordReceiptPayment(
     receiptId: string,
-    payment: { paidDate?: Date; whtAmount?: number; paymentMethod?: string; paymentBankName?: string; paymentReference?: string; note?: string }
+    payment: {
+      paidDate?: Date
+      whtAmount?: number
+      paymentMethod?: string
+      paymentBankName?: string
+      paymentReference?: string
+      note?: string
+      receivedAmount?: number
+      paymentAdjustment?: number
+      paymentAdjustmentLabel?: string
+    }
   ): SalesDocument | null {
     const doc = documents.value.find((d) => d.id === receiptId && d.type === 'RECEIPT')
     if (!doc || doc.status !== 'DRAFT') return null
     doc.status = 'PAID'
     doc.paidDate = payment.paidDate || new Date()
     if (payment.whtAmount !== undefined) doc.whtAmount = payment.whtAmount
+    doc.receivedAmount = payment.receivedAmount
+    doc.paymentAdjustment = payment.paymentAdjustment || undefined
+    doc.paymentAdjustmentLabel = payment.paymentAdjustment ? payment.paymentAdjustmentLabel : undefined
     doc.paymentMethod = payment.paymentMethod
     doc.paymentBankName = payment.paymentBankName
     doc.paymentReference = payment.paymentReference
@@ -2924,6 +2950,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     ;(doc.sourceDocumentIds || []).forEach((sid) => {
       const invoice = documents.value.find((d) => d.id === sid && d.type === 'TAX_INVOICE')
       if (invoice) {
+        if (invoice.status !== 'PAID') invoice.statusBeforeReceiptPaid = invoice.status
         invoice.status = 'PAID'
         invoice.paidDate = doc.paidDate
         invoice.paymentMethod = doc.paymentMethod
@@ -2932,6 +2959,40 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
       }
     })
     return doc
+  }
+
+  /**
+   * รีเซ็ตใบเสร็จที่ "เก็บเงิน" แล้วกลับเป็น "รอเก็บเงิน" (PAID → DRAFT) — ล้างข้อมูลการรับชำระของใบเสร็จ และคืนสถานะ
+   * ใบแจ้งหนี้ต้นทางที่ถูกปิดเป็น PAID ตอนเก็บเงิน (ดู recordReceiptPayment) กลับเป็นสถานะเดิมก่อนชำระ ไม่ลบเอกสาร ไม่แตะงานขนส่ง
+   * (เดิมใบที่เก็บเงินแล้วทำได้อย่างเดียวคือลบทิ้ง)
+   */
+  function resetReceiptPayment(id: string): { ok: boolean; message?: string } {
+    const doc = documents.value.find((d) => d.id === id && d.type === 'RECEIPT')
+    if (!doc) return { ok: false, message: 'ไม่พบเอกสาร' }
+    if (doc.status !== 'PAID') return { ok: false, message: 'ใบเสร็จนี้ยังไม่ได้เก็บเงิน' }
+    doc.status = 'DRAFT'
+    doc.paidDate = undefined
+    doc.paymentMethod = undefined
+    doc.paymentBankName = undefined
+    doc.paymentReference = undefined
+    doc.receivedAmount = undefined
+    doc.paymentAdjustment = undefined
+    doc.paymentAdjustmentLabel = undefined
+    ;(doc.sourceDocumentIds || []).forEach((sid) => {
+      const invoice = documents.value.find((d) => d.id === sid && d.type === 'TAX_INVOICE')
+      if (!invoice || invoice.status !== 'PAID') return
+      // ใบแจ้งหนี้ที่ยังมีใบเสร็จอื่นที่เก็บเงินแล้วอ้างอิงอยู่ ยังถือว่าชำระแล้ว
+      const paidByOther = documents.value.some((d) => d.id !== id && d.type === 'RECEIPT' && d.status === 'PAID' && (d.sourceDocumentIds || []).includes(sid))
+      if (paidByOther) return
+      invoice.status = invoice.statusBeforeReceiptPaid || 'SENT'
+      invoice.statusBeforeReceiptPaid = undefined
+      invoice.paidDate = undefined
+      invoice.paymentMethod = undefined
+      invoice.paymentBankName = undefined
+      invoice.paymentReference = undefined
+    })
+    useBookingStore().addLog(`รีเซ็ตการเก็บเงิน ${doc.number} กลับเป็นรอเก็บเงิน`, { docId: doc.id })
+    return { ok: true }
   }
 
   /** ยกเลิกใบเสร็จรับเงินที่ยังไม่ได้เก็บเงิน — ไม่กระทบใบแจ้งหนี้ต้นทาง (ยังไม่ได้ปิดสถานะ) แต่ถ้ามาจากใบวางบิลตรงๆ ต้องคืนสถานะใบวางบิลกลับ BILLING_PENDING ไม่งั้นใบวางบิลจะค้างสถานะ BILLED ทั้งที่ไม่มีใบเสร็จอ้างอิงแล้ว (ออกใบแจ้งหนี้/ใบเสร็จใหม่จากใบวางบิลนี้ไม่ได้อีกเลย) */
@@ -3220,6 +3281,7 @@ export const useSalesDocumentsStore = defineStore('salesDocuments', () => {
     createReceiptManual,
     updateReceiptManual,
     recordReceiptPayment,
+    resetReceiptPayment,
     cancelReceipt,
     deleteReceipt,
     createCashSale,
