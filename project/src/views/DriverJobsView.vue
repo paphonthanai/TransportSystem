@@ -340,6 +340,7 @@
 </template>
 
 <script setup lang="ts">
+import { compareDriverJobs } from '@/utils/driverJobOrder'
 import SiteContactActions from '@/components/driver/SiteContactActions.vue'
 import PageGate from '@/components/shared/PageGate.vue'
 import { ref, computed, watch } from 'vue'
@@ -408,20 +409,10 @@ const logout = async () => {
 
 const ACTIVE_STATUSES = ['ASSIGNED', 'ACCEPTED', 'FUEL_RECEIVED', 'LOADING', 'LOADED', 'IN_TRANSIT', 'DELIVERING'] as const
 
-/** เรียงการ์ดตาม "เที่ยวที่" (tripSequence) — งานที่มีเลขเที่ยวขึ้นก่อนเรียงตามเลข งานที่ไม่มีเลขคงลำดับเดิมทุกประการ (sort เสถียร) */
-const byTripSequence = (a: Booking, b: Booking) => {
-  const sa = a.tripSequence
-  const sb = b.tripSequence
-  if (sa !== undefined && sb !== undefined) return sa - sb
-  if (sa !== undefined) return -1
-  if (sb !== undefined) return 1
-  return 0
-}
-
 const activeJobs = computed(() =>
   bookingStore.bookings
     .filter((b) => matchesSelectedDriver(b) && (ACTIVE_STATUSES as readonly string[]).includes(b.status))
-    .sort(byTripSequence)
+    .sort(compareDriverJobs)
 )
 
 /** ระดับ 4 (ซ่อนไว้ก่อน): true = คนขับเลือกเที่ยวเองได้ (ปุ่มยืนยันขึ้นที่ทุกงาน ACCEPTED) — ยังไม่มี UI เปิดใช้ ตอนนี้ปิดเสมอ */
