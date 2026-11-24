@@ -341,6 +341,7 @@ import JobItemEditorModal, { type JobItemDraft } from '@/components/booking/JobI
 import DocumentActionBar from '@/components/shared/DocumentActionBar.vue'
 import { computeRowAmount, computeRowVat, computeRowDiscountBaht } from '@/utils/documentTotals'
 import { salesOrderLineDescription } from '@/utils/salesOrderDescription'
+import { createdAtFromInput, localDateFromInput, toDateInputValue } from '@/utils/dateRanges'
 
 const props = defineProps<{ fleet: BookingCategory }>()
 
@@ -413,13 +414,14 @@ const prefill = route.query
 const sourceQuotationId = typeof prefill.quotationId === 'string' ? prefill.quotationId : undefined
 const defaultHeader = () => ({
   po: (prefill.po as string) || bookingStore.nextPoNo(),
-  shipDate: (prefill.shipDate as string) || new Date().toISOString().slice(0, 10),
+  shipDate: (prefill.shipDate as string) || toDateInputValue(new Date()),
   loadingDate: '',
   loadingTime: '',
   /** เวลาสิ้นสุดของช่วงเวลา (ไม่บังคับ) — form-only state ไม่ใช่ field ของ Booking โดยตรง รวมกับ loadingTime เป็น
    *  ข้อความช่วงเวลาเดียว "HH:mm - HH:mm" ก่อนบันทึกจริง (ดู saveAllItems) — ไม่เพิ่ม field ใหม่ใน data model */
   loadingTimeEnd: '',
-  jobDate: new Date().toISOString().slice(0, 10),
+  // วันที่ตามเวลาไทย — เดิมใช้ toISOString (UTC) ช่วง 00:00–06:59 ได้วันที่ของเมื่อวาน
+  jobDate: toDateInputValue(new Date()),
   returnDate: '',
   customer: (prefill.customer as string) || (isCements.value ? '' : fixedCustomer),
   contactId: undefined as string | undefined,
@@ -603,7 +605,7 @@ const draftToItem = (draft: JobItemDraft, existingId?: string): JobItem => {
     tripFee: isMulti ? draft.tripFee : undefined,
     tripCount: isMulti ? draft.tripCount || 1 : undefined,
     extraProducts: draft.extraProducts.length ? draft.extraProducts : undefined,
-    loadingDate: draft.loadingDate ? new Date(draft.loadingDate) : undefined,
+    loadingDate: localDateFromInput(draft.loadingDate),
     loadingTime: draft.loadingTime || undefined,
   }
 }
@@ -680,10 +682,10 @@ const combineLoadingTime = (start: string, end: string): string | undefined => {
 
 const saveAllItems = () => {
   if (!canSave.value) return
-  const shipDate = header.value.shipDate ? new Date(header.value.shipDate) : undefined
-  const loadingDate = header.value.loadingDate ? new Date(header.value.loadingDate) : undefined
-  const returnDate = header.value.returnDate ? new Date(header.value.returnDate) : undefined
-  const createdAt = header.value.jobDate ? new Date(header.value.jobDate) : undefined
+  const shipDate = localDateFromInput(header.value.shipDate)
+  const loadingDate = localDateFromInput(header.value.loadingDate)
+  const returnDate = localDateFromInput(header.value.returnDate)
+  const createdAt = createdAtFromInput(header.value.jobDate, new Date())
   const selectedDriver = header.value.driverName ? findDriverByName(header.value.driverName) : undefined
   const newBooking = bookingStore.addBooking({
     category: props.fleet,

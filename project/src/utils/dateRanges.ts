@@ -38,6 +38,24 @@ export function toDateInputValue(d: Date | string | undefined): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+/** แปลงค่า <input type="date"> (YYYY-MM-DD) เป็นเที่ยงคืนเวลาท้องถิ่นของวันนั้น — ห้ามใช้ new Date('YYYY-MM-DD') ตรงๆ
+ *  (อ่านเป็นเที่ยงคืน UTC = 07:00 เวลาไทย) คู่กับ toDateInputValue: อ่านแล้วบันทึกกลับได้วันเดิมเสมอ ค่าว่าง/ผิดรูปแบบ = undefined */
+export function localDateFromInput(value: string | undefined): Date | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '')
+  if (!m) return undefined
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return d.getMonth() === Number(m[2]) - 1 ? d : undefined
+}
+
+/** เวลาสร้างงานจากช่อง "วันที่ลงงาน" — วันนี้ = เวลาจริงตอนนี้ (เดิมกลายเป็น 07:00 ทุกงาน งานใหม่เลยไปเรียงอยู่ใต้งานที่ลงทีหลัง
+ *  ในวันเดียวกัน) วันอื่น = วันนั้นที่เวลาเดียวกับตอนนี้ ค่าว่าง/ผิดรูปแบบ = undefined (ใช้เวลาปัจจุบัน) */
+export function createdAtFromInput(value: string | undefined, now: Date): Date | undefined {
+  const day = localDateFromInput(value)
+  if (!day) return undefined
+  if (toDateInputValue(day) === toDateInputValue(now)) return now
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), now.getHours(), now.getMinutes(), now.getSeconds())
+}
+
 /**
  * แปลงวันที่ที่ผู้ใช้เลือก (YYYY-MM-DD) เป็นเวลาที่จะบันทึก — วันเดียวกับ now = now ตรงๆ, วันย้อนหลัง = วันนั้นแต่เวลาเดียวกับ
  * now (ให้เรียงลำดับในวันนั้นได้ปกติ) คืน null เมื่อรูปแบบผิดหรือเป็นวันในอนาคต (ห้ามลงวันที่ส่งของล่วงหน้า)

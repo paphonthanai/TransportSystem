@@ -180,6 +180,7 @@
 
 <script setup lang="ts">
 import { JOB_TYPE_OPTIONS, jobTypeCode } from '@/utils/jobType'
+import { toDateInputValue } from '@/utils/dateRanges'
 import { ref, computed, watch } from 'vue'
 import { useInventoryStore } from '@/stores/inventory'
 import { useCustomerStore } from '@/stores/customers'
@@ -292,7 +293,7 @@ const seed = () => {
       tripFee: i.tripFee || 0,
       tripCount: i.tripCount || 1,
       extraProducts: (i.extraProducts || []).map((ep) => ({ ...ep })),
-      loadingDate: i.loadingDate ? new Date(i.loadingDate).toISOString().slice(0, 10) : '',
+      loadingDate: i.loadingDate ? toDateInputValue(i.loadingDate) : '',
       loadingTime: i.loadingTime || '',
     }
   } else {

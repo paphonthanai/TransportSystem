@@ -197,6 +197,7 @@
 
 <script setup lang="ts">
 import { matchesSearchFields } from '@/utils/searchFields'
+import { toDateInputValue } from '@/utils/dateRanges'
 import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSalesDocumentsStore, type SalesDocument, type SalesDocumentStatus } from '@/stores/salesDocuments'
@@ -436,7 +437,7 @@ const navigateToBookingCreate = (doc: SalesDocument, fleet: BookingCategory, sou
       customer: doc.customer,
       po: doc.reference || '',
       route: doc.project || '',
-      shipDate: new Date().toISOString().slice(0, 10),
+      shipDate: toDateInputValue(new Date()),
       amount: String(doc.amount),
     },
   })

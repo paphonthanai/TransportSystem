@@ -312,6 +312,7 @@ import type { Booking, BookingCategory, JobItem, PricingMode } from '@/types'
 import { parseGpsInput } from '@/utils/gps'
 import { maxFuelLitersFor } from '@/utils/bookingCompletion'
 import JobItemEditorModal, { type JobItemDraft } from '@/components/booking/JobItemEditorModal.vue'
+import { localDateFromInput, toDateInputValue } from '@/utils/dateRanges'
 
 const props = defineProps<{ fleet: BookingCategory; id: string }>()
 
@@ -327,7 +328,9 @@ const productOptionsForFleet = computed(() => inventoryStore.products.filter((p)
 
 const target = computed(() => bookingStore.bookings.find((b) => b.id === props.id) || null)
 
-const toDateInput = (d?: Date) => (d ? new Date(d).toISOString().slice(0, 10) : '')
+// อ่าน/บันทึกวันที่ตามเวลาไทยทั้งคู่ — เดิมอ่านด้วย toISOString (UTC) งานที่ import (เก็บเที่ยงคืนเวลาไทย) แสดงเป็นวันก่อนหน้า
+// พอกดบันทึก วันที่ขนส่ง/วันที่ลงสินค้าเลื่อนถอยไป 1 วันทุกครั้งที่แก้งาน
+const toDateInput = (d?: Date) => (d ? toDateInputValue(d) : '')
 
 /** แยกข้อความช่วงเวลา "HH:mm - HH:mm" (หรือ "HH:mm" เดี่ยวๆ ของงานเก่าก่อนมี Requirement ช่วงเวลา) กลับเป็น
  *  [เวลาเริ่ม, เวลาสิ้นสุด] สำหรับเติมฟอร์มตอนเปิดแก้ไข — ไม่ตรงรูปแบบใดเลยถือเป็นเวลาเริ่มอย่างเดียว ไม่ error */
@@ -559,7 +562,7 @@ const draftToItem = (draft: JobItemDraft, existingId?: string): JobItem => {
     tripFee: isMulti ? draft.tripFee : undefined,
     tripCount: isMulti ? draft.tripCount || 1 : undefined,
     extraProducts: draft.extraProducts.length ? draft.extraProducts : undefined,
-    loadingDate: draft.loadingDate ? new Date(draft.loadingDate) : undefined,
+    loadingDate: localDateFromInput(draft.loadingDate),
     loadingTime: draft.loadingTime || undefined,
   }
 }
@@ -628,10 +631,10 @@ const confirmEditBooking = () => {
     // ช่องข้อความส่งเป็น string เสมอ (รวมค่าว่าง) — เดิมส่ง `|| undefined` ทำให้ลบข้อความจนว่างแล้วบันทึก store มองว่า
     // "ไม่ได้แก้" ข้อความเดิมจึงไม่หาย (store แปลงค่าว่างเป็น undefined เองอยู่แล้ว ดู updateBookingFull)
     po: f.po ?? '',
-    shipDate: f.shipDate ? new Date(f.shipDate) : undefined,
-    loadingDate: f.loadingDate ? new Date(f.loadingDate) : undefined,
+    shipDate: localDateFromInput(f.shipDate),
+    loadingDate: localDateFromInput(f.loadingDate),
     loadingTime: combineLoadingTime(f.loadingTime, f.loadingTimeEnd),
-    returnDate: f.returnDate ? new Date(f.returnDate) : undefined,
+    returnDate: localDateFromInput(f.returnDate),
     shipmentNo: f.shipmentNo ?? '',
     customerDocNo: f.customerDocNo ?? '',
     ticketNo: f.ticketNo ?? '',
