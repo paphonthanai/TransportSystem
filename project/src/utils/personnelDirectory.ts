@@ -167,3 +167,28 @@ export function countByRole(rows: PersonnelRow[]): Record<UserRole | 'ALL', numb
   for (const r of rows) out[r.role] = (out[r.role] || 0) + 1
   return out as Record<UserRole | 'ALL', number>
 }
+
+/**
+ * บัญชี login role เสมียน (เปิดใช้งาน) ที่ยังไม่มีทะเบียนเสมียน — หน้าเงินเดือนเสมียนใช้แสดงรายชื่อเพิ่มจากทะเบียน
+ * (เดิมเห็นเฉพาะทะเบียนเสมียน เสมียนที่มีแค่บัญชี login เลยไม่ขึ้นในหน้าเงินเดือน) จับคู่ด้วยชื่อแบบเดียวกับหน้าบุคลากร
+ */
+export function staffAccountsWithoutRecord(users: UserProfile[], staff: StaffRecord[]): UserProfile[] {
+  return buildPersonnelRows({ users, staff, drivers: [] })
+    .filter((r) => r.role === 'STAFF' && r.user && r.user.active && !r.staff)
+    .map((r) => r.user as UserProfile)
+}
+
+/** ทะเบียนเสมียนตั้งต้นจากบัญชี login (สร้างตอนกด "สร้างเงินเดือน" ครั้งแรก) — ชื่อเดียวกับบัญชี จึงรวมเป็นแถวเดียวในหน้าบุคลากร */
+export function staffRecordFromAccount(user: UserProfile): Partial<StaffRecord> {
+  let name = squish(user.name)
+  let prefix = ''
+  for (const p of PREFIXES) {
+    if (name.startsWith(p)) {
+      prefix = p
+      name = squish(name.slice(p.length))
+      break
+    }
+  }
+  const [firstName = '', ...rest] = name.split(' ')
+  return { prefix, firstName, lastName: rest.join(' '), position: 'เสมียน', employmentStatus: 'active' }
+}

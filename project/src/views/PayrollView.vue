@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <div class="flex items-center gap-3 flex-wrap">
       <h2 class="text-lg font-bold text-text">เงินเดือนเสมียน (พนักงานออฟฟิศ)</h2>
-      <div class="text-xs text-muted">รายชื่อพนักงานดึงจากทะเบียนเสมียน (ตั้งค่า &gt; สมุดรายชื่อ &gt; เสมียน) — แยกจากพนักงานขับรถซึ่งอยู่ในเมนู "รายได้พนักงานขับรถ" ต่างหาก</div>
+      <div class="text-xs text-muted">รายชื่อพนักงานดึงจากทะเบียนเสมียน และบัญชี login role เสมียนที่ยังไม่มีทะเบียน — แยกจากพนักงานขับรถซึ่งอยู่ในเมนู "รายได้พนักงานขับรถ" ต่างหาก</div>
       <div class="flex-1"></div>
       <input v-model="search" placeholder="ค้นหาชื่อพนักงาน/เลขที่เอกสาร" class="input-field w-56" />
       <input v-model="period" type="month" class="input-field" />
@@ -13,10 +13,10 @@
       </select>
     </div>
 
-    <div v-if="staffSalaryStore.loading || staffStore.loading" class="card-lg text-center text-muted py-10">กำลังโหลดข้อมูล...</div>
-    <div v-else-if="staffPool.length === 0" class="card-lg text-center text-muted py-10 space-y-2">
+    <div v-if="staffSalaryStore.loading || staffStore.loading || userStore.loading" class="card-lg text-center text-muted py-10">กำลังโหลดข้อมูล...</div>
+    <div v-else-if="rows.length === 0" class="card-lg text-center text-muted py-10 space-y-2">
       <div>ยังไม่มีข้อมูลเสมียนในระบบ — ต้องเพิ่มพนักงานในทะเบียนเสมียนก่อน จึงจะสร้างเงินเดือนได้</div>
-      <button @click="router.push('/settings/staff')" class="btn-sm">ไปหน้าทะเบียนเสมียน</button>
+      <button @click="router.push('/settings/personnel?role=STAFF')" class="btn-sm">ไปหน้าทะเบียนเสมียน</button>
     </div>
     <div v-else class="card-lg overflow-x-auto">
       <table class="min-w-[760px] w-full text-sm border-separate border-spacing-0">
@@ -35,9 +35,12 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in filteredRows" :key="row.staff.id" class="border-t border-border hover:bg-surface-2 transition-colors">
-            <td class="px-4 py-3 font-semibold text-text">{{ staffStore.fullName(row.staff) }}</td>
-            <td class="px-4 py-3 text-muted">{{ row.staff.position || '-' }}</td>
+          <tr v-for="row in filteredRows" :key="row.key" class="border-t border-border hover:bg-surface-2 transition-colors">
+            <td class="px-4 py-3 font-semibold text-text">
+              {{ row.name }}
+              <span v-if="row.account" class="ml-1 text-[10px] font-normal text-muted" title="มีบัญชี login แต่ยังไม่มีทะเบียนเสมียน — กดสร้างเงินเดือนแล้วระบบจะสร้างทะเบียนเสมียนให้">(บัญชี login)</span>
+            </td>
+            <td class="px-4 py-3 text-muted">{{ row.position || '-' }}</td>
             <td class="px-4 py-3 text-muted">{{ row.record?.period || periodLabel }}</td>
             <td class="px-4 py-3 text-right text-text">{{ row.record ? formatBaht(row.record.baseSalary) : '-' }}</td>
             <td class="px-4 py-3 text-right text-green-600">{{ row.record ? '+' + formatBaht(additionsTotal(row.record)) : '-' }}</td>
@@ -52,7 +55,7 @@
             <td class="px-4 py-3 text-muted font-mono text-xs">{{ row.record?.documentNumber || '-' }}</td>
             <td class="px-4 py-3 text-right">
               <button v-if="row.record" @click="router.push(`/payroll/staff/${row.record.id}`)" class="btn-sm">ดูรายละเอียด</button>
-              <button v-else @click="router.push({ path: '/payroll/staff/new', query: { staffId: row.staff.id, period: periodLabel } })" class="btn-sm">สร้างเงินเดือน</button>
+              <button v-else @click="createSalary(row)" :disabled="creatingFor === row.key" class="btn-sm disabled:opacity-60">สร้างเงินเดือน</button>
             </td>
           </tr>
           <tr v-if="filteredRows.length === 0">
@@ -68,12 +71,15 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useStaffStore } from '@/stores/staff'
+import { useUserStore, type UserProfile } from '@/stores/users'
+import { staffAccountsWithoutRecord, staffRecordFromAccount } from '@/utils/personnelDirectory'
 import { useStaffSalaryStore, type StaffSalaryRecord } from '@/stores/staffSalaries'
 import { useRememberedState } from '@/composables/useRememberedState'
 
 const router = useRouter()
 const staffStore = useStaffStore()
 const staffSalaryStore = useStaffSalaryStore()
+const userStore = useUserStore()
 
 function currentMonthValue(): string {
   const now = new Date()
@@ -96,23 +102,58 @@ useRememberedState('payroll', { period, search })
 const additionsTotal = (r: StaffSalaryRecord) => r.additions.reduce((sum, a) => sum + a.amount, 0)
 const deductionsTotal = (r: StaffSalaryRecord) => r.deductions.reduce((sum, d) => sum + d.amount, 0)
 
-/** พนักงานเสมียน = ทะเบียนเสมียน (StaffRecord) — แยก Entity จากบัญชีผู้ใช้งาน (UserProfile) โดยเจตนา ดูคอมเมนต์ใน
- *  stores/staff.ts (Driver Income แยกเมนูต่างหากตามที่ตกลงไว้ ไม่ปนกัน) */
-const staffPool = computed(() => staffStore.staffList)
+/** พนักงานเสมียน = ทะเบียนเสมียน (StaffRecord) + บัญชี login role เสมียนที่ยังไม่มีทะเบียน (เดิมเห็นแค่ทะเบียน เสมียนที่มีแค่
+ *  บัญชี login เลยไม่ขึ้น) เงินเดือนผูกกับทะเบียนเสมียนเสมอ — แถวบัญชี login กด "สร้างเงินเดือน" แล้วระบบสร้างทะเบียนให้ก่อน */
+interface PayrollRow {
+  key: string
+  name: string
+  position: string
+  staffId?: string
+  account?: UserProfile
+  record: StaffSalaryRecord | null
+}
 
-const rows = computed(() =>
-  staffPool.value.map((staff) => ({
-    staff,
+const rows = computed<PayrollRow[]>(() => [
+  ...staffStore.staffList.map((staff) => ({
+    key: `staff:${staff.id}`,
+    name: staffStore.fullName(staff),
+    position: staff.position,
+    staffId: staff.id,
     record: staffSalaryStore.records.find((r) => r.staffId === staff.id && r.period === periodLabel.value) || null,
-  }))
-)
+  })),
+  ...staffAccountsWithoutRecord(userStore.users, staffStore.staffList).map((account) => ({
+    key: `user:${account.id}`,
+    name: account.name,
+    position: 'เสมียน',
+    account,
+    record: null,
+  })),
+])
+
+const creatingFor = ref('')
+async function createSalary(row: PayrollRow) {
+  let staffId = row.staffId
+  if (!staffId && row.account) {
+    creatingFor.value = row.key
+    try {
+      await staffStore.createStaff(staffStore.sanitizeStaff(staffRecordFromAccount(row.account)))
+      staffId = staffStore.staffList[0]?.id
+    } catch (err: any) {
+      alert(`สร้างทะเบียนเสมียนไม่สำเร็จ: ${err?.message || err}`)
+      return
+    } finally {
+      creatingFor.value = ''
+    }
+  }
+  if (staffId) router.push({ path: '/payroll/staff/new', query: { staffId, period: periodLabel.value } })
+}
 
 const filteredRows = computed(() =>
   rows.value.filter((r) => {
     if (statusFilter.value !== 'all' && r.record?.status !== statusFilter.value && !(statusFilter.value === 'DRAFT' && !r.record)) return false
     const q = search.value.trim().toLowerCase()
     if (!q) return true
-    return staffStore.fullName(r.staff).toLowerCase().includes(q) || (r.record?.documentNumber || '').toLowerCase().includes(q)
+    return r.name.toLowerCase().includes(q) || (r.record?.documentNumber || '').toLowerCase().includes(q)
   })
 )
 
