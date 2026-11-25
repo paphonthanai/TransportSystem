@@ -127,7 +127,7 @@
     </div>
     <Teleport to="body" v-if="duplicateModalOpen">
       <div @click="duplicateModalOpen = false" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
-        <div @click.stop class="w-full max-w-4xl bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div @click.stop class="w-full max-w-4xl bg-surface text-text rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
             <div class="font-bold text-text">ตรวจงานที่อาจซ้ำ ({{ activeDuplicateGroups.length }} กลุ่ม)</div>
             <button @click="duplicateModalOpen = false" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
@@ -1024,7 +1024,7 @@
     <!-- ซ่อมค่าเที่ยวงาน Import จากไฟล์ Excel ต้นฉบับ -->
     <Teleport to="body" v-if="reconcileModalOpen">
       <div @click="closeReconcileModal" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur z-50 flex items-center justify-center p-6">
-        <div @click.stop class="w-full max-w-4xl bg-surface rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div @click.stop class="w-full max-w-4xl bg-surface text-text rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-surface z-10">
             <div class="font-bold text-text">ซ่อมค่าเที่ยวงาน Import จากไฟล์ Excel</div>
             <button @click="closeReconcileModal" class="w-9 h-9 rounded-lg border border-border bg-surface-2 flex items-center justify-center hover:bg-border">
