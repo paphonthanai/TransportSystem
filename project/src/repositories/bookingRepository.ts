@@ -23,6 +23,7 @@ const BOOKING_DATE_FIELDS = [
   'transitStartedAt',
   'goodsReceivedAt',
   'completedAt',
+  'originalCompletedAt',
   'billedAt',
   'completionConfirmedAt',
 ] as const

@@ -1147,6 +1147,12 @@ export const useBookingStore = defineStore('booking', () => {
    * เช็คจาก item.pickupStatus จริงเสมอ (ไม่ใช่ครั้งเดียวจากสถานะงาน) จึงกด Reset ซ้ำได้โดยไม่คืนสต๊อกซ้ำ เพราะหลังคืน
    * ครั้งแรก pickupStatus ของทุกรายการถูกเคลียร์ไปแล้ว ไม่มีอะไรให้คืนซ้ำอีก
    */
+  /** ตั้งเวลาจบงาน — งานที่เคยจบแล้วถูก Reset ใช้เวลาจบครั้งแรก (originalCompletedAt) ไม่ใช่เวลาที่กดจบใหม่ */
+  function resumeCompletedAt(booking: Booking) {
+    booking.completedAt = booking.originalCompletedAt ? new Date(booking.originalCompletedAt) : new Date()
+    booking.originalCompletedAt = undefined
+  }
+
   function resetBookingStatus(id: string): { ok: boolean; message?: string } {
     const booking = bookings.value.find((b) => b.id === id)
     if (!booking) return { ok: false, message: 'ไม่พบงาน' }
@@ -1189,7 +1195,9 @@ export const useBookingStore = defineStore('booking', () => {
       /** ห้ามล้างข้อมูลการส่งของจริงที่เกิดขึ้นแล้ว (deliveryStatus/deliveredAt/podImage/deliveredBy) — Reset คือการ
        *  ย้อนสถานะงานระดับ workflow control เท่านั้น ไม่ใช่การลบประวัติการส่งของจริง (Business Rule: Reset ≠ ลบ
        *  Delivery history — จุดที่ส่งไปแล้วต้องยังมี POD/ผู้รับ/เวลาส่งครบ ไม่บังคับให้คนขับส่งซ้ำ) เหลือแค่
-       *  completedAt ที่เคลียร์ได้เพราะงานไม่ถือว่าจบแล้วอีกต่อไปหลัง Reset */
+       *  completedAt ที่เคลียร์ได้เพราะงานไม่ถือว่าจบแล้วอีกต่อไปหลัง Reset — แต่จำเวลาเดิมไว้ใน originalCompletedAt
+       *  จบงานใหม่แล้วได้เวลาเดิมคืน (ดู resumeCompletedAt) */
+      booking.originalCompletedAt = booking.originalCompletedAt || booking.completedAt
       booking.completedAt = undefined
     }
 
@@ -1331,7 +1339,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (odometerAfter !== undefined) booking.odometerAfter = odometerAfter
     booking.status = 'DELIVERED'
     // billingStatus ไม่เกี่ยวกับสถานะงานเลย ปล่อยไว้ตามเดิม (UNBILLED จนกว่าจะถูกดึงเข้ารอบบิลเองที่หน้าใบวางบิล)
-    booking.completedAt = new Date()
+    resumeCompletedAt(booking)
     // หลักการ: งานจะ "จบจริง" ก็ต่อเมื่อออฟฟิศยืนยัน POD แล้วเท่านั้น — ออฟฟิศกดจบงานเอง = ส่งของเสร็จ แต่ต้องรอตรวจสอบ POD
     // เสมอ (มีหรือไม่มีรูปก็ตาม ไม่มีรูปให้แนบ POD ที่หน้ารายละเอียดงานก่อนยืนยัน) เหมือนงานที่คนขับจบเองผ่านแอป (ดู finishDriverJob
     // / isBookingConfirmedForBilling) — POD ที่อนุมัติไปแล้วคงไว้ ไม่ต้องตรวจซ้ำ
@@ -1481,7 +1489,7 @@ export const useBookingStore = defineStore('booking', () => {
     if (lastDelivered?.podImage) booking.podImage = lastDelivered.podImage
     booking.finalAllowance = booking.finalAllowance ?? booking.allowance
     booking.status = 'DELIVERED'
-    booking.completedAt = new Date()
+    resumeCompletedAt(booking)
     // งานที่จบผ่านแอปคนขับต้องรอออฟฟิศตรวจสอบ POD ก่อนเสมอ ห้ามสร้างใบแจ้งหนี้/ใบเสร็จจนกว่าจะ APPROVED (ไม่บล็อกใบวางบิล — ดู reviewPod ด้านล่าง + createTaxInvoiceFromBookings/createReceiptFromBookings)
     booking.podReviewStatus = 'PENDING_REVIEW'
     booking.podReviewNote = undefined

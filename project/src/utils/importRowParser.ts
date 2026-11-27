@@ -413,6 +413,9 @@ export function mapImportRowToDriver(
  *  ข้อมูลส่วนไหนขาด/จับคู่ไม่ได้ (คนขับไม่พบในทะเบียน, น้ำมัน/ปลายทางไม่มีเรท, สถานะไม่ตรง ฯลฯ) จะถูกสะสมไว้ใน warnings
  *  แล้วต่อท้ายเข้า note ของ Booking ให้ออฟฟิศไปตรวจ/กรอกเพิ่มทีหลัง แถวที่ไม่มีข้อมูลอะไรเลย (isEmpty) จะถูกข้ามตอนสร้างจริง
  *  เพราะถือเป็นแถวว่างท้ายชีท ไม่ใช่ข้อมูลที่ตั้งใจกรอก */
+/** ตัวคั่นสินค้าหลายชนิด/จำนวนตันหลายค่าในเซลล์เดียว: "+" หรือขึ้นบรรทัดใหม่ */
+const MULTI_SEPARATOR = /\+|\r?\n/
+
 export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: number, deps: ParseImportRowDeps): ImportRowResult {
   const raw = withColumnAliases(rawInput)
   const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim())
@@ -443,8 +446,9 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
   // "23 + 52" หรือ "52 + 13 + 23" หมายถึงหลายชนิดสินค้าปนมาในเที่ยวเดียว ไม่ใช่ชื่อสินค้าชื่อเดียวที่มีเครื่องหมาย +
   // อยู่ในชื่อ — แยกออกเป็นรายการเดี่ยวๆ ไปแสดงแบบคอลัมน์ (ดู productColumns + JobItem.extraProducts) ยืนยันจากไฟล์จริง
   // แล้วว่า "จำนวนตัน" ก็แยกด้วย + คู่กันตำแหน่งต่อตำแหน่งเช่นกัน (เช่น "23 + 13" คู่กับ "0.40 + 9.60")
+  // คั่นด้วย + หรือขึ้นบรรทัดใหม่ในเซลล์เดียวกัน (Alt+Enter) — ไฟล์จริงใช้ทั้งสองแบบ
   const productCodes = product
-    .split('+')
+    .split(MULTI_SEPARATOR)
     .map((p) => p.trim())
     .filter(Boolean)
   // เดิม num() พาร์สค่าดิบทั้งก้อนตรงๆ ("0.40 + 9.60") ได้ NaN แล้ว fallback เป็น 0 เงียบๆ — เป็นสาเหตุจริงที่ทำให้
@@ -452,9 +456,12 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
   // ปูนกรอกมาถูกต้อง (ไม่มีคำเตือนราคาให้สังเกตด้วย) — แก้ด้วยการแยกตามเครื่องหมาย + แล้วรวมยอดจริงแทน (ค่าปกติที่ไม่มี +
   // เลยก็ยังพาร์สได้ผลลัพธ์เดิมทุกประการ เพราะ split บนสตริงไม่มี + ได้ array 1 ตัวเท่ากับค่าเดิม)
   const qtyStr = str(raw[IMPORT_HEADERS.qty])
+  // เดิมแยกเฉพาะ + และต้องเป็นตัวเลขล้วน — "5.20<ขึ้นบรรทัด>4.80" หรือ "5 ตัน" อ่านไม่ออกเลยกลายเป็น 0 ตัน (สินค้าหลายชนิดถูกตัดเป็น 0)
   const qtyParts = qtyStr
-    .split('+')
-    .map((s) => Number(s.trim()))
+    .split(MULTI_SEPARATOR)
+    .map((s) => s.replace(/,/g, '').match(/\d+(?:\.\d+)?/)?.[0])
+    .filter((s): s is string => !!s)
+    .map(Number)
     .filter((n) => Number.isFinite(n))
   const qty = qtyParts.length ? Math.round(qtyParts.reduce((sum, n) => sum + n, 0) * 100) / 100 : 0
   /** จับคู่สินค้ากับจำนวนตันเป็นรายชนิด — ใช้ได้เฉพาะตอนจำนวนชิ้นตรงกันเป๊ะ (กรณีปกติ) ถ้าจำนวนไม่ตรงกัน (ข้อมูลกรอกมา

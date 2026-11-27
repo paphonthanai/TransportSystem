@@ -318,6 +318,9 @@ export interface Booking {
   goodsReceivedBy?: string
   transitStartedAt?: Date
   completedAt?: Date
+  /** เวลาจบงานครั้งแรก เก็บไว้ตอน Reset งานที่ส่งของเสร็จแล้ว (completedAt ถูกเคลียร์) — กดจบงานใหม่แล้วใช้เวลานี้คืน
+   *  ไม่ใช่เวลาที่กดจบใหม่ (ผู้ใช้กำหนด: เวลาจบงานต้องคงเดิมแม้งานถูก Reset) */
+  originalCompletedAt?: Date
   billedAt?: Date
 }
 

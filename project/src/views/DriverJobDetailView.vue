@@ -152,7 +152,10 @@
             <span class="text-muted">เวลาลงสินค้า:</span> <span class="font-semibold">{{ loadingTimeOf(job) || '-' }}</span>
           </div>
           <div class="bg-white border border-border rounded-xl p-3 text-sm text-text">
-            <span class="text-muted">เลขที่ PO ลูกค้า:</span> <span class="font-semibold break-all">{{ job.reference || '-' }}</span>
+            <span class="text-muted">เลขที่เอกสาร:</span> <span class="font-semibold break-all whitespace-pre-line">{{ job.customerDocNo?.trim() || '-' }}</span>
+          </div>
+          <div class="bg-white border border-border rounded-xl p-3 text-sm text-text">
+            <span class="text-muted">เลขชิพเม้น/รับนาม (PO ลูกค้า):</span> <span class="font-semibold break-all whitespace-pre-line">{{ customerShipmentNo(job) || '-' }}</span>
           </div>
           <div v-if="customerConditionsFor(job).length" class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
             <div class="text-xs font-bold text-amber-800 mb-1">เงื่อนไขลูกค้า</div>
@@ -372,6 +375,7 @@ import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
 import { jobTypeCode } from '@/utils/jobType'
 import { loadingTimeOf } from '@/utils/loadingTime'
 import { customerConditionsFor } from '@/utils/bookingNote'
+import { customerShipmentNo } from '@/utils/customerShipment'
 import PageGate from '@/components/shared/PageGate.vue'
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'

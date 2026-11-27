@@ -17,8 +17,12 @@
         <div class="font-semibold text-text">{{ loadingTimeOf(booking) || '-' }}</div>
       </div>
       <div class="bg-surface-2 rounded-lg p-3 col-span-2">
-        <div class="text-xs text-muted mb-0.5">เลขที่ PO ลูกค้า</div>
-        <div class="font-semibold text-text break-all">{{ booking.reference || '-' }}</div>
+        <div class="text-xs text-muted mb-0.5">เลขที่เอกสาร</div>
+        <div class="font-semibold text-text break-all whitespace-pre-line">{{ booking.customerDocNo?.trim() || '-' }}</div>
+      </div>
+      <div class="bg-surface-2 rounded-lg p-3 col-span-2">
+        <div class="text-xs text-muted mb-0.5">เลขชิพเม้น/รับนาม (PO ลูกค้า)</div>
+        <div class="font-semibold text-text break-all whitespace-pre-line">{{ customerShipmentNo(booking) || '-' }}</div>
       </div>
     </div>
     <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
@@ -47,6 +51,7 @@
 <script setup lang="ts">
 import { customerConditionsFor } from '@/utils/bookingNote'
 import { jobTypeCode } from '@/utils/jobType'
+import { customerShipmentNo } from '@/utils/customerShipment'
 import { loadingTimeOf } from '@/utils/loadingTime'
 import BookingPhotoList from '@/components/booking/BookingPhotoList.vue'
 import type { Booking } from '@/types'
