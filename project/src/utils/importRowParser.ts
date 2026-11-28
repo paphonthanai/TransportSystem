@@ -447,28 +447,46 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
   // อยู่ในชื่อ — แยกออกเป็นรายการเดี่ยวๆ ไปแสดงแบบคอลัมน์ (ดู productColumns + JobItem.extraProducts) ยืนยันจากไฟล์จริง
   // แล้วว่า "จำนวนตัน" ก็แยกด้วย + คู่กันตำแหน่งต่อตำแหน่งเช่นกัน (เช่น "23 + 13" คู่กับ "0.40 + 9.60")
   // คั่นด้วย + หรือขึ้นบรรทัดใหม่ในเซลล์เดียวกัน (Alt+Enter) — ไฟล์จริงใช้ทั้งสองแบบ
-  const productCodes = product
+  // นิยาม: ตัวเลขหลัง "/" ในช่องชนิดปูน (รายการสินค้า) คือจำนวนตันของสินค้าชนิดนั้น เช่น "23/5.2 + 52/4.8"
+  const productEntries = product
     .split(MULTI_SEPARATOR)
     .map((p) => p.trim())
     .filter(Boolean)
+    .map((seg) => {
+      const m = /^(.*?)\s*\/\s*(\d[\d,]*(?:\.\d+)?)\s*(?:ตัน)?$/.exec(seg)
+      return m && m[1].trim() ? { code: m[1].trim(), tons: Number(m[2].replace(/,/g, '')) as number | undefined } : { code: seg, tons: undefined }
+    })
+  const productCodes = productEntries.map((e) => e.code)
+  const tonsInProductCount = productEntries.filter((e) => e.tons !== undefined).length
+  const allTonsInProduct = productEntries.length > 0 && tonsInProductCount === productEntries.length
   // เดิม num() พาร์สค่าดิบทั้งก้อนตรงๆ ("0.40 + 9.60") ได้ NaN แล้ว fallback เป็น 0 เงียบๆ — เป็นสาเหตุจริงที่ทำให้
   // งานที่มีสินค้าหลายชนิดในเที่ยวเดียว (จำนวนตันเขียนแบบ "0.40 + 9.60") ได้ tripFee/ยอดใบสั่งสินค้าเป็น 0 ทั้งที่ราคา
   // ปูนกรอกมาถูกต้อง (ไม่มีคำเตือนราคาให้สังเกตด้วย) — แก้ด้วยการแยกตามเครื่องหมาย + แล้วรวมยอดจริงแทน (ค่าปกติที่ไม่มี +
   // เลยก็ยังพาร์สได้ผลลัพธ์เดิมทุกประการ เพราะ split บนสตริงไม่มี + ได้ array 1 ตัวเท่ากับค่าเดิม)
   const qtyStr = str(raw[IMPORT_HEADERS.qty])
   // เดิมแยกเฉพาะ + และต้องเป็นตัวเลขล้วน — "5.20<ขึ้นบรรทัด>4.80" หรือ "5 ตัน" อ่านไม่ออกเลยกลายเป็น 0 ตัน (สินค้าหลายชนิดถูกตัดเป็น 0)
-  const qtyParts = qtyStr
+  const qtySegments = qtyStr
     .split(MULTI_SEPARATOR)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  // ช่องที่ไม่มีตัวเลขเลยเก็บไว้เตือน (เดิมทิ้งเงียบๆ ตันส่วนนั้นหายไปโดยไม่มีใครเห็น)
+  const unreadableQty = qtySegments.filter((s) => !/\d/.test(s))
+  const qtyParts = qtySegments
     .map((s) => s.replace(/,/g, '').match(/\d+(?:\.\d+)?/)?.[0])
     .filter((s): s is string => !!s)
     .map(Number)
     .filter((n) => Number.isFinite(n))
-  const qty = qtyParts.length ? Math.round(qtyParts.reduce((sum, n) => sum + n, 0) * 100) / 100 : 0
+  const round2 = (n: number) => Math.round(n * 100) / 100
+  const qtyColumnTotal = qtyParts.length ? round2(qtyParts.reduce((sum, n) => sum + n, 0)) : 0
+  // ตันหลัง "/" ครบทุกชนิด = ใช้ตามช่องชนิดปูนเป็นหลัก ไม่ต้องเดาจับคู่กับช่องจำนวนตัน
+  const qty = allTonsInProduct ? round2(productEntries.reduce((sum, e) => sum + (e.tons ?? 0), 0)) : qtyColumnTotal
+  const qtyColumnMatchesProducts = productCodes.length > 0 && productCodes.length === qtyParts.length
   /** จับคู่สินค้ากับจำนวนตันเป็นรายชนิด — ใช้ได้เฉพาะตอนจำนวนชิ้นตรงกันเป๊ะ (กรณีปกติ) ถ้าจำนวนไม่ตรงกัน (ข้อมูลกรอกมา
    *  ไม่สมบูรณ์ เช่น เขียนโค้ดสินค้าปนเครื่องหมาย "-" จนแยกจำนวนชนิดผิด) ให้ยกยอดรวมทั้งหมดไปไว้ที่สินค้าตัวแรกก่อน
    *  แทนการเดาแบ่งเอง แล้วเตือนให้ไปตรวจสอบเอง (ดู warnings ด้านล่าง) */
-  const productQtyPairs =
-    productCodes.length > 0 && productCodes.length === qtyParts.length
+  const productQtyPairs = allTonsInProduct
+    ? productEntries.map((e) => ({ product: e.code, qty: e.tons ?? 0 }))
+    : qtyColumnMatchesProducts
       ? productCodes.map((p, i) => ({ product: p, qty: qtyParts[i] }))
       : productCodes.map((p, i) => ({ product: p, qty: i === 0 ? qty : 0 }))
   const allowance = num(raw[IMPORT_HEADERS.allowance])
@@ -516,8 +534,28 @@ export function parseImportRow(rawInput: Record<string, unknown>, rowNumber: num
   // เดิมไม่เช็คว่าขาดจำนวนตันเลย — งานที่ Excel ไม่กรอกจำนวนตันมาจะเงียบๆ กลายเป็น 0 ตันโดยไม่มีคำเตือนใดๆ
   // (ต่างจากราคา/เบี้ยเลี้ยงที่เตือนอยู่แล้ว) ทำให้ผู้ใช้งงว่าทำไมน้ำหนัก/ราคาเป็น 0 ทั้งที่สินค้ากรอกมาถูกต้อง
   if (!qty) warnings.push('ต้องกรอกเพิ่ม: จำนวนตัน')
-  if (productCodes.length > 1 && productCodes.length !== qtyParts.length) {
-    warnings.push(`สินค้าหลายชนิดในเที่ยวเดียว (${productCodes.join(' + ')}) แต่จำนวนตันแยกไม่ตรงกับจำนวนชนิดสินค้า — ยกยอดรวมไปไว้ที่ "${productCodes[0]}" ก่อน ตรวจสอบแยกจำนวนตันต่อชนิดเองภายหลัง`)
+  // เช็คจำนวนตันเทียบกับสินค้าทุกแบบ (เดิมเช็คแค่หลายชนิดแต่ตันไม่ครบ) — กันตันหาย/สินค้าตกหล่นแบบเงียบๆ
+  if (unreadableQty.length) {
+    warnings.push(`อ่านจำนวนตันไม่ได้ ("${unreadableQty.join('", "')}") — ค่านี้ไม่ถูกนับรวม ตรวจสอบจำนวนตันเองภายหลัง`)
+  }
+  if (allTonsInProduct && qtyParts.length && qtyColumnTotal !== qty) {
+    warnings.push(`จำนวนตันหลัง "/" ในชนิดปูน (รวม ${qty} ตัน) ไม่ตรงกับช่องจำนวนตัน (${qtyColumnTotal} ตัน) — ใช้ตามชนิดปูน กรุณาตรวจสอบข้อมูลก่อนจ่ายงาน`)
+  } else if (tonsInProductCount > 0 && !allTonsInProduct) {
+    warnings.push(`ระบุตันหลัง "/" ในชนิดปูนไว้แค่บางชนิด — ใช้ช่องจำนวนตันแทน กรุณาตรวจสอบข้อมูลก่อนจ่ายงาน`)
+  }
+  if (allTonsInProduct) {
+    // ตันมาจากช่องชนิดปูนครบทุกชนิดแล้ว ไม่ต้องเทียบจำนวนค่ากับช่องจำนวนตัน
+  } else if (!productCodes.length && qty) {
+    warnings.push(`มีจำนวนตัน (${qty} ตัน) แต่ไม่มีรหัสสินค้า — ตรวจสอบสินค้าเองภายหลัง`)
+  } else if (productCodes.length === 1 && qtyParts.length > 1) {
+    warnings.push(`เทียบกับจำนวนสินค้า: สินค้ามี 1 ชนิด ("${productCodes[0]}") แต่ตันมีหลายค่า (${qtyParts.join(' + ')}) กรุณาตรวจสอบข้อมูลก่อนจ่ายงาน`)
+  } else if (productCodes.length > 1 && !qtyColumnMatchesProducts) {
+    warnings.push(`สินค้าหลายชนิดในเที่ยวเดียว (${productCodes.join(' + ')}) แต่จำนวนตันแยกไม่ตรงกับจำนวนชนิดสินค้า — ยกยอดรวมไปไว้ที่ "${productCodes[0]}" ก่อน (ระบุตันหลัง "/" ในชนิดปูนได้ เช่น 23/5.2 + 52/4.8) ตรวจสอบแยกจำนวนตันต่อชนิดเองภายหลัง`)
+  }
+  // หลังเทียบกับจำนวนสินค้าแล้ว (รวมตันหลัง "/") ยังมีชนิดที่ได้ 0 ตัน = เตือนชื่อสินค้านั้น
+  if (productCodes.length > 1 && qty && (allTonsInProduct || qtyColumnMatchesProducts)) {
+    const zero = productQtyPairs.filter((p) => !p.qty).map((p) => `"${p.product}"`)
+    if (zero.length) warnings.push(`สินค้า ${zero.join(', ')} ได้ 0 ตัน — ตรวจสอบจำนวนตันต่อชนิดเองภายหลัง`)
   }
 
   const fuelCell = parseFuelCell(raw[IMPORT_HEADERS.fuel])
